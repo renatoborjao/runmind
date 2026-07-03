@@ -43,7 +43,6 @@ def _metrics(**overrides) -> RunnerMetrics:
         average_hr=150.0,
         max_long_run=15.0,
         weekly_volume=30.0,
-        consistency=82.0,
     )
 
     defaults.update(overrides)

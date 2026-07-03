@@ -1,4 +1,5 @@
 import json
+from dataclasses import fields
 from pathlib import Path
 
 from app.domain.entities.runner_profile import RunnerProfile
@@ -32,7 +33,14 @@ class RunnerProfileRepository:
 
             data = json.load(f)
 
-        return RunnerProfile(**data)
+        # ignora chaves do JSON que a entidade (ainda) não conhece
+        known = {field.name for field in fields(RunnerProfile)}
+
+        return RunnerProfile(**{
+            key: value
+            for key, value in data.items()
+            if key in known
+        })
 
     def find_by_phone(
         self,

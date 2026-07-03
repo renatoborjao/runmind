@@ -127,9 +127,53 @@ def test_multiple_activities_same_day_count_once():
     assert result == 25.0
 
 
-def test_empty_week_scores_zero_and_pulls_average_down():
+def test_empty_week_between_trained_weeks_pulls_average_down():
 
-    # Semana atual cheia, semanas anteriores vazias
+    # Treinou nas semanas 1 e 3 (completas), falhou a semana 2
+    dates = [
+        _date_in_week(weeks_ago, weekday_offset)
+        for weeks_ago in (1, 3)
+        for weekday_offset in range(3)
+    ]
+
+    history = _history_from_dates(*dates)
+
+    result = ConsistencyCalculator.calculate(
+        history,
+        weekly_training_days=3,
+        weeks=4,
+        reference_date=REFERENCE_DATE,
+    )
+
+    # janela recortada ao início do histórico: semanas 1-3
+    # (100% + 0% + 100%) / 3
+    assert result == 66.7
+
+
+def test_current_incomplete_week_does_not_drag_average_down():
+
+    # 4 semanas completas perfeitas; semana em curso ainda sem treino
+    dates = [
+        _date_in_week(weeks_ago, weekday_offset)
+        for weeks_ago in range(1, 5)
+        for weekday_offset in range(3)
+    ]
+
+    history = _history_from_dates(*dates)
+
+    result = ConsistencyCalculator.calculate(
+        history,
+        weekly_training_days=3,
+        weeks=4,
+        reference_date=REFERENCE_DATE,
+    )
+
+    assert result == 100.0
+
+
+def test_rookie_with_history_only_in_current_week_scores_current_week():
+
+    # Corredor estreante: todo o histórico está na semana em curso
     dates = [
         _date_in_week(0, weekday_offset)
         for weekday_offset in range(3)
@@ -144,4 +188,25 @@ def test_empty_week_scores_zero_and_pulls_average_down():
         reference_date=REFERENCE_DATE,
     )
 
-    assert result == 25.0
+    assert result == 100.0
+
+
+def test_weeks_before_first_activity_are_not_counted():
+
+    # Corredor na 2ª semana, treinando perfeitamente a semana completa
+    dates = [
+        _date_in_week(1, weekday_offset)
+        for weekday_offset in range(3)
+    ]
+
+    history = _history_from_dates(*dates)
+
+    result = ConsistencyCalculator.calculate(
+        history,
+        weekly_training_days=3,
+        weeks=4,
+        reference_date=REFERENCE_DATE,
+    )
+
+    # sem o recorte, as 3 semanas vazias anteriores dariam 25%
+    assert result == 100.0

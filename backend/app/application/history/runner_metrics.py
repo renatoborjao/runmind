@@ -69,6 +69,4 @@ class RunnerMetricsBuilder:
             weekly_volume=weekly[
                 "average_4_weeks"
             ],
-
-            consistency=95,
         )

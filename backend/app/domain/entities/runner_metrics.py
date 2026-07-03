@@ -19,5 +19,3 @@ class RunnerMetrics:
     max_long_run: float
 
     weekly_volume: float
-
-    consistency: float
