@@ -1,0 +1,91 @@
+from google import genai
+from google.genai import types
+
+from app.core.config import get_settings
+
+DEFAULT_MODEL = "gemini-2.5-flash"
+# Modelo gratuito via Google AI Studio (API key). gemini-2.0-flash não tem
+# mais cota no nível gratuito atual; confirmado 2026-07-02 que 2.5-flash
+# funciona com a chave real do projeto. Trocar por um gemini-*-flash mais
+# novo no futuro é só mudar esta constante.
+
+MAX_OUTPUT_TOKENS = 400
+
+SYSTEM_PROMPT_TEMPLATE = """Você é o coach de corrida do RunMind, conversando \
+por WhatsApp com {runner_name}.
+
+TOM: mensagens curtas, diretas, tom de treinador experiente e cordial — como uma
+conversa real de WhatsApp. Sem markdown pesado (sem **negrito** excessivo, sem
+headers, sem listas numeradas longas). Pode usar emoji com moderação.
+
+FATOS DISPONÍVEIS SOBRE O CORREDOR (calculados deterministicamente pelo sistema,
+não invente nada além disso):
+{context_facts}
+
+REGRAS NÃO-NEGOCIÁVEIS:
+- Você NUNCA decide ou sugere mudança no plano de treino. Se o corredor pedir
+  para mudar o treino, diga que vai anotar o pedido e repassar — nunca finja
+  que já mudou.
+- Você NUNCA dá conselho médico ou sobre lesão além do que já está calculado
+  nos fatos acima. Se perguntarem sobre dor/lesão, oriente a procurar um
+  profissional de saúde.
+- Você NUNCA inventa números (distância, pace, volume, etc.) — use só os fatos
+  fornecidos acima. Se não souber, diga que não tem essa informação ainda.
+- Se o corredor pedir algo que você não consegue fazer de verdade (mudar plano,
+  registrar lesão, agendar algo), seja honesto: diga que vai anotar/repassar,
+  nunca finja que executou.
+"""
+
+# Gemini usa "model" onde o resto do projeto usa "assistant".
+_ROLE_MAP = {
+    "user": "user",
+    "assistant": "model",
+}
+
+
+class CoachConversationEngine:
+
+    @staticmethod
+    async def reply(
+        runner_name: str,
+        context_facts: str,
+        conversation_history: list[dict],
+        incoming_text: str,
+    ) -> str:
+
+        settings = get_settings()
+
+        client = genai.Client(
+            api_key=settings.google_api_key,
+        )
+
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+            runner_name=runner_name,
+            context_facts=context_facts,
+        )
+
+        contents = [
+            {
+                "role": _ROLE_MAP[turn["role"]],
+                "parts": [{"text": turn["text"]}],
+            }
+            for turn in conversation_history
+        ]
+
+        contents.append(
+            {
+                "role": "user",
+                "parts": [{"text": incoming_text}],
+            }
+        )
+
+        response = await client.aio.models.generate_content(
+            model=DEFAULT_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+            ),
+        )
+
+        return response.text or ""

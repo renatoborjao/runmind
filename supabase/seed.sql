@@ -1,0 +1,2 @@
+-- RunMind seed data
+-- No seed data in the foundation scaffold.

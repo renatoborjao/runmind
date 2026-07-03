@@ -1,0 +1,130 @@
+from datetime import UTC, datetime
+
+from app.application.assessment.training_assessment_builder import (
+    TrainingAssessmentBuilder,
+)
+from app.application.history.runner_metrics import (
+    RunnerMetricsBuilder,
+)
+from app.application.planner.weekly_plan_service import (
+    WeeklyPlanService,
+)
+from app.application.use_cases.load_runner_profile import (
+    LoadRunnerProfile,
+)
+from app.application.use_cases.load_training_history import (
+    LoadTrainingHistory,
+)
+from app.domain.entities.training_goal import (
+    TrainingGoal,
+)
+
+
+class ConversationContextBuilder:
+
+    @staticmethod
+    async def build(
+        profile: str,
+    ) -> str:
+
+        runner = LoadRunnerProfile.execute(profile)
+
+        history = await LoadTrainingHistory.execute(
+            profile=profile,
+        )
+
+        assessment = TrainingAssessmentBuilder.build(
+            runner,
+            history,
+        )
+
+        metrics = RunnerMetricsBuilder.build(
+            history,
+        )
+
+        goal = TrainingGoal(
+            name=runner.goal,
+            distance_km=10,
+            target_time=runner.target_time,
+            race_date=None,
+        )
+
+        plan = WeeklyPlanService.get_or_generate(
+            profile=profile,
+            runner=runner,
+            assessment=assessment,
+            metrics=metrics,
+            goal=goal,
+        )
+
+        return (
+            f"Corredor: {runner.name}\n"
+            f"Meta: {runner.goal}\n"
+            f"Volume semanal atual: {assessment.current_weekly_volume:.1f} km "
+            f"(meta recomendada: {assessment.recommended_weekly_volume:.1f} km)\n"
+            f"Consistência: {assessment.consistency:.0f}%\n"
+            f"Último treino: {ConversationContextBuilder._last_activity_summary(history)}\n"
+            f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan)}\n"
+        )
+
+    @staticmethod
+    def _last_activity_summary(
+        history,
+    ) -> str:
+
+        latest = history.latest
+
+        if latest is None:
+
+            return "nenhum treino recente encontrado"
+
+        distance_km = latest.distance / 1000
+
+        return f"{latest.name}, {distance_km:.1f} km"
+
+    @staticmethod
+    def _next_session_summary(
+        plan,
+        reference_date=None,
+    ) -> str:
+
+        if not plan.sessions:
+
+            return "nenhum treino planejado ainda"
+
+        today = reference_date or datetime.now(UTC).date()
+
+        upcoming = sorted(
+            plan.sessions,
+            key=lambda session: plan.session_date(session),
+        )
+
+        session = next(
+            (
+                s
+                for s in upcoming
+                if plan.session_date(s) >= today
+            ),
+            upcoming[0],
+        )
+
+        session_date = plan.session_date(session)
+
+        pace = ""
+
+        if session.target_pace_min and session.target_pace_max:
+
+            pace = f" — pace {session.target_pace_min}-{session.target_pace_max} min/km"
+
+        adjustment = ""
+
+        if session.adjusted and session.adjustment_reason:
+
+            adjustment = f" [AJUSTADO: {session.adjustment_reason}]"
+
+        return (
+            f"{session.day} ({session_date.strftime('%d/%m')}) — "
+            f"{session.workout_type} "
+            f"({session.planned_distance_km or 0:.1f} km) — "
+            f"{session.objective}{pace}{adjustment}"
+        )

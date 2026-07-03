@@ -149,8 +149,19 @@ activemq-data/
 
 # Environments
 .env
-.envrc
-.venv
+.env.local
+.env.*.local
+
+# RunMind runtime data (tokens OAuth, perfis com telefone, planos/conversas)
+backend/storage/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Python
 env/
 venv/
 ENV/

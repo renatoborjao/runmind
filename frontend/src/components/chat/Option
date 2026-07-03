@@ -1,0 +1,39 @@
+type OptionProps = {
+  text: string;
+  icon?: string;
+  onClick: () => void;
+};
+
+export default function Option({
+  text,
+  icon,
+  onClick,
+}: OptionProps) {
+  return (
+    <button
+      onClick={onClick}
+      className="
+        w-full
+        rounded-2xl
+        border
+        border-zinc-700
+        bg-zinc-900
+        px-5
+        py-4
+        text-left
+        text-lg
+        transition-all
+        duration-200
+        hover:border-green-500
+        hover:bg-zinc-800
+        hover:scale-[1.02]
+        active:scale-[0.99]
+      "
+    >
+      <span className="flex items-center gap-3">
+        {icon && <span className="text-xl">{icon}</span>}
+        <span>{text}</span>
+      </span>
+    </button>
+  );
+}

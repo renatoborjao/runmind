@@ -1,0 +1,19 @@
+type AvatarProps = {
+  from: "coach" | "user";
+};
+
+export default function Avatar({ from }: AvatarProps) {
+  if (from === "coach") {
+    return (
+      <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-xl shrink-0">
+        🤖
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-xl shrink-0">
+      👤
+    </div>
+  );
+}
