@@ -115,3 +115,55 @@ def test_source_round_trip_and_legacy_default(tmp_path):
     )
 
     assert repo.load("fulano").source == "runmind"
+
+
+def _plan_for_week(week_start, volume=20.0):
+
+    return TrainingPlan(
+        athlete_name="Renato",
+        objective="10k",
+        phase="BUILD",
+        weekly_volume=volume,
+        running_days=["Tuesday"],
+        week_start=week_start,
+        sessions=[],
+    )
+
+
+def test_save_appends_snapshot_to_history(tmp_path):
+
+    repo = WeeklyPlanRepository()
+    repo.storage = tmp_path
+
+    repo.save("renato", _plan_for_week(date(2026, 6, 22)))
+    repo.save("renato", _plan_for_week(date(2026, 6, 29)))
+
+    history = repo.history("renato")
+
+    assert [p.week_start for p in history] == [
+        date(2026, 6, 22),
+        date(2026, 6, 29),
+    ]
+
+
+def test_same_week_snapshot_is_replaced_not_duplicated(tmp_path):
+
+    repo = WeeklyPlanRepository()
+    repo.storage = tmp_path
+
+    repo.save("renato", _plan_for_week(date(2026, 6, 29), volume=20.0))
+    # ajuste na mesma semana regrava o snapshot
+    repo.save("renato", _plan_for_week(date(2026, 6, 29), volume=16.0))
+
+    history = repo.history("renato")
+
+    assert len(history) == 1
+    assert history[0].weekly_volume == 16.0
+
+
+def test_history_empty_without_file(tmp_path):
+
+    repo = WeeklyPlanRepository()
+    repo.storage = tmp_path
+
+    assert repo.history("renato") == []

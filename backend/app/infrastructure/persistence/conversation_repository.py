@@ -83,3 +83,50 @@ class ConversationRepository:
     ) -> list[dict]:
 
         return self.load(profile)[-limit:]
+
+    # ==========================================================
+    # Resumo corrido (turnos fora da janela recente)
+    # ==========================================================
+
+    def load_summary(
+        self,
+        profile: str,
+    ) -> dict:
+
+        file = self.storage / f"{profile}_summary.json"
+
+        if not file.exists():
+
+            return {"summary": "", "covered_until": ""}
+
+        with open(
+            file,
+            encoding="utf-8",
+        ) as f:
+
+            return json.load(f)
+
+    def save_summary(
+        self,
+        profile: str,
+        summary: str,
+        covered_until: str,
+    ) -> None:
+
+        file = self.storage / f"{profile}_summary.json"
+
+        with open(
+            file,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                {
+                    "summary": summary,
+                    "covered_until": covered_until,
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )

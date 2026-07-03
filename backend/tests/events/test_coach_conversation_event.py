@@ -166,6 +166,84 @@ def test_memory_is_not_touched_when_no_ops():
     mock_memory_service.process.assert_not_called()
 
 
+def _turns(count: int, start: int = 0) -> list[dict]:
+
+    return [
+        {
+            "role": "user" if i % 2 == 0 else "assistant",
+            "text": f"turno {i}",
+            "timestamp": f"2026-07-03T10:{i:02d}:00+00:00",
+        }
+        for i in range(start, start + count)
+    ]
+
+
+def _run_summary_check(total_turns, covered_until=""):
+
+    with (
+        patch(f"{MODULE}.ConversationSummaryEngine") as mock_engine,
+    ):
+
+        mock_engine.summarize = AsyncMock(
+            return_value="resumo atualizado",
+        )
+
+        repo = MagicMock()
+        repo.load.return_value = _turns(total_turns)
+        repo.load_summary.return_value = {
+            "summary": "resumo antigo",
+            "covered_until": covered_until,
+        }
+
+        asyncio.run(
+            CoachConversationEvent._update_summary(
+                profile="renato",
+                runner_name="Renato",
+                repo=repo,
+            )
+        )
+
+        return mock_engine, repo
+
+
+def test_summary_folds_when_enough_turns_left_the_window():
+
+    # 32 turnos: 12 fora da janela de 20 (>= lote mínimo de 10)
+    mock_engine, repo = _run_summary_check(total_turns=32)
+
+    mock_engine.summarize.assert_awaited_once()
+
+    kwargs = mock_engine.summarize.await_args.kwargs
+    assert len(kwargs["turns"]) == 12
+    assert kwargs["current_summary"] == "resumo antigo"
+
+    repo.save_summary.assert_called_once_with(
+        "renato",
+        "resumo atualizado",
+        "2026-07-03T10:11:00+00:00",  # último turno dobrado
+    )
+
+
+def test_summary_does_not_fold_below_batch_minimum():
+
+    # 25 turnos: só 5 fora da janela (< 10)
+    mock_engine, repo = _run_summary_check(total_turns=25)
+
+    mock_engine.summarize.assert_not_awaited()
+    repo.save_summary.assert_not_called()
+
+
+def test_summary_skips_turns_already_covered():
+
+    # 40 turnos, mas os 15 primeiros já cobertos -> só 5 pendentes
+    mock_engine, repo = _run_summary_check(
+        total_turns=40,
+        covered_until="2026-07-03T10:14:00+00:00",
+    )
+
+    mock_engine.summarize.assert_not_awaited()
+
+
 def test_gemini_failure_sends_busy_reply_instead_of_silence():
 
     runner = make_runner(name="Renato", phone="+5511975658679")

@@ -6,6 +6,9 @@ from app.domain.value_objects.sports import is_foot_sport
 from app.infrastructure.integrations.strava.client import (
     StravaClient,
 )
+from app.infrastructure.persistence.activity_archive_repository import (
+    ActivityArchiveRepository,
+)
 from app.infrastructure.storage.token_store import TokenStore
 
 
@@ -19,6 +22,11 @@ class LoadTrainingHistory:
     ) -> TrainingHistory:
 
         if activity is not None:
+
+            LoadTrainingHistory._archive(
+                profile,
+                [activity],
+            )
 
             return TrainingHistory(
 
@@ -48,8 +56,33 @@ class LoadTrainingHistory:
             if is_foot_sport(activity.sport)
         ]
 
+        LoadTrainingHistory._archive(
+            profile,
+            activities,
+        )
+
         return TrainingHistory(
 
             activities=activities
 
         )
+
+    @staticmethod
+    def _archive(
+        profile: str,
+        activities: list[Activity],
+    ) -> None:
+
+        # falha no arquivamento nunca derruba o fluxo principal
+        try:
+
+            ActivityArchiveRepository().upsert_many(
+                profile,
+                activities,
+            )
+
+        except Exception as e:
+
+            print(
+                f"Falha ao arquivar atividades de '{profile}': {e}"
+            )

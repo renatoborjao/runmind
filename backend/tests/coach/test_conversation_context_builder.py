@@ -63,7 +63,13 @@ def _plan(sessions=None) -> TrainingPlan:
     )
 
 
-async def _build_with_mocks(history_activities, sessions, memory=""):
+async def _build_with_mocks(
+    history_activities,
+    sessions,
+    memory="",
+    summary="",
+    lifetime_stats=None,
+):
 
     with (
         patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
@@ -72,6 +78,8 @@ async def _build_with_mocks(history_activities, sessions, memory=""):
         patch(f"{MODULE}.MetricsResolver") as mock_metrics_resolver,
         patch(f"{MODULE}.WeeklyPlanService") as mock_plan_service,
         patch(f"{MODULE}.RunnerMemoryService") as mock_memory_service,
+        patch(f"{MODULE}.ConversationRepository") as mock_conv_repo,
+        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive,
     ):
 
         mock_load_runner.execute.return_value = make_runner()
@@ -87,6 +95,13 @@ async def _build_with_mocks(history_activities, sessions, memory=""):
         mock_plan_service.get_or_generate.return_value = _plan(sessions)
 
         mock_memory_service.render.return_value = memory
+
+        mock_conv_repo.return_value.load_summary.return_value = {
+            "summary": summary,
+            "covered_until": "",
+        }
+
+        mock_archive.return_value.stats.return_value = lifetime_stats
 
         return await ConversationContextBuilder.build("renato")
 
@@ -143,6 +158,54 @@ def test_build_omits_week_plan_without_sessions():
     )
 
     assert "Plano da semana completo" not in text
+
+
+def test_build_includes_conversation_summary_when_present():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+            summary="Discutiram estratégia de pace para a prova de outubro.",
+        )
+    )
+
+    assert (
+        "Resumo de conversas anteriores: Discutiram estratégia" in text
+    )
+
+
+def test_build_includes_lifetime_stats_when_archive_has_data():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+            lifetime_stats={
+                "total_runs": 123,
+                "total_km": 861.4,
+                "first_date": "2025-03-14",
+                "longest_km": 21.1,
+            },
+        )
+    )
+
+    assert "Histórico geral registrado: 123 treinos" in text
+    assert "861 km desde 03/2025" in text
+    assert "maior treino: 21.1 km" in text
+
+
+def test_build_omits_summary_and_lifetime_when_empty():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+        )
+    )
+
+    assert "Resumo de conversas anteriores" not in text
+    assert "Histórico geral" not in text
 
 
 def test_build_includes_memory_section_when_present():

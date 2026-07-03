@@ -4,6 +4,9 @@ from app.application.coach.conversation.coach_conversation_engine import (
 from app.application.coach.conversation.conversation_context_builder import (
     ConversationContextBuilder,
 )
+from app.application.coach.conversation.conversation_summary_engine import (
+    ConversationSummaryEngine,
+)
 from app.application.coach.memory.memory_extraction_engine import (
     MemoryExtractionEngine,
 )
@@ -24,6 +27,12 @@ from app.infrastructure.persistence.runner_memory_repository import (
 )
 
 MEMORY_EXTRACTION_CONTEXT_TURNS = 6
+
+# janela recente enviada ao Gemini; turnos além dela viram resumo
+CONVERSATION_WINDOW = 20
+
+# dobra o resumo em lotes: 1 chamada Gemini a cada ~10 turnos antigos
+SUMMARY_BATCH_MIN = 10
 
 BUSY_REPLY = (
     "Opa, me embananei aqui por um instante 😅 "
@@ -98,7 +107,62 @@ class CoachConversationEvent:
 
             print(f"Falha ao atualizar memória de '{profile}': {e}")
 
+        try:
+
+            await CoachConversationEvent._update_summary(
+                profile=profile,
+                runner_name=runner.name,
+                repo=repo,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao atualizar resumo de '{profile}': {e}")
+
         return reply_text
+
+    @staticmethod
+    async def _update_summary(
+        profile: str,
+        runner_name: str,
+        repo: ConversationRepository,
+    ) -> None:
+        """Dobra no resumo corrido os turnos que já saíram da janela
+        recente e ainda não foram cobertos."""
+
+        turns = repo.load(profile)
+
+        outside_window = turns[:-CONVERSATION_WINDOW]
+
+        if not outside_window:
+
+            return
+
+        summary_state = repo.load_summary(profile)
+
+        covered_until = summary_state["covered_until"]
+
+        pending = [
+            turn
+            for turn in outside_window
+            if turn["timestamp"] > covered_until
+        ]
+
+        if len(pending) < SUMMARY_BATCH_MIN:
+
+            return
+
+        updated = await ConversationSummaryEngine.summarize(
+            runner_name=runner_name,
+            current_summary=summary_state["summary"],
+            turns=pending,
+        )
+
+        repo.save_summary(
+            profile,
+            updated,
+            pending[-1]["timestamp"],
+        )
 
     @staticmethod
     async def _update_memory(

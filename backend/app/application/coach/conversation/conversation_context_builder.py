@@ -21,6 +21,12 @@ from app.application.use_cases.load_training_history import (
 )
 from app.core.clock import today_local
 from app.core.weekdays import weekday_label
+from app.infrastructure.persistence.activity_archive_repository import (
+    ActivityArchiveRepository,
+)
+from app.infrastructure.persistence.conversation_repository import (
+    ConversationRepository,
+)
 from app.domain.entities.training_goal import (
     TrainingGoal,
 )
@@ -80,13 +86,56 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{week_plan}\n"
 
+        lifetime = ConversationContextBuilder._lifetime_summary(
+            profile,
+        )
+
+        if lifetime:
+
+            facts = f"{facts}{lifetime}\n"
+
         memory = RunnerMemoryService.render(profile)
 
         if memory:
 
             facts = f"{facts}\n{memory}\n"
 
+        summary = ConversationRepository().load_summary(
+            profile,
+        )["summary"]
+
+        if summary:
+
+            facts = (
+                f"{facts}\nResumo de conversas anteriores: "
+                f"{summary}\n"
+            )
+
         return facts
+
+    @staticmethod
+    def _lifetime_summary(
+        profile: str,
+    ) -> str:
+        """Agregados do arquivo permanente — o coach responde sobre o
+        histórico de vida, além da janela recente do Strava."""
+
+        stats = ActivityArchiveRepository().stats(profile)
+
+        if stats is None:
+
+            return ""
+
+        first = stats["first_date"]
+
+        first_label = f"{first[5:7]}/{first[:4]}"  # mm/aaaa
+
+        return (
+            f"Histórico geral registrado: {stats['total_runs']} "
+            f"treinos, {stats['total_km']:.0f} km desde "
+            f"{first_label}; maior treino: "
+            f"{stats['longest_km']:.1f} km\n"
+        )
 
     @staticmethod
     def _week_plan_summary(
