@@ -67,6 +67,42 @@ def test_with_hr_keeps_hr_based_intensity():
     assert enriched.estimated_zone == "Z3"
 
 
+def test_below_10km_is_never_long_run_even_with_long_duration():
+
+    # 8 km em 100 min: duração de longão, mas abaixo do piso de 10 km
+    activity = make_activity(
+        distance=8000.0,
+        moving_time=6000,
+        average_speed=1.33,
+        average_heartrate=None,
+    )
+
+    enriched = ActivityEnricher.enrich(
+        activity,
+        _metrics(max_long_run=8.0),
+    )
+
+    assert enriched.training_type != "LONG_RUN"
+
+
+def test_10km_or_more_can_be_long_run():
+
+    # 12 km em ~95 min, perto do longão máximo do corredor
+    activity = make_activity(
+        distance=12000.0,
+        moving_time=5700,
+        average_speed=2.10,
+        average_heartrate=None,
+    )
+
+    enriched = ActivityEnricher.enrich(
+        activity,
+        _metrics(max_long_run=13.0),
+    )
+
+    assert enriched.training_type == "LONG_RUN"
+
+
 def test_tiny_activity_is_never_classified_as_long_run():
 
     # histórico minúsculo: max_long_run de 100 m fazia 100 m virar

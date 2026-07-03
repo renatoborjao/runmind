@@ -17,7 +17,8 @@ from app.domain.entities.runner_metrics import (
 
 # Piso absoluto para pontuar como longão: sem isso, um histórico
 # minúsculo (max_long_run de 100 m) faz qualquer trote virar LONG_RUN.
-MIN_LONG_RUN_KM = 5.0
+# Abaixo de 10 km não é longão, independente do histórico.
+MIN_LONG_RUN_KM = 10.0
 
 
 class TrainingClassifier:
