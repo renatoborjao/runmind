@@ -7,6 +7,9 @@ from app.application.coach.memory.runner_memory_service import (
 from app.application.history.metrics_resolver import (
     MetricsResolver,
 )
+from app.application.planner.weekly_plan_message_formatter import (
+    WeeklyPlanMessageFormatter,
+)
 from app.application.planner.weekly_plan_service import (
     WeeklyPlanService,
 )
@@ -71,6 +74,12 @@ class ConversationContextBuilder:
             f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan)}\n"
         )
 
+        week_plan = ConversationContextBuilder._week_plan_summary(plan)
+
+        if week_plan:
+
+            facts = f"{facts}\n{week_plan}\n"
+
         memory = RunnerMemoryService.render(profile)
 
         if memory:
@@ -78,6 +87,32 @@ class ConversationContextBuilder:
             facts = f"{facts}\n{memory}\n"
 
         return facts
+
+    @staticmethod
+    def _week_plan_summary(
+        plan,
+    ) -> str:
+        """Plano completo da semana — permite ao coach responder
+        "qual meu treino de sábado?" sem inventar."""
+
+        if not plan.sessions:
+
+            return ""
+
+        lines = ["Plano da semana completo:"]
+
+        lines.extend(
+            WeeklyPlanMessageFormatter.session_lines(plan)
+        )
+
+        if plan.source == "externo":
+
+            lines.append(
+                "(plano montado pelo treinador do corredor — o "
+                "RunMind só acompanha)"
+            )
+
+        return "\n".join(lines)
 
     @staticmethod
     def _last_activity_summary(

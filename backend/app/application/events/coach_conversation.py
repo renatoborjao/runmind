@@ -25,6 +25,11 @@ from app.infrastructure.persistence.runner_memory_repository import (
 
 MEMORY_EXTRACTION_CONTEXT_TURNS = 6
 
+BUSY_REPLY = (
+    "Opa, me embananei aqui por um instante 😅 "
+    "Me manda sua mensagem de novo daqui a pouquinho?"
+)
+
 
 class CoachConversationEvent:
 
@@ -37,18 +42,30 @@ class CoachConversationEvent:
 
         runner = LoadRunnerProfile.execute(profile)
 
-        context_facts = await ConversationContextBuilder.build(profile)
-
         repo = ConversationRepository()
 
         history = repo.recent_turns(profile)
 
-        reply_text = await CoachConversationEngine.reply(
-            runner_name=runner.name,
-            context_facts=context_facts,
-            conversation_history=history,
-            incoming_text=incoming_text,
-        )
+        # indisponibilidade (Gemini/Strava fora do ar, rate limit)
+        # não pode virar silêncio: o atleta sempre recebe resposta
+        try:
+
+            context_facts = await ConversationContextBuilder.build(
+                profile,
+            )
+
+            reply_text = await CoachConversationEngine.reply(
+                runner_name=runner.name,
+                context_facts=context_facts,
+                conversation_history=history,
+                incoming_text=incoming_text,
+            )
+
+        except Exception as e:
+
+            print(f"Falha na conversa com '{profile}': {e}")
+
+            reply_text = BUSY_REPLY
 
         repo.append_turn(
             profile,

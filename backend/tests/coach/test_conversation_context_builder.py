@@ -109,6 +109,42 @@ def test_build_includes_runner_facts_and_last_activity():
     assert "Rodagem, 10.5 km" in text
 
 
+def test_build_includes_full_week_plan_when_sessions_exist():
+
+    session = PlannedSession(
+        day="Thursday",
+        workout_type="Intervalado",
+        objective="Velocidade",
+        planned_distance_km=8.0,
+        planned_duration_minutes=45,
+        target_pace_min="4:21",
+        target_pace_max="4:21",
+    )
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[session],
+        )
+    )
+
+    assert "Plano da semana completo:" in text
+    assert "quinta-feira" in text
+    assert "8.0 km" in text
+
+
+def test_build_omits_week_plan_without_sessions():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+        )
+    )
+
+    assert "Plano da semana completo" not in text
+
+
 def test_build_includes_memory_section_when_present():
 
     text = asyncio.run(

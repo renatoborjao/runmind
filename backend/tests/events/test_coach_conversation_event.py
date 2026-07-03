@@ -166,6 +166,53 @@ def test_memory_is_not_touched_when_no_ops():
     mock_memory_service.process.assert_not_called()
 
 
+def test_gemini_failure_sends_busy_reply_instead_of_silence():
+
+    runner = make_runner(name="Renato", phone="+5511975658679")
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
+        patch(f"{MODULE}.ConversationContextBuilder") as mock_context,
+        patch(f"{MODULE}.ConversationRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as mock_engine,
+        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.RunnerMemoryRepository") as mock_memory_repo,
+        patch(f"{MODULE}.MemoryExtractionEngine") as mock_extraction,
+        patch(f"{MODULE}.RunnerMemoryService"),
+    ):
+
+        mock_load_runner.execute.return_value = runner
+
+        mock_context.build = AsyncMock(return_value="fatos")
+
+        mock_repo = MagicMock()
+        mock_repo.recent_turns.return_value = []
+        mock_repo_cls.return_value = mock_repo
+
+        mock_engine.reply = AsyncMock(
+            side_effect=RuntimeError("429 RESOURCE_EXHAUSTED"),
+        )
+
+        mock_notification.send_training_feedback = AsyncMock()
+
+        mock_memory_repo.return_value.active.return_value = []
+        mock_extraction.extract = AsyncMock(
+            return_value={"add": [], "archive": []},
+        )
+
+        reply = asyncio.run(
+            CoachConversationEvent.execute(
+                profile="renato",
+                incoming_text="qual meu treino de amanhã?",
+            )
+        )
+
+        # o atleta recebe resposta, não silêncio/500
+        assert "me embananei" in reply.lower() or "de novo" in reply
+
+        mock_notification.send_training_feedback.assert_awaited_once()
+
+
 def test_extraction_failure_does_not_break_reply():
 
     (
