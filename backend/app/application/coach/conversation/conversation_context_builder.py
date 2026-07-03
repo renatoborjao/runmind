@@ -4,8 +4,8 @@ from app.application.assessment.training_assessment_builder import (
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
-from app.application.history.runner_metrics import (
-    RunnerMetricsBuilder,
+from app.application.history.metrics_resolver import (
+    MetricsResolver,
 )
 from app.application.planner.weekly_plan_service import (
     WeeklyPlanService,
@@ -41,7 +41,8 @@ class ConversationContextBuilder:
             history,
         )
 
-        metrics = RunnerMetricsBuilder.build(
+        metrics = MetricsResolver.resolve(
+            runner,
             history,
         )
 

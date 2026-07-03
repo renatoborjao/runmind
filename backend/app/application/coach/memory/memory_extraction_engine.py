@@ -84,6 +84,12 @@ class MemoryExtractionEngine:
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 max_output_tokens=MAX_OUTPUT_TOKENS,
+                # extração estruturada não precisa de raciocínio; com
+                # thinking ligado os tokens de pensamento estouram o
+                # max_output_tokens e o JSON volta vazio (flaky)
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=0,
+                ),
             ),
         )
 

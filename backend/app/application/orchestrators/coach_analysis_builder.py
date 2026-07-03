@@ -10,8 +10,8 @@ from app.application.coach.pipeline.coach_pipeline import (
 from app.application.history.activity_enricher import (
     ActivityEnricher,
 )
-from app.application.history.runner_metrics import (
-    RunnerMetricsBuilder,
+from app.application.history.metrics_resolver import (
+    MetricsResolver,
 )
 from app.application.planner.weekly_plan_service import (
     WeeklyPlanService,
@@ -85,7 +85,8 @@ class CoachAnalysisBuilder:
         # Métricas
         # --------------------------------------------------
 
-        metrics = RunnerMetricsBuilder.build(
+        metrics = MetricsResolver.resolve(
+            runner,
             history,
         )
 

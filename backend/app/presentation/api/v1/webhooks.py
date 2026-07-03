@@ -6,6 +6,9 @@ from fastapi import Request
 from app.application.events.coach_conversation import (
     CoachConversationEvent,
 )
+from app.application.events.onboarding_conversation import (
+    OnboardingEvent,
+)
 from app.application.events.training_completed import (
     TrainingCompletedEvent,
 )
@@ -245,15 +248,22 @@ async def receive_whatsapp_webhook(
 
     profile = RunnerProfileRepository().find_by_phone(phone)
 
+    # número desconhecido: inicia (ou continua) o cadastro
     if profile is None:
 
-        print(f"Nenhum profile encontrado para phone={phone}")
+        reply = await OnboardingEvent.execute(
+            phone=phone,
+            incoming_text=text,
+            sender_name=data.get("pushName", ""),
+        )
 
         return {
 
-            "ignored": True,
+            "success": True,
 
-            "reason": "unknown phone",
+            "onboarding": True,
+
+            "reply_sent": bool(reply),
 
         }
 

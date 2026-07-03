@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
-from app.application.history.runner_metrics import RunnerMetricsBuilder
+from app.application.history.metrics_resolver import MetricsResolver
 from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
@@ -37,7 +37,8 @@ async def get_plan(profile: str = "renato"):
             history,
         )
 
-        metrics = RunnerMetricsBuilder.build(
+        metrics = MetricsResolver.resolve(
+            runner,
             history,
         )
 

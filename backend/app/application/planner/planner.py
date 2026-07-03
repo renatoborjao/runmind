@@ -33,6 +33,98 @@ class TrainingPlanner:
             runner
         )
 
+        if not running_days:
+
+            raise Exception(
+                "Corredor sem dias de treino preferidos."
+            )
+
+        sessions = TrainingPlanner._build_sessions(
+            strategy,
+            metrics,
+            running_days,
+        )
+
+        return TrainingPlan(
+
+            athlete_name=runner.name,
+
+            objective=goal.name,
+
+            phase=phase,
+
+            weekly_volume=strategy[
+                "weekly_volume"
+            ],
+
+            running_days=running_days,
+
+            week_start=week_start,
+
+            sessions=sessions,
+        )
+
+    @staticmethod
+    def _build_sessions(
+        strategy: dict,
+        metrics: RunnerMetrics,
+        running_days: list[str],
+    ) -> list:
+        """Sessões conforme a quantidade de dias disponíveis:
+        1 dia = rodagem única com o volume da semana;
+        2 dias = rodagem leve + longão;
+        3+ dias = rodagem leve + VO2 + longão."""
+
+        easy_pace_min = PaceFormatter.format(
+            metrics.easy_pace_min,
+        )
+
+        easy_pace_max = PaceFormatter.format(
+            metrics.easy_pace_max,
+        )
+
+        if len(running_days) == 1:
+
+            easy = WorkoutGenerator.generate_easy(
+                strategy["weekly_volume"]
+            )
+
+            easy.day = running_days[0]
+
+            easy.target_pace_min = easy_pace_min
+
+            easy.target_pace_max = easy_pace_max
+
+            return [easy]
+
+        if len(running_days) == 2:
+
+            easy = WorkoutGenerator.generate_easy(
+                round(
+                    strategy["easy_run"]
+                    + strategy["quality_run"],
+                    1,
+                )
+            )
+
+            long = WorkoutGenerator.generate_long(
+                strategy["long_run"]
+            )
+
+            easy.day = running_days[0]
+
+            long.day = running_days[1]
+
+            easy.target_pace_min = easy_pace_min
+
+            easy.target_pace_max = easy_pace_max
+
+            long.target_pace_min = easy_pace_min
+
+            long.target_pace_max = easy_pace_max
+
+            return [easy, long]
+
         easy = WorkoutGenerator.generate_easy(
             strategy["easy_run"]
         )
@@ -54,13 +146,9 @@ class TrainingPlanner:
         long.day = running_days[2]
 
         # Rodagem leve: faixa de pace confortável.
-        easy.target_pace_min = PaceFormatter.format(
-            metrics.easy_pace_min,
-        )
+        easy.target_pace_min = easy_pace_min
 
-        easy.target_pace_max = PaceFormatter.format(
-            metrics.easy_pace_max,
-        )
+        easy.target_pace_max = easy_pace_max
 
         # VO2 max: alvo único, não faixa.
         vo2.target_pace_min = PaceFormatter.format(
@@ -70,29 +158,8 @@ class TrainingPlanner:
         vo2.target_pace_max = vo2.target_pace_min
 
         # Longão: mesma faixa confortável da rodagem leve.
-        long.target_pace_min = easy.target_pace_min
+        long.target_pace_min = easy_pace_min
 
-        long.target_pace_max = easy.target_pace_max
+        long.target_pace_max = easy_pace_max
 
-        return TrainingPlan(
-
-            athlete_name=runner.name,
-
-            objective=goal.name,
-
-            phase=phase,
-
-            weekly_volume=strategy[
-                "weekly_volume"
-            ],
-
-            running_days=running_days,
-
-            week_start=week_start,
-
-            sessions=[
-                easy,
-                vo2,
-                long,
-            ],
-        )
+        return [easy, vo2, long]

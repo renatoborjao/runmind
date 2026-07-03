@@ -7,8 +7,17 @@ from app.application.services.strava.webhook_service import (
     WebhookService,
 )
 from app.core.config import get_settings
+from app.infrastructure.integrations.evolution.phone_normalizer import (
+    PhoneNormalizer,
+)
 from app.infrastructure.integrations.strava.client import (
     StravaClient,
+)
+from app.infrastructure.persistence.onboarding_state_repository import (
+    OnboardingStateRepository,
+)
+from app.infrastructure.persistence.runner_profile_repository import (
+    RunnerProfileRepository,
 )
 from app.infrastructure.storage.token_store import (
     TokenStore,
@@ -25,18 +34,28 @@ router = APIRouter(
 # ==========================================================
 
 @router.get("/connect")
-async def connect():
+async def connect(state: str = ""):
+    """`state` carrega o telefone normalizado do corredor — é assim que
+    o callback sabe de quem são os tokens (multiatleta/onboarding)."""
 
     settings = get_settings()
+
+    redirect_uri = (
+        f"{settings.public_base_url}/api/v1/strava/callback"
+    )
 
     url = (
         "https://www.strava.com/oauth/authorize"
         f"?client_id={settings.strava_client_id}"
         "&response_type=code"
-        "&redirect_uri=http://127.0.0.1:8000/api/v1/strava/callback"
+        f"&redirect_uri={redirect_uri}"
         "&approval_prompt=force"
         "&scope=read,activity:read_all"
     )
+
+    if state:
+
+        url += f"&state={state}"
 
     return RedirectResponse(url)
 
@@ -44,6 +63,7 @@ async def connect():
 @router.get("/callback")
 async def callback(
     code: str,
+    state: str = "",
 ):
 
     settings = get_settings()
@@ -77,27 +97,99 @@ async def callback(
 
     data = response.json()
 
-    TokenStore().save(
+    athlete_id = (data.get("athlete") or {}).get("id")
 
+    profile, source = _resolve_token_target(state)
+
+    TokenStore(profile).save(
         {
-
             "access_token": data["access_token"],
-
             "refresh_token": data["refresh_token"],
-
             "expires_at": data["expires_at"],
-
         }
-
     )
+
+    if athlete_id:
+
+        _persist_athlete_id(
+            source,
+            profile,
+            state,
+            athlete_id,
+        )
 
     return {
 
         "message": "Strava conectado com sucesso.",
 
+        "profile": profile,
+
         "saved": True,
 
     }
+
+
+def _resolve_token_target(state: str) -> tuple[str, str]:
+    """De quem são os tokens: (profile/slug, origem).
+
+    - sem state: comportamento original (renato);
+    - state = telefone de perfil existente: o próprio perfil;
+    - state = telefone com onboarding em andamento: o slug reservado.
+    """
+
+    if not state:
+
+        return "renato", "profile"
+
+    phone = PhoneNormalizer.normalize(state)
+
+    profile = RunnerProfileRepository().find_by_phone(phone)
+
+    if profile is not None:
+
+        return profile, "profile"
+
+    onboarding = OnboardingStateRepository().load(phone)
+
+    if onboarding and onboarding.get("slug"):
+
+        return onboarding["slug"], "onboarding"
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Nenhum cadastro encontrado para este link. "
+            "Comece a conversa com o coach no WhatsApp primeiro."
+        ),
+    )
+
+
+def _persist_athlete_id(
+    source: str,
+    profile: str,
+    state: str,
+    athlete_id: int,
+) -> None:
+
+    if source == "profile":
+
+        RunnerProfileRepository().update_fields(
+            profile,
+            {"strava_athlete_id": athlete_id},
+        )
+
+        return
+
+    # onboarding em andamento: o id vai pro perfil na conclusão
+    phone = PhoneNormalizer.normalize(state)
+
+    repo = OnboardingStateRepository()
+
+    onboarding = repo.load(phone) or {}
+
+    onboarding["strava_athlete_id"] = athlete_id
+
+    repo.save(phone, onboarding)
 
 
 # ==========================================================

@@ -1,7 +1,7 @@
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
-from app.application.history.runner_metrics import RunnerMetricsBuilder
+from app.application.history.metrics_resolver import MetricsResolver
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -53,7 +53,8 @@ class WeeklyPlanNotifier:
             history,
         )
 
-        metrics = RunnerMetricsBuilder.build(
+        metrics = MetricsResolver.resolve(
+            runner,
             history,
         )
 

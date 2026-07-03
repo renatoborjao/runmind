@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # URL pública da API (usada em links enviados ao corredor,
+    # ex: OAuth do Strava). Em produção vem do .env.
+    public_base_url: str = "http://127.0.0.1:8000"
+
     # ==========================
     # CORS
     # ==========================

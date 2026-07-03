@@ -69,7 +69,7 @@ async def _build_with_mocks(history_activities, sessions, memory=""):
         patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
         patch(f"{MODULE}.TrainingAssessmentBuilder") as mock_assessment_builder,
-        patch(f"{MODULE}.RunnerMetricsBuilder") as mock_metrics_builder,
+        patch(f"{MODULE}.MetricsResolver") as mock_metrics_resolver,
         patch(f"{MODULE}.WeeklyPlanService") as mock_plan_service,
         patch(f"{MODULE}.RunnerMemoryService") as mock_memory_service,
     ):
@@ -82,7 +82,7 @@ async def _build_with_mocks(history_activities, sessions, memory=""):
 
         mock_assessment_builder.build.return_value = _assessment()
 
-        mock_metrics_builder.build.return_value = _metrics()
+        mock_metrics_resolver.resolve.return_value = _metrics()
 
         mock_plan_service.get_or_generate.return_value = _plan(sessions)
 

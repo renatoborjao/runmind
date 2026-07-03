@@ -58,3 +58,29 @@ def test_consistency_is_zero_with_no_training_history():
     assessment = TrainingAssessmentBuilder.build(runner, history)
 
     assert assessment.consistency == 0.0
+
+
+def test_empty_history_uses_declared_volume_without_progression():
+
+    runner = make_runner(initial_weekly_km=10.0, weekly_training_days=2)
+
+    assessment = TrainingAssessmentBuilder.build(
+        runner,
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.current_weekly_volume == 10.0
+    # sem +8% na primeira semana (conservador)
+    assert assessment.recommended_weekly_volume == 10.0
+    assert assessment.longest_run == 5.0  # 10 km / 2 dias
+
+
+def test_empty_history_without_declared_volume_uses_rookie_floor():
+
+    assessment = TrainingAssessmentBuilder.build(
+        make_runner(),
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.current_weekly_volume == 6.0
+    assert assessment.recommended_weekly_volume == 6.0

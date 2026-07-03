@@ -20,7 +20,12 @@ def test_history_keeps_only_foot_sports():
         make_activity(id=6, sport="VirtualRun"),
     ]
 
-    with patch(f"{MODULE}.StravaClient") as mock_client_cls:
+    with (
+        patch(f"{MODULE}.StravaClient") as mock_client_cls,
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+    ):
+
+        mock_token_store.return_value.load.return_value = {"access_token": "x"}
 
         mock_client = mock_client_cls.return_value
 
@@ -33,6 +38,24 @@ def test_history_keeps_only_foot_sports():
         )
 
     assert [activity.id for activity in history.activities] == [1, 3, 6]
+
+
+def test_profile_without_strava_tokens_gets_empty_history():
+
+    with (
+        patch(f"{MODULE}.StravaClient") as mock_client_cls,
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+    ):
+
+        mock_token_store.return_value.load.return_value = None
+
+        history = asyncio.run(
+            LoadTrainingHistory.execute(profile="beatriz"),
+        )
+
+    assert history.activities == []
+
+    mock_client_cls.assert_not_called()
 
 
 def test_direct_activity_bypasses_strava():

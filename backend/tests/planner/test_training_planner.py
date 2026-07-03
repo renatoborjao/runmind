@@ -88,6 +88,55 @@ def test_generate_fills_real_pace_on_all_sessions():
     assert long.target_pace_max == easy.target_pace_max
 
 
+def test_generate_with_two_days_builds_easy_and_long():
+
+    runner = make_runner(
+        preferred_running_days=["Tuesday", "Saturday"],
+    )
+
+    plan = TrainingPlanner.generate(
+        runner,
+        _assessment(),
+        _goal(),
+        _metrics(),
+        WEEK_START,
+    )
+
+    assert len(plan.sessions) == 2
+
+    easy, long = plan.sessions
+
+    assert easy.day == "Tuesday"
+    assert long.day == "Saturday"
+
+    # volume da semana preservado nas duas sessões
+    total = (easy.planned_distance_km or 0) + (
+        long.planned_distance_km or 0
+    )
+    assert abs(total - _assessment().recommended_weekly_volume) < 0.2
+
+
+def test_generate_with_one_day_builds_single_session():
+
+    runner = make_runner(
+        preferred_running_days=["Sunday"],
+    )
+
+    plan = TrainingPlanner.generate(
+        runner,
+        _assessment(),
+        _goal(),
+        _metrics(),
+        WEEK_START,
+    )
+
+    assert len(plan.sessions) == 1
+    assert plan.sessions[0].day == "Sunday"
+    assert plan.sessions[0].planned_distance_km == (
+        _assessment().recommended_weekly_volume
+    )
+
+
 def test_generate_sets_week_start_on_plan():
 
     runner = make_runner(

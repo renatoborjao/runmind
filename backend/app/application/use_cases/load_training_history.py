@@ -6,6 +6,7 @@ from app.domain.value_objects.sports import is_foot_sport
 from app.infrastructure.integrations.strava.client import (
     StravaClient,
 )
+from app.infrastructure.storage.token_store import TokenStore
 
 
 class LoadTrainingHistory:
@@ -24,6 +25,12 @@ class LoadTrainingHistory:
                 activities=[activity]
 
             )
+
+        # atleta sem Strava conectado: histórico vazio, sem erro —
+        # o MetricsResolver/assessment cuidam do plano inicial
+        if TokenStore(profile).load() is None:
+
+            return TrainingHistory(activities=[])
 
         client = StravaClient(
             profile

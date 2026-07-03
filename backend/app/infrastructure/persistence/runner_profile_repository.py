@@ -49,24 +49,14 @@ class RunnerProfileRepository:
             if key in known
         })
 
-    def update_injuries(
+    def save(
         self,
         profile: str,
-        injuries: list[str],
+        data: dict,
     ) -> None:
-        """Regrava apenas a chave `injuries`, preservando chaves do JSON
-        que a entidade não conhece (notifications, timezone...)."""
+        """Grava o JSON completo do perfil (criação de atleta novo)."""
 
         file = self.storage / f"{profile}.json"
-
-        with open(
-            file,
-            encoding="utf-8",
-        ) as f:
-
-            data = json.load(f)
-
-        data["injuries"] = injuries
 
         with open(
             file,
@@ -80,6 +70,38 @@ class RunnerProfileRepository:
                 ensure_ascii=False,
                 indent=2,
             )
+
+    def update_fields(
+        self,
+        profile: str,
+        updates: dict,
+    ) -> None:
+        """Merge de campos no JSON existente, preservando chaves que a
+        entidade não conhece (notifications, timezone...)."""
+
+        file = self.storage / f"{profile}.json"
+
+        with open(
+            file,
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        data.update(updates)
+
+        self.save(profile, data)
+
+    def update_injuries(
+        self,
+        profile: str,
+        injuries: list[str],
+    ) -> None:
+
+        self.update_fields(
+            profile,
+            {"injuries": injuries},
+        )
 
     def find_by_phone(
         self,

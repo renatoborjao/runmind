@@ -43,3 +43,9 @@ class RunnerProfile:
     injuries: list[str] = field(
         default_factory=list
     )
+
+    # Autodeclarados no onboarding; usados como fallback de métricas
+    # enquanto não há histórico do Strava.
+    initial_pace_min_km: float | None = None
+
+    initial_weekly_km: float | None = None

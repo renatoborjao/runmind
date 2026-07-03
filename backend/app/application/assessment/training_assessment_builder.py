@@ -1,6 +1,7 @@
 from app.application.history.consistency_calculator import (
     ConsistencyCalculator,
 )
+from app.application.history.metrics_resolver import ROOKIE_WEEKLY_KM
 from app.application.history.weekly_volume_analyzer import WeeklyVolumeAnalyzer
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_assessment import TrainingAssessment
@@ -19,15 +20,37 @@ class TrainingAssessmentBuilder:
 
         current_weekly_volume = weekly["average_4_weeks"]
 
-        recommended_weekly_volume = round(
-            current_weekly_volume * 1.08,
-            1,
-        )
-
         longest = 0
 
         if history.longest_run:
             longest = history.longest_run.distance / 1000
+
+        # Sem histórico: usa o volume autodeclarado no onboarding
+        # (ou o piso de estreante), sem progressão na primeira
+        # semana (conservador).
+        if current_weekly_volume == 0:
+
+            current_weekly_volume = (
+                runner.initial_weekly_km or ROOKIE_WEEKLY_KM
+            )
+
+            recommended_weekly_volume = round(
+                current_weekly_volume,
+                1,
+            )
+
+            longest = longest or round(
+                current_weekly_volume
+                / max(runner.weekly_training_days, 1),
+                1,
+            )
+
+        else:
+
+            recommended_weekly_volume = round(
+                current_weekly_volume * 1.08,
+                1,
+            )
 
         observations = []
 
