@@ -64,6 +64,12 @@ class Settings(BaseSettings):
 
     google_api_key: str = ""
 
+    # A cota gratuita é POR MODELO: conversa num modelo, extrações
+    # estruturadas (parser/memória/resumo/plano) noutro mais leve —
+    # separa os orçamentos e as extrações não roubam cota do chat.
+    gemini_chat_model: str = "gemini-2.5-flash"
+    gemini_extract_model: str = "gemini-2.5-flash-lite"
+
     @property
     def cors_origin_list(self) -> list[str]:
 

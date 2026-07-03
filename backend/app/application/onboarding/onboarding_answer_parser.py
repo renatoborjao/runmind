@@ -6,8 +6,6 @@ from google.genai import types
 from app.core.clock import today_local
 from app.core.config import get_settings
 
-DEFAULT_MODEL = "gemini-2.5-flash"
-
 MAX_OUTPUT_TOKENS = 300
 
 # O que extrair em cada passo do questionário.
@@ -114,7 +112,7 @@ class OnboardingAnswerParser:
         )
 
         response = await client.aio.models.generate_content(
-            model=DEFAULT_MODEL,
+            model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",

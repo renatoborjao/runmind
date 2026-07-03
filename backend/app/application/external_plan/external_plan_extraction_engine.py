@@ -5,8 +5,6 @@ from google.genai import types
 
 from app.core.config import get_settings
 
-DEFAULT_MODEL = "gemini-2.5-flash"
-
 MAX_OUTPUT_TOKENS = 1500
 
 EXTRACTION_PROMPT = """Você lê planilhas de treino de corrida (print, foto \
@@ -55,7 +53,7 @@ class ExternalPlanExtractionEngine:
         )
 
         response = await client.aio.models.generate_content(
-            model=DEFAULT_MODEL,
+            model=settings.gemini_extract_model,
             contents=[
                 types.Part.from_bytes(
                     data=media_bytes,

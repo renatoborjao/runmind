@@ -11,8 +11,6 @@ from app.domain.entities.memory_entry import (
     MemoryEntry,
 )
 
-DEFAULT_MODEL = "gemini-2.5-flash"
-
 MAX_OUTPUT_TOKENS = 400
 
 EMPTY_OPS: dict = {"add": [], "archive": []}
@@ -91,7 +89,7 @@ class MemoryExtractionEngine:
         )
 
         response = await client.aio.models.generate_content(
-            model=DEFAULT_MODEL,
+            model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",

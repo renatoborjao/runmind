@@ -3,12 +3,6 @@ from google.genai import types
 
 from app.core.config import get_settings
 
-DEFAULT_MODEL = "gemini-2.5-flash"
-# Modelo gratuito via Google AI Studio (API key). gemini-2.0-flash não tem
-# mais cota no nível gratuito atual; confirmado 2026-07-02 que 2.5-flash
-# funciona com a chave real do projeto. Trocar por um gemini-*-flash mais
-# novo no futuro é só mudar esta constante.
-
 MAX_OUTPUT_TOKENS = 400
 
 SYSTEM_PROMPT_TEMPLATE = """Você é o coach de corrida do RunMind, conversando \
@@ -89,7 +83,7 @@ class CoachConversationEngine:
         )
 
         response = await client.aio.models.generate_content(
-            model=DEFAULT_MODEL,
+            model=settings.gemini_chat_model,
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,

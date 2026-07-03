@@ -3,8 +3,6 @@ from google.genai import types
 
 from app.core.config import get_settings
 
-DEFAULT_MODEL = "gemini-2.5-flash"
-
 MAX_OUTPUT_TOKENS = 400
 
 SUMMARY_PROMPT_TEMPLATE = """Você mantém o resumo corrido das conversas \
@@ -51,7 +49,7 @@ class ConversationSummaryEngine:
         )
 
         response = await client.aio.models.generate_content(
-            model=DEFAULT_MODEL,
+            model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 max_output_tokens=MAX_OUTPUT_TOKENS,
