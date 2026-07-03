@@ -8,6 +8,9 @@ from app.application.history.enriched_history_builder import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.infrastructure.persistence.runner_memory_repository import (
+    RunnerMemoryRepository,
+)
 
 router = APIRouter(
     prefix="/debug",
@@ -20,7 +23,7 @@ async def enriched_activities():
 
     try:
 
-        history = await LoadTrainingHistory.execute(15)
+        history = await LoadTrainingHistory.execute(limit=15)
 
         enriched = EnrichedHistoryBuilder.build(
             history
@@ -29,6 +32,24 @@ async def enriched_activities():
         return [
             asdict(activity)
             for activity in enriched
+        ]
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/memory/{profile}")
+async def runner_memory(profile: str):
+
+    try:
+
+        return [
+            asdict(entry)
+            for entry in RunnerMemoryRepository().load(profile)
         ]
 
     except Exception as e:

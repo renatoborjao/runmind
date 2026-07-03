@@ -42,6 +42,38 @@ class RunnerProfileRepository:
             if key in known
         })
 
+    def update_injuries(
+        self,
+        profile: str,
+        injuries: list[str],
+    ) -> None:
+        """Regrava apenas a chave `injuries`, preservando chaves do JSON
+        que a entidade não conhece (notifications, timezone...)."""
+
+        file = self.storage / f"{profile}.json"
+
+        with open(
+            file,
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        data["injuries"] = injuries
+
+        with open(
+            file,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
     def find_by_phone(
         self,
         phone: str,

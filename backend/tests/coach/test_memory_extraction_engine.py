@@ -1,0 +1,105 @@
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from app.application.coach.memory.memory_extraction_engine import (
+    MemoryExtractionEngine,
+)
+from app.domain.entities.memory_entry import MemoryEntry
+
+MODULE = "app.application.coach.memory.memory_extraction_engine"
+
+
+def _mock_response(text: str | None):
+
+    return SimpleNamespace(text=text)
+
+
+def _memory(entry_id: str = "m-1") -> MemoryEntry:
+
+    return MemoryEntry(
+        id=entry_id,
+        category="lesao",
+        content="Dor no joelho direito",
+        source="conversation",
+        created_at="2026-07-01T10:00:00+00:00",
+    )
+
+
+def _extract(response_text: str | None, **overrides):
+
+    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+
+        mock_client = mock_client_cls.return_value
+
+        mock_client.aio.models.generate_content = AsyncMock(
+            return_value=_mock_response(response_text),
+        )
+
+        kwargs = dict(
+            runner_name="Renato",
+            current_memories=[_memory()],
+            recent_turns=[{"role": "user", "text": "oi coach"}],
+            incoming_text="Senti dor no tornozelo hoje",
+        )
+
+        kwargs.update(overrides)
+
+        ops = asyncio.run(
+            MemoryExtractionEngine.extract(**kwargs)
+        )
+
+        _, call_kwargs = mock_client.aio.models.generate_content.call_args
+
+        return ops, call_kwargs
+
+
+def test_extract_parses_add_and_archive_ops():
+
+    ops, kwargs = _extract(
+        '{"add": [{"category": "lesao", "content": "Dor no tornozelo"}],'
+        ' "archive": ["m-1"]}'
+    )
+
+    assert ops == {
+        "add": [{"category": "lesao", "content": "Dor no tornozelo"}],
+        "archive": ["m-1"],
+    }
+
+    # o prompt leva memórias atuais, contexto e a mensagem nova
+    prompt = kwargs["contents"]
+    assert "m-1 — [lesao] Dor no joelho direito" in prompt
+    assert "user: oi coach" in prompt
+    assert "Senti dor no tornozelo hoje" in prompt
+
+    assert kwargs["config"].response_mime_type == "application/json"
+
+
+def test_extract_returns_empty_ops_on_malformed_json():
+
+    ops, _ = _extract("resposta que não é json")
+
+    assert ops == {"add": [], "archive": []}
+
+
+def test_extract_returns_empty_ops_on_none_response():
+
+    ops, _ = _extract(None)
+
+    assert ops == {"add": [], "archive": []}
+
+
+def test_extract_filters_invalid_categories_and_empty_content():
+
+    ops, _ = _extract(
+        '{"add": ['
+        '{"category": "invalida", "content": "algo"},'
+        '{"category": "lesao", "content": ""},'
+        '{"category": "vida", "content": "Semana puxada no trabalho"}'
+        '], "archive": [42]}'
+    )
+
+    assert ops == {
+        "add": [{"category": "vida", "content": "Semana puxada no trabalho"}],
+        "archive": [],
+    }

@@ -63,7 +63,7 @@ def _plan(sessions=None) -> TrainingPlan:
     )
 
 
-async def _build_with_mocks(history_activities, sessions):
+async def _build_with_mocks(history_activities, sessions, memory=""):
 
     with (
         patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
@@ -71,6 +71,7 @@ async def _build_with_mocks(history_activities, sessions):
         patch(f"{MODULE}.TrainingAssessmentBuilder") as mock_assessment_builder,
         patch(f"{MODULE}.RunnerMetricsBuilder") as mock_metrics_builder,
         patch(f"{MODULE}.WeeklyPlanService") as mock_plan_service,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory_service,
     ):
 
         mock_load_runner.execute.return_value = make_runner()
@@ -84,6 +85,8 @@ async def _build_with_mocks(history_activities, sessions):
         mock_metrics_builder.build.return_value = _metrics()
 
         mock_plan_service.get_or_generate.return_value = _plan(sessions)
+
+        mock_memory_service.render.return_value = memory
 
         return await ConversationContextBuilder.build("renato")
 
@@ -104,6 +107,36 @@ def test_build_includes_runner_facts_and_last_activity():
     assert "32.4 km" in text
     assert "82%" in text
     assert "Rodagem, 10.5 km" in text
+
+
+def test_build_includes_memory_section_when_present():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+            memory=(
+                "Memória do corredor (fatos anotados de conversas anteriores):\n"
+                "- [lesao] Dor no joelho direito (01/07)"
+            ),
+        )
+    )
+
+    assert "Memória do corredor" in text
+    assert "[lesao] Dor no joelho direito" in text
+
+
+def test_build_has_no_memory_section_when_empty():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+            memory="",
+        )
+    )
+
+    assert "Memória do corredor" not in text
 
 
 def test_build_handles_no_recent_activity():

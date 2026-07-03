@@ -4,6 +4,12 @@ from app.application.coach.conversation.coach_conversation_engine import (
 from app.application.coach.conversation.conversation_context_builder import (
     ConversationContextBuilder,
 )
+from app.application.coach.memory.memory_extraction_engine import (
+    MemoryExtractionEngine,
+)
+from app.application.coach.memory.runner_memory_service import (
+    RunnerMemoryService,
+)
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -13,6 +19,11 @@ from app.application.use_cases.load_runner_profile import (
 from app.infrastructure.persistence.conversation_repository import (
     ConversationRepository,
 )
+from app.infrastructure.persistence.runner_memory_repository import (
+    RunnerMemoryRepository,
+)
+
+MEMORY_EXTRACTION_CONTEXT_TURNS = 6
 
 
 class CoachConversationEvent:
@@ -56,4 +67,42 @@ class CoachConversationEvent:
             message=reply_text,
         )
 
+        # A resposta já foi enviada: falha na memória nunca chega ao corredor.
+        try:
+
+            await CoachConversationEvent._update_memory(
+                profile=profile,
+                runner_name=runner.name,
+                history=history,
+                incoming_text=incoming_text,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao atualizar memória de '{profile}': {e}")
+
         return reply_text
+
+    @staticmethod
+    async def _update_memory(
+        profile: str,
+        runner_name: str,
+        history: list[dict],
+        incoming_text: str,
+    ) -> None:
+
+        current_memories = RunnerMemoryRepository().active(profile)
+
+        ops = await MemoryExtractionEngine.extract(
+            runner_name=runner_name,
+            current_memories=current_memories,
+            recent_turns=history[-MEMORY_EXTRACTION_CONTEXT_TURNS:],
+            incoming_text=incoming_text,
+        )
+
+        if ops["add"] or ops["archive"]:
+
+            RunnerMemoryService.process(
+                profile,
+                ops,
+            )

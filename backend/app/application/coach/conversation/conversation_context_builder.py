@@ -3,6 +3,9 @@ from datetime import UTC, datetime
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
+from app.application.coach.memory.runner_memory_service import (
+    RunnerMemoryService,
+)
 from app.application.history.runner_metrics import (
     RunnerMetricsBuilder,
 )
@@ -57,7 +60,7 @@ class ConversationContextBuilder:
             goal=goal,
         )
 
-        return (
+        facts = (
             f"Corredor: {runner.name}\n"
             f"Meta: {runner.goal}\n"
             f"Volume semanal atual: {assessment.current_weekly_volume:.1f} km "
@@ -66,6 +69,14 @@ class ConversationContextBuilder:
             f"Último treino: {ConversationContextBuilder._last_activity_summary(history)}\n"
             f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan)}\n"
         )
+
+        memory = RunnerMemoryService.render(profile)
+
+        if memory:
+
+            facts = f"{facts}\n{memory}\n"
+
+        return facts
 
     @staticmethod
     def _last_activity_summary(
