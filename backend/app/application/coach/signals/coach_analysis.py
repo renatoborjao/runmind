@@ -13,15 +13,18 @@ from app.application.coach.signals.finding import (
 @dataclass(slots=True)
 class CoachAnalysis:
 
-    distance: Finding
-
-    type_match: Finding
-
     intensity: Finding
 
     pace_effort: Finding
 
     recovery: Finding
+
+    # None quando o treino foi em dia sem sessão planejada
+    distance: Finding | None = None
+
+    type_match: Finding | None = None
+
+    unplanned: Finding | None = None
 
     fatigue: Finding | None = None
 

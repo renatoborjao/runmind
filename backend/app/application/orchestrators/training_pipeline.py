@@ -64,13 +64,18 @@ class TrainingPipeline:
 
         # --------------------------------------------------
         # Ajuste do plano (determinístico, com base na análise acima)
+        # Treino extra (sem sessão planejada) não ajusta o plano.
         # --------------------------------------------------
 
-        adjustment_note = PlanAdjustmentEngine.adjust(
-            plan,
-            planned_session,
-            coach_analysis,
-        )
+        adjustment_note = None
+
+        if planned_session is not None:
+
+            adjustment_note = PlanAdjustmentEngine.adjust(
+                plan,
+                planned_session,
+                coach_analysis,
+            )
 
         if adjustment_note:
 

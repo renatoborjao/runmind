@@ -30,7 +30,16 @@ class ActivityEnricher:
 
         # ---------------- Intensidade ----------------
 
-        if hr >= metrics.average_hr + 10:
+        if activity.average_heartrate is None:
+
+            # Sem FC real não dá pra fingir "MEDIUM" com a FC média
+            # emprestada — deriva a intensidade do pace do corredor.
+            intensity, zone = ActivityEnricher._intensity_from_pace(
+                pace,
+                metrics,
+            )
+
+        elif hr >= metrics.average_hr + 10:
 
             intensity = "VERY_HIGH"
 
@@ -146,3 +155,27 @@ class ActivityEnricher:
         )
 
         return enriched
+
+    @staticmethod
+    def _intensity_from_pace(
+        pace: float,
+        metrics: RunnerMetrics,
+    ) -> tuple[str, str]:
+
+        if pace <= metrics.vo2_pace:
+
+            return "VERY_HIGH", "Z5"
+
+        if pace <= metrics.threshold_pace:
+
+            return "HIGH", "Z4"
+
+        if pace <= metrics.easy_pace_min:
+
+            return "MEDIUM", "Z3"
+
+        if pace <= metrics.easy_pace_max:
+
+            return "LOW", "Z2"
+
+        return "VERY_LOW", "Z1"

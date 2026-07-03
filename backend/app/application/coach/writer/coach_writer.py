@@ -13,10 +13,20 @@ from app.application.coach.models.next_training import (
 from app.application.coach.signals.finding import (
     Finding,
 )
+from app.application.coach.writer.labels import (
+    intensity_label,
+    workout_type_label,
+)
 from app.application.coach.writer.phrasebook import (
     ALL_TEMPLATES,
     CLOSING_TEMPLATES,
     GREETING_TEMPLATE,
+)
+from app.application.planner.pace_formatter import (
+    PaceFormatter,
+)
+from app.core.weekdays import (
+    weekday_label,
 )
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
@@ -57,8 +67,13 @@ class CoachWriter:
 
     @staticmethod
     def _planned_lines(
-        planned: PlannedSession,
+        planned: PlannedSession | None,
     ) -> list[str]:
+
+        # treino extra: sem sessão planejada, a seção some da mensagem
+        if planned is None:
+
+            return []
 
         return [
             planned.workout_type,
@@ -74,9 +89,9 @@ class CoachWriter:
 
         return [
             f"{distance:.1f} km",
-            f"Ritmo: {executed.pace_min_km:.2f} min/km",
-            f"Tipo identificado: {executed.training_type}",
-            f"Intensidade: {executed.intensity}",
+            f"Ritmo: {PaceFormatter.format(executed.pace_min_km)} min/km",
+            f"Tipo identificado: {workout_type_label(executed.training_type)}",
+            f"Intensidade: {intensity_label(executed.intensity)}",
             f"Zona: {executed.estimated_zone}",
         ]
 
@@ -88,6 +103,10 @@ class CoachWriter:
         lines = []
 
         for finding in findings:
+
+            if finding is None:
+
+                continue
 
             template = ALL_TEMPLATES.get(finding.code)
 
@@ -111,7 +130,7 @@ class CoachWriter:
             return []
 
         lines = [
-            f"Dia: {next_training.day}",
+            f"Dia: {weekday_label(next_training.day)}",
             f"Tipo: {next_training.workout_type}",
             f"Objetivo: {next_training.objective}",
         ]

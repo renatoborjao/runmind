@@ -170,7 +170,7 @@ def test_next_session_summary_includes_real_date_and_pace():
         reference_date=date(2026, 7, 20),
     )
 
-    assert "Thursday" in summary
+    assert "quinta-feira" in summary
     assert "23/07" in summary  # quinta-feira da semana de 2026-07-20
     assert "Intervalado" in summary
     assert "8.0 km" in summary
@@ -232,7 +232,7 @@ def test_next_session_summary_picks_closest_upcoming_not_first():
         reference_date=date(2026, 7, 22),
     )
 
-    assert "Sunday" in summary
+    assert "domingo" in summary
     assert "Long Run" in summary
 
 

@@ -23,10 +23,11 @@ class CoachContextBuilder:
     @staticmethod
     def build(
         runner: RunnerProfile,
-        planned: PlannedSession,
+        planned: PlannedSession | None,
         executed: EnrichedActivity,
         history: TrainingHistory,
         assessment: TrainingAssessment,
+        next_planned: PlannedSession | None = None,
     ) -> CoachContext:
 
         return CoachContext(
@@ -36,6 +37,8 @@ class CoachContextBuilder:
             planned=planned,
 
             executed=executed,
+
+            next_planned=next_planned,
 
             fatigue=executed.fatigue_score,
 

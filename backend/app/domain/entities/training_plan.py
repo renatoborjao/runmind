@@ -83,6 +83,28 @@ class TrainingPlan:
 
         )
 
+    def next_session_after(
+        self,
+        reference: date,
+    ) -> PlannedSession | None:
+        """
+        Próxima sessão do plano com data estritamente
+        posterior à referência.
+        """
+
+        upcoming = sorted(
+            self.sessions,
+            key=lambda session: self.session_date(session),
+        )
+
+        for session in upcoming:
+
+            if self.session_date(session) > reference:
+
+                return session
+
+        return None
+
     def find_session_by_day(
         self,
         day: str,

@@ -8,6 +8,7 @@ from app.application.coach.signals.codes import (
     RecoveryStatus,
     TypeMatchStatus,
     WeeklyVolumeStatus,
+    WorkoutPlanStatus,
 )
 
 # Todas as frases abaixo sao copiadas literalmente do que ja existia
@@ -30,6 +31,13 @@ DISTANCE_TEMPLATES = {
         "é manter a consistência."
     ),
     DistanceStatus.UNKNOWN.value: None,
+}
+
+WORKOUT_PLAN_TEMPLATES = {
+    WorkoutPlanStatus.UNPLANNED.value: (
+        "Hoje não era um dia planejado de corrida — registrei como "
+        "treino extra. Fique de olho na carga total da semana."
+    ),
 }
 
 TYPE_MATCH_TEMPLATES = {
@@ -129,6 +137,7 @@ WEEKLY_VOLUME_TEMPLATES = {
 
 ALL_TEMPLATES: dict[str, str | None] = {
     **DISTANCE_TEMPLATES,
+    **WORKOUT_PLAN_TEMPLATES,
     **TYPE_MATCH_TEMPLATES,
     **INTENSITY_TEMPLATES,
     **PACE_EFFORT_TEMPLATES,

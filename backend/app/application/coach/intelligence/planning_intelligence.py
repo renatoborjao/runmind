@@ -11,9 +11,14 @@ class PlanningIntelligence:
     @staticmethod
     def process(
         context: CoachContext,
-    ) -> NextTraining:
+    ) -> NextTraining | None:
 
-        planned = context.planned
+        # próxima sessão futura do plano — NÃO a que acabou de ser feita
+        planned = context.next_planned
+
+        if planned is None:
+
+            return None
 
         return NextTraining(
             day=planned.day,

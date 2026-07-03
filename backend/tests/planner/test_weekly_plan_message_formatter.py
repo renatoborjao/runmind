@@ -47,14 +47,17 @@ def test_format_includes_runner_name_and_week_start():
     assert "20/07" in text
 
 
-def test_format_lists_sessions_in_chronological_order():
+def test_format_lists_sessions_in_chronological_order_ptbr():
 
     text = WeeklyPlanMessageFormatter.format("Renato", _plan())
 
-    monday_index = text.index("Monday")
-    sunday_index = text.index("Sunday")
+    # dias exibidos em pt-BR, em ordem cronológica
+    # ("• " para não casar com o "Bom domingo" do cabeçalho)
+    monday_index = text.index("• segunda-feira")
+    sunday_index = text.index("• domingo")
 
     assert monday_index < sunday_index
+    assert "Monday" not in text
 
 
 def test_format_includes_pace_and_distance():

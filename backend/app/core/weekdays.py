@@ -12,6 +12,17 @@ WEEKDAYS = {
 }
 
 
+WEEKDAYS_PTBR = {
+    "monday": "segunda-feira",
+    "tuesday": "terça-feira",
+    "wednesday": "quarta-feira",
+    "thursday": "quinta-feira",
+    "friday": "sexta-feira",
+    "saturday": "sábado",
+    "sunday": "domingo",
+}
+
+
 def weekday_name(date: datetime) -> str:
     """
     Retorna o dia da semana no padrão utilizado
@@ -21,3 +32,10 @@ def weekday_name(date: datetime) -> str:
     """
 
     return WEEKDAYS[date.weekday()]
+
+
+def weekday_label(day: str) -> str:
+    """Nome interno em inglês ("Thursday") -> exibição em pt-BR
+    ("quinta-feira"). Dia desconhecido volta como veio."""
+
+    return WEEKDAYS_PTBR.get(day.lower(), day)

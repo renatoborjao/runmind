@@ -22,9 +22,13 @@ class CoachContext:
 
     runner: RunnerProfile
 
-    planned: PlannedSession
+    # None = treino feito em dia sem sessão planejada (treino extra)
+    planned: PlannedSession | None
 
     executed: EnrichedActivity
+
+    # próxima sessão futura do plano (para o "🎯 Próximo treino")
+    next_planned: PlannedSession | None = None
 
     # ==========================
     # Histórico

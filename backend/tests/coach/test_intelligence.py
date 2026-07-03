@@ -294,10 +294,10 @@ def test_weekly_volume_progress_boundaries():
 # PlanningIntelligence
 # ==========================================================
 
-def test_planning_intelligence_maps_real_plan_fields():
+def test_planning_intelligence_maps_next_planned_session():
 
     context = make_context(
-        planned=make_planned_session(
+        next_planned=make_planned_session(
             day="Thursday",
             workout_type="Intervalado",
             objective="Velocidade",
@@ -321,7 +321,7 @@ def test_planning_intelligence_maps_real_plan_fields():
 def test_planning_intelligence_defaults_pace_when_absent():
 
     context = make_context(
-        planned=make_planned_session(
+        next_planned=make_planned_session(
             target_pace_min=None,
             target_pace_max=None,
         ),
@@ -330,6 +330,13 @@ def test_planning_intelligence_defaults_pace_when_absent():
     next_training = PlanningIntelligence.process(context)
 
     assert next_training.pace == "-"
+
+
+def test_planning_intelligence_returns_none_without_upcoming_session():
+
+    context = make_context(next_planned=None)
+
+    assert PlanningIntelligence.process(context) is None
 
 
 # ==========================================================

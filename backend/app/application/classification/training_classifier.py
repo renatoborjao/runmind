@@ -15,6 +15,11 @@ from app.domain.entities.runner_metrics import (
 )
 
 
+# Piso absoluto para pontuar como longão: sem isso, um histórico
+# minúsculo (max_long_run de 100 m) faz qualquer trote virar LONG_RUN.
+MIN_LONG_RUN_KM = 5.0
+
+
 class TrainingClassifier:
 
     @staticmethod
@@ -47,7 +52,10 @@ class TrainingClassifier:
 
         # ---------------- DISTÂNCIA ----------------
 
-        if distance >= metrics.max_long_run * 0.90:
+        if (
+            distance >= metrics.max_long_run * 0.90
+            and distance >= MIN_LONG_RUN_KM
+        ):
 
             scores[4].add(
                 60,
@@ -130,7 +138,7 @@ class TrainingClassifier:
 
         # ---------------- DURAÇÃO ----------------
 
-        if duration >= 90:
+        if duration >= 90 and distance >= MIN_LONG_RUN_KM:
 
             scores[4].add(
                 30,

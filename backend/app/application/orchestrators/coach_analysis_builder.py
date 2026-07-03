@@ -111,7 +111,8 @@ class CoachAnalysisBuilder:
         )
 
         # --------------------------------------------------
-        # Procura treino pelo dia
+        # Procura treino pelo dia — sem sessão para o dia,
+        # o treino é tratado como extra (sem comparação)
         # --------------------------------------------------
 
         activity_day = weekday_name(
@@ -123,24 +124,12 @@ class CoachAnalysisBuilder:
         )
 
         # --------------------------------------------------
-        # Fallback pela distância
+        # Próxima sessão futura (para o "próximo treino")
         # --------------------------------------------------
 
-        if planned_session is None:
-
-            executed_distance = (
-                enriched.activity.distance / 1000
-            )
-
-            planned_session = plan.find_best_session(
-                executed_distance,
-            )
-
-        if planned_session is None:
-
-            raise Exception(
-                "Nenhum treino planejado encontrado."
-            )
+        next_planned = plan.next_session_after(
+            enriched.activity.start_date.date(),
+        )
 
         # --------------------------------------------------
         # Coach
@@ -152,6 +141,7 @@ class CoachAnalysisBuilder:
             executed=enriched,
             history=history,
             assessment=assessment,
+            next_planned=next_planned,
         )
 
         coach_analysis = CoachPipeline.execute(

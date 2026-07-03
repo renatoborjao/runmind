@@ -17,6 +17,7 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import today_local
+from app.core.weekdays import weekday_label
 from app.domain.entities.training_goal import (
     TrainingGoal,
 )
@@ -133,7 +134,8 @@ class ConversationContextBuilder:
             adjustment = f" [AJUSTADO: {session.adjustment_reason}]"
 
         return (
-            f"{session.day} ({session_date.strftime('%d/%m')}) — "
+            f"{weekday_label(session.day)} "
+            f"({session_date.strftime('%d/%m')}) — "
             f"{session.workout_type} "
             f"({session.planned_distance_km or 0:.1f} km) — "
             f"{session.objective}{pace}{adjustment}"

@@ -22,9 +22,14 @@ class CoachSummaryBuilder:
         improvements = []
 
         # Distância e aderência ao objetivo: POSITIVE vira elogio,
-        # qualquer outra severidade vira ponto de atenção.
+        # qualquer outra severidade vira ponto de atenção. Ausentes
+        # (treino em dia sem sessão planejada) são pulados.
 
         for finding in (analysis.distance, analysis.type_match):
+
+            if finding is None:
+
+                continue
 
             if finding.severity == FindingSeverity.POSITIVE:
 
@@ -33,6 +38,12 @@ class CoachSummaryBuilder:
             else:
 
                 improvements.append(finding)
+
+        # Treino extra entra como aviso leve.
+
+        if analysis.unplanned is not None:
+
+            improvements.append(analysis.unplanned)
 
         # Intensidade e ritmo são sempre leitura informativa do treino,
         # nunca alerta — entram direto como positives.

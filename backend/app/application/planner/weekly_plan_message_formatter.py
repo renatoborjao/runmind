@@ -1,3 +1,4 @@
+from app.core.weekdays import weekday_label
 from app.domain.entities.training_plan import TrainingPlan
 
 
@@ -55,6 +56,7 @@ class WeeklyPlanMessageFormatter:
             )
 
         return (
-            f"• {session.day} ({session_date}): {session.workout_type} "
+            f"• {weekday_label(session.day)} ({session_date}): "
+            f"{session.workout_type} "
             f"— {session.planned_distance_km or 0:.1f} km{pace}"
         )

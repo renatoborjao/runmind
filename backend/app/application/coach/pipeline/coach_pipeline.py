@@ -28,6 +28,13 @@ from app.application.coach.intelligence.type_match_intelligence import (
 from app.application.coach.signals.coach_analysis import (
     CoachAnalysis,
 )
+from app.application.coach.signals.codes import (
+    WorkoutPlanStatus,
+)
+from app.application.coach.signals.finding import (
+    Finding,
+    FindingSeverity,
+)
 
 
 class CoachPipeline:
@@ -37,9 +44,32 @@ class CoachPipeline:
         context: CoachContext,
     ) -> CoachAnalysis:
 
+        # Treino em dia sem sessão planejada: não há o que comparar
+        # com o plano — registra como treino extra.
+        if context.planned is None:
+
+            distance = None
+
+            type_match = None
+
+            unplanned = Finding(
+                code=WorkoutPlanStatus.UNPLANNED.value,
+                severity=FindingSeverity.NEUTRAL,
+                params={},
+            )
+
+        else:
+
+            distance = DistanceIntelligence.process(context)
+
+            type_match = TypeMatchIntelligence.process(context)
+
+            unplanned = None
+
         return CoachAnalysis(
-            distance=DistanceIntelligence.process(context),
-            type_match=TypeMatchIntelligence.process(context),
+            distance=distance,
+            type_match=type_match,
+            unplanned=unplanned,
             intensity=IntensityIntelligence.process(context),
             pace_effort=PerformanceIntelligence.process(context),
             recovery=RecoveryIntelligence.process_recovery(context),

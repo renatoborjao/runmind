@@ -8,6 +8,9 @@ from app.application.coach.signals.finding import (
     Finding,
     FindingSeverity,
 )
+from app.application.coach.writer.labels import (
+    workout_type_label,
+)
 
 
 class TypeMatchIntelligence:
@@ -42,6 +45,9 @@ class TypeMatchIntelligence:
             severity=FindingSeverity.ATTENTION,
             params={
                 "planned_type": context.planned.workout_type,
-                "executed_type": context.executed.training_type.lower(),
+                # minúsculo: entra no meio da frase do phrasebook
+                "executed_type": workout_type_label(
+                    context.executed.training_type,
+                ).lower(),
             },
         )

@@ -58,3 +58,34 @@ def test_session_date_is_case_insensitive():
     plan = _plan([_session("wednesday")])
 
     assert plan.session_date(plan.sessions[0]) == date(2026, 7, 22)
+
+
+def test_next_session_after_picks_first_upcoming():
+
+    plan = _plan([
+        _session("Sunday"),
+        _session("Monday"),
+        _session("Wednesday"),
+    ])
+
+    # terça (21/07): próxima sessão é quarta, não domingo
+    next_session = plan.next_session_after(date(2026, 7, 21))
+
+    assert next_session.day == "Wednesday"
+
+
+def test_next_session_after_is_strictly_after_reference():
+
+    plan = _plan([_session("Monday"), _session("Sunday")])
+
+    # na própria segunda, a próxima é domingo (não a de hoje)
+    next_session = plan.next_session_after(date(2026, 7, 20))
+
+    assert next_session.day == "Sunday"
+
+
+def test_next_session_after_returns_none_past_last_session():
+
+    plan = _plan([_session("Monday"), _session("Wednesday")])
+
+    assert plan.next_session_after(date(2026, 7, 22)) is None

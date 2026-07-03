@@ -27,6 +27,11 @@ class PlanAdjustmentEngine:
         analysis: CoachAnalysis,
     ) -> str | None:
 
+        # treino extra (sem sessão planejada): nada a ajustar
+        if analysis.distance is None:
+
+            return None
+
         if analysis.distance.code != DistanceStatus.ABOVE.value:
 
             return None
@@ -47,9 +52,8 @@ class PlanAdjustmentEngine:
 
             return None
 
-        next_session = PlanAdjustmentEngine._find_next_session(
-            plan,
-            executed_session,
+        next_session = plan.next_session_after(
+            plan.session_date(executed_session),
         )
 
         if next_session is None:
@@ -78,28 +82,3 @@ class PlanAdjustmentEngine:
         )
 
         return next_session.adjustment_reason
-
-    @staticmethod
-    def _find_next_session(
-        plan: TrainingPlan,
-        executed_session: PlannedSession,
-    ) -> PlannedSession | None:
-
-        executed_date = plan.session_date(executed_session)
-
-        upcoming = sorted(
-            (
-                session
-                for session in plan.sessions
-                if session is not executed_session
-            ),
-            key=lambda session: plan.session_date(session),
-        )
-
-        for session in upcoming:
-
-            if plan.session_date(session) > executed_date:
-
-                return session
-
-        return None

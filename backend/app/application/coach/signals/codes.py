@@ -19,6 +19,11 @@ class TypeMatchStatus(str, Enum):
     MISMATCH = "TYPE_MISMATCH"
 
 
+class WorkoutPlanStatus(str, Enum):
+
+    UNPLANNED = "WORKOUT_UNPLANNED"
+
+
 class IntensityLevel(str, Enum):
 
     VERY_HIGH = "INTENSITY_VERY_HIGH"
