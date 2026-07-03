@@ -34,6 +34,10 @@ CONVERSATION_WINDOW = 20
 # dobra o resumo em lotes: 1 chamada Gemini a cada ~10 turnos antigos
 SUMMARY_BATCH_MIN = 10
 
+# mensagens triviais ("ok", "sim", "valeu 💪") não têm fato durável:
+# pular a extração de memória economiza 1 chamada Gemini por mensagem
+MEMORY_EXTRACTION_MIN_CHARS = 12
+
 BUSY_REPLY = (
     "Opa, me embananei aqui por um instante 😅 "
     "Me manda sua mensagem de novo daqui a pouquinho?"
@@ -171,6 +175,10 @@ class CoachConversationEvent:
         history: list[dict],
         incoming_text: str,
     ) -> None:
+
+        if len(incoming_text.strip()) < MEMORY_EXTRACTION_MIN_CHARS:
+
+            return
 
         current_memories = RunnerMemoryRepository().active(profile)
 

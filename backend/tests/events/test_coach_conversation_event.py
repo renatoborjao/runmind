@@ -12,6 +12,7 @@ MODULE = "app.application.events.coach_conversation"
 def _run_event(
     extraction_ops=None,
     extraction_error=None,
+    incoming_text="Como foi meu treino de ontem?",
 ):
 
     runner = make_runner(name="Renato", phone="+5511975658679")
@@ -60,7 +61,7 @@ def _run_event(
         reply = asyncio.run(
             CoachConversationEvent.execute(
                 profile="renato",
-                incoming_text="Como foi meu treino de ontem?",
+                incoming_text=incoming_text,
                 sender_name="Renato",
             )
         )
@@ -307,4 +308,20 @@ def test_extraction_failure_does_not_break_reply():
 
     mock_notification.send_training_feedback.assert_awaited_once()
 
+    mock_memory_service.process.assert_not_called()
+
+
+def test_trivial_message_skips_memory_extraction():
+
+    (
+        reply,
+        *_,
+        mock_extraction,
+        mock_memory_service,
+    ) = _run_event(incoming_text="ok 💪")
+
+    assert reply == "Bom dia! Foi um baita treino ontem."
+
+    # mensagem trivial: sem chamada de extração (economia de 1 call)
+    mock_extraction.extract.assert_not_awaited()
     mock_memory_service.process.assert_not_called()

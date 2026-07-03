@@ -88,6 +88,12 @@ class CoachConversationEngine:
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
+                # resposta curta de WhatsApp não precisa de raciocínio;
+                # tokens de thinking são cobrados como saída (o preço
+                # mais caro) e ainda aumentam a latência
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=0,
+                ),
             ),
         )
 
