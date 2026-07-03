@@ -13,12 +13,20 @@ class StravaMapper:
         start = data.get("start_latlng") or [None, None]
         end = data.get("end_latlng") or [None, None]
 
+        # start_date_local traz a hora de parede do atleta (o Strava manda
+        # com sufixo Z, mas é hora local). Usar o start_date UTC jogaria
+        # uma corrida de sábado 21h30 (BRT) no domingo — semana errada em
+        # todos os cálculos semanais.
+        start_date_raw = (
+            data.get("start_date_local") or data["start_date"]
+        )
+
         return Activity(
             id=data["id"],
             name=data["name"],
             sport=data["sport_type"],
             start_date=datetime.fromisoformat(
-                data["start_date"].replace("Z", "+00:00")
+                start_date_raw.replace("Z", "+00:00")
             ),
             timezone=data["timezone"],
             distance=data["distance"],

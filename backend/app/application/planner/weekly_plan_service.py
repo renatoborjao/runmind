@@ -1,6 +1,7 @@
-from datetime import UTC, date, datetime
+from datetime import date
 
 from app.application.planner.planner import TrainingPlanner
+from app.core.clock import today_local
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_assessment import TrainingAssessment
@@ -23,7 +24,7 @@ class WeeklyPlanService:
         reference_date: date | None = None,
     ) -> TrainingPlan:
 
-        reference_date = reference_date or datetime.now(UTC).date()
+        reference_date = reference_date or today_local()
 
         current_week_start = WeeklyPlanService._week_start(
             reference_date,

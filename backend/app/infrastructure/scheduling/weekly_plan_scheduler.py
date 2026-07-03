@@ -2,6 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
+from app.core.clock import DEFAULT_TIMEZONE
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -15,7 +16,7 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         return _scheduler
 
     _scheduler = AsyncIOScheduler(
-        timezone="America/Sao_Paulo",
+        timezone=DEFAULT_TIMEZONE.key,
     )
 
     _scheduler.add_job(

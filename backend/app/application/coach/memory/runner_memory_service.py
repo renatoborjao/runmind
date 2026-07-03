@@ -1,6 +1,7 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
+from app.core.clock import now_local
 from app.domain.entities.memory_entry import MemoryEntry
 from app.infrastructure.persistence.runner_memory_repository import (
     RunnerMemoryRepository,
@@ -33,7 +34,9 @@ class RunnerMemoryService:
                     category=item["category"],
                     content=item["content"],
                     source="conversation",
-                    created_at=datetime.now(UTC).isoformat(),
+                    # hora local: a data exibida no contexto ("03/07")
+                    # tem que bater com o dia do corredor
+                    created_at=now_local().isoformat(),
                 ),
             )
 

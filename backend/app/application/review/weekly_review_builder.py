@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 from app.application.history.consistency_calculator import (
     ConsistencyCalculator,
 )
 from app.application.history.evolution_analyzer import EvolutionAnalyzer
 from app.application.history.week_comparator import WeekComparator
+from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 
@@ -23,9 +24,7 @@ class WeeklyReviewBuilder:
         reference_date: date | None = None,
     ) -> dict:
 
-        reference_date = (
-            reference_date or datetime.now(UTC).date()
-        )
+        reference_date = reference_date or today_local()
 
         comparison = WeekComparator.compare(
             history,

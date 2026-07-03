@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 from app.application.history.weekly_buckets import (
     group_by_week,
@@ -8,6 +8,7 @@ from app.application.history.weekly_buckets import (
     week_start,
     week_stats,
 )
+from app.core.clock import today_local
 from app.domain.entities.training_history import TrainingHistory
 
 STABLE_THRESHOLD_PERCENT = 5
@@ -24,9 +25,7 @@ class EvolutionAnalyzer:
         reference_date: date | None = None,
     ) -> dict:
 
-        reference_date = (
-            reference_date or datetime.now(UTC).date()
-        )
+        reference_date = reference_date or today_local()
 
         buckets = group_by_week(history.activities)
 

@@ -1,6 +1,7 @@
 from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
+from app.core.clock import today_local
 from app.domain.entities.training_history import TrainingHistory
 
 WeekKey = tuple[int, int]
@@ -36,7 +37,7 @@ class ConsistencyCalculator:
 
             return 0.0
 
-        reference_date = reference_date or datetime.now(UTC).date()
+        reference_date = reference_date or today_local()
 
         days_by_week: dict[WeekKey, set[date]] = defaultdict(set)
 

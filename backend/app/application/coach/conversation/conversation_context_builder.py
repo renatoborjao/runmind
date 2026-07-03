@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
@@ -18,6 +16,7 @@ from app.application.use_cases.load_runner_profile import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.core.clock import today_local
 from app.domain.entities.training_goal import (
     TrainingGoal,
 )
@@ -103,7 +102,7 @@ class ConversationContextBuilder:
 
             return "nenhum treino planejado ainda"
 
-        today = reference_date or datetime.now(UTC).date()
+        today = reference_date or today_local()
 
         upcoming = sorted(
             plan.sessions,
