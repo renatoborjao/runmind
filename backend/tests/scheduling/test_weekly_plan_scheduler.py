@@ -10,7 +10,7 @@ def _reset_module_state():
     scheduler_module._scheduler = None
 
 
-def test_registers_cron_job_for_sunday_15h():
+def test_registers_plan_and_review_cron_jobs():
 
     _reset_module_state()
 
@@ -22,12 +22,22 @@ def test_registers_cron_job_for_sunday_15h():
 
         scheduler_module.start_weekly_plan_scheduler()
 
-        _, kwargs = mock_instance.add_job.call_args
+        jobs = {
+            kwargs["id"]: kwargs
+            for _, kwargs in mock_instance.add_job.call_args_list
+        }
 
-        assert kwargs["trigger"] == "cron"
-        assert kwargs["day_of_week"] == "sun"
-        assert kwargs["hour"] == 15
-        assert kwargs["minute"] == 0
+        plan = jobs["weekly_plan_notification"]
+        assert plan["trigger"] == "cron"
+        assert plan["day_of_week"] == "sun"
+        assert plan["hour"] == 15
+        assert plan["minute"] == 0
+
+        review = jobs["weekly_review_notification"]
+        assert review["trigger"] == "cron"
+        assert review["day_of_week"] == "sun"
+        assert review["hour"] == 20
+        assert review["minute"] == 0
 
         mock_instance.start.assert_called_once()
 

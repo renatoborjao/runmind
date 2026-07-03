@@ -3,6 +3,9 @@ from fastapi import APIRouter, HTTPException
 from app.application.events.training_completed import (
     TrainingCompletedEvent,
 )
+from app.application.review.weekly_review_notifier import (
+    WeeklyReviewNotifier,
+)
 
 router = APIRouter(
     prefix="/events",
@@ -33,4 +36,23 @@ async def training_completed():
 
             detail=str(e),
 
+        )
+
+
+@router.post("/weekly-review")
+async def weekly_review():
+
+    try:
+
+        await WeeklyReviewNotifier.notify_all()
+
+        return {
+            "status": "success",
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
         )
