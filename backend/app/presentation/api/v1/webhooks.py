@@ -254,6 +254,33 @@ async def receive_whatsapp_webhook(
 
     phone = PhoneNormalizer.normalize(raw_phone)
 
+    # Falha aqui dentro NUNCA pode virar 500: a Evolution reenvia o
+    # webhook em erro, reprocessando a mesma mensagem várias vezes
+    # (tempestade de retry + chamadas duplicadas ao Gemini).
+    try:
+
+        return await _route_message(phone, text, media, data)
+
+    except Exception as e:
+
+        print(f"Falha ao processar mensagem de {phone}: {e}")
+
+        return {
+
+            "success": False,
+
+            "error": str(e),
+
+        }
+
+
+async def _route_message(
+    phone: str,
+    text: str | None,
+    media: dict | None,
+    data: dict,
+) -> dict:
+
     profile = RunnerProfileRepository().find_by_phone(phone)
 
     # número desconhecido: inicia (ou continua) o cadastro
