@@ -12,16 +12,23 @@ class RunnerProfileRepository:
 
     def __init__(self):
 
+        # um arquivo por atleta: storage/profiles/{profile}.json
         self.storage = (
             Path(__file__)
             .resolve()
             .parents[3]
             / "storage"
+            / "profiles"
+        )
+
+        self.storage.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
     def load(
         self,
-        profile: str = "runner_profile",
+        profile: str = "renato",
     ) -> RunnerProfile:
 
         file = self.storage / f"{profile}.json"

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -14,29 +12,9 @@ class OwnerResolver:
 
         repository = RunnerProfileRepository()
 
-        storage = (
-            Path(__file__)
-            .resolve()
-            .parents[3]
-            / "storage"
-        )
+        for profile, runner in repository._valid_profiles():
 
-        for file in storage.glob("*.json"):
-
-            profile = file.stem
-
-            runner = repository.load(
-                profile,
-            )
-
-            if (
-                getattr(
-                    runner,
-                    "strava_athlete_id",
-                    None,
-                )
-                == owner_id
-            ):
+            if runner.strava_athlete_id == owner_id:
 
                 return profile
 

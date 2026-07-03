@@ -10,10 +10,10 @@ from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
-from app.domain.entities.training_goal import TrainingGoal
-from app.infrastructure.persistence.runner_profile_repository import (
-    RunnerProfileRepository,
+from app.application.use_cases.load_runner_profile import (
+    LoadRunnerProfile,
 )
+from app.domain.entities.training_goal import TrainingGoal
 
 router = APIRouter(
     prefix="/plan",
@@ -22,15 +22,15 @@ router = APIRouter(
 
 
 @router.get("")
-async def get_plan():
+async def get_plan(profile: str = "renato"):
 
     try:
 
-        profile = "runner_profile"
+        runner = LoadRunnerProfile.execute(profile)
 
-        runner = RunnerProfileRepository().load(profile)
-
-        history = await LoadTrainingHistory.execute()
+        history = await LoadTrainingHistory.execute(
+            profile=profile,
+        )
 
         assessment = TrainingAssessmentBuilder.build(
             runner,

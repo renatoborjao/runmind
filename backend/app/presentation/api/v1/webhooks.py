@@ -12,6 +12,9 @@ from app.application.events.training_completed import (
 from app.application.use_cases.owner_resolver import (
     OwnerResolver,
 )
+from app.domain.value_objects.sports import (
+    is_foot_sport,
+)
 from app.infrastructure.integrations.evolution.inbound_parser import (
     WhatsAppInboundParser,
 )
@@ -107,6 +110,17 @@ async def receive_webhook(
     activity = await client.get_activity(
         activity_id,
     )
+
+    # pedalada/natação/musculação não geram feedback de corrida
+    if not is_foot_sport(activity.sport):
+
+        return {
+
+            "ignored": True,
+
+            "reason": f"sport não suportado: {activity.sport}",
+
+        }
 
     await TrainingCompletedEvent.execute(
 
