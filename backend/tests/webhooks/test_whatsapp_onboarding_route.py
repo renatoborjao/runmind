@@ -52,6 +52,7 @@ def test_unknown_phone_starts_onboarding():
             phone="5511900000000",
             incoming_text="oi",
             sender_name="Fulano",
+            media=None,
         )
 
         mock_coach.execute.assert_not_called()

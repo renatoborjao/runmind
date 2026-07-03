@@ -213,6 +213,25 @@ def test_injury_alone_without_fatigue_does_not_adjust():
     assert wednesday.planned_distance_km == 10.0
 
 
+def test_external_plan_is_never_adjusted():
+
+    monday = _session("Monday")
+    wednesday = _session("Wednesday", distance=10.0)
+
+    plan = _plan([monday, wednesday])
+    plan.source = "externo"
+
+    note = PlanAdjustmentEngine.adjust(
+        plan,
+        monday,
+        _analysis(DistanceStatus.ABOVE.value, FatigueLevel.HIGH.value),
+    )
+
+    assert note is None
+    assert wednesday.adjusted is False
+    assert wednesday.planned_distance_km == 10.0
+
+
 def test_returns_none_when_no_upcoming_session():
 
     sunday = _session("Sunday")  # última sessão da semana

@@ -40,6 +40,10 @@ class TrainingPlan:
         default_factory=list
     )
 
+    # "runmind" = gerado pelo sistema; "externo" = plano de treinador
+    # humano enviado pelo corredor (nunca ajustado automaticamente)
+    source: str = "runmind"
+
     def session_date(
         self,
         session: PlannedSession,

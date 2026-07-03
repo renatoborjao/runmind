@@ -80,3 +80,38 @@ def test_save_overwrites_previous_plan(tmp_path):
     loaded = repo.load("renato")
 
     assert loaded.weekly_volume == 40.0
+
+
+def test_source_round_trip_and_legacy_default(tmp_path):
+
+    import json as _json
+
+    from app.domain.entities.training_plan import TrainingPlan
+    from datetime import date as _date
+
+    repo = WeeklyPlanRepository()
+    repo.storage = tmp_path
+
+    external = TrainingPlan(
+        athlete_name="Fulano",
+        objective="10k",
+        phase="EXTERNO",
+        weekly_volume=20.0,
+        running_days=["Tuesday"],
+        week_start=_date(2026, 6, 29),
+        sessions=[],
+        source="externo",
+    )
+
+    repo.save("fulano", external)
+
+    assert repo.load("fulano").source == "externo"
+
+    # JSON antigo sem o campo source -> "runmind"
+    data = _json.loads((tmp_path / "fulano.json").read_text("utf-8"))
+    del data["source"]
+    (tmp_path / "fulano.json").write_text(
+        _json.dumps(data), encoding="utf-8",
+    )
+
+    assert repo.load("fulano").source == "runmind"

@@ -4,6 +4,12 @@ from datetime import UTC, datetime
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
+from app.application.external_plan.external_plan_extraction_engine import (
+    ExternalPlanExtractionEngine,
+)
+from app.application.external_plan.external_plan_service import (
+    ExternalPlanService,
+)
 from app.application.history.metrics_resolver import MetricsResolver
 from app.application.onboarding.onboarding_answer_parser import (
     OnboardingAnswerParser,
@@ -19,6 +25,9 @@ from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.domain.entities.training_goal import TrainingGoal
 from app.domain.entities.training_history import TrainingHistory
+from app.infrastructure.integrations.evolution.media_client import (
+    EvolutionMediaClient,
+)
 from app.infrastructure.persistence.onboarding_state_repository import (
     OnboardingStateRepository,
 )
@@ -53,6 +62,16 @@ QUESTIONS = {
         "Você já corre hoje? Se sim, quantas vezes por semana e "
         "quantos km por treino, mais ou menos?"
     ),
+    "ASK_COACH": (
+        "Você já treina com um treinador ou segue uma planilha de "
+        "treinos? (sim/não)"
+    ),
+    "AWAIT_PLAN_MEDIA": (
+        "Então me manda um print, foto ou PDF do seu treino desta "
+        "semana 📸 — eu registro e acompanho os treinos do seu "
+        "treinador, sem mudar nada.\n\n"
+        "(se não tiver em mãos agora, responde \"mando depois\")"
+    ),
     "ASK_PACE": (
         "E em quanto tempo você costuma fazer esses {typical_km:.0f} km?"
     ),
@@ -74,6 +93,7 @@ class OnboardingFlow:
         phone: str,
         incoming_text: str,
         sender_name: str = "",
+        media: dict | None = None,
     ) -> str:
 
         repo = OnboardingStateRepository()
@@ -94,6 +114,23 @@ class OnboardingFlow:
             return QUESTIONS["ASK_NAME"]
 
         step = state["step"]
+
+        # mídia só é aceita no passo do plano do treinador
+        if media is not None:
+
+            if step == "AWAIT_PLAN_MEDIA":
+
+                return await OnboardingFlow._on_plan_media(
+                    phone,
+                    state,
+                    media,
+                    repo,
+                )
+
+            return (
+                "Boa! Mas primeiro vamos terminar seu cadastro. 😉 "
+                + OnboardingFlow._question(state)
+            )
 
         # indisponibilidade do Gemini (ex: rate limit do nível
         # gratuito) não pode virar 500: pede pra reenviar
@@ -249,20 +286,39 @@ class OnboardingFlow:
                 typical_km=float(typical_km),
             )
 
-            # o pace declarado vale até o histórico do Strava chegar
-            state["step"] = "ASK_PACE"
+            # quem já corre pode ter treinador
+            state["step"] = "ASK_COACH"
 
             repo.save(phone, state)
 
-            return QUESTIONS["ASK_PACE"].format(
-                typical_km=typical_km,
-            )
+            return QUESTIONS["ASK_COACH"]
 
         state["step"] = "ASK_DAYS"
 
         repo.save(phone, state)
 
         return QUESTIONS["ASK_DAYS"]
+
+    @staticmethod
+    async def _on_ask_coach(phone, state, parsed, repo) -> str:
+
+        has_coach = parsed.get("has_coach")
+
+        if not isinstance(has_coach, bool):
+
+            return RETRY_PREFIX + QUESTIONS["ASK_COACH"]
+
+        state["answers"]["has_coach"] = has_coach
+
+        # pace declarado vale para os dois caminhos (fallback de
+        # métricas até o histórico do Strava chegar)
+        state["step"] = "ASK_PACE"
+
+        repo.save(phone, state)
+
+        return QUESTIONS["ASK_PACE"].format(
+            typical_km=state["answers"]["typical_km"],
+        )
 
     @staticmethod
     async def _on_ask_pace(phone, state, parsed, repo) -> str:
@@ -338,6 +394,67 @@ class OnboardingFlow:
             target_time=parsed.get("target_time"),
         )
 
+        # com treinador: pede o plano da semana antes de confirmar
+        if state["answers"].get("has_coach"):
+
+            state["step"] = "AWAIT_PLAN_MEDIA"
+
+            repo.save(phone, state)
+
+            return QUESTIONS["AWAIT_PLAN_MEDIA"]
+
+        state["step"] = "CONFIRM"
+
+        repo.save(phone, state)
+
+        return OnboardingFlow._summary(state)
+
+    @staticmethod
+    async def _on_await_plan_media(phone, state, parsed, repo) -> str:
+
+        # resposta em texto neste passo: só aceita "mando depois"
+        if parsed.get("skip") is True:
+
+            state["step"] = "CONFIRM"
+
+            repo.save(phone, state)
+
+            return OnboardingFlow._summary(state)
+
+        return (
+            "Sem pressa! Quando tiver o print em mãos é só mandar. "
+            + QUESTIONS["AWAIT_PLAN_MEDIA"]
+        )
+
+    @staticmethod
+    async def _on_plan_media(phone, state, media, repo) -> str:
+
+        try:
+
+            media_bytes, mimetype = await EvolutionMediaClient.download(
+                media["key_id"],
+            )
+
+            sessions = await ExternalPlanExtractionEngine.extract(
+                media_bytes,
+                media.get("mimetype") or mimetype,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao processar mídia do onboarding: {e}")
+
+            return BUSY_REPLY
+
+        if not sessions:
+
+            return (
+                "Hmm, não consegui ler o treino nessa imagem. 😕 "
+                "Consegue mandar uma foto mais nítida (ou o PDF)?"
+            )
+
+        state["answers"]["external_sessions"] = sessions
+
         state["step"] = "CONFIRM"
 
         repo.save(phone, state)
@@ -388,6 +505,8 @@ class OnboardingFlow:
             else None
         )
 
+        has_coach = bool(answers.get("has_coach"))
+
         RunnerProfileRepository().save(
             slug,
             {
@@ -409,13 +528,25 @@ class OnboardingFlow:
                     "initial_pace_min_km"
                 ),
                 "initial_weekly_km": initial_weekly_km,
+                "external_coach": has_coach,
                 "notifications": True,
                 "timezone": "America/Sao_Paulo",
                 "language": "pt-BR",
             },
         )
 
-        plan_message = await OnboardingFlow._build_plan_message(slug)
+        if has_coach:
+
+            plan_message = OnboardingFlow._register_external_plan(
+                slug,
+                answers,
+            )
+
+        else:
+
+            plan_message = await OnboardingFlow._build_plan_message(
+                slug,
+            )
 
         repo.delete(phone)
 
@@ -437,6 +568,41 @@ class OnboardingFlow:
             "o resumo da semana, e a cada treino registrado você recebe "
             "meu feedback. Qualquer coisa, é só chamar!"
             f"{strava_reminder}"
+        )
+
+    @staticmethod
+    def _register_external_plan(slug: str, answers: dict) -> str:
+
+        sessions = answers.get("external_sessions")
+
+        if not sessions:
+
+            return (
+                "Quando tiver o treino do seu treinador em mãos, me "
+                "manda o print/foto/PDF que eu registro e começo a "
+                "acompanhar. 📸"
+            )
+
+        runner = RunnerProfileRepository().load(slug)
+
+        plan = ExternalPlanService.apply(slug, runner, sessions)
+
+        if plan is None:
+
+            return (
+                "Não consegui aproveitar as sessões do plano — me "
+                "manda o print de novo depois que eu registro. 📸"
+            )
+
+        sessions_block = "\n".join(
+            WeeklyPlanMessageFormatter.session_lines(plan),
+        )
+
+        return (
+            "Plano do seu treinador registrado! ✅\n\n"
+            f"{sessions_block}\n\n"
+            "Vou acompanhar esses treinos, sem mudar nada — o plano "
+            "é do seu treinador."
         )
 
     @staticmethod
@@ -534,15 +700,40 @@ class OnboardingFlow:
                 f"~{answers['typical_km']:.0f} km por treino"
             )
 
+        coach_line = ""
+
+        if answers.get("has_coach"):
+
+            sessions = answers.get("external_sessions")
+
+            plan_status = (
+                f"plano da semana recebido "
+                f"({len(sessions)} treinos)"
+                if sessions
+                else "vai mandar o plano depois"
+            )
+
+            coach_line = (
+                f"• Treinador: sim — {plan_status}\n"
+            )
+
+        question = (
+            "Posso registrar seu cadastro e acompanhar os treinos "
+            "do seu treinador? (sim/não)"
+            if answers.get("has_coach")
+            else "Posso montar seu plano com esses dados? (sim/não)"
+        )
+
         return (
             "Fechou! Confere se está tudo certo:\n\n"
             f"• Nome: {answers['name']}\n"
             f"• Idade: {answers['age']} anos — "
             f"{answers['weight']:.0f} kg, {answers['height']:.2f} m\n"
             f"• Experiência: {experience}\n"
+            f"{coach_line}"
             f"• Dias de corrida: {days}\n"
             f"• Objetivo: {answers['goal']}\n\n"
-            "Posso montar seu plano com esses dados? (sim/não)"
+            f"{question}"
         )
 
     @staticmethod

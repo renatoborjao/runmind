@@ -18,25 +18,32 @@ class WeeklyPlanMessageFormatter:
             "",
         ]
 
-        sessions = sorted(
-            plan.sessions,
-            key=lambda session: plan.session_date(session),
+        lines.extend(
+            WeeklyPlanMessageFormatter.session_lines(plan)
         )
-
-        for session in sessions:
-
-            lines.append(
-                WeeklyPlanMessageFormatter._session_line(
-                    plan,
-                    session,
-                ),
-            )
 
         lines.append("")
 
         lines.append("Bora treinar! 💪")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def session_lines(
+        plan: TrainingPlan,
+    ) -> list[str]:
+        """Só as linhas de sessão, em ordem cronológica — para usar em
+        mensagens que não são a de domingo."""
+
+        sessions = sorted(
+            plan.sessions,
+            key=lambda session: plan.session_date(session),
+        )
+
+        return [
+            WeeklyPlanMessageFormatter._session_line(plan, session)
+            for session in sessions
+        ]
 
     @staticmethod
     def _session_line(

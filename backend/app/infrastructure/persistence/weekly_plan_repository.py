@@ -55,6 +55,8 @@ class WeeklyPlanRepository:
             running_days=data["running_days"],
             week_start=date.fromisoformat(data["week_start"]),
             sessions=sessions,
+            # planos salvos antes do campo existir são do RunMind
+            source=data.get("source", "runmind"),
         )
 
     def save(
@@ -70,6 +72,7 @@ class WeeklyPlanRepository:
             "weekly_volume": plan.weekly_volume,
             "running_days": plan.running_days,
             "week_start": plan.week_start.isoformat(),
+            "source": plan.source,
             "sessions": [
                 asdict(session)
                 for session in plan.sessions

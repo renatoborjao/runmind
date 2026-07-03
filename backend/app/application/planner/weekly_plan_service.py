@@ -34,6 +34,26 @@ class WeeklyPlanService:
 
         existing = repository.load(profile)
 
+        # Atleta com treinador humano: NUNCA gera plano. Acompanha o
+        # último plano enviado (mesmo de semana anterior) ou um plano
+        # vazio até o corredor mandar o print da semana.
+        if runner.external_coach:
+
+            if existing is not None:
+
+                return existing
+
+            return TrainingPlan(
+                athlete_name=runner.name,
+                objective=runner.goal,
+                phase="EXTERNO",
+                weekly_volume=0,
+                running_days=[],
+                week_start=current_week_start,
+                sessions=[],
+                source="externo",
+            )
+
         if (
             existing is not None
             and existing.week_start == current_week_start

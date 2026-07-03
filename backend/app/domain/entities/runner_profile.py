@@ -49,3 +49,7 @@ class RunnerProfile:
     initial_pace_min_km: float | None = None
 
     initial_weekly_km: float | None = None
+
+    # Tem treinador humano: o RunMind só acompanha os treinos enviados
+    # (print/foto/PDF), nunca gera nem ajusta plano.
+    external_coach: bool = False

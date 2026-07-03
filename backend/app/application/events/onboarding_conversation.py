@@ -12,12 +12,14 @@ class OnboardingEvent:
         phone: str,
         incoming_text: str,
         sender_name: str = "",
+        media: dict | None = None,
     ) -> str:
 
         reply = await OnboardingFlow.handle(
             phone=phone,
             incoming_text=incoming_text,
             sender_name=sender_name,
+            media=media,
         )
 
         await NotificationService.send_training_feedback(

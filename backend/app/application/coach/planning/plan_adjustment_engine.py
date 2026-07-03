@@ -27,6 +27,11 @@ class PlanAdjustmentEngine:
         analysis: CoachAnalysis,
     ) -> str | None:
 
+        # plano de treinador humano: NUNCA é ajustado pelo RunMind
+        if plan.source == "externo":
+
+            return None
+
         # treino extra (sem sessão planejada): nada a ajustar
         if analysis.distance is None:
 

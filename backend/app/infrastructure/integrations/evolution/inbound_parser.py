@@ -1,3 +1,12 @@
+# Formatos aceitos para plano de treinador (print/foto/PDF).
+SUPPORTED_MEDIA_MIMETYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+}
+
+
 class WhatsAppInboundParser:
 
     @staticmethod
@@ -18,6 +27,43 @@ class WhatsAppInboundParser:
             return extended["text"]
 
         return None
+
+    @staticmethod
+    def extract_media(
+        data: dict,
+    ) -> dict | None:
+        """Imagem ou documento suportado na mensagem:
+        {key_id, mimetype, caption} — senão None."""
+
+        message = data.get("message") or {}
+
+        media = (
+            message.get("imageMessage")
+            or message.get("documentMessage")
+        )
+
+        if not media:
+
+            return None
+
+        mimetype = media.get("mimetype", "")
+
+        # mimetype pode vir com sufixo (ex: "image/jpeg; codecs=...")
+        if mimetype.split(";")[0] not in SUPPORTED_MEDIA_MIMETYPES:
+
+            return None
+
+        key_id = (data.get("key") or {}).get("id")
+
+        if not key_id:
+
+            return None
+
+        return {
+            "key_id": key_id,
+            "mimetype": mimetype.split(";")[0],
+            "caption": media.get("caption") or "",
+        }
 
     @staticmethod
     def is_group_message(

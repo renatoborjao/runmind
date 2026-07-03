@@ -1,6 +1,6 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.onboarding.onboarding_flow import OnboardingFlow
 from app.infrastructure.persistence.onboarding_state_repository import (
@@ -83,6 +83,7 @@ FULL_CONVERSATION = [
         "corro 2x por semana, uns 5km",
         {"runs_today": True, "runs_per_week": 2, "typical_km": 5.0},
     ),
+    ("não, treino por conta", {"has_coach": False}),
     ("uns 32 minutos", {"typical_minutes": 32.0}),
     ("terça e sábado", {"days": ["Tuesday", "Saturday"]}),
     (
@@ -145,6 +146,7 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
             "corro 3x, 6km",
             {"runs_today": True, "runs_per_week": 3, "typical_km": 6.0},
         ),
+        ("não tenho treinador", {"has_coach": False}),
         # pace é perguntado mesmo com Strava (a conexão pode demorar)
         ("uns 40 minutos", {"typical_minutes": 40.0}),
         (
@@ -162,10 +164,11 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
     strava_reply = replies[3]
     assert f"/api/v1/strava/connect?state={PHONE}" in strava_reply
 
-    # pergunta seguinte é a de experiência, depois pace, depois dias
+    # sequência: experiência -> treinador -> pace -> dias
     assert "já corre hoje" in strava_reply
-    assert "em quanto tempo" in replies[4]
-    assert "Quais dias" in replies[5]
+    assert "treinador" in replies[4]
+    assert "em quanto tempo" in replies[5]
+    assert "Quais dias" in replies[6]
 
     data = json.loads(
         (profile_repo.storage / "ciclano.json").read_text(
@@ -244,6 +247,177 @@ def test_decline_at_confirm_resets_onboarding(tmp_path):
     assert "Sem problema" in replies[-1]
     assert onboarding_repo.load(PHONE) is None
     assert list(profile_repo.storage.glob("*.json")) == []
+
+
+COACH_CONVERSATION_START = [
+    ("oi", {}),
+    ("Treinada", {"name": "Treinada"}),
+    ("30, 60kg, 1.60", {"age": 30, "weight": 60.0, "height": 1.60}),
+    ("tenho sim", {"has_strava": True}),
+    (
+        "corro 4x, 8km",
+        {"runs_today": True, "runs_per_week": 4, "typical_km": 8.0},
+    ),
+    ("sim, tenho treinador", {"has_coach": True}),
+    ("45 minutos", {"typical_minutes": 45.0}),
+    (
+        "terça, quinta, sábado e domingo",
+        {"days": ["Tuesday", "Thursday", "Saturday", "Sunday"]},
+    ),
+    ("maratona de SP", {"goal": "Maratona de SP",
+                        "target_race": "42 km", "target_time": None}),
+]
+
+EXTRACTED_SESSIONS = [
+    {"day": "Tuesday", "workout_type": "Intervalado",
+     "distance_km": 8.0},
+    {"day": "Saturday", "workout_type": "Longão",
+     "distance_km": 16.0},
+]
+
+
+def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
+
+    onboarding_repo, profile_repo = _repos(tmp_path)
+
+    with (
+        patch(
+            f"{MODULE}.OnboardingStateRepository",
+            return_value=onboarding_repo,
+        ),
+        patch(
+            f"{MODULE}.RunnerProfileRepository",
+            return_value=profile_repo,
+        ),
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.EvolutionMediaClient") as mock_media,
+        patch(f"{MODULE}.ExternalPlanExtractionEngine") as mock_engine,
+        patch(f"{MODULE}.ExternalPlanService") as mock_service,
+        patch(
+            f"{MODULE}.WeeklyPlanMessageFormatter"
+        ) as mock_formatter,
+    ):
+
+        mock_token_store.return_value.load.return_value = {"t": 1}
+
+        mock_parser.parse = AsyncMock(
+            side_effect=[p for _, p in COACH_CONVERSATION_START[1:]]
+            + [{"confirmed": True}],
+        )
+
+        mock_media.download = AsyncMock(
+            return_value=(b"img", "image/jpeg"),
+        )
+
+        mock_engine.extract = AsyncMock(
+            return_value=EXTRACTED_SESSIONS,
+        )
+
+        fake_plan = MagicMock()
+        mock_service.apply.return_value = fake_plan
+
+        mock_formatter.session_lines.return_value = [
+            "terça: Intervalado 8 km",
+        ]
+
+        replies = [
+            asyncio.run(OnboardingFlow.handle(PHONE, text))
+            for text, _ in COACH_CONVERSATION_START
+        ]
+
+        # depois do objetivo, pede o print do treino
+        assert "print, foto ou PDF" in replies[-1]
+
+        # mídia chega -> resumo com plano recebido
+        media_reply = asyncio.run(
+            OnboardingFlow.handle(
+                PHONE,
+                "",
+                media={"key_id": "M1", "mimetype": "image/jpeg"},
+            )
+        )
+
+        assert "plano da semana recebido (2 treinos)" in media_reply
+        assert "acompanhar os treinos" in media_reply
+
+        # confirmação final cria perfil external_coach e salva o plano
+        final = asyncio.run(OnboardingFlow.handle(PHONE, "sim"))
+
+        assert "Plano do seu treinador registrado" in final
+
+        data = json.loads(
+            (profile_repo.storage / "treinada.json").read_text(
+                encoding="utf-8",
+            )
+        )
+        assert data["external_coach"] is True
+
+        mock_service.apply.assert_called_once()
+        args = mock_service.apply.call_args.args
+        assert args[0] == "treinada"
+        assert args[2] == EXTRACTED_SESSIONS
+
+
+def test_media_outside_plan_step_is_deferred(tmp_path):
+
+    onboarding_repo, profile_repo = _repos(tmp_path)
+
+    with (
+        patch(
+            f"{MODULE}.OnboardingStateRepository",
+            return_value=onboarding_repo,
+        ),
+        patch(
+            f"{MODULE}.RunnerProfileRepository",
+            return_value=profile_repo,
+        ),
+    ):
+
+        asyncio.run(OnboardingFlow.handle(PHONE, "oi"))
+
+        reply = asyncio.run(
+            OnboardingFlow.handle(
+                PHONE,
+                "",
+                media={"key_id": "M1", "mimetype": "image/jpeg"},
+            )
+        )
+
+        assert "terminar seu cadastro" in reply
+        assert "como você se chama" in reply
+
+
+def test_skip_media_goes_to_confirm(tmp_path):
+
+    onboarding_repo, profile_repo = _repos(tmp_path)
+
+    with (
+        patch(
+            f"{MODULE}.OnboardingStateRepository",
+            return_value=onboarding_repo,
+        ),
+        patch(
+            f"{MODULE}.RunnerProfileRepository",
+            return_value=profile_repo,
+        ),
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+    ):
+
+        mock_parser.parse = AsyncMock(
+            side_effect=[p for _, p in COACH_CONVERSATION_START[1:]]
+            + [{"skip": True}],
+        )
+
+        for text, _ in COACH_CONVERSATION_START:
+            asyncio.run(OnboardingFlow.handle(PHONE, text))
+
+        reply = asyncio.run(
+            OnboardingFlow.handle(PHONE, "mando depois"),
+        )
+
+        assert "vai mandar o plano depois" in reply
+        assert "Posso registrar seu cadastro" in reply
 
 
 def test_parser_error_asks_to_resend_instead_of_crashing(tmp_path):

@@ -6,8 +6,14 @@ from fastapi import Request
 from app.application.events.coach_conversation import (
     CoachConversationEvent,
 )
+from app.application.events.external_plan_received import (
+    ExternalPlanEvent,
+)
 from app.application.events.onboarding_conversation import (
     OnboardingEvent,
+)
+from app.application.notifications.notification_service import (
+    NotificationService,
 )
 from app.application.events.training_completed import (
     TrainingCompletedEvent,
@@ -234,13 +240,15 @@ async def receive_whatsapp_webhook(
 
     text = WhatsAppInboundParser.extract_text(data)
 
-    if not text:
+    media = WhatsAppInboundParser.extract_media(data)
+
+    if not text and not media:
 
         return {
 
             "ignored": True,
 
-            "reason": "no text content found",
+            "reason": "no supported content found",
 
         }
 
@@ -253,8 +261,9 @@ async def receive_whatsapp_webhook(
 
         reply = await OnboardingEvent.execute(
             phone=phone,
-            incoming_text=text,
+            incoming_text=text or "",
             sender_name=data.get("pushName", ""),
+            media=media,
         )
 
         return {
@@ -262,6 +271,21 @@ async def receive_whatsapp_webhook(
             "success": True,
 
             "onboarding": True,
+
+            "reply_sent": bool(reply),
+
+        }
+
+    # mídia de atleta cadastrado: plano do treinador (se aplicável)
+    if media is not None:
+
+        reply = await _handle_profile_media(profile, media)
+
+        return {
+
+            "success": True,
+
+            "profile": profile,
 
             "reply_sent": bool(reply),
 
@@ -282,3 +306,32 @@ async def receive_whatsapp_webhook(
         "reply_sent": bool(reply),
 
     }
+
+
+async def _handle_profile_media(
+    profile: str,
+    media: dict,
+) -> str:
+
+    runner = RunnerProfileRepository().load(profile)
+
+    if runner.external_coach:
+
+        return await ExternalPlanEvent.execute(
+            profile=profile,
+            media=media,
+        )
+
+    reply = (
+        "Recebi sua imagem! 📷 Por enquanto eu só leio planos de "
+        "treinador de quem treina com um — e o seu plano é comigo "
+        "mesmo. 😉 Se você passou a treinar com um treinador, me "
+        "avisa que eu registro."
+    )
+
+    await NotificationService.send_training_feedback(
+        phone=runner.phone,
+        message=reply,
+    )
+
+    return reply

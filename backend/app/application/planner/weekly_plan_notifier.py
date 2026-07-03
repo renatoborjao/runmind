@@ -13,9 +13,13 @@ from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.core.clock import today_local
 from app.domain.entities.training_goal import TrainingGoal
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
+)
+from app.infrastructure.persistence.weekly_plan_repository import (
+    WeeklyPlanRepository,
 )
 
 
@@ -43,6 +47,17 @@ class WeeklyPlanNotifier:
     ) -> None:
 
         runner = LoadRunnerProfile.execute(profile)
+
+        # atleta com treinador humano: pede o treino da semana em vez
+        # de gerar plano
+        if runner.external_coach:
+
+            await WeeklyPlanNotifier._notify_external(
+                profile,
+                runner,
+            )
+
+            return
 
         history = await LoadTrainingHistory.execute(
             profile=profile,
@@ -77,6 +92,38 @@ class WeeklyPlanNotifier:
             runner.name,
             plan,
         )
+
+        await NotificationService.send_training_feedback(
+            phone=runner.phone,
+            message=message,
+        )
+
+    @staticmethod
+    async def _notify_external(
+        profile: str,
+        runner,
+    ) -> None:
+
+        plan = WeeklyPlanRepository().load(profile)
+
+        current_week = WeeklyPlanService._week_start(today_local())
+
+        if plan is not None and plan.week_start == current_week:
+
+            # plano da semana já enviado: só reapresenta
+            message = WeeklyPlanMessageFormatter.format(
+                runner.name,
+                plan,
+            )
+
+        else:
+
+            message = (
+                f"Bom domingo, {runner.name}! 🏃\n\n"
+                "Me manda um print, foto ou PDF do treino desta "
+                "semana do seu treinador pra eu acompanhar seus "
+                "treinos e te dar feedback. 📸"
+            )
 
         await NotificationService.send_training_feedback(
             phone=runner.phone,

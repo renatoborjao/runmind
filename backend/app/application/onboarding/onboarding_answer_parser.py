@@ -30,6 +30,15 @@ STEP_INSTRUCTIONS = {
         'Formato: {"runs_today": true, "runs_per_week": 3, '
         '"typical_km": 5.0} — se não corre: {"runs_today": false}'
     ),
+    "ASK_COACH": (
+        'O corredor já treina com um treinador ou segue uma planilha?\n'
+        'Formato: {"has_coach": true}'
+    ),
+    "AWAIT_PLAN_MEDIA": (
+        'O corredor disse que vai mandar o plano de treino depois '
+        '(ex: "mando depois", "não tenho agora", "mais tarde")?\n'
+        'Formato: {"skip": true} — qualquer outra coisa: {}'
+    ),
     "ASK_PACE": (
         'Extraia o tempo que o corredor leva na distância habitual, em '
         'minutos totais (número — "32 minutos" vira 32, "meia hora" '

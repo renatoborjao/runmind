@@ -2,6 +2,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 from app.application.planner.weekly_plan_service import WeeklyPlanService
+from tests.coach.factories import make_runner
 from app.domain.entities.training_plan import TrainingPlan
 
 MODULE = "app.application.planner.weekly_plan_service"
@@ -39,7 +40,7 @@ def test_reuses_existing_plan_when_same_iso_week():
 
         result = WeeklyPlanService.get_or_generate(
             profile="renato",
-            runner=object(),
+            runner=make_runner(),
             assessment=object(),
             metrics=object(),
             goal=object(),
@@ -71,7 +72,7 @@ def test_regenerates_when_stored_plan_is_from_a_previous_week():
 
         result = WeeklyPlanService.get_or_generate(
             profile="renato",
-            runner=object(),
+            runner=make_runner(),
             assessment=object(),
             metrics=object(),
             goal=object(),
@@ -107,7 +108,7 @@ def test_generates_when_no_plan_exists_yet():
 
         result = WeeklyPlanService.get_or_generate(
             profile="renato",
-            runner=object(),
+            runner=make_runner(),
             assessment=object(),
             metrics=object(),
             goal=object(),
@@ -117,3 +118,62 @@ def test_generates_when_no_plan_exists_yet():
         assert result is fresh
 
         mock_repo.save.assert_called_once_with("renato", fresh)
+
+
+def test_external_coach_reuses_stale_plan_and_never_generates():
+
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as mock_repo_cls,
+        patch(f"{MODULE}.TrainingPlanner") as mock_planner,
+    ):
+
+        stale = _plan(CURRENT_WEEK_START.replace(day=1))
+        stale.source = "externo"
+
+        mock_repo = MagicMock()
+        mock_repo.load.return_value = stale
+        mock_repo_cls.return_value = mock_repo
+
+        result = WeeklyPlanService.get_or_generate(
+            profile="fulano",
+            runner=make_runner(external_coach=True),
+            assessment=object(),
+            metrics=object(),
+            goal=object(),
+            reference_date=REFERENCE_DATE,
+        )
+
+        # acompanha o último plano enviado, mesmo de semana anterior
+        assert result is stale
+
+        mock_planner.generate.assert_not_called()
+        mock_repo.save.assert_not_called()
+
+
+def test_external_coach_without_plan_gets_empty_placeholder():
+
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as mock_repo_cls,
+        patch(f"{MODULE}.TrainingPlanner") as mock_planner,
+    ):
+
+        mock_repo = MagicMock()
+        mock_repo.load.return_value = None
+        mock_repo_cls.return_value = mock_repo
+
+        result = WeeklyPlanService.get_or_generate(
+            profile="fulano",
+            runner=make_runner(external_coach=True),
+            assessment=object(),
+            metrics=object(),
+            goal=object(),
+            reference_date=REFERENCE_DATE,
+        )
+
+        assert result.source == "externo"
+        assert result.sessions == []
+        assert result.week_start == CURRENT_WEEK_START
+
+        mock_planner.generate.assert_not_called()
+        # placeholder não é persistido
+        mock_repo.save.assert_not_called()
