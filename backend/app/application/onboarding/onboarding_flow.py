@@ -25,6 +25,7 @@ from app.infrastructure.persistence.onboarding_state_repository import (
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+from app.infrastructure.storage.token_store import TokenStore
 
 RETRY_PREFIX = "Desculpa, não consegui entender. "
 
@@ -44,7 +45,9 @@ QUESTIONS = {
         "Me conta sua idade, peso e altura (ex: 33 anos, 91 kg, 1,78 m)."
     ),
     "ASK_STRAVA": (
-        "Você usa o Strava pra registrar suas corridas? (sim/não)"
+        "Você já tem conta no Strava? (sim/não)\n\n"
+        "É por ele que eu recebo seus treinos e te dou feedback — "
+        "então essa parte é obrigatória, mas a conta é gratuita. 😉"
     ),
     "ASK_EXPERIENCE": (
         "Você já corre hoje? Se sim, quantas vezes por semana e "
@@ -193,14 +196,9 @@ class OnboardingFlow:
 
         repo.save(phone, state)
 
+        link = OnboardingFlow._connect_link(phone)
+
         if has_strava:
-
-            settings = get_settings()
-
-            link = (
-                f"{settings.public_base_url}"
-                f"/api/v1/strava/connect?state={phone}"
-            )
 
             return (
                 "Ótimo! Conecta seu Strava neste link (pode fazer "
@@ -209,7 +207,14 @@ class OnboardingFlow:
                 + QUESTIONS["ASK_EXPERIENCE"]
             )
 
-        return QUESTIONS["ASK_EXPERIENCE"]
+        # Strava é obrigatório: quem não tem cria a conta gratuita
+        return (
+            "Sem problema! Baixa o app do Strava (gratuito) e cria "
+            "sua conta — é rapidinho. Depois conecta comigo neste "
+            f"link:\n{link}\n\n"
+            "Enquanto isso, seguimos por aqui. "
+            + QUESTIONS["ASK_EXPERIENCE"]
+        )
 
     @staticmethod
     async def _on_ask_experience(phone, state, parsed, repo) -> str:
@@ -244,16 +249,14 @@ class OnboardingFlow:
                 typical_km=float(typical_km),
             )
 
-            # com Strava, o pace virá do histórico real
-            if not state["answers"].get("has_strava"):
+            # o pace declarado vale até o histórico do Strava chegar
+            state["step"] = "ASK_PACE"
 
-                state["step"] = "ASK_PACE"
+            repo.save(phone, state)
 
-                repo.save(phone, state)
-
-                return QUESTIONS["ASK_PACE"].format(
-                    typical_km=typical_km,
-                )
+            return QUESTIONS["ASK_PACE"].format(
+                typical_km=typical_km,
+            )
 
         state["step"] = "ASK_DAYS"
 
@@ -416,12 +419,24 @@ class OnboardingFlow:
 
         repo.delete(phone)
 
+        strava_reminder = ""
+
+        if TokenStore(slug).load() is None:
+
+            strava_reminder = (
+                "\n\n⚠️ Falta só uma coisa: conectar seu Strava — é "
+                "por ele que eu acompanho seus treinos e te dou "
+                "feedback. Conecta aqui:\n"
+                f"{OnboardingFlow._connect_link(phone)}"
+            )
+
         return (
             f"Cadastro feito, {answers['name']}! 🎉\n\n"
             f"{plan_message}\n\n"
             "A partir de agora é comigo: te mando o plano todo domingo, "
             "o resumo da semana, e a cada treino registrado você recebe "
             "meu feedback. Qualquer coisa, é só chamar!"
+            f"{strava_reminder}"
         )
 
     @staticmethod
@@ -528,6 +543,16 @@ class OnboardingFlow:
             f"• Dias de corrida: {days}\n"
             f"• Objetivo: {answers['goal']}\n\n"
             "Posso montar seu plano com esses dados? (sim/não)"
+        )
+
+    @staticmethod
+    def _connect_link(phone: str) -> str:
+
+        settings = get_settings()
+
+        return (
+            f"{settings.public_base_url}"
+            f"/api/v1/strava/connect?state={phone}"
         )
 
     @staticmethod

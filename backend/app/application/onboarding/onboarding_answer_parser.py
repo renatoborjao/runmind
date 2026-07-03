@@ -21,7 +21,7 @@ STEP_INSTRUCTIONS = {
         'Formato: {"age": 33, "weight": 91.0, "height": 1.78}'
     ),
     "ASK_STRAVA": (
-        'O corredor usa Strava?\n'
+        'O corredor já tem conta no Strava?\n'
         'Formato: {"has_strava": true}'
     ),
     "ASK_EXPERIENCE": (
