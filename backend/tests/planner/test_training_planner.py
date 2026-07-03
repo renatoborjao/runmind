@@ -152,3 +152,36 @@ def test_generate_sets_week_start_on_plan():
     )
 
     assert plan.week_start == WEEK_START
+
+
+def test_taper_phase_reduces_weekly_volume():
+
+    from unittest.mock import patch
+
+    runner = make_runner(
+        preferred_running_days=["Monday", "Wednesday", "Sunday"],
+    )
+
+    with patch(
+        "app.application.planner.planner.PhaseEngine"
+    ) as mock_phase:
+
+        mock_phase.execute.return_value = "TAPER"
+
+        plan = TrainingPlanner.generate(
+            runner,
+            _assessment(),
+            _goal(),
+            _metrics(),
+            WEEK_START,
+        )
+
+    assert plan.phase == "TAPER"
+
+    total = sum(
+        session.planned_distance_km or 0
+        for session in plan.sessions
+    )
+
+    # 32.4 * 0.6 = 19.4 (volume de véspera de prova)
+    assert abs(total - 19.4) < 0.3

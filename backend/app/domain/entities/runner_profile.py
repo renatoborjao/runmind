@@ -35,6 +35,10 @@ class RunnerProfile:
 
     target_time: str | None = None
 
+    # Data da prova alvo (ISO). Opcional: só existe se o atleta tiver
+    # prova — registrada naturalmente pela conversa ou onboarding.
+    race_date: str | None = None
+
     # ID do atleta no Strava.
     # Será utilizado pelo webhook para identificar
     # automaticamente o corredor.

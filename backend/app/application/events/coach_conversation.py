@@ -181,7 +181,7 @@ class CoachConversationEvent:
             incoming_text=incoming_text,
         )
 
-        if ops["add"] or ops["archive"]:
+        if ops["add"] or ops["archive"] or ops.get("race"):
 
             RunnerMemoryService.process(
                 profile,

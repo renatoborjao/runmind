@@ -23,7 +23,7 @@ from app.application.use_cases.load_training_history import (
 )
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
-from app.domain.entities.training_goal import TrainingGoal
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.integrations.evolution.media_client import (
     EvolutionMediaClient,
@@ -392,6 +392,9 @@ class OnboardingFlow:
             goal=goal,
             target_race=parsed.get("target_race"),
             target_time=parsed.get("target_time"),
+            race_date=OnboardingFlow._valid_iso_date(
+                parsed.get("race_date"),
+            ),
         )
 
         # com treinador: pede o plano da semana antes de confirmar
@@ -522,6 +525,7 @@ class OnboardingFlow:
                 "strength_training_days": [],
                 "target_race": answers.get("target_race"),
                 "target_time": answers.get("target_time"),
+                "race_date": answers.get("race_date"),
                 "strava_athlete_id": state.get("strava_athlete_id"),
                 "injuries": [],
                 "initial_pace_min_km": answers.get(
@@ -633,12 +637,7 @@ class OnboardingFlow:
             history,
         )
 
-        goal = TrainingGoal(
-            name=runner.goal,
-            distance_km=10,
-            target_time=runner.target_time,
-            race_date=None,
-        )
+        goal = BuildTrainingGoal.execute(runner)
 
         plan = WeeklyPlanService.get_or_generate(
             profile=slug,
@@ -735,6 +734,23 @@ class OnboardingFlow:
             f"• Objetivo: {answers['goal']}\n\n"
             f"{question}"
         )
+
+    @staticmethod
+    def _valid_iso_date(value) -> str | None:
+
+        if not isinstance(value, str):
+
+            return None
+
+        try:
+
+            datetime.fromisoformat(value)
+
+        except ValueError:
+
+            return None
+
+        return value
 
     @staticmethod
     def _connect_link(phone: str) -> str:

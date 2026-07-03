@@ -345,3 +345,47 @@ def test_build_handles_no_planned_sessions():
     )
 
     assert "nenhum treino planejado ainda" in text
+
+
+def test_race_summary_includes_countdown_and_target():
+
+    from app.domain.entities.training_goal import TrainingGoal
+
+    goal = TrainingGoal(
+        name="10 km Sub 50",
+        distance_km=10.0,
+        target_time="00:50:00",
+        race_date=date(2026, 8, 15),
+    )
+
+    line = ConversationContextBuilder._race_summary(
+        goal,
+        reference_date=date(2026, 7, 3),
+    )
+
+    assert "Prova alvo: 10 km Sub 50 em 15/08/2026" in line
+    assert "daqui a 6 semanas" in line
+    assert "alvo 00:50:00" in line
+
+
+def test_race_summary_empty_without_race_or_past_race():
+
+    from app.domain.entities.training_goal import TrainingGoal
+
+    no_race = TrainingGoal(
+        name="Saúde", distance_km=10.0,
+        target_time=None, race_date=None,
+    )
+
+    past_race = TrainingGoal(
+        name="10k", distance_km=10.0,
+        target_time=None, race_date=date(2026, 6, 1),
+    )
+
+    assert ConversationContextBuilder._race_summary(
+        no_race, reference_date=date(2026, 7, 3),
+    ) == ""
+
+    assert ConversationContextBuilder._race_summary(
+        past_race, reference_date=date(2026, 7, 3),
+    ) == ""

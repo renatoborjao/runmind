@@ -50,6 +50,11 @@ class RunnerMemoryService:
             repo,
         )
 
+        RunnerMemoryService._sync_race(
+            profile,
+            ops.get("race"),
+        )
+
     @staticmethod
     def render(
         profile: str,
@@ -80,6 +85,43 @@ class RunnerMemoryService:
             )
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _sync_race(
+        profile: str,
+        race: dict | None,
+    ) -> None:
+        """Prova alvo mencionada na conversa vira dado do perfil —
+        o planejamento (fase, goal) passa a olhar pra ela."""
+
+        if race is None:
+
+            return
+
+        if race.get("clear") is True:
+
+            updates = {
+                "target_race": None,
+                "race_date": None,
+                "target_time": None,
+            }
+
+        else:
+
+            updates = {"race_date": race["date"]}
+
+            if race.get("name"):
+
+                updates["target_race"] = race["name"]
+
+            if race.get("target_time"):
+
+                updates["target_time"] = race["target_time"]
+
+        RunnerProfileRepository().update_fields(
+            profile,
+            updates,
+        )
 
     @staticmethod
     def _sync_injuries(

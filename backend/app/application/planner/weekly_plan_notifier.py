@@ -14,7 +14,7 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import today_local
-from app.domain.entities.training_goal import TrainingGoal
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -73,12 +73,7 @@ class WeeklyPlanNotifier:
             history,
         )
 
-        goal = TrainingGoal(
-            name=runner.goal,
-            distance_km=10,
-            target_time=runner.target_time,
-            race_date=None,
-        )
+        goal = BuildTrainingGoal.execute(runner)
 
         plan = WeeklyPlanService.get_or_generate(
             profile=profile,

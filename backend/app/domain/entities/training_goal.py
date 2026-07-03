@@ -11,8 +11,9 @@ class TrainingGoal:
 
     distance_km: float
 
-    target_time: str
+    target_time: str | None
 
-    race_date: date
+    # None = atleta sem prova alvo (progressão contínua)
+    race_date: date | None
 
     priority: str = "A"

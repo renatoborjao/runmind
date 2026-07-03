@@ -103,3 +103,40 @@ def test_extract_filters_invalid_categories_and_empty_content():
         "add": [{"category": "vida", "content": "Semana puxada no trabalho"}],
         "archive": [],
     }
+
+
+def test_extract_parses_race_field():
+
+    ops, kwargs = _extract(
+        '{"add": [], "archive": [],'
+        ' "race": {"name": "10 km", "date": "2026-08-15",'
+        ' "target_time": "00:50:00"}}'
+    )
+
+    assert ops["race"] == {
+        "name": "10 km",
+        "date": "2026-08-15",
+        "target_time": "00:50:00",
+    }
+
+    # o prompt informa a data de hoje (datas relativas)
+    assert "Hoje é" in kwargs["contents"]
+
+
+def test_extract_parses_race_clear():
+
+    ops, _ = _extract(
+        '{"add": [], "archive": [], "race": {"clear": true}}'
+    )
+
+    assert ops["race"] == {"clear": True}
+
+
+def test_race_with_invalid_date_is_dropped():
+
+    ops, _ = _extract(
+        '{"add": [], "archive": [],'
+        ' "race": {"name": "10 km", "date": "agosto"}}'
+    )
+
+    assert "race" not in ops

@@ -149,3 +149,85 @@ def test_render_limits_to_15_most_recent(tmp_path):
         assert len(lines) == 16
         assert "Fato 19" in lines[-1]
         assert "Fato 4" not in rendered
+
+
+def test_race_op_updates_profile(tmp_path):
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    with (
+        patch(f"{MODULE}.RunnerMemoryRepository", return_value=memory_repo),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+    ):
+
+        RunnerMemoryService.process(
+            "renato",
+            {
+                "add": [],
+                "archive": [],
+                "race": {
+                    "name": "10 km",
+                    "date": "2026-08-15",
+                    "target_time": "00:50:00",
+                },
+            },
+        )
+
+        profile = json.loads(
+            (tmp_path / "renato.json").read_text(encoding="utf-8")
+        )
+        assert profile["race_date"] == "2026-08-15"
+        assert profile["target_race"] == "10 km"
+        assert profile["target_time"] == "00:50:00"
+        # chaves desconhecidas preservadas
+        assert profile["notifications"] is True
+
+
+def test_race_clear_wipes_race_fields(tmp_path):
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    with (
+        patch(f"{MODULE}.RunnerMemoryRepository", return_value=memory_repo),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+    ):
+
+        RunnerMemoryService.process(
+            "renato",
+            {"add": [], "archive": [],
+             "race": {"name": "10 km", "date": "2026-08-15",
+                      "target_time": None}},
+        )
+
+        RunnerMemoryService.process(
+            "renato",
+            {"add": [], "archive": [], "race": {"clear": True}},
+        )
+
+        profile = json.loads(
+            (tmp_path / "renato.json").read_text(encoding="utf-8")
+        )
+        assert profile["race_date"] is None
+        assert profile["target_race"] is None
+        assert profile["target_time"] is None
+
+
+def test_ops_without_race_do_not_touch_profile_race(tmp_path):
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    with (
+        patch(f"{MODULE}.RunnerMemoryRepository", return_value=memory_repo),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+    ):
+
+        RunnerMemoryService.process(
+            "renato",
+            {"add": [{"category": "vida", "content": "Semana puxada"}],
+             "archive": []},
+        )
+
+        profile = json.loads(
+            (tmp_path / "renato.json").read_text(encoding="utf-8")
+        )
+        assert "race_date" not in profile

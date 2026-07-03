@@ -13,7 +13,7 @@ from app.application.use_cases.load_training_history import (
 from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
-from app.domain.entities.training_goal import TrainingGoal
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 
 router = APIRouter(
     prefix="/plan",
@@ -42,12 +42,7 @@ async def get_plan(profile: str = "renato"):
             history,
         )
 
-        goal = TrainingGoal(
-            name=runner.goal,
-            distance_km=10,
-            target_time=runner.target_time,
-            race_date=None,
-        )
+        goal = BuildTrainingGoal.execute(runner)
 
         plan = WeeklyPlanService.get_or_generate(
             profile=profile,

@@ -1,8 +1,10 @@
 import json
+from datetime import date
 
 from google import genai
 from google.genai import types
 
+from app.core.clock import today_local
 from app.core.config import get_settings
 from app.domain.entities.memory_entry import (
     MEMORY_CATEGORIES,
@@ -17,6 +19,8 @@ EMPTY_OPS: dict = {"add": [], "archive": []}
 
 EXTRACTION_PROMPT_TEMPLATE = """Você mantém a memória de longo prazo do coach \
 de corrida do RunMind sobre o corredor {runner_name}.
+
+Hoje é {today} (use para resolver datas relativas como "em agosto").
 
 Analise a MENSAGEM NOVA do corredor e decida se ela contém fatos duráveis que
 o coach deve lembrar em conversas futuras. Categorias possíveis:
@@ -38,6 +42,13 @@ MENSAGEM NOVA DO CORREDOR:
 
 Responda APENAS com JSON neste formato:
 {{"add": [{{"category": "...", "content": "..."}}], "archive": ["id"]}}
+
+PROVA ALVO (opcional): se a mensagem definir ou mudar uma prova alvo do
+corredor (distância e/ou data), inclua também:
+"race": {{"name": "10 km", "date": "2026-08-15", "target_time": "00:50:00"}}
+— campos desconhecidos: null; sem dia exato, use o dia 15 do mês citado.
+Se disser que a prova foi cancelada ou já aconteceu:
+"race": {{"clear": true}}
 
 REGRAS:
 - Só fatos duráveis. Perguntas, cumprimentos e comentários sobre um treino
@@ -69,6 +80,7 @@ class MemoryExtractionEngine:
 
         prompt = EXTRACTION_PROMPT_TEMPLATE.format(
             runner_name=runner_name,
+            today=today_local().isoformat(),
             current_memories=MemoryExtractionEngine._render_memories(
                 current_memories,
             ),
@@ -156,7 +168,50 @@ class MemoryExtractionEngine:
             if isinstance(entry_id, str)
         ]
 
-        return {
+        ops = {
             "add": add,
             "archive": archive,
+        }
+
+        race = MemoryExtractionEngine._parse_race(
+            data.get("race"),
+        )
+
+        if race is not None:
+
+            ops["race"] = race
+
+        return ops
+
+    @staticmethod
+    def _parse_race(
+        race,
+    ) -> dict | None:
+
+        if not isinstance(race, dict):
+
+            return None
+
+        if race.get("clear") is True:
+
+            return {"clear": True}
+
+        raw_date = race.get("date")
+
+        if not isinstance(raw_date, str):
+
+            return None
+
+        try:
+
+            date.fromisoformat(raw_date)
+
+        except ValueError:
+
+            return None
+
+        return {
+            "name": race.get("name"),
+            "date": raw_date,
+            "target_time": race.get("target_time"),
         }

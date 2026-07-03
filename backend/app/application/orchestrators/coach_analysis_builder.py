@@ -28,8 +28,8 @@ from app.core.weekdays import (
 from app.domain.entities.activity import (
     Activity,
 )
-from app.domain.entities.training_goal import (
-    TrainingGoal,
+from app.application.use_cases.build_training_goal import (
+    BuildTrainingGoal,
 )
 
 
@@ -74,12 +74,7 @@ class CoachAnalysisBuilder:
         # Objetivo
         # --------------------------------------------------
 
-        goal = TrainingGoal(
-            name=runner.goal,
-            distance_km=10,
-            target_time=runner.target_time,
-            race_date=None,
-        )
+        goal = BuildTrainingGoal.execute(runner)
 
         # --------------------------------------------------
         # Métricas

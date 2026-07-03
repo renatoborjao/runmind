@@ -27,8 +27,8 @@ from app.infrastructure.persistence.activity_archive_repository import (
 from app.infrastructure.persistence.conversation_repository import (
     ConversationRepository,
 )
-from app.domain.entities.training_goal import (
-    TrainingGoal,
+from app.application.use_cases.build_training_goal import (
+    BuildTrainingGoal,
 )
 
 
@@ -55,12 +55,7 @@ class ConversationContextBuilder:
             history,
         )
 
-        goal = TrainingGoal(
-            name=runner.goal,
-            distance_km=10,
-            target_time=runner.target_time,
-            race_date=None,
-        )
+        goal = BuildTrainingGoal.execute(runner)
 
         plan = WeeklyPlanService.get_or_generate(
             profile=profile,
@@ -79,6 +74,12 @@ class ConversationContextBuilder:
             f"Último treino: {ConversationContextBuilder._last_activity_summary(history)}\n"
             f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan)}\n"
         )
+
+        race_line = ConversationContextBuilder._race_summary(goal)
+
+        if race_line:
+
+            facts = f"{facts}{race_line}\n"
 
         week_plan = ConversationContextBuilder._week_plan_summary(plan)
 
@@ -112,6 +113,36 @@ class ConversationContextBuilder:
             )
 
         return facts
+
+    @staticmethod
+    def _race_summary(
+        goal,
+        reference_date=None,
+    ) -> str:
+        """Prova alvo, quando existir e for futura — atleta sem prova
+        não tem essa linha (nada é inventado)."""
+
+        if goal.race_date is None:
+
+            return ""
+
+        today = reference_date or today_local()
+
+        if goal.race_date <= today:
+
+            return ""
+
+        weeks = (goal.race_date - today).days // 7
+
+        target = (
+            f", alvo {goal.target_time}" if goal.target_time else ""
+        )
+
+        return (
+            f"Prova alvo: {goal.name} em "
+            f"{goal.race_date.strftime('%d/%m/%Y')} "
+            f"(daqui a {weeks} semanas{target})\n"
+        )
 
     @staticmethod
     def _lifetime_summary(

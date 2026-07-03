@@ -3,6 +3,7 @@ import json
 from google import genai
 from google.genai import types
 
+from app.core.clock import today_local
 from app.core.config import get_settings
 
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -52,9 +53,11 @@ STEP_INSTRUCTIONS = {
     ),
     "ASK_GOAL": (
         'Extraia o objetivo do corredor: descrição curta e, se houver, '
-        'distância alvo (km) e tempo alvo (HH:MM:SS).\n'
+        'distância alvo (km), tempo alvo (HH:MM:SS) e data da prova '
+        '(ISO; sem dia exato, use o dia 15 do mês citado).\n'
         'Formato: {"goal": "10 km Sub 55", "target_race": "10 km", '
-        '"target_time": "00:55:00"} — campos sem informação: null'
+        '"target_time": "00:55:00", "race_date": "2026-08-15"} — '
+        'campos sem informação: null'
     ),
     "CONFIRM": (
         'O corredor confirmou que quer o plano?\n'
@@ -64,6 +67,8 @@ STEP_INSTRUCTIONS = {
 
 PROMPT_TEMPLATE = """Você interpreta respostas do questionário de \
 cadastro do RunMind (coach de corrida via WhatsApp, pt-BR).
+
+Hoje é {today} (use para resolver datas relativas como "em agosto").
 
 PERGUNTA FEITA AO CORREDOR:
 {question}
@@ -102,6 +107,7 @@ class OnboardingAnswerParser:
         )
 
         prompt = PROMPT_TEMPLATE.format(
+            today=today_local().isoformat(),
             question=question,
             instruction=instruction,
             answer=answer,

@@ -26,7 +26,8 @@ class TrainingPlanner:
         phase = PhaseEngine.execute(goal)
 
         strategy = TrainingStrategy.build(
-            assessment
+            assessment,
+            phase,
         )
 
         running_days = DistributionEngine.execute(
