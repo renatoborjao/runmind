@@ -102,58 +102,58 @@ async def receive_webhook(
     # Ignora eventos que não são de atividade
     if payload.get("object_type") != "activity":
 
+        return {"ignored": True, "reason": "object_type != activity"}
+
+    # Só treino recém-criado gera feedback. update/delete não —
+    # buscar uma atividade apagada dá 404 e não há o que avaliar.
+    if payload.get("aspect_type") != "create":
+
         return {
-
             "ignored": True,
-
-            "reason": "object_type != activity"
-
+            "reason": f"aspect_type {payload.get('aspect_type')}",
         }
 
     owner_id = payload["owner_id"]
 
     activity_id = payload["object_id"]
 
-    profile = OwnerResolver.resolve(
-        owner_id,
-    )
+    # Falha aqui NUNCA pode virar 500: o Strava reenvia em erro e vira
+    # tempestade de retry.
+    try:
 
-    client = StravaClient(
-        profile,
-    )
+        profile = OwnerResolver.resolve(owner_id)
 
-    activity = await client.get_activity(
-        activity_id,
-    )
+        client = StravaClient(profile)
 
-    # pedalada/natação/musculação não geram feedback de corrida
-    if not is_foot_sport(activity.sport):
+        activity = await client.get_activity(activity_id)
+
+        # pedalada/natação/musculação não geram feedback de corrida
+        if not is_foot_sport(activity.sport):
+
+            return {
+                "ignored": True,
+                "reason": f"sport não suportado: {activity.sport}",
+            }
+
+        await TrainingCompletedEvent.execute(
+            profile=profile,
+            activity=activity,
+        )
 
         return {
-
-            "ignored": True,
-
-            "reason": f"sport não suportado: {activity.sport}",
-
+            "success": True,
+            "profile": profile,
+            "activity_id": activity_id,
         }
 
-    await TrainingCompletedEvent.execute(
+    except Exception as e:
 
-        profile=profile,
+        print(
+            f"Falha ao processar atividade {activity_id} "
+            f"(owner {owner_id}): {e}"
+        )
 
-        activity=activity,
-
-    )
-
-    return {
-
-        "success": True,
-
-        "profile": profile,
-
-        "activity_id": activity_id,
-
-    }
+        return {"success": False, "error": str(e)}
 
 
 # ==========================================================
