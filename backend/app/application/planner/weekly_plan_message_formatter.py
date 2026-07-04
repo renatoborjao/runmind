@@ -7,8 +7,11 @@ from app.domain.entities.training_plan import TrainingPlan
 
 # emoji por intensidade do treino
 TYPE_EMOJI = {
+    "RECOVERY": "⚪",
     "EASY": "🟢",
     "PROGRESSION": "🟡",
+    "FARTLEK": "🟣",
+    "TEMPO": "🟠",
     "VO2": "🔴",
     "LONG_RUN": "🔵",
 }
@@ -335,6 +338,35 @@ class WeeklyPlanMessageFormatter:
                 f"em ritmo leve e constante{pace_range}",
                 "Foco: resistência — completar bem, hidratando",
                 "Dica: se cansar, reduza o ritmo antes de parar",
+            ]
+
+        if code == "TEMPO":
+
+            return [
+                "Aquecimento: 10 min leve",
+                f"Execução: trecho contínuo em ritmo forte porém "
+                f"sustentável{pace_range}",
+                "Foco: limiar — segurar o ritmo sem estourar",
+                "Desaquecimento: 10 min leve",
+            ]
+
+        if code == "FARTLEK":
+
+            return [
+                "Aquecimento: 10 min leve",
+                f"Execução: jogo de velocidades — alterne trechos "
+                f"fortes e leves à vontade{pace_range}",
+                "Foco: ritmo de prova de forma lúdica, sem cronômetro",
+                "Desaquecimento: 5–10 min leve",
+            ]
+
+        if code == "RECOVERY":
+
+            return [
+                f"Execução: {(session.planned_distance_km or 0):.1f} km "
+                f"bem leves{pace_range}",
+                "Foco: soltar as pernas e acelerar a recuperação",
+                "Dica: se estiver cansado, pode virar caminhada",
             ]
 
         # tipo desconhecido: linha simples

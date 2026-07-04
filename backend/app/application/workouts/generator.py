@@ -110,3 +110,69 @@ class WorkoutGenerator:
 
             notes="",
         )
+
+    @staticmethod
+    def generate_tempo(distance: float):
+        """Ritmo (tempo run): trecho contínuo em ritmo de limiar."""
+
+        return PlannedSession(
+            day="",
+            workout_type="TEMPO",
+            objective="Limiar anaeróbico",
+            planned_distance_km=round(distance, 1),
+            planned_duration_minutes=None,
+            target_pace_min=None,
+            target_pace_max=None,
+            notes="",
+        )
+
+    @staticmethod
+    def generate_fartlek(distance: float):
+        """Fartlek: jogo de velocidades, variação livre de ritmo."""
+
+        return PlannedSession(
+            day="",
+            workout_type="FARTLEK",
+            objective="Ritmo de prova de forma lúdica",
+            planned_distance_km=round(distance, 1),
+            planned_duration_minutes=None,
+            target_pace_min=None,
+            target_pace_max=None,
+            notes="",
+        )
+
+    @staticmethod
+    def generate_recovery(distance: float):
+        """Regenerativo: rodagem curta e bem leve pra recuperar."""
+
+        return PlannedSession(
+            day="",
+            workout_type="RECOVERY",
+            objective="Recuperação ativa",
+            planned_distance_km=round(distance, 1),
+            planned_duration_minutes=None,
+            target_pace_min=None,
+            target_pace_max=None,
+            notes="",
+        )
+
+    @staticmethod
+    def generate(workout_type: str, distance: float):
+        """Despacha para o gerador do tipo (fallback: rodagem leve)."""
+
+        builders = {
+            "EASY": WorkoutGenerator.generate_easy,
+            "RECOVERY": WorkoutGenerator.generate_recovery,
+            "PROGRESSION": WorkoutGenerator.generate_progression,
+            "TEMPO": WorkoutGenerator.generate_tempo,
+            "VO2": WorkoutGenerator.generate_vo2,
+            "FARTLEK": WorkoutGenerator.generate_fartlek,
+            "LONG_RUN": WorkoutGenerator.generate_long,
+        }
+
+        builder = builders.get(
+            workout_type,
+            WorkoutGenerator.generate_easy,
+        )
+
+        return builder(distance)

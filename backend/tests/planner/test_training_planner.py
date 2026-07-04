@@ -73,19 +73,19 @@ def test_generate_fills_real_pace_on_all_sessions():
         assert session.target_pace_min is not None
         assert session.target_pace_max is not None
 
-    easy = plan.sessions[0]
+    by_type = {s.workout_type: s for s in plan.sessions}
 
-    assert easy.target_pace_min == "5:12"
-    assert easy.target_pace_max == "5:48"
+    # rodagem e longão na faixa confortável
+    assert by_type["EASY"].target_pace_min == "5:12"
+    assert by_type["EASY"].target_pace_max == "5:48"
 
-    vo2 = plan.sessions[1]
+    long = by_type["LONG_RUN"]
+    assert long.target_pace_min == "5:12"
+    assert long.target_pace_max == "5:48"
 
+    # intervalado com alvo único de VO2
+    vo2 = by_type["VO2"]
     assert vo2.target_pace_min == vo2.target_pace_max == "4:21"
-
-    long = plan.sessions[2]
-
-    assert long.target_pace_min == easy.target_pace_min
-    assert long.target_pace_max == easy.target_pace_max
 
 
 def test_generate_with_two_days_builds_easy_and_long():
