@@ -153,4 +153,4 @@ def test_unplanned_workout_skips_plan_comparison():
     assert "distância planejada" not in text
     assert "acima da distância" not in text
 
-    assert "registrei como treino extra" in text
+    assert "Treino extra, ótimo — todo movimento conta!" in text
