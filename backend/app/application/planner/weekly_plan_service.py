@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.application.planner.planner import TrainingPlanner
 from app.core.clock import today_local
@@ -77,7 +77,18 @@ class WeeklyPlanService:
     def _week_start(
         reference_date: date,
     ) -> date:
+        """Segunda-feira da semana que o plano cobre.
 
-        iso_year, iso_week, _ = reference_date.isocalendar()
+        Domingo é véspera: planejamos a semana que COMEÇA na segunda
+        seguinte, para o plano nunca nascer com datas passadas (o
+        notificador roda domingo 15h). Segunda a sábado usam a segunda
+        da própria semana corrente."""
 
-        return date.fromisocalendar(iso_year, iso_week, 1)
+        # weekday(): segunda=0 ... domingo=6
+        if reference_date.weekday() == 6:
+
+            return reference_date + timedelta(days=1)
+
+        return reference_date - timedelta(
+            days=reference_date.weekday(),
+        )

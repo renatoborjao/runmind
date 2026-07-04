@@ -12,6 +12,8 @@ class ChatIntent(str, Enum):
 
     NEXT_TRAINING = "NEXT_TRAINING"
 
+    WEEKLY_PLAN = "WEEKLY_PLAN"
+
 
 # Pedido claro sobre o treino JÁ FEITO (quer a análise completa).
 _LAST_PATTERNS = [
@@ -32,9 +34,19 @@ _NEXT_PATTERNS = [
     r"\b(o que|oq|o q)\b.*\b(treino|faco|corro|rodo|devo fazer)\b.*\b(hoje|amanha|agora)\b",
 ]
 
+# Pedido do plano da semana inteiro (quer a agenda, não uma sessão só).
+_WEEKLY_PLAN_PATTERNS = [
+    r"\bplano\b.*\b(semana|treino|treinos|corrida)\b",
+    r"\b(qual|meu|meus|quais|ver|mostra|manda|me manda)\b.*\bplano\b",
+    r"\btreinos da semana\b",
+    r"\bagenda (da|de) (semana|treino)\b",
+]
+
 _LAST_REGEXES = [re.compile(p) for p in _LAST_PATTERNS]
 
 _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
+
+_WEEKLY_PLAN_REGEXES = [re.compile(p) for p in _WEEKLY_PLAN_PATTERNS]
 
 
 class IntentRouter:
@@ -42,22 +54,28 @@ class IntentRouter:
     @staticmethod
     def detect(text: str) -> ChatIntent | None:
         """Só devolve uma intenção quando o pedido é inequívoco. Se a
-        mensagem casa com as duas (ou nenhuma), devolve None e a conversa
-        segue para o Gemini — evita mostrar o card errado."""
+        mensagem casa com mais de uma (ou nenhuma), devolve None e a
+        conversa segue para o Gemini — evita mostrar o card errado."""
 
         normalized = IntentRouter._normalize(text)
 
-        last = any(regex.search(normalized) for regex in _LAST_REGEXES)
+        matched = []
 
-        nxt = any(regex.search(normalized) for regex in _NEXT_REGEXES)
+        if any(regex.search(normalized) for regex in _LAST_REGEXES):
 
-        if last and not nxt:
+            matched.append(ChatIntent.LAST_TRAINING)
 
-            return ChatIntent.LAST_TRAINING
+        if any(regex.search(normalized) for regex in _NEXT_REGEXES):
 
-        if nxt and not last:
+            matched.append(ChatIntent.NEXT_TRAINING)
 
-            return ChatIntent.NEXT_TRAINING
+        if any(regex.search(normalized) for regex in _WEEKLY_PLAN_REGEXES):
+
+            matched.append(ChatIntent.WEEKLY_PLAN)
+
+        if len(matched) == 1:
+
+            return matched[0]
 
         return None
 
