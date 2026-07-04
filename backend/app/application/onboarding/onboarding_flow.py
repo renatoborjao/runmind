@@ -1,5 +1,5 @@
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
@@ -21,6 +21,7 @@ from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.core.clock import today_local
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
@@ -547,6 +548,7 @@ class OnboardingFlow:
             },
         )
 
+        # Com treinador: registra o plano do treinador e conclui.
         if has_coach:
 
             plan_message = OnboardingFlow._register_external_plan(
@@ -554,11 +556,65 @@ class OnboardingFlow:
                 answers,
             )
 
-        else:
+            return OnboardingFlow._finish(address, state, plan_message, repo)
 
-            plan_message = await OnboardingFlow._build_plan_message(
-                slug,
+        # Plano gerado pelo RunMind: se ainda dá tempo nesta semana,
+        # pergunta se começa agora ou na próxima; se está no fim da
+        # semana, já monta pra próxima (datas sempre futuras).
+        today = today_local()
+
+        days = answers["days"]
+
+        if OnboardingFlow._should_ask_week(days, today):
+
+            state["week_labels"] = OnboardingFlow._remaining_day_labels(
+                days,
+                today,
             )
+
+            state["step"] = "ASK_WEEK_CHOICE"
+
+            repo.save(address, state)
+
+            return OnboardingFlow._week_choice_question(
+                answers["name"],
+                state["week_labels"],
+            )
+
+        plan_message = await OnboardingFlow._build_plan_message(
+            slug,
+            start_next_week=True,
+        )
+
+        return OnboardingFlow._finish(address, state, plan_message, repo)
+
+    @staticmethod
+    async def _on_ask_week_choice(address, state, parsed, repo) -> str:
+
+        start = parsed.get("start_week")
+
+        if start not in ("current", "next"):
+
+            return RETRY_PREFIX + OnboardingFlow._week_choice_question(
+                state["answers"]["name"],
+                state.get("week_labels", []),
+            )
+
+        plan_message = await OnboardingFlow._build_plan_message(
+            state["slug"],
+            start_next_week=(start == "next"),
+        )
+
+        return OnboardingFlow._finish(address, state, plan_message, repo)
+
+    @staticmethod
+    def _finish(address, state, plan_message, repo) -> str:
+        """Mensagem final do cadastro (comum aos caminhos treinador,
+        próxima-semana e escolha do atleta)."""
+
+        answers = state["answers"]
+
+        slug = state["slug"]
 
         repo.delete(address)
 
@@ -580,6 +636,68 @@ class OnboardingFlow:
             "o resumo da semana, e a cada treino registrado você recebe "
             "meu feedback. Qualquer coisa, é só chamar!"
             f"{strava_reminder}"
+        )
+
+    # ==========================================================
+    # Escolha da semana de início (esta vs próxima)
+    # ==========================================================
+
+    @staticmethod
+    def _remaining_day_labels(
+        preferred_days: list[str],
+        today,
+    ) -> list[str]:
+        """Rótulos pt-BR dos dias de treino que ainda faltam NESTA semana
+        (data >= hoje), na ordem escolhida pelo atleta."""
+
+        monday = today - timedelta(days=today.weekday())
+
+        index = {name.lower(): i for i, name in WEEKDAYS.items()}
+
+        labels = []
+
+        for day in preferred_days:
+
+            i = index.get(day.lower())
+
+            if i is not None and (monday + timedelta(days=i)) >= today:
+
+                labels.append(weekday_label(day))
+
+        return labels
+
+    @staticmethod
+    def _should_ask_week(
+        preferred_days: list[str],
+        today,
+    ) -> bool:
+        """Pergunta esta/próxima só quando ainda restam 2+ dias de treino
+        nesta semana; com menos que isso, vai direto pra próxima."""
+
+        return len(
+            OnboardingFlow._remaining_day_labels(preferred_days, today)
+        ) >= 2
+
+    @staticmethod
+    def _week_choice_question(
+        name: str,
+        labels: list[str],
+    ) -> str:
+
+        if len(labels) <= 2:
+
+            days_txt = " e ".join(labels)
+
+        else:
+
+            days_txt = ", ".join(labels[:-1]) + " e " + labels[-1]
+
+        return (
+            f"Boa, {name}! Última pergunta pra fechar 👇\n\n"
+            f"Quer começar já *nesta semana* (ainda dá pra treinar "
+            f"{days_txt}) ou prefere começar *na próxima segunda*, com a "
+            "semana cheia?\n\n"
+            "(responde \"esta\" ou \"próxima\")"
         )
 
     @staticmethod
@@ -618,7 +736,10 @@ class OnboardingFlow:
         )
 
     @staticmethod
-    async def _build_plan_message(slug: str) -> str:
+    async def _build_plan_message(
+        slug: str,
+        start_next_week: bool = False,
+    ) -> str:
 
         repository = RunnerProfileRepository()
 
@@ -647,18 +768,52 @@ class OnboardingFlow:
 
         goal = BuildTrainingGoal.execute(runner)
 
+        today = today_local()
+
+        if start_next_week:
+
+            monday = today - timedelta(days=today.weekday())
+
+            reference_date = monday + timedelta(days=7)
+
+        else:
+
+            reference_date = today
+
         plan = WeeklyPlanService.get_or_generate(
             profile=slug,
             runner=runner,
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+            reference_date=reference_date,
         )
 
-        return WeeklyPlanMessageFormatter.format(
-            runner.name,
-            plan,
-        )
+        # dias já passados desta semana ficam marcados como "já passou"
+        # (não realizado) — nada de data passada como se fosse fazer
+        sessions_text = "\n".join(
+            WeeklyPlanMessageFormatter.session_lines(
+                plan,
+                reference_date=today,
+                past_label="⏭️ (já passou)",
+            )
+        ).strip()
+
+        if start_next_week:
+
+            header = (
+                "🗓️ Seu plano já está pronto, começando na "
+                "próxima segunda:"
+            )
+
+        else:
+
+            header = (
+                "🏃 Seu plano desta semana (o que já passou "
+                "fica marcado):"
+            )
+
+        return f"{header}\n\n{sessions_text}"
 
     # ==========================================================
     # Auxiliares
@@ -672,6 +827,13 @@ class OnboardingFlow:
         if step == "CONFIRM":
 
             return OnboardingFlow._summary(state)
+
+        if step == "ASK_WEEK_CHOICE":
+
+            return OnboardingFlow._week_choice_question(
+                state["answers"].get("name", ""),
+                state.get("week_labels", []),
+            )
 
         template = QUESTIONS[step]
 

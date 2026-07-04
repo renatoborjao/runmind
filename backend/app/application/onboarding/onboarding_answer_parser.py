@@ -61,6 +61,13 @@ STEP_INSTRUCTIONS = {
         'O corredor confirmou que quer o plano?\n'
         'Formato: {"confirmed": true}'
     ),
+    "ASK_WEEK_CHOICE": (
+        'O corredor quer começar o plano NESTA semana (atual) ou só na '
+        'PRÓXIMA? "esta/essa/atual/agora/já/nesta/pode ser essa" = '
+        'current; "próxima/semana que vem/segunda/depois/próxima semana" '
+        '= next.\n'
+        'Formato: {"start_week": "current"} ou {"start_week": "next"}'
+    ),
 }
 
 PROMPT_TEMPLATE = """Você interpreta respostas do questionário de \

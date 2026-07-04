@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.onboarding.onboarding_flow import OnboardingFlow
@@ -13,6 +14,14 @@ from app.infrastructure.persistence.runner_profile_repository import (
 MODULE = "app.application.onboarding.onboarding_flow"
 
 PHONE = "5511900000000"
+
+# Sábado 25/07/2026: fim da semana. Com os dias de treino dos cenários,
+# sobra <2 dia -> onboarding vai direto pra próxima semana (sem perguntar),
+# concluindo com "Cadastro feito" (mantém o comportamento dos testes base).
+FIM_DE_SEMANA = date(2026, 7, 25)
+
+# Segunda 20/07/2026: começo da semana, sobram 2+ dias -> pergunta.
+COMECO_DA_SEMANA = date(2026, 7, 20)
 
 
 def _repos(tmp_path):
@@ -28,9 +37,9 @@ def _repos(tmp_path):
     return onboarding_repo, profile_repo
 
 
-def _run_conversation(tmp_path, exchanges):
+def _run_conversation(tmp_path, exchanges, today=FIM_DE_SEMANA):
     """exchanges: lista de (texto_do_corredor, resposta_do_parser).
-    Retorna as respostas do bot."""
+    Retorna as respostas do bot. `today` controla a régua da semana."""
 
     onboarding_repo, profile_repo = _repos(tmp_path)
 
@@ -47,6 +56,7 @@ def _run_conversation(tmp_path, exchanges):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.today_local", return_value=today),
         patch(
             f"{MODULE}.OnboardingFlow._build_plan_message",
             new=AsyncMock(return_value="[PLANO DA SEMANA]"),
@@ -135,6 +145,80 @@ def test_full_onboarding_without_strava_creates_profile(tmp_path):
     assert onboarding_repo.load(PHONE) is None
 
 
+def test_midweek_asks_week_choice_then_finishes(tmp_path):
+    """Começo da semana, 2+ dias por vir: pergunta esta/próxima e só
+    depois conclui com o plano."""
+
+    conversation = FULL_CONVERSATION + [
+        ("pode ser essa mesma", {"start_week": "current"}),
+    ]
+
+    replies, onboarding_repo, _ = _run_conversation(
+        tmp_path,
+        conversation,
+        today=COMECO_DA_SEMANA,
+    )
+
+    # a resposta ao "confirmar" é a pergunta da semana (não o plano ainda)
+    week_question = replies[-2]
+    assert "nesta semana" in week_question
+    assert "próxima segunda" in week_question
+    # lista os dias que ainda dá pra treinar (terça e sábado)
+    assert "terça-feira" in week_question
+    assert "sábado" in week_question
+    assert "[PLANO DA SEMANA]" not in week_question
+
+    # após escolher, conclui com o plano
+    assert "Cadastro feito, Fulano" in replies[-1]
+    assert "[PLANO DA SEMANA]" in replies[-1]
+
+    # onboarding encerrado
+    assert onboarding_repo.load(PHONE) is None
+
+
+def test_near_end_of_week_skips_question(tmp_path):
+    """Fim da semana (<2 dias): monta direto, sem perguntar."""
+
+    replies, onboarding_repo, _ = _run_conversation(
+        tmp_path,
+        FULL_CONVERSATION,
+        today=FIM_DE_SEMANA,
+    )
+
+    # concluiu direto no confirmar, sem passo de escolha de semana
+    assert "Cadastro feito, Fulano" in replies[-1]
+    assert "nesta semana" not in replies[-1]
+    assert onboarding_repo.load(PHONE) is None
+
+
+def test_should_ask_week_true_at_start_of_week():
+
+    assert OnboardingFlow._should_ask_week(
+        ["Tuesday", "Saturday"],
+        COMECO_DA_SEMANA,
+    ) is True
+
+
+def test_should_ask_week_false_near_end():
+
+    # sábado: só sábado ainda por vir (1 dia < 2)
+    assert OnboardingFlow._should_ask_week(
+        ["Tuesday", "Saturday"],
+        FIM_DE_SEMANA,
+    ) is False
+
+
+def test_remaining_day_labels_midweek_keeps_order():
+
+    # quinta 23/07: dos dias ter/qui/sáb restam quinta e sábado
+    labels = OnboardingFlow._remaining_day_labels(
+        ["Tuesday", "Thursday", "Saturday"],
+        date(2026, 7, 23),
+    )
+
+    assert labels == ["quinta-feira", "sábado"]
+
+
 def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
 
     conversation = [
@@ -194,6 +278,7 @@ def test_no_strava_reminder_when_already_connected(tmp_path):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.today_local", return_value=FIM_DE_SEMANA),
         patch(
             f"{MODULE}.OnboardingFlow._build_plan_message",
             new=AsyncMock(return_value="[PLANO]"),

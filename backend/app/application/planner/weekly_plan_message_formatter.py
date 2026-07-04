@@ -163,10 +163,12 @@ class WeeklyPlanMessageFormatter:
     def session_lines(
         plan: TrainingPlan,
         reference_date: date | None = None,
+        past_label: str = "✅ (já feito)",
     ) -> list[str]:
         """Blocos detalhados por sessão, em ordem cronológica — reusado
         pelo resumo, onboarding e plano externo. Com `reference_date`,
-        sessões já passadas viram uma linha marcada com ✅."""
+        sessões já passadas viram uma linha marcada com `past_label`
+        (padrão "✅ já feito"; onboarding usa "já passou")."""
 
         sessions = sorted(
             plan.sessions,
@@ -182,6 +184,7 @@ class WeeklyPlanMessageFormatter:
                     plan,
                     session,
                     reference_date,
+                    past_label,
                 )
             )
 
@@ -194,6 +197,7 @@ class WeeklyPlanMessageFormatter:
         plan: TrainingPlan,
         session,
         reference_date: date | None = None,
+        past_label: str = "✅ (já feito)",
     ) -> list[str]:
 
         session_date_obj = plan.session_date(session)
@@ -220,7 +224,7 @@ class WeeklyPlanMessageFormatter:
             and session_date_obj < reference_date
         ):
 
-            return [f"{header} ✅ (já feito)"]
+            return [f"{header} {past_label}"]
 
         detail = WeeklyPlanMessageFormatter._execution_detail(
             code,
