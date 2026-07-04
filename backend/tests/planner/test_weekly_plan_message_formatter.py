@@ -262,6 +262,21 @@ def test_week_plan_start_of_week_has_no_done_marks():
     assert "5x400m" in text  # detalhe do intervalado presente
 
 
+def test_session_lines_custom_past_label():
+    """Onboarding marca dias passados como 'já passou', não 'já feito'."""
+
+    lines = WeeklyPlanMessageFormatter.session_lines(
+        _week_plan(),
+        reference_date=date(2026, 7, 25),  # sábado: ter/qui passaram
+        past_label="⏭️ (já passou)",
+    )
+
+    text = "\n".join(lines)
+
+    assert "terça-feira (21/07) — Rodagem leve · 6.0 km ⏭️ (já passou)" in text
+    assert "já feito" not in text
+
+
 def test_week_plan_empty_plan_is_friendly():
 
     plan = _plan([])
