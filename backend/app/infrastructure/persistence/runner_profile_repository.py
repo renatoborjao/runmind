@@ -118,6 +118,21 @@ class RunnerProfileRepository:
 
         return None
 
+    def find_by_telegram_id(
+        self,
+        telegram_id: str,
+    ) -> str | None:
+
+        target = str(telegram_id)
+
+        for profile, runner in self._valid_profiles():
+
+            if runner.telegram_id and str(runner.telegram_id) == target:
+
+                return profile
+
+        return None
+
     def list_all(
         self,
     ) -> list[str]:

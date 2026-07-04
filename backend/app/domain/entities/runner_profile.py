@@ -57,3 +57,9 @@ class RunnerProfile:
     # Tem treinador humano: o RunMind só acompanha os treinos enviados
     # (print/foto/PDF), nunca gera nem ajusta plano.
     external_coach: bool = False
+
+    # Canal de mensagens do atleta e endereço nativo do Telegram.
+    # "whatsapp" usa `phone`; "telegram" usa `telegram_id` (chat_id).
+    channel: str = "whatsapp"
+
+    telegram_id: str | None = None

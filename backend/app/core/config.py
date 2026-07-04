@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     evolution_instance: str = ""
 
     # ==========================
+    # TELEGRAM
+    # ==========================
+
+    telegram_bot_token: str = ""
+    telegram_webhook_secret: str = ""
+
+    # ==========================
     # GOOGLE GEMINI
     # ==========================
 

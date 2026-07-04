@@ -1,7 +1,10 @@
 from fastapi import APIRouter
+from fastapi import Header
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+
+from app.core.config import get_settings
 
 from app.application.events.coach_conversation import (
     CoachConversationEvent,
@@ -32,6 +35,9 @@ from app.infrastructure.integrations.evolution.phone_normalizer import (
 )
 from app.infrastructure.integrations.strava.client import (
     StravaClient,
+)
+from app.infrastructure.integrations.telegram.telegram_inbound_parser import (
+    TelegramInboundParser,
 )
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
@@ -259,7 +265,13 @@ async def receive_whatsapp_webhook(
     # (tempestade de retry + chamadas duplicadas ao Gemini).
     try:
 
-        return await _route_message(phone, text, media, data)
+        return await route_inbound(
+            channel="whatsapp",
+            address=phone,
+            text=text,
+            media=media,
+            sender_name=data.get("pushName", ""),
+        )
 
     except Exception as e:
 
@@ -274,22 +286,35 @@ async def receive_whatsapp_webhook(
         }
 
 
-async def _route_message(
-    phone: str,
+async def route_inbound(
+    channel: str,
+    address: str,
     text: str | None,
     media: dict | None,
-    data: dict,
+    sender_name: str,
 ) -> dict:
+    """Roteamento agnóstico ao canal (WhatsApp/Telegram): resolve o
+    atleta pelo endereço e despacha onboarding, plano externo ou
+    conversa."""
 
-    profile = RunnerProfileRepository().find_by_phone(phone)
+    repo = RunnerProfileRepository()
 
-    # número desconhecido: inicia (ou continua) o cadastro
+    if channel == "telegram":
+
+        profile = repo.find_by_telegram_id(address)
+
+    else:
+
+        profile = repo.find_by_phone(address)
+
+    # endereço desconhecido: inicia (ou continua) o cadastro
     if profile is None:
 
         reply = await OnboardingEvent.execute(
-            phone=phone,
+            channel=channel,
+            address=address,
             incoming_text=text or "",
-            sender_name=data.get("pushName", ""),
+            sender_name=sender_name,
             media=media,
         )
 
@@ -321,7 +346,7 @@ async def _route_message(
     reply = await CoachConversationEvent.execute(
         profile=profile,
         incoming_text=text,
-        sender_name=data.get("pushName", ""),
+        sender_name=sender_name,
     )
 
     return {
@@ -356,9 +381,76 @@ async def _handle_profile_media(
         "avisa que eu registro."
     )
 
-    await NotificationService.send_training_feedback(
-        phone=runner.phone,
-        message=reply,
+    await NotificationService.send(
+        runner,
+        reply,
     )
 
     return reply
+
+
+# ==========================================================
+# TELEGRAM INBOUND
+# ==========================================================
+
+@router.post("/telegram")
+async def receive_telegram_webhook(
+    request: Request,
+    x_telegram_bot_api_secret_token: str = Header(default=""),
+):
+
+    settings = get_settings()
+
+    secret = settings.telegram_webhook_secret
+
+    if secret and x_telegram_bot_api_secret_token != secret:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Telegram secret token",
+        )
+
+    update = await request.json()
+
+    print()
+    print("=" * 70)
+    print("TELEGRAM WEBHOOK RECEBIDO")
+    print("=" * 70)
+    print(update)
+    print("=" * 70)
+
+    message = TelegramInboundParser.message(update)
+
+    if message is None or TelegramInboundParser.is_from_bot(message):
+
+        return {"ignored": True, "reason": "no direct message"}
+
+    chat_id = TelegramInboundParser.chat_id(message)
+
+    if chat_id is None:
+
+        return {"ignored": True, "reason": "no chat id"}
+
+    text = TelegramInboundParser.extract_text(message)
+
+    media = TelegramInboundParser.extract_media(message)
+
+    if not text and not media:
+
+        return {"ignored": True, "reason": "no supported content found"}
+
+    try:
+
+        return await route_inbound(
+            channel="telegram",
+            address=chat_id,
+            text=text,
+            media=media,
+            sender_name=TelegramInboundParser.sender_name(message),
+        )
+
+    except Exception as e:
+
+        print(f"Falha ao processar mensagem Telegram de {chat_id}: {e}")
+
+        return {"success": False, "error": str(e)}

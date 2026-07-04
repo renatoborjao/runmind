@@ -25,8 +25,8 @@ from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.domain.entities.training_history import TrainingHistory
-from app.infrastructure.integrations.evolution.media_client import (
-    EvolutionMediaClient,
+from app.infrastructure.integrations.media_download import (
+    download_media,
 )
 from app.infrastructure.persistence.onboarding_state_repository import (
     OnboardingStateRepository,
@@ -90,7 +90,8 @@ class OnboardingFlow:
 
     @staticmethod
     async def handle(
-        phone: str,
+        channel: str,
+        address: str,
         incoming_text: str,
         sender_name: str = "",
         media: dict | None = None,
@@ -98,7 +99,7 @@ class OnboardingFlow:
 
         repo = OnboardingStateRepository()
 
-        state = repo.load(phone)
+        state = repo.load(address)
 
         # primeira mensagem: só dá boas-vindas e pergunta o nome
         if state is None:
@@ -106,10 +107,12 @@ class OnboardingFlow:
             state = {
                 "step": "ASK_NAME",
                 "answers": {},
+                "channel": channel,
+                "address": address,
                 "created_at": datetime.now(UTC).isoformat(),
             }
 
-            repo.save(phone, state)
+            repo.save(address, state)
 
             return QUESTIONS["ASK_NAME"]
 
@@ -121,7 +124,7 @@ class OnboardingFlow:
             if step == "AWAIT_PLAN_MEDIA":
 
                 return await OnboardingFlow._on_plan_media(
-                    phone,
+                    address,
                     state,
                     media,
                     repo,
@@ -153,7 +156,7 @@ class OnboardingFlow:
             f"_on_{step.lower()}",
         )
 
-        reply = await handler(phone, state, parsed, repo)
+        reply = await handler(address, state, parsed, repo)
 
         return reply
 
@@ -162,7 +165,7 @@ class OnboardingFlow:
     # ==========================================================
 
     @staticmethod
-    async def _on_ask_name(phone, state, parsed, repo) -> str:
+    async def _on_ask_name(address, state, parsed, repo) -> str:
 
         name = (parsed.get("name") or "").strip()
 
@@ -176,12 +179,12 @@ class OnboardingFlow:
 
         state["step"] = "ASK_BODY"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return QUESTIONS["ASK_BODY"].format(name=name)
 
     @staticmethod
-    async def _on_ask_body(phone, state, parsed, repo) -> str:
+    async def _on_ask_body(address, state, parsed, repo) -> str:
 
         age = parsed.get("age")
 
@@ -214,12 +217,12 @@ class OnboardingFlow:
 
         state["step"] = "ASK_STRAVA"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return QUESTIONS["ASK_STRAVA"]
 
     @staticmethod
-    async def _on_ask_strava(phone, state, parsed, repo) -> str:
+    async def _on_ask_strava(address, state, parsed, repo) -> str:
 
         has_strava = parsed.get("has_strava")
 
@@ -231,9 +234,9 @@ class OnboardingFlow:
 
         state["step"] = "ASK_EXPERIENCE"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
-        link = OnboardingFlow._connect_link(phone)
+        link = OnboardingFlow._connect_link(state)
 
         if has_strava:
 
@@ -254,7 +257,7 @@ class OnboardingFlow:
         )
 
     @staticmethod
-    async def _on_ask_experience(phone, state, parsed, repo) -> str:
+    async def _on_ask_experience(address, state, parsed, repo) -> str:
 
         runs_today = parsed.get("runs_today")
 
@@ -289,18 +292,18 @@ class OnboardingFlow:
             # quem já corre pode ter treinador
             state["step"] = "ASK_COACH"
 
-            repo.save(phone, state)
+            repo.save(address, state)
 
             return QUESTIONS["ASK_COACH"]
 
         state["step"] = "ASK_DAYS"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return QUESTIONS["ASK_DAYS"]
 
     @staticmethod
-    async def _on_ask_coach(phone, state, parsed, repo) -> str:
+    async def _on_ask_coach(address, state, parsed, repo) -> str:
 
         has_coach = parsed.get("has_coach")
 
@@ -314,14 +317,14 @@ class OnboardingFlow:
         # métricas até o histórico do Strava chegar)
         state["step"] = "ASK_PACE"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return QUESTIONS["ASK_PACE"].format(
             typical_km=state["answers"]["typical_km"],
         )
 
     @staticmethod
-    async def _on_ask_pace(phone, state, parsed, repo) -> str:
+    async def _on_ask_pace(address, state, parsed, repo) -> str:
 
         minutes = parsed.get("typical_minutes")
 
@@ -346,12 +349,12 @@ class OnboardingFlow:
 
         state["step"] = "ASK_DAYS"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return QUESTIONS["ASK_DAYS"]
 
     @staticmethod
-    async def _on_ask_days(phone, state, parsed, repo) -> str:
+    async def _on_ask_days(address, state, parsed, repo) -> str:
 
         raw_days = parsed.get("days") or []
 
@@ -375,12 +378,12 @@ class OnboardingFlow:
 
         state["step"] = "ASK_GOAL"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return QUESTIONS["ASK_GOAL"]
 
     @staticmethod
-    async def _on_ask_goal(phone, state, parsed, repo) -> str:
+    async def _on_ask_goal(address, state, parsed, repo) -> str:
 
         goal = (parsed.get("goal") or "").strip()
 
@@ -402,25 +405,25 @@ class OnboardingFlow:
 
             state["step"] = "AWAIT_PLAN_MEDIA"
 
-            repo.save(phone, state)
+            repo.save(address, state)
 
             return QUESTIONS["AWAIT_PLAN_MEDIA"]
 
         state["step"] = "CONFIRM"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return OnboardingFlow._summary(state)
 
     @staticmethod
-    async def _on_await_plan_media(phone, state, parsed, repo) -> str:
+    async def _on_await_plan_media(address, state, parsed, repo) -> str:
 
         # resposta em texto neste passo: só aceita "mando depois"
         if parsed.get("skip") is True:
 
             state["step"] = "CONFIRM"
 
-            repo.save(phone, state)
+            repo.save(address, state)
 
             return OnboardingFlow._summary(state)
 
@@ -430,12 +433,13 @@ class OnboardingFlow:
         )
 
     @staticmethod
-    async def _on_plan_media(phone, state, media, repo) -> str:
+    async def _on_plan_media(address, state, media, repo) -> str:
 
         try:
 
-            media_bytes, mimetype = await EvolutionMediaClient.download(
-                media["key_id"],
+            media_bytes, mimetype = await download_media(
+                state["channel"],
+                media,
             )
 
             sessions = await ExternalPlanExtractionEngine.extract(
@@ -460,18 +464,18 @@ class OnboardingFlow:
 
         state["step"] = "CONFIRM"
 
-        repo.save(phone, state)
+        repo.save(address, state)
 
         return OnboardingFlow._summary(state)
 
     @staticmethod
-    async def _on_confirm(phone, state, parsed, repo) -> str:
+    async def _on_confirm(address, state, parsed, repo) -> str:
 
         confirmed = parsed.get("confirmed")
 
         if confirmed is False:
 
-            repo.delete(phone)
+            repo.delete(address)
 
             return (
                 "Sem problema! Se quiser recomeçar o cadastro, "
@@ -485,14 +489,14 @@ class OnboardingFlow:
                 "dados? (sim/não)"
             )
 
-        return await OnboardingFlow._finalize(phone, state, repo)
+        return await OnboardingFlow._finalize(address, state, repo)
 
     # ==========================================================
     # Conclusão
     # ==========================================================
 
     @staticmethod
-    async def _finalize(phone, state, repo) -> str:
+    async def _finalize(address, state, repo) -> str:
 
         answers = state["answers"]
 
@@ -510,6 +514,8 @@ class OnboardingFlow:
 
         has_coach = bool(answers.get("has_coach"))
 
+        channel = state["channel"]
+
         RunnerProfileRepository().save(
             slug,
             {
@@ -518,7 +524,9 @@ class OnboardingFlow:
                 "age": answers["age"],
                 "weight": answers["weight"],
                 "height": answers["height"],
-                "phone": phone,
+                "channel": channel,
+                "phone": address if channel == "whatsapp" else "",
+                "telegram_id": address if channel == "telegram" else None,
                 "goal": answers["goal"],
                 "weekly_training_days": len(answers["days"]),
                 "preferred_running_days": answers["days"],
@@ -552,7 +560,7 @@ class OnboardingFlow:
                 slug,
             )
 
-        repo.delete(phone)
+        repo.delete(address)
 
         strava_reminder = ""
 
@@ -562,7 +570,7 @@ class OnboardingFlow:
                 "\n\n⚠️ Falta só uma coisa: conectar seu Strava — é "
                 "por ele que eu acompanho seus treinos e te dou "
                 "feedback. Conecta aqui:\n"
-                f"{OnboardingFlow._connect_link(phone)}"
+                f"{OnboardingFlow._connect_link(state)}"
             )
 
         return (
@@ -752,14 +760,25 @@ class OnboardingFlow:
 
         return value
 
+    # prefixo do canal no `state` do OAuth, pra o callback saber por
+    # onde resolver o atleta (tg:<chat_id> ou wa:<telefone>)
+    _CHANNEL_PREFIX = {"telegram": "tg", "whatsapp": "wa"}
+
     @staticmethod
-    def _connect_link(phone: str) -> str:
+    def _connect_link(state: dict) -> str:
 
         settings = get_settings()
 
+        prefix = OnboardingFlow._CHANNEL_PREFIX.get(
+            state["channel"],
+            "wa",
+        )
+
+        oauth_state = f"{prefix}:{state['address']}"
+
         return (
             f"{settings.public_base_url}"
-            f"/api/v1/strava/connect?state={phone}"
+            f"/api/v1/strava/connect?state={oauth_state}"
         )
 
     @staticmethod

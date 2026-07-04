@@ -28,7 +28,7 @@ def _run_notify_all(profiles, runners, messages):
 
         mock_formatter.format.side_effect = messages
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         asyncio.run(WeeklyReviewNotifier.notify_all())
 
@@ -46,12 +46,12 @@ def test_notify_all_sends_review_to_every_profile():
         messages=["resumo renato", "resumo camila"],
     )
 
-    assert mock_notification.send_training_feedback.await_count == 2
+    assert mock_notification.send.await_count == 2
 
-    mock_notification.send_training_feedback.assert_any_await(
-        phone="+5511900000001",
-        message="resumo renato",
-    )
+    sent = [call.args for call in mock_notification.send.await_args_list]
+    assert ("Renato", "resumo renato") in [
+        (r.name, msg) for r, msg in sent
+    ]
 
 
 def test_does_not_send_when_formatter_returns_none():
@@ -62,7 +62,7 @@ def test_does_not_send_when_formatter_returns_none():
         messages=[None],
     )
 
-    mock_notification.send_training_feedback.assert_not_awaited()
+    mock_notification.send.assert_not_awaited()
 
 
 def test_notify_all_continues_after_one_profile_fails():
@@ -76,7 +76,7 @@ def test_notify_all_continues_after_one_profile_fails():
         messages=["resumo renato"],
     )
 
-    mock_notification.send_training_feedback.assert_awaited_once_with(
-        phone="+5511900000001",
-        message="resumo renato",
-    )
+    mock_notification.send.assert_awaited_once()
+    runner, msg = mock_notification.send.await_args.args
+    assert runner.name == "Renato"
+    assert msg == "resumo renato"

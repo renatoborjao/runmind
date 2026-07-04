@@ -13,8 +13,8 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
-from app.infrastructure.integrations.evolution.media_client import (
-    EvolutionMediaClient,
+from app.infrastructure.integrations.media_download import (
+    download_media,
 )
 
 UNREADABLE_REPLY = (
@@ -35,8 +35,9 @@ class ExternalPlanEvent:
 
         runner = LoadRunnerProfile.execute(profile)
 
-        media_bytes, mimetype = await EvolutionMediaClient.download(
-            media["key_id"],
+        media_bytes, mimetype = await download_media(
+            runner.channel,
+            media,
         )
 
         sessions = await ExternalPlanExtractionEngine.extract(
@@ -68,9 +69,9 @@ class ExternalPlanEvent:
                 "a foto de novo que eu atualizo."
             )
 
-        await NotificationService.send_training_feedback(
-            phone=runner.phone,
-            message=reply,
+        await NotificationService.send(
+            runner,
+            reply,
         )
 
         return reply

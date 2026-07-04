@@ -129,27 +129,52 @@ async def callback(
     }
 
 
+def _parse_state(state: str) -> tuple[str, str]:
+    """`state` do OAuth -> (channel, address_key).
+
+    - "tg:<chat_id>"  -> ("telegram", chat_id)
+    - "wa:<telefone>" -> ("whatsapp", telefone normalizado)
+    - sem prefixo     -> ("whatsapp", telefone normalizado) [retrocompat]
+    """
+
+    if state.startswith("tg:"):
+
+        return "telegram", state[3:]
+
+    raw = state[3:] if state.startswith("wa:") else state
+
+    return "whatsapp", PhoneNormalizer.normalize(raw)
+
+
 def _resolve_token_target(state: str) -> tuple[str, str]:
     """De quem são os tokens: (profile/slug, origem).
 
     - sem state: comportamento original (renato);
-    - state = telefone de perfil existente: o próprio perfil;
-    - state = telefone com onboarding em andamento: o slug reservado.
+    - perfil existente (por telefone ou telegram_id): o próprio perfil;
+    - onboarding em andamento: o slug reservado.
     """
 
     if not state:
 
         return "renato", "profile"
 
-    phone = PhoneNormalizer.normalize(state)
+    channel, address = _parse_state(state)
 
-    profile = RunnerProfileRepository().find_by_phone(phone)
+    repo = RunnerProfileRepository()
+
+    if channel == "telegram":
+
+        profile = repo.find_by_telegram_id(address)
+
+    else:
+
+        profile = repo.find_by_phone(address)
 
     if profile is not None:
 
         return profile, "profile"
 
-    onboarding = OnboardingStateRepository().load(phone)
+    onboarding = OnboardingStateRepository().load(address)
 
     if onboarding and onboarding.get("slug"):
 
@@ -159,7 +184,7 @@ def _resolve_token_target(state: str) -> tuple[str, str]:
         status_code=400,
         detail=(
             "Nenhum cadastro encontrado para este link. "
-            "Comece a conversa com o coach no WhatsApp primeiro."
+            "Comece a conversa com o coach primeiro."
         ),
     )
 
@@ -181,15 +206,15 @@ def _persist_athlete_id(
         return
 
     # onboarding em andamento: o id vai pro perfil na conclusão
-    phone = PhoneNormalizer.normalize(state)
+    _, address = _parse_state(state)
 
     repo = OnboardingStateRepository()
 
-    onboarding = repo.load(phone) or {}
+    onboarding = repo.load(address) or {}
 
     onboarding["strava_athlete_id"] = athlete_id
 
-    repo.save(phone, onboarding)
+    repo.save(address, onboarding)
 
 
 # ==========================================================

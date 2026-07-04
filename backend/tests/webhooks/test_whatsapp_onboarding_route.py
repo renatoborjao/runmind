@@ -49,7 +49,8 @@ def test_unknown_phone_starts_onboarding():
         assert body["onboarding"] is True
 
         mock_onboarding.execute.assert_awaited_once_with(
-            phone="5511900000000",
+            channel="whatsapp",
+            address="5511900000000",
             incoming_text="oi",
             sender_name="Fulano",
             media=None,

@@ -88,9 +88,9 @@ class WeeklyPlanNotifier:
             plan,
         )
 
-        await NotificationService.send_training_feedback(
-            phone=runner.phone,
-            message=message,
+        await NotificationService.send(
+            runner,
+            message,
         )
 
     @staticmethod
@@ -120,7 +120,7 @@ class WeeklyPlanNotifier:
                 "treinos e te dar feedback. 📸"
             )
 
-        await NotificationService.send_training_feedback(
-            phone=runner.phone,
-            message=message,
+        await NotificationService.send(
+            runner,
+            message,
         )

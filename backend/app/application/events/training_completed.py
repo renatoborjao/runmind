@@ -24,12 +24,9 @@ class TrainingCompletedEvent:
 
         runner = result["runner"]
 
-        await NotificationService.send_training_feedback(
-
-            phone=runner.phone,
-
-            message=result["message"],
-
+        await NotificationService.send(
+            runner,
+            result["message"],
         )
 
         return result

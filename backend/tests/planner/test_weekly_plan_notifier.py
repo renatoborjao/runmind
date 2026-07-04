@@ -49,7 +49,7 @@ def _run_external(plan):
 
         mock_formatter.format.return_value = "plano formatado"
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         asyncio.run(WeeklyPlanNotifier.notify_all())
 
@@ -66,8 +66,7 @@ def test_external_coach_with_current_plan_gets_it_formatted():
 
     mock_formatter.format.assert_called_once()
 
-    message = mock_notification.send_training_feedback.call_args
-    assert message.kwargs["message"] == "plano formatado"
+    assert mock_notification.send.call_args.args[1] == "plano formatado"
 
 
 def test_external_coach_without_current_plan_gets_reminder():
@@ -80,8 +79,7 @@ def test_external_coach_without_current_plan_gets_reminder():
 
     mock_formatter.format.assert_not_called()
 
-    message = mock_notification.send_training_feedback.call_args
-    assert "print" in message.kwargs["message"]
+    assert "print" in mock_notification.send.call_args.args[1]
 
 
 def test_notify_all_sends_to_every_profile():
@@ -110,21 +108,18 @@ def test_notify_all_sends_to_every_profile():
 
         mock_formatter.format.return_value = "mensagem"
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         asyncio.run(WeeklyPlanNotifier.notify_all())
 
-        assert mock_notification.send_training_feedback.await_count == 2
+        assert mock_notification.send.await_count == 2
 
-        mock_notification.send_training_feedback.assert_any_await(
-            phone="+5511900000001",
-            message="mensagem",
-        )
-
-        mock_notification.send_training_feedback.assert_any_await(
-            phone="+5511900000002",
-            message="mensagem",
-        )
+        sent = [
+            call.args
+            for call in mock_notification.send.await_args_list
+        ]
+        assert {r.name for r, _ in sent} == {"Renato", "Camila"}
+        assert all(msg == "mensagem" for _, msg in sent)
 
 
 def test_notify_all_continues_after_one_profile_fails():
@@ -153,11 +148,11 @@ def test_notify_all_continues_after_one_profile_fails():
 
         mock_formatter.format.return_value = "mensagem"
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         asyncio.run(WeeklyPlanNotifier.notify_all())
 
-        mock_notification.send_training_feedback.assert_awaited_once_with(
-            phone="+5511900000001",
-            message="mensagem",
-        )
+        mock_notification.send.assert_awaited_once()
+        runner, msg = mock_notification.send.await_args.args
+        assert runner.name == "Renato"
+        assert msg == "mensagem"

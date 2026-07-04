@@ -96,3 +96,30 @@ def test_list_all_skips_invalid_json_files(tmp_path):
     repo = _isolated_repo(tmp_path)
 
     assert repo.list_all() == ["renato"]
+
+
+def test_find_by_telegram_id_matches_exact(tmp_path):
+
+    repo = _isolated_repo(tmp_path)
+
+    _write_profile(
+        tmp_path, "renato.json",
+        channel="telegram", telegram_id="4242",
+    )
+    _write_profile(
+        tmp_path, "camila.json",
+        id="c", telegram_id="9999",
+    )
+
+    assert repo.find_by_telegram_id("4242") == "renato"
+    assert repo.find_by_telegram_id("0000") is None
+
+
+def test_find_by_telegram_id_ignores_profiles_without_it(tmp_path):
+
+    repo = _isolated_repo(tmp_path)
+
+    # perfil só WhatsApp (sem telegram_id) não casa
+    _write_profile(tmp_path, "renato.json")
+
+    assert repo.find_by_telegram_id("123") is None

@@ -65,7 +65,7 @@ def _run_conversation(tmp_path, exchanges):
 
             replies.append(
                 asyncio.run(
-                    OnboardingFlow.handle(PHONE, text),
+                    OnboardingFlow.handle("whatsapp", PHONE, text),
                 )
             )
 
@@ -110,7 +110,7 @@ def test_full_onboarding_without_strava_creates_profile(tmp_path):
 
     # sem conta no Strava: instrução de criar + link (obrigatório)
     assert "cria" in replies[3].lower()
-    assert f"/api/v1/strava/connect?state={PHONE}" in replies[3]
+    assert f"/api/v1/strava/connect?state=wa:{PHONE}" in replies[3]
 
     # a última conclui com o plano
     assert "Cadastro feito, Fulano" in replies[-1]
@@ -162,7 +162,7 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
 
     # link de conexão com state=telefone
     strava_reply = replies[3]
-    assert f"/api/v1/strava/connect?state={PHONE}" in strava_reply
+    assert f"/api/v1/strava/connect?state=wa:{PHONE}" in strava_reply
 
     # sequência: experiência -> treinador -> pace -> dias
     assert "já corre hoje" in strava_reply
@@ -210,7 +210,7 @@ def test_no_strava_reminder_when_already_connected(tmp_path):
         )
 
         replies = [
-            asyncio.run(OnboardingFlow.handle(PHONE, text))
+            asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, text))
             for text, _ in FULL_CONVERSATION
         ]
 
@@ -291,7 +291,7 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
-        patch(f"{MODULE}.EvolutionMediaClient") as mock_media,
+        patch(f"{MODULE}.download_media") as mock_download,
         patch(f"{MODULE}.ExternalPlanExtractionEngine") as mock_engine,
         patch(f"{MODULE}.ExternalPlanService") as mock_service,
         patch(
@@ -306,9 +306,7 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
             + [{"confirmed": True}],
         )
 
-        mock_media.download = AsyncMock(
-            return_value=(b"img", "image/jpeg"),
-        )
+        mock_download.return_value = (b"img", "image/jpeg")
 
         mock_engine.extract = AsyncMock(
             return_value=EXTRACTED_SESSIONS,
@@ -322,7 +320,7 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         ]
 
         replies = [
-            asyncio.run(OnboardingFlow.handle(PHONE, text))
+            asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, text))
             for text, _ in COACH_CONVERSATION_START
         ]
 
@@ -332,6 +330,7 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         # mídia chega -> resumo com plano recebido
         media_reply = asyncio.run(
             OnboardingFlow.handle(
+                "whatsapp",
                 PHONE,
                 "",
                 media={"key_id": "M1", "mimetype": "image/jpeg"},
@@ -342,7 +341,7 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         assert "acompanhar os treinos" in media_reply
 
         # confirmação final cria perfil external_coach e salva o plano
-        final = asyncio.run(OnboardingFlow.handle(PHONE, "sim"))
+        final = asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, "sim"))
 
         assert "Plano do seu treinador registrado" in final
 
@@ -374,10 +373,11 @@ def test_media_outside_plan_step_is_deferred(tmp_path):
         ),
     ):
 
-        asyncio.run(OnboardingFlow.handle(PHONE, "oi"))
+        asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, "oi"))
 
         reply = asyncio.run(
             OnboardingFlow.handle(
+                "whatsapp",
                 PHONE,
                 "",
                 media={"key_id": "M1", "mimetype": "image/jpeg"},
@@ -410,10 +410,10 @@ def test_skip_media_goes_to_confirm(tmp_path):
         )
 
         for text, _ in COACH_CONVERSATION_START:
-            asyncio.run(OnboardingFlow.handle(PHONE, text))
+            asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, text))
 
         reply = asyncio.run(
-            OnboardingFlow.handle(PHONE, "mando depois"),
+            OnboardingFlow.handle("whatsapp", PHONE, "mando depois"),
         )
 
         assert "vai mandar o plano depois" in reply
@@ -437,14 +437,14 @@ def test_parser_error_asks_to_resend_instead_of_crashing(tmp_path):
     ):
 
         # inicia o onboarding (sem parser)
-        asyncio.run(OnboardingFlow.handle(PHONE, "oi"))
+        asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, "oi"))
 
         # Gemini fora do ar / rate limit na resposta seguinte
         mock_parser.parse = AsyncMock(
             side_effect=RuntimeError("429 RESOURCE_EXHAUSTED"),
         )
 
-        reply = asyncio.run(OnboardingFlow.handle(PHONE, "Fulano"))
+        reply = asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, "Fulano"))
 
         assert "manda sua última mensagem de novo" in reply
 

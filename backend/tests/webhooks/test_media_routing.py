@@ -108,7 +108,7 @@ def test_media_from_regular_athlete_gets_polite_reply():
         mock_repo.find_by_phone.return_value = "renato"
         mock_repo.load.return_value = make_runner(external_coach=False)
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         client = TestClient(app)
 
@@ -121,5 +121,4 @@ def test_media_from_regular_athlete_gets_polite_reply():
 
         mock_event.execute.assert_not_called()
 
-        message = mock_notification.send_training_feedback.call_args
-        assert "treinador" in message.kwargs["message"]
+        assert "treinador" in mock_notification.send.call_args.args[1]

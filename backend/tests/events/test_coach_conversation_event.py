@@ -44,7 +44,7 @@ def _run_event(
             return_value="Bom dia! Foi um baita treino ontem.",
         )
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         mock_memory_repo_cls.return_value.active.return_value = []
 
@@ -118,10 +118,10 @@ def test_execute_orchestrates_context_reply_persistence_and_notification():
         text="Bom dia! Foi um baita treino ontem.",
     )
 
-    mock_notification.send_training_feedback.assert_awaited_once_with(
-        phone="+5511975658679",
-        message="Bom dia! Foi um baita treino ontem.",
-    )
+    mock_notification.send.assert_awaited_once()
+    runner, msg = mock_notification.send.await_args.args
+    assert runner.phone == "+5511975658679"
+    assert msg == "Bom dia! Foi um baita treino ontem."
 
 
 def test_memory_ops_are_applied_after_reply():
@@ -272,7 +272,7 @@ def test_gemini_failure_sends_busy_reply_instead_of_silence():
             side_effect=RuntimeError("429 RESOURCE_EXHAUSTED"),
         )
 
-        mock_notification.send_training_feedback = AsyncMock()
+        mock_notification.send = AsyncMock()
 
         mock_memory_repo.return_value.active.return_value = []
         mock_extraction.extract = AsyncMock(
@@ -289,7 +289,7 @@ def test_gemini_failure_sends_busy_reply_instead_of_silence():
         # o atleta recebe resposta, não silêncio/500
         assert "me embananei" in reply.lower() or "de novo" in reply
 
-        mock_notification.send_training_feedback.assert_awaited_once()
+        mock_notification.send.assert_awaited_once()
 
 
 def test_extraction_failure_does_not_break_reply():
@@ -306,7 +306,7 @@ def test_extraction_failure_does_not_break_reply():
 
     assert reply == "Bom dia! Foi um baita treino ontem."
 
-    mock_notification.send_training_feedback.assert_awaited_once()
+    mock_notification.send.assert_awaited_once()
 
     mock_memory_service.process.assert_not_called()
 

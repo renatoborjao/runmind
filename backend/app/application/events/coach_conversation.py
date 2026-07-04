@@ -92,9 +92,9 @@ class CoachConversationEvent:
             text=reply_text,
         )
 
-        await NotificationService.send_training_feedback(
-            phone=runner.phone,
-            message=reply_text,
+        await NotificationService.send(
+            runner,
+            reply_text,
         )
 
         # A resposta já foi enviada: falha na memória nunca chega ao corredor.

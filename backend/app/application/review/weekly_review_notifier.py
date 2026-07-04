@@ -63,7 +63,7 @@ class WeeklyReviewNotifier:
 
             return
 
-        await NotificationService.send_training_feedback(
-            phone=runner.phone,
-            message=message,
+        await NotificationService.send(
+            runner,
+            message,
         )

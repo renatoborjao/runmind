@@ -203,3 +203,43 @@ def test_callback_with_unknown_state_returns_400(tmp_path):
         )
 
         assert response.status_code == 400
+
+
+def test_callback_with_telegram_state_resolves_by_chat_id(tmp_path):
+
+    profile_repo, onboarding_repo = _repos(tmp_path)
+
+    (profile_repo.storage / "tonho.json").write_text(
+        json.dumps({
+            "id": "tonho", "name": "Tonho", "age": 30,
+            "weight": 70.0, "height": 1.75,
+            "phone": "", "channel": "telegram", "telegram_id": "4242",
+            "goal": "10k", "weekly_training_days": 3,
+        }),
+        encoding="utf-8",
+    )
+
+    with (
+        patch(f"{MODULE}.httpx.AsyncClient",
+              return_value=_mock_token_exchange()),
+        patch(f"{MODULE}.RunnerProfileRepository",
+              return_value=profile_repo),
+        patch(f"{MODULE}.OnboardingStateRepository",
+              return_value=onboarding_repo),
+        patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
+    ):
+
+        client = TestClient(app)
+
+        response = client.get(
+            "/api/v1/strava/callback",
+            params={"code": "abc", "state": "tg:4242"},
+        )
+
+        assert response.json()["profile"] == "tonho"
+        mock_token_store_cls.assert_called_once_with("tonho")
+
+        data = json.loads(
+            (profile_repo.storage / "tonho.json").read_text("utf-8")
+        )
+        assert data["strava_athlete_id"] == 777
