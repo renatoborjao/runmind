@@ -125,6 +125,33 @@ def test_session_count_and_days_are_preserved():
     assert {c["day"] for c in composed} == set(days)
 
 
+def test_preferred_long_run_day_is_honored():
+
+    by_day = _by_day(
+        SessionComposer.compose(
+            "Intermediate", "BUILD",
+            ["Tuesday", "Thursday", "Sunday"],
+            preferred_long_run_day="Tuesday",
+        )
+    )
+
+    assert by_day["Tuesday"] == "LONG_RUN"
+    assert by_day["Sunday"] != "LONG_RUN"
+
+
+def test_preferred_day_outside_running_days_falls_back_to_last():
+
+    by_day = _by_day(
+        SessionComposer.compose(
+            "Intermediate", "BUILD",
+            ["Tuesday", "Thursday", "Saturday"],
+            preferred_long_run_day="Sunday",
+        )
+    )
+
+    assert by_day["Saturday"] == "LONG_RUN"
+
+
 def test_quality_days_are_not_calendar_adjacent():
 
     composed = SessionComposer.compose(

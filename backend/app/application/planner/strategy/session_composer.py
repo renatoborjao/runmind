@@ -28,6 +28,7 @@ class SessionComposer:
         level: str,
         phase: str,
         running_days: list[str],
+        preferred_long_run_day: str | None = None,
     ) -> list[dict]:
 
         days_sorted = sorted(
@@ -45,10 +46,14 @@ class SessionComposer:
 
             return [{"day": days_sorted[0], "type": "EASY"}]
 
-        # longão sempre no último dia (tende ao fim de semana, já ordenado)
-        long_day = days_sorted[-1]
+        # longão no dia preferido do atleta (se for dia de treino); senão
+        # no último dia (tende ao fim de semana, já ordenado)
+        long_day = SessionComposer._long_day(
+            days_sorted,
+            preferred_long_run_day,
+        )
 
-        available = days_sorted[:-1]
+        available = [day for day in days_sorted if day != long_day]
 
         quality_types = SessionComposer._quality_types(level, phase)
 
@@ -80,6 +85,22 @@ class SessionComposer:
             {"day": day, "type": assignment[day]}
             for day in days_sorted
         ]
+
+    @staticmethod
+    def _long_day(
+        days_sorted: list[str],
+        preferred: str | None,
+    ) -> str:
+
+        if preferred:
+
+            for day in days_sorted:
+
+                if day.lower() == preferred.lower():
+
+                    return day
+
+        return days_sorted[-1]
 
     @staticmethod
     def _quality_types(level: str, phase: str) -> list[str]:

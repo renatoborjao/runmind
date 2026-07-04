@@ -31,6 +31,11 @@ class RunnerProfile:
         default_factory=list
     )
 
+    # Preferência do atleta: dia em que gosta de fazer o longão (ex.:
+    # "Sunday"). Fixa o longão nesse dia se for dia de treino; None =
+    # o planejador decide (fim de semana por padrão).
+    preferred_long_run_day: str | None = None
+
     target_race: str | None = None
 
     target_time: str | None = None

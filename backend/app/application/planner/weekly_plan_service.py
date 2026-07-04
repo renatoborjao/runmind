@@ -22,6 +22,7 @@ class WeeklyPlanService:
         metrics: RunnerMetrics,
         goal: TrainingGoal,
         reference_date: date | None = None,
+        force: bool = False,
     ) -> TrainingPlan:
 
         reference_date = reference_date or today_local()
@@ -55,7 +56,8 @@ class WeeklyPlanService:
             )
 
         if (
-            existing is not None
+            not force
+            and existing is not None
             and existing.week_start == current_week_start
         ):
 
