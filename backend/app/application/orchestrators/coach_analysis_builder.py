@@ -13,6 +13,9 @@ from app.application.history.activity_enricher import (
 from app.application.history.metrics_resolver import (
     MetricsResolver,
 )
+from app.application.planner.weekly_plan_matcher import (
+    WeeklyPlanMatcher,
+)
 from app.application.planner.weekly_plan_service import (
     WeeklyPlanService,
 )
@@ -21,9 +24,6 @@ from app.application.use_cases.load_runner_profile import (
 )
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
-)
-from app.core.weekdays import (
-    weekday_name,
 )
 from app.domain.entities.activity import (
     Activity,
@@ -107,16 +107,15 @@ class CoachAnalysisBuilder:
         )
 
         # --------------------------------------------------
-        # Procura treino pelo dia — sem sessão para o dia,
-        # o treino é tratado como extra (sem comparação)
+        # Casa o treino com a sessão que ele cumpriu — por
+        # DISTÂNCIA, não por dia (plano é guia, não obrigação
+        # de dia). Sobra além das sessões da semana = extra.
         # --------------------------------------------------
 
-        activity_day = weekday_name(
-            enriched.activity.start_date,
-        )
-
-        planned_session = plan.find_session_by_day(
-            activity_day,
+        planned_session = WeeklyPlanMatcher.match(
+            plan,
+            history.activities,
+            enriched.activity,
         )
 
         # --------------------------------------------------

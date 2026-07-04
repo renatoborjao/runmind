@@ -35,8 +35,9 @@ DISTANCE_TEMPLATES = {
 
 WORKOUT_PLAN_TEMPLATES = {
     WorkoutPlanStatus.UNPLANNED.value: (
-        "Hoje não era um dia planejado de corrida — registrei como "
-        "treino extra. Fique de olho na carga total da semana."
+        "Treino extra, ótimo — todo movimento conta! O plano é um guia, "
+        "não uma obrigação de dia. Só fique de olho na carga total da "
+        "semana."
     ),
 }
 
