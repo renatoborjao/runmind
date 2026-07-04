@@ -185,3 +185,68 @@ def test_taper_phase_reduces_weekly_volume():
 
     # 32.4 * 0.6 = 19.4 (volume de véspera de prova)
     assert abs(total - 19.4) < 0.3
+
+
+def test_intermediate_gets_vo2_quality_session():
+
+    runner = make_runner(
+        preferred_running_days=["Monday", "Wednesday", "Sunday"],
+    )
+
+    plan = TrainingPlanner.generate(
+        runner,
+        _assessment(level="Intermediate"),
+        _goal(),
+        _metrics(),
+        WEEK_START,
+    )
+
+    codes = [s.workout_type for s in plan.sessions]
+    assert "VO2" in codes
+    assert "PROGRESSION" not in codes
+
+    vo2 = next(s for s in plan.sessions if s.workout_type == "VO2")
+    # série escala com a distância (tiros de 400m), não fixa em 6x800
+    assert vo2.notes.endswith("x400m")
+
+
+def test_beginner_gets_progression_not_vo2():
+
+    runner = make_runner(
+        preferred_running_days=["Monday", "Wednesday", "Sunday"],
+    )
+
+    plan = TrainingPlanner.generate(
+        runner,
+        _assessment(level="Beginner"),
+        _goal(),
+        _metrics(),
+        WEEK_START,
+    )
+
+    codes = [s.workout_type for s in plan.sessions]
+    assert "PROGRESSION" in codes
+    assert "VO2" not in codes
+
+
+def test_long_run_respects_capacity_not_only_weekly_volume():
+
+    runner = make_runner(
+        preferred_running_days=["Monday", "Wednesday", "Sunday"],
+    )
+
+    # volume baixo (14.6) mas já correu 12 km — longão não deve ficar
+    # preso em 35% do volume (~5 km)
+    plan = TrainingPlanner.generate(
+        runner,
+        _assessment(
+            recommended_weekly_volume=14.6,
+            longest_run=12.0,
+        ),
+        _goal(),
+        _metrics(),
+        WEEK_START,
+    )
+
+    long = next(s for s in plan.sessions if s.workout_type == "LONG_RUN")
+    assert long.planned_distance_km >= 8.0

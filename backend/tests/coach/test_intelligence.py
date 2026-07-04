@@ -115,11 +115,23 @@ def test_distance_below_when_under_10_percent():
 # TypeMatchIntelligence
 # ==========================================================
 
-def test_type_match_when_executed_prefixes_planned():
+def test_type_match_when_codes_are_equal():
 
     context = make_context(
-        planned=make_planned_session(workout_type="Rodagem Leve"),
-        executed=make_enriched_activity(training_type="RODAGEM"),
+        planned=make_planned_session(workout_type="EASY"),
+        executed=make_enriched_activity(training_type="EASY"),
+    )
+
+    finding = TypeMatchIntelligence.process(context)
+
+    assert finding.code == TypeMatchStatus.MATCH.value
+
+
+def test_progression_matches_easy_execution():
+
+    context = make_context(
+        planned=make_planned_session(workout_type="PROGRESSION"),
+        executed=make_enriched_activity(training_type="EASY"),
     )
 
     finding = TypeMatchIntelligence.process(context)
@@ -130,8 +142,8 @@ def test_type_match_when_executed_prefixes_planned():
 def test_type_mismatch_when_types_diverge():
 
     context = make_context(
-        planned=make_planned_session(workout_type="Rodagem Leve"),
-        executed=make_enriched_activity(training_type="INTERVALADO"),
+        planned=make_planned_session(workout_type="VO2"),
+        executed=make_enriched_activity(training_type="LONG_RUN"),
     )
 
     finding = TypeMatchIntelligence.process(context)

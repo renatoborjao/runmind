@@ -9,8 +9,15 @@ from app.application.coach.signals.finding import (
     FindingSeverity,
 )
 from app.application.coach.writer.labels import (
+    plan_workout_label,
     workout_type_label,
 )
+
+# Um progressivo executado costuma ser classificado como rodagem/tempo —
+# não é desvio do plano.
+_COMPATIBLE = {
+    "PROGRESSION": {"EASY", "TEMPO", "VO2"},
+}
 
 
 class TypeMatchIntelligence:
@@ -20,16 +27,13 @@ class TypeMatchIntelligence:
         context: CoachContext,
     ) -> Finding:
 
-        planned_type = context.planned.workout_type.upper().replace(
-            " ",
-            "_",
-        )
+        planned_type = context.planned.workout_type
 
         executed_type = context.executed.training_type
 
         matches = (
-            planned_type.startswith(executed_type)
-            or executed_type.startswith(planned_type)
+            planned_type == executed_type
+            or executed_type in _COMPATIBLE.get(planned_type, set())
         )
 
         if matches:
@@ -44,10 +48,13 @@ class TypeMatchIntelligence:
             code=TypeMatchStatus.MISMATCH.value,
             severity=FindingSeverity.ATTENTION,
             params={
-                "planned_type": context.planned.workout_type,
+                "planned_type": plan_workout_label(
+                    planned_type,
+                    context.planned.planned_distance_km,
+                ),
                 # minúsculo: entra no meio da frase do phrasebook
                 "executed_type": workout_type_label(
-                    context.executed.training_type,
+                    executed_type,
                 ).lower(),
             },
         )

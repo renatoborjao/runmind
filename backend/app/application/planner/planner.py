@@ -130,11 +130,12 @@ class TrainingPlanner:
             strategy["easy_run"]
         )
 
-        vo2 = WorkoutGenerator.generate_vo2()
-
-        vo2.planned_distance_km = strategy[
-            "quality_run"
-        ]
+        quality = TrainingPlanner._build_quality_session(
+            strategy,
+            metrics,
+            easy_pace_min,
+            easy_pace_max,
+        )
 
         long = WorkoutGenerator.generate_long(
             strategy["long_run"]
@@ -142,7 +143,7 @@ class TrainingPlanner:
 
         easy.day = running_days[0]
 
-        vo2.day = running_days[1]
+        quality.day = running_days[1]
 
         long.day = running_days[2]
 
@@ -151,16 +152,47 @@ class TrainingPlanner:
 
         easy.target_pace_max = easy_pace_max
 
-        # VO2 max: alvo único, não faixa.
+        # Longão: mesma faixa confortável da rodagem leve.
+        long.target_pace_min = easy_pace_min
+
+        long.target_pace_max = easy_pace_max
+
+        return [easy, quality, long]
+
+    @staticmethod
+    def _build_quality_session(
+        strategy: dict,
+        metrics: RunnerMetrics,
+        easy_pace_min: str,
+        easy_pace_max: str,
+    ):
+        """VO2 (intervalado) para quem tem base; progressivo para
+        iniciante — a estratégia decide via quality_type."""
+
+        distance = strategy["quality_run"]
+
+        if strategy["quality_type"] == "PROGRESSION":
+
+            progression = WorkoutGenerator.generate_progression(
+                distance
+            )
+
+            # começa leve, termina no limiar
+            progression.target_pace_min = easy_pace_max
+
+            progression.target_pace_max = PaceFormatter.format(
+                metrics.threshold_pace,
+            )
+
+            return progression
+
+        vo2 = WorkoutGenerator.generate_vo2(distance)
+
+        # VO2: alvo único de pace nos tiros.
         vo2.target_pace_min = PaceFormatter.format(
             metrics.vo2_pace,
         )
 
         vo2.target_pace_max = vo2.target_pace_min
 
-        # Longão: mesma faixa confortável da rodagem leve.
-        long.target_pace_min = easy_pace_min
-
-        long.target_pace_max = easy_pace_max
-
-        return [easy, vo2, long]
+        return vo2

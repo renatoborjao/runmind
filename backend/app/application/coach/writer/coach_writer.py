@@ -15,6 +15,7 @@ from app.application.coach.signals.finding import (
 )
 from app.application.coach.writer.labels import (
     intensity_label,
+    plan_workout_label,
     workout_type_label,
 )
 from app.application.coach.writer.phrasebook import (
@@ -76,7 +77,10 @@ class CoachWriter:
             return []
 
         return [
-            planned.workout_type,
+            plan_workout_label(
+                planned.workout_type,
+                planned.planned_distance_km,
+            ),
             f"{(planned.planned_distance_km or 0):.1f} km",
         ]
 
@@ -131,7 +135,7 @@ class CoachWriter:
 
         lines = [
             f"Dia: {weekday_label(next_training.day)}",
-            f"Tipo: {next_training.workout_type}",
+            f"Tipo: {plan_workout_label(next_training.workout_type, next_training.distance_km)}",
             f"Objetivo: {next_training.objective}",
         ]
 

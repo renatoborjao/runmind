@@ -54,14 +54,16 @@ class TrainingAssessmentBuilder:
 
         observations = []
 
-        if current_weekly_volume < 20:
-            level = "Beginner"
+        # Nível olha capacidade real, não só volume: quem já corre 12 km
+        # não é iniciante mesmo com volume semanal moderado.
+        if current_weekly_volume >= 45 or longest >= 18:
+            level = "Advanced"
 
-        elif current_weekly_volume < 45:
+        elif current_weekly_volume >= 20 or longest >= 8:
             level = "Intermediate"
 
         else:
-            level = "Advanced"
+            level = "Beginner"
 
         observations.append(
             f"Volume médio (4 semanas): {current_weekly_volume:.1f} km."

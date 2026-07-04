@@ -84,3 +84,36 @@ def test_empty_history_without_declared_volume_uses_rookie_floor():
 
     assert assessment.current_weekly_volume == 6.0
     assert assessment.recommended_weekly_volume == 6.0
+
+
+def test_level_is_intermediate_when_longest_run_high_despite_low_volume():
+
+    # volume semanal moderado mas maior treino de 12 km: não é iniciante
+    runner = make_runner(weekly_training_days=3)
+
+    history = TrainingHistory(
+        activities=[
+            make_activity(
+                id=1,
+                distance=12000.0,
+                start_date=datetime(2026, 7, 10, 7, 0, 0),
+            ),
+        ],
+    )
+
+    assessment = TrainingAssessmentBuilder.build(runner, history)
+
+    assert assessment.longest_run == 12.0
+    assert assessment.level == "Intermediate"
+
+
+def test_level_is_beginner_when_low_volume_and_short_runs():
+
+    runner = make_runner(weekly_training_days=3, initial_weekly_km=8.0)
+
+    assessment = TrainingAssessmentBuilder.build(
+        runner,
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.level == "Beginner"

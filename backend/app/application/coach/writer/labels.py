@@ -5,10 +5,14 @@ WORKOUT_TYPE_LABELS = {
     "RECOVERY": "Regenerativo",
     "EASY": "Rodagem leve",
     "TEMPO": "Tempo run",
-    "VO2": "Intervalado (VO2)",
+    "PROGRESSION": "Progressivo",
+    "VO2": "Intervalado",
     "LONG_RUN": "Longão",
     "UNKNOWN": "—",
 }
+
+# Abaixo disso, a sessão mais longa não é "longão" de verdade.
+LONG_RUN_LABEL_MIN_KM = 10.0
 
 INTENSITY_LABELS = {
     "VERY_HIGH": "Muito alta",
@@ -22,6 +26,24 @@ INTENSITY_LABELS = {
 def workout_type_label(training_type: str) -> str:
 
     return WORKOUT_TYPE_LABELS.get(training_type, training_type)
+
+
+def plan_workout_label(
+    code: str,
+    distance_km: float | None = None,
+) -> str:
+    """Rótulo do treino planejado. O longão só se chama "Longão" quando
+    é de fato longo; curto vira "Rodagem longa"."""
+
+    if code == "LONG_RUN":
+
+        if distance_km is not None and distance_km < LONG_RUN_LABEL_MIN_KM:
+
+            return "Rodagem longa"
+
+        return "Longão"
+
+    return workout_type_label(code)
 
 
 def intensity_label(intensity: str) -> str:

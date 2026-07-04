@@ -1,5 +1,14 @@
+from app.application.coach.writer.labels import plan_workout_label
 from app.core.weekdays import weekday_label
 from app.domain.entities.training_plan import TrainingPlan
+
+# emoji por intensidade do treino
+TYPE_EMOJI = {
+    "EASY": "🟢",
+    "PROGRESSION": "🟡",
+    "VO2": "🔴",
+    "LONG_RUN": "🔵",
+}
 
 
 class WeeklyPlanMessageFormatter:
@@ -22,8 +31,6 @@ class WeeklyPlanMessageFormatter:
             WeeklyPlanMessageFormatter.session_lines(plan)
         )
 
-        lines.append("")
-
         lines.append("Bora treinar! 💪")
 
         return "\n".join(lines)
@@ -32,38 +39,131 @@ class WeeklyPlanMessageFormatter:
     def session_lines(
         plan: TrainingPlan,
     ) -> list[str]:
-        """Só as linhas de sessão, em ordem cronológica — para usar em
-        mensagens que não são a de domingo."""
+        """Blocos detalhados por sessão, em ordem cronológica — reusado
+        pelo resumo, onboarding e plano externo."""
 
         sessions = sorted(
             plan.sessions,
             key=lambda session: plan.session_date(session),
         )
 
-        return [
-            WeeklyPlanMessageFormatter._session_line(plan, session)
-            for session in sessions
-        ]
+        lines: list[str] = []
+
+        for session in sessions:
+
+            lines.extend(
+                WeeklyPlanMessageFormatter._session_block(plan, session)
+            )
+
+            lines.append("")
+
+        return lines
 
     @staticmethod
-    def _session_line(
+    def _session_block(
         plan: TrainingPlan,
         session,
-    ) -> str:
+    ) -> list[str]:
 
         session_date = plan.session_date(session).strftime("%d/%m")
 
-        pace = ""
+        code = session.workout_type
+
+        distance = session.planned_distance_km or 0
+
+        emoji = TYPE_EMOJI.get(code, "•")
+
+        label = plan_workout_label(code, distance)
+
+        header = (
+            f"{emoji} {weekday_label(session.day)} ({session_date}) — "
+            f"{label} · {distance:.1f} km"
+        )
+
+        detail = WeeklyPlanMessageFormatter._execution_detail(
+            code,
+            session,
+        )
+
+        block = [header]
+
+        block += [f"   • {item}" for item in detail]
+
+        if session.adjusted and session.adjustment_reason:
+
+            block.append(f"   ⚠️ {session.adjustment_reason}")
+
+        return block
+
+    @staticmethod
+    def _execution_detail(
+        code: str,
+        session,
+    ) -> list[str]:
+
+        pace_range = WeeklyPlanMessageFormatter._pace_range(session)
+
+        if code == "EASY":
+
+            return [
+                "Aquecimento: já começa no ritmo, corpo relaxado",
+                f"Execução: {(session.planned_distance_km or 0):.1f} km "
+                f"confortáveis{pace_range}, dá pra conversar",
+                "Foco: base aeróbica, sem forçar",
+            ]
+
+        if code == "PROGRESSION":
+
+            return [
+                "Aquecimento: primeiros minutos bem leves",
+                f"Execução: comece leve e vá acelerando; termine "
+                f"forte{pace_range}",
+                "Foco: estímulo de ritmo com segurança, sem tiros",
+            ]
+
+        if code == "VO2":
+
+            reps = session.notes or "tiros"
+
+            target = (
+                f" a {session.target_pace_min}/km"
+                if session.target_pace_min
+                else ""
+            )
+
+            return [
+                "Aquecimento: 10 min leve + 3 acelerações curtas",
+                f"Série: {reps} forte{target}",
+                "Recuperação: 2 min de trote entre os tiros",
+                "Desaquecimento: 10 min leve",
+            ]
+
+        if code == "LONG_RUN":
+
+            return [
+                f"Execução: {(session.planned_distance_km or 0):.1f} km "
+                f"em ritmo leve e constante{pace_range}",
+                "Foco: resistência — completar bem, hidratando",
+                "Dica: se cansar, reduza o ritmo antes de parar",
+            ]
+
+        # tipo desconhecido: linha simples
+        return [
+            f"{(session.planned_distance_km or 0):.1f} km{pace_range}",
+        ]
+
+    @staticmethod
+    def _pace_range(session) -> str:
 
         if session.target_pace_min and session.target_pace_max:
 
-            pace = (
-                f" — pace {session.target_pace_min}-"
-                f"{session.target_pace_max} min/km"
+            if session.target_pace_min == session.target_pace_max:
+
+                return f" a {session.target_pace_min}/km"
+
+            return (
+                f" ({session.target_pace_min}–"
+                f"{session.target_pace_max}/km)"
             )
 
-        return (
-            f"• {weekday_label(session.day)} ({session_date}): "
-            f"{session.workout_type} "
-            f"— {session.planned_distance_km or 0:.1f} km{pace}"
-        )
+        return ""

@@ -22,9 +22,17 @@ class TrainingStrategy:
                 1,
             )
 
+        # O longão respeita a capacidade real (maior treino já feito),
+        # sem saltar demais frente ao volume da semana.
         longest_run = min(
             assessment.longest_run,
-            round(weekly_volume * 0.35, 1),
+            round(
+                max(
+                    weekly_volume * 0.35,
+                    assessment.longest_run * 0.75,
+                ),
+                1,
+            ),
         )
 
         remaining = weekly_volume - longest_run
@@ -32,6 +40,14 @@ class TrainingStrategy:
         easy_run = round(remaining * 0.45, 1)
 
         quality_run = round(remaining * 0.55, 1)
+
+        # Iniciante não faz VO2: a sessão de qualidade vira um
+        # progressivo (rodagem que acelera no fim), estímulo seguro.
+        quality_type = (
+            "PROGRESSION"
+            if assessment.level == "Beginner"
+            else "VO2"
+        )
 
         return {
 
@@ -45,5 +61,5 @@ class TrainingStrategy:
 
             "quality_run": quality_run,
 
-            "quality_type": "VO2",
+            "quality_type": quality_type,
         }
