@@ -21,14 +21,14 @@ def test_long_run_starts_at_ten_km():
 def test_below_ten_km_is_never_long_run():
     """9.9km não é longão — alinhado ao padrão."""
 
-    assert _classify(9.9) == "EASY"
+    assert _classify(9.9) == "RODAGEM"
 
 
-def test_mid_distance_is_easy_not_tempo():
-    """Sem pace, distância média é rodagem, não um tipo de intensidade."""
+def test_mid_distance_is_rodagem_not_easy_or_tempo():
+    """Sem pace, distância média é rodagem de base — nem leve, nem tempo."""
 
-    assert _classify(7.0) == "EASY"
-    assert _classify(8.5) == "EASY"
+    assert _classify(7.0) == "RODAGEM"
+    assert _classify(8.5) == "RODAGEM"
 
 
 def test_short_distance_is_recovery():

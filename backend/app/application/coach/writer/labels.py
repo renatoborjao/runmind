@@ -4,6 +4,7 @@
 WORKOUT_TYPE_LABELS = {
     "RECOVERY": "Regenerativo",
     "EASY": "Rodagem leve",
+    "RODAGEM": "Rodagem",
     "TEMPO": "Tempo run",
     "PROGRESSION": "Progressivo",
     "VO2": "Intervalado",
