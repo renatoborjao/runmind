@@ -3,6 +3,7 @@ from datetime import date
 from app.application.planner.engines.distribution_engine import DistributionEngine
 from app.application.planner.engines.phase_engine import PhaseEngine
 from app.application.planner.pace_formatter import PaceFormatter
+from app.application.planner.strategy.session_composer import SessionComposer
 from app.application.planner.strategy.training_strategy import TrainingStrategy
 from app.application.workouts.generator import WorkoutGenerator
 from app.domain.entities.runner_metrics import RunnerMetrics
@@ -55,6 +56,8 @@ class TrainingPlanner:
             strategy,
             metrics,
             running_days,
+            assessment.level,
+            phase,
         )
 
         return TrainingPlan(
@@ -78,134 +81,138 @@ class TrainingPlanner:
             is_deload=is_deload,
         )
 
+    # Peso relativo de distância por tipo (rodagem = referência). Divide
+    # o volume da semana (fora o longão) entre as sessões: qualidade e
+    # regenerativo são mais curtos que uma rodagem.
+    _DISTANCE_WEIGHT = {
+        "EASY": 1.0,
+        "RECOVERY": 0.6,
+        "PROGRESSION": 0.9,
+        "TEMPO": 0.85,
+        "VO2": 0.8,
+        "FARTLEK": 0.85,
+    }
+
     @staticmethod
     def _build_sessions(
         strategy: dict,
         metrics: RunnerMetrics,
         running_days: list[str],
+        level: str,
+        phase: str,
     ) -> list:
-        """Sessões conforme a quantidade de dias disponíveis:
-        1 dia = rodagem única com o volume da semana;
-        2 dias = rodagem leve + longão;
-        3+ dias = rodagem leve + VO2 + longão."""
+        """Compõe a semana pelo SessionComposer (tipos por nível/fase e
+        nº de dias) e distribui o volume: longão pela capacidade, o resto
+        rateado entre as demais sessões por peso de tipo."""
 
-        easy_pace_min = PaceFormatter.format(
-            metrics.easy_pace_min,
+        composed = SessionComposer.compose(
+            level,
+            phase,
+            running_days,
         )
 
-        easy_pace_max = PaceFormatter.format(
-            metrics.easy_pace_max,
-        )
+        if not composed:
 
-        if len(running_days) == 1:
+            return []
 
-            easy = WorkoutGenerator.generate_easy(
-                strategy["weekly_volume"]
-            )
+        weekly_volume = strategy["weekly_volume"]
 
-            easy.day = running_days[0]
+        long_km = strategy["long_run"]
 
-            easy.target_pace_min = easy_pace_min
+        has_long = any(c["type"] == "LONG_RUN" for c in composed)
 
-            easy.target_pace_max = easy_pace_max
+        remaining = weekly_volume - (long_km if has_long else 0)
 
-            return [easy]
+        remaining = max(remaining, 0.0)
 
-        if len(running_days) == 2:
+        total_weight = sum(
+            TrainingPlanner._DISTANCE_WEIGHT.get(c["type"], 1.0)
+            for c in composed
+            if c["type"] != "LONG_RUN"
+        ) or 1.0
 
-            easy = WorkoutGenerator.generate_easy(
-                round(
-                    strategy["easy_run"]
-                    + strategy["quality_run"],
-                    1,
-                )
-            )
+        sessions = []
 
-            long = WorkoutGenerator.generate_long(
-                strategy["long_run"]
-            )
+        for entry in composed:
 
-            easy.day = running_days[0]
+            code = entry["type"]
 
-            long.day = running_days[1]
+            if code == "LONG_RUN":
 
-            easy.target_pace_min = easy_pace_min
+                distance = long_km
 
-            easy.target_pace_max = easy_pace_max
+            else:
 
-            long.target_pace_min = easy_pace_min
+                weight = TrainingPlanner._DISTANCE_WEIGHT.get(code, 1.0)
 
-            long.target_pace_max = easy_pace_max
+                distance = remaining * weight / total_weight
 
-            return [easy, long]
+            session = WorkoutGenerator.generate(code, distance)
 
-        easy = WorkoutGenerator.generate_easy(
-            strategy["easy_run"]
-        )
+            session.day = entry["day"]
 
-        quality = TrainingPlanner._build_quality_session(
-            strategy,
-            metrics,
-            easy_pace_min,
-            easy_pace_max,
-        )
+            TrainingPlanner._apply_pace(session, metrics)
 
-        long = WorkoutGenerator.generate_long(
-            strategy["long_run"]
-        )
+            sessions.append(session)
 
-        easy.day = running_days[0]
-
-        quality.day = running_days[1]
-
-        long.day = running_days[2]
-
-        # Rodagem leve: faixa de pace confortável.
-        easy.target_pace_min = easy_pace_min
-
-        easy.target_pace_max = easy_pace_max
-
-        # Longão: mesma faixa confortável da rodagem leve.
-        long.target_pace_min = easy_pace_min
-
-        long.target_pace_max = easy_pace_max
-
-        return [easy, quality, long]
+        return sessions
 
     @staticmethod
-    def _build_quality_session(
-        strategy: dict,
+    def _apply_pace(
+        session,
         metrics: RunnerMetrics,
-        easy_pace_min: str,
-        easy_pace_max: str,
-    ):
-        """VO2 (intervalado) para quem tem base; progressivo para
-        iniciante — a estratégia decide via quality_type."""
+    ) -> None:
+        """Faixa de pace por tipo de treino, a partir das métricas."""
 
-        distance = strategy["quality_run"]
+        easy_min = PaceFormatter.format(metrics.easy_pace_min)
 
-        if strategy["quality_type"] == "PROGRESSION":
+        easy_max = PaceFormatter.format(metrics.easy_pace_max)
 
-            progression = WorkoutGenerator.generate_progression(
-                distance
+        threshold = PaceFormatter.format(metrics.threshold_pace)
+
+        vo2 = PaceFormatter.format(metrics.vo2_pace)
+
+        code = session.workout_type
+
+        if code == "RECOVERY":
+
+            session.target_pace_min = easy_max
+
+            session.target_pace_max = PaceFormatter.format(
+                metrics.easy_pace_max + 0.5,
             )
+
+        elif code == "PROGRESSION":
 
             # começa leve, termina no limiar
-            progression.target_pace_min = easy_pace_max
+            session.target_pace_min = easy_max
 
-            progression.target_pace_max = PaceFormatter.format(
-                metrics.threshold_pace,
-            )
+            session.target_pace_max = threshold
 
-            return progression
+        elif code == "TEMPO":
 
-        vo2 = WorkoutGenerator.generate_vo2(distance)
+            # ritmo de limiar, alvo único
+            session.target_pace_min = threshold
 
-        # VO2: alvo único de pace nos tiros.
-        vo2.target_pace_min = PaceFormatter.format(
-            metrics.vo2_pace,
-        )
+            session.target_pace_max = threshold
 
-        vo2.target_pace_max = vo2.target_pace_min
+        elif code == "VO2":
 
-        return vo2
+            # alvo único nos tiros
+            session.target_pace_min = vo2
+
+            session.target_pace_max = vo2
+
+        elif code == "FARTLEK":
+
+            # varia livre entre leve e forte
+            session.target_pace_min = easy_max
+
+            session.target_pace_max = vo2
+
+        else:
+
+            # EASY e LONG_RUN: faixa confortável
+            session.target_pace_min = easy_min
+
+            session.target_pace_max = easy_max
