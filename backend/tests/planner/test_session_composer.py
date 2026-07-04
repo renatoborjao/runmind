@@ -49,6 +49,32 @@ def test_long_run_goes_on_the_last_weekend_day():
     assert by_day["Saturday"] == "LONG_RUN"
 
 
+def test_beginner_has_no_long_run():
+    """Quem está começando não faz longão — constrói base."""
+
+    types = _types(
+        SessionComposer.compose(
+            "Beginner", "BUILD",
+            ["Tuesday", "Thursday", "Saturday"],
+        )
+    )
+
+    assert "LONG_RUN" not in types
+
+
+def test_intermediate_gets_a_long_run():
+    """O longão entra com a evolução (intermediário+)."""
+
+    types = _types(
+        SessionComposer.compose(
+            "Intermediate", "BUILD",
+            ["Tuesday", "Thursday", "Saturday"],
+        )
+    )
+
+    assert "LONG_RUN" in types
+
+
 def test_beginner_never_gets_hard_quality():
 
     composed = SessionComposer.compose(

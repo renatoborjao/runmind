@@ -46,11 +46,14 @@ class SessionComposer:
 
             return [{"day": days_sorted[0], "type": "EASY"}]
 
-        # longão no dia preferido do atleta (se for dia de treino); senão
-        # no último dia (tende ao fim de semana, já ordenado)
-        long_day = SessionComposer._long_day(
-            days_sorted,
-            preferred_long_run_day,
+        # Longão é decisão do coach, não do atleta: iniciante (quem mal
+        # corre) NÃO faz longão — constrói base com rodagens. Ele entra
+        # sozinho quando o atleta evolui pra intermediário. A preferência
+        # de dia só vale quando o longão de fato faz parte do plano.
+        long_day = (
+            SessionComposer._long_day(days_sorted, preferred_long_run_day)
+            if SessionComposer._includes_long_run(level)
+            else None
         )
 
         available = [day for day in days_sorted if day != long_day]
@@ -65,7 +68,11 @@ class SessionComposer:
             quality_count,
         )
 
-        assignment: dict[str, str] = {long_day: "LONG_RUN"}
+        assignment: dict[str, str] = {}
+
+        if long_day is not None:
+
+            assignment[long_day] = "LONG_RUN"
 
         for i, day in enumerate(quality_days):
 
@@ -85,6 +92,13 @@ class SessionComposer:
             {"day": day, "type": assignment[day]}
             for day in days_sorted
         ]
+
+    @staticmethod
+    def _includes_long_run(level: str) -> bool:
+        """Iniciante não faz longão (ainda constrói base). Intermediário
+        e avançado sim — o longão entra com a evolução do atleta."""
+
+        return level != "Beginner"
 
     @staticmethod
     def _long_day(
@@ -155,10 +169,9 @@ class SessionComposer:
 
                     break
 
-                if strict and SessionComposer._adjacent(
-                    day,
-                    picked + [long_day],
-                ):
+                avoid = picked + ([long_day] if long_day else [])
+
+                if strict and SessionComposer._adjacent(day, avoid):
 
                     continue
 

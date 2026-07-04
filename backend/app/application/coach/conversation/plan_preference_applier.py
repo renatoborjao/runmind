@@ -61,6 +61,21 @@ class PlanPreferenceApplier:
             force=True,
         )
 
+        has_long = any(
+            session.workout_type == "LONG_RUN"
+            for session in plan.sessions
+        )
+
+        # Iniciante ainda não tem longão (o coach decide pela evolução):
+        # guarda a preferência pra quando o longão entrar no plano.
+        if not has_long:
+
+            return (
+                f"Anotei que você curte o longão {day_label}! 🙌 Por "
+                f"enquanto seu foco é construir base — quando o longão "
+                f"entrar no seu plano, vai ser {day_label}. Bora seguir. 💪"
+            )
+
         plan_text = WeeklyPlanMessageFormatter.week_plan_message(
             runner.name,
             plan,
