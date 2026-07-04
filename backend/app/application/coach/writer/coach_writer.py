@@ -18,8 +18,13 @@ from app.application.coach.writer.labels import (
     plan_workout_label,
     workout_type_label,
 )
+from app.application.coach.signals.codes import (
+    RecoveryStatus,
+)
 from app.application.coach.writer.phrasebook import (
     ALL_TEMPLATES,
+    CLOSING_MODERATE_NEXT,
+    CLOSING_MODERATE_WEEK_DONE,
     CLOSING_TEMPLATES,
     GREETING_TEMPLATE,
 )
@@ -165,5 +170,17 @@ class CoachWriter:
             return ""
 
         recovery_finding = summary.recovery[0]
+
+        # Recuperação moderada: o fechamento depende de haver um próximo
+        # treino no plano. Sem ele (semana concluída), não fala em "amanhã".
+        if recovery_finding.code == RecoveryStatus.MODERATE.value:
+
+            next_day = recovery_finding.params.get("next_day")
+
+            if next_day:
+
+                return CLOSING_MODERATE_NEXT.format(next_day=next_day)
+
+            return CLOSING_MODERATE_WEEK_DONE
 
         return CLOSING_TEMPLATES.get(recovery_finding.code, "")

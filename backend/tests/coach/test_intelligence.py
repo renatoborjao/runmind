@@ -33,6 +33,9 @@ from app.application.coach.signals.codes import (
     TypeMatchStatus,
     WeeklyVolumeStatus,
 )
+from app.application.coach.signals.finding import (
+    FindingSeverity,
+)
 from tests.coach.factories import (
     make_activity,
     make_context,
@@ -144,6 +147,38 @@ def test_type_mismatch_when_types_diverge():
     context = make_context(
         planned=make_planned_session(workout_type="VO2"),
         executed=make_enriched_activity(training_type="LONG_RUN"),
+    )
+
+    finding = TypeMatchIntelligence.process(context)
+
+    assert finding.code == TypeMatchStatus.MISMATCH.value
+
+
+def test_short_long_run_matches_easy_execution():
+    """Longão abaixo de 10km é base aeróbica: rodagem leve não é desvio."""
+
+    context = make_context(
+        planned=make_planned_session(
+            workout_type="LONG_RUN",
+            planned_distance_km=9.1,
+        ),
+        executed=make_enriched_activity(training_type="EASY"),
+    )
+
+    finding = TypeMatchIntelligence.process(context)
+
+    assert finding.code == TypeMatchStatus.MATCH.value
+
+
+def test_real_long_run_still_mismatches_easy_execution():
+    """A partir de 10km o longão volta a cobrar o objetivo do plano."""
+
+    context = make_context(
+        planned=make_planned_session(
+            workout_type="LONG_RUN",
+            planned_distance_km=12.0,
+        ),
+        executed=make_enriched_activity(training_type="EASY"),
     )
 
     finding = TypeMatchIntelligence.process(context)
@@ -265,11 +300,34 @@ def test_consistency_boundaries():
 
     for consistency, expected_code in cases.items():
 
-        context = make_context(consistency=consistency)
+        # histórico longo o bastante para julgar a regularidade
+        context = make_context(consistency=consistency, history_weeks=4)
 
         finding = HistoryIntelligence.process_consistency(context)
 
         assert finding.code == expected_code
+
+
+def test_low_consistency_with_short_history_is_building_not_irregular():
+    """Poucas semanas: rotina baixa vira incentivo, não 'irregular'."""
+
+    context = make_context(consistency=20, history_weeks=2)
+
+    finding = HistoryIntelligence.process_consistency(context)
+
+    assert finding.code == ConsistencyLevel.BUILDING.value
+
+    assert finding.severity == FindingSeverity.NEUTRAL
+
+
+def test_low_consistency_with_enough_history_stays_irregular():
+    """Com 3+ semanas completas, rotina baixa continua sendo alerta."""
+
+    context = make_context(consistency=20, history_weeks=3)
+
+    finding = HistoryIntelligence.process_consistency(context)
+
+    assert finding.code == ConsistencyLevel.LOW.value
 
 
 def test_weekly_volume_no_goal():

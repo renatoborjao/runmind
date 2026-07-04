@@ -33,11 +33,64 @@ class ConsistencyCalculator:
 
             return 0.0
 
-        if not history.activities:
+        days_by_week = ConsistencyCalculator._days_by_week(history)
+
+        if not days_by_week:
 
             return 0.0
 
         reference_date = reference_date or today_local()
+
+        week_keys = ConsistencyCalculator._evaluated_week_keys(
+            days_by_week,
+            weeks,
+            reference_date,
+        )
+
+        adherence_scores = [
+            min(
+                len(days_by_week.get(week_key, set()))
+                / weekly_training_days,
+                1.0,
+            )
+            for week_key in week_keys
+        ]
+
+        return round(
+            sum(adherence_scores) / len(adherence_scores) * 100,
+            1,
+        )
+
+    @staticmethod
+    def evaluated_weeks(
+        history: TrainingHistory,
+        weeks: int = 4,
+        reference_date: date | None = None,
+    ) -> int:
+        """Quantas semanas completas o cálculo de consistência de fato
+        avaliou — usado para saber se há histórico suficiente para
+        julgar a regularidade (poucas semanas = julgamento prematuro)."""
+
+        days_by_week = ConsistencyCalculator._days_by_week(history)
+
+        if not days_by_week:
+
+            return 0
+
+        reference_date = reference_date or today_local()
+
+        return len(
+            ConsistencyCalculator._evaluated_week_keys(
+                days_by_week,
+                weeks,
+                reference_date,
+            )
+        )
+
+    @staticmethod
+    def _days_by_week(
+        history: TrainingHistory,
+    ) -> dict[WeekKey, set[date]]:
 
         days_by_week: dict[WeekKey, set[date]] = defaultdict(set)
 
@@ -48,6 +101,15 @@ class ConsistencyCalculator:
             week_key = activity_date.isocalendar()[:2]
 
             days_by_week[week_key].add(activity_date)
+
+        return days_by_week
+
+    @staticmethod
+    def _evaluated_week_keys(
+        days_by_week: dict[WeekKey, set[date]],
+        weeks: int,
+        reference_date: date,
+    ) -> list[WeekKey]:
 
         # a chave ISO (ano, semana) ordena cronologicamente
         first_week = min(days_by_week)
@@ -68,18 +130,6 @@ class ConsistencyCalculator:
         # corredor estreante: todo o histórico está na semana em curso
         if not week_keys:
 
-            week_keys = [reference_date.isocalendar()[:2]]
+            return [reference_date.isocalendar()[:2]]
 
-        adherence_scores = [
-            min(
-                len(days_by_week.get(week_key, set()))
-                / weekly_training_days,
-                1.0,
-            )
-            for week_key in week_keys
-        ]
-
-        return round(
-            sum(adherence_scores) / len(adherence_scores) * 100,
-            1,
-        )
+        return week_keys

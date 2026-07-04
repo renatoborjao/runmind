@@ -61,6 +61,9 @@ class ConsistencyLevel(str, Enum):
 
     LOW = "CONSISTENCY_LOW"
 
+    # histórico curto demais para julgar a regularidade
+    BUILDING = "CONSISTENCY_BUILDING"
+
 
 class WeeklyVolumeStatus(str, Enum):
 

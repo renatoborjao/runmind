@@ -1,6 +1,9 @@
 import httpx
 
 from app.core.config import get_settings
+from app.infrastructure.integrations.telegram.telegram_text import (
+    to_plain_text,
+)
 
 
 class TelegramService:
@@ -12,6 +15,10 @@ class TelegramService:
     ):
 
         settings = get_settings()
+
+        # Telegram não renderiza o markdown do Gemini sem parse_mode;
+        # normalizamos para texto limpo (sem "**", bullets viram "•").
+        message = to_plain_text(message)
 
         async with httpx.AsyncClient(timeout=30) as client:
 

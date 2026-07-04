@@ -210,3 +210,47 @@ def test_weeks_before_first_activity_are_not_counted():
 
     # sem o recorte, as 3 semanas vazias anteriores dariam 25%
     assert result == 100.0
+
+
+def test_evaluated_weeks_counts_only_weeks_since_first_activity():
+
+    # Histórico começa 2 semanas atrás: só as semanas 1 e 2 são avaliadas
+    dates = [_date_in_week(weeks_ago) for weeks_ago in (1, 2)]
+
+    history = _history_from_dates(*dates)
+
+    weeks = ConsistencyCalculator.evaluated_weeks(
+        history,
+        weeks=4,
+        reference_date=REFERENCE_DATE,
+    )
+
+    assert weeks == 2
+
+
+def test_evaluated_weeks_zero_without_activities():
+
+    history = TrainingHistory(activities=[])
+
+    assert (
+        ConsistencyCalculator.evaluated_weeks(
+            history,
+            reference_date=REFERENCE_DATE,
+        )
+        == 0
+    )
+
+
+def test_evaluated_weeks_rookie_current_week_counts_as_one():
+
+    # Todo o histórico na semana em curso: avalia a própria semana
+    dates = [_date_in_week(0, offset) for offset in range(3)]
+
+    history = _history_from_dates(*dates)
+
+    weeks = ConsistencyCalculator.evaluated_weeks(
+        history,
+        reference_date=REFERENCE_DATE,
+    )
+
+    assert weeks == 1
