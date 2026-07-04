@@ -13,6 +13,14 @@ TYPE_EMOJI = {
     "LONG_RUN": "🔵",
 }
 
+# nome da fase do ciclo em pt-BR (ancorada na prova)
+PHASE_LABELS = {
+    "BASE": "Base",
+    "BUILD": "Construção",
+    "PEAK": "Pico",
+    "TAPER": "Polimento",
+}
+
 
 class WeeklyPlanMessageFormatter:
 
@@ -30,6 +38,8 @@ class WeeklyPlanMessageFormatter:
             "",
         ]
 
+        lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan))
+
         lines.extend(
             WeeklyPlanMessageFormatter.session_lines(plan)
         )
@@ -37,6 +47,38 @@ class WeeklyPlanMessageFormatter:
         lines.append("Bora treinar! 💪")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _phase_lines(
+        plan: TrainingPlan,
+    ) -> list[str]:
+        """Cabeçalho da periodização: fase do ciclo e aviso de semana de
+        corte. Plano externo (treinador) não tem fase do RunMind."""
+
+        if plan.source == "externo":
+
+            return []
+
+        lines = []
+
+        label = PHASE_LABELS.get(plan.phase)
+
+        if label:
+
+            lines.append(f"📈 Fase: {label}")
+
+        if plan.is_deload:
+
+            lines.append(
+                "🔽 Semana de recuperação — volume reduzido de "
+                "propósito pra assimilar a carga."
+            )
+
+        if lines:
+
+            lines.append("")
+
+        return lines
 
     @staticmethod
     def week_plan_message(
@@ -58,6 +100,8 @@ class WeeklyPlanMessageFormatter:
             )
 
         lines = [f"🏃 Seu plano da semana, {runner_name}:", ""]
+
+        lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan))
 
         lines.extend(
             WeeklyPlanMessageFormatter.session_lines(

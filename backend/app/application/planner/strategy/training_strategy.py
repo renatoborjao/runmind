@@ -1,8 +1,18 @@
 from app.domain.entities.training_assessment import TrainingAssessment
 
 
-# Semana de véspera de prova: chega descansado, sem perder o costume.
-TAPER_VOLUME_FACTOR = 0.6
+# Volume relativo por fase do ciclo (ancorado na prova):
+# BASE/BUILD carregam volume; PICO afia (menos volume, mais intensidade —
+# intensidade fica pra frente 1.2); TAPER poli pra chegar descansado.
+PHASE_VOLUME_FACTOR = {
+    "BASE": 1.0,
+    "BUILD": 1.0,
+    "PEAK": 0.9,
+    "TAPER": 0.6,
+}
+
+# Semana de corte (deload) do ciclo 3:1: reduz pra assimilar a carga.
+DELOAD_VOLUME_FACTOR = 0.8
 
 
 class TrainingStrategy:
@@ -11,16 +21,19 @@ class TrainingStrategy:
     def build(
         assessment: TrainingAssessment,
         phase: str = "BUILD",
+        is_deload: bool = False,
     ) -> dict:
 
-        weekly_volume = assessment.recommended_weekly_volume
+        factor = PHASE_VOLUME_FACTOR.get(phase, 1.0)
 
-        if phase == "TAPER":
+        if is_deload:
 
-            weekly_volume = round(
-                weekly_volume * TAPER_VOLUME_FACTOR,
-                1,
-            )
+            factor *= DELOAD_VOLUME_FACTOR
+
+        weekly_volume = round(
+            assessment.recommended_weekly_volume * factor,
+            1,
+        )
 
         # O longão respeita a capacidade real (maior treino já feito),
         # sem saltar demais frente ao volume da semana.

@@ -39,6 +39,15 @@ def test_mid_range_race_is_build():
     ) == "BUILD"
 
 
+def test_close_race_is_peak():
+
+    # ~3 semanas até a prova: afiação
+    assert PhaseEngine.execute(
+        _goal(date(2026, 7, 24)),
+        REFERENCE,
+    ) == "PEAK"
+
+
 def test_race_week_is_taper():
 
     # 1 semana até a prova

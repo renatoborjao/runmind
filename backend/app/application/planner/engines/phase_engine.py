@@ -5,12 +5,17 @@ from app.domain.entities.training_goal import TrainingGoal
 
 BASE_THRESHOLD_WEEKS = 8
 
+PEAK_THRESHOLD_WEEKS = 4
+
 TAPER_THRESHOLD_WEEKS = 2
 
 
 class PhaseEngine:
     """
     Fase do ciclo de treino, calculada pela distância até a prova alvo.
+
+    Ancorada na prova: BASE (constrói base, >8sem) -> BUILD (qualidade,
+    4-8sem) -> PICO (afiação, 2-4sem) -> TAPER (polimento, <2sem).
 
     Sem prova (ou prova já passada): BUILD — progressão contínua.
     """
@@ -38,5 +43,9 @@ class PhaseEngine:
         if weeks_to_race < TAPER_THRESHOLD_WEEKS:
 
             return "TAPER"
+
+        if weeks_to_race < PEAK_THRESHOLD_WEEKS:
+
+            return "PEAK"
 
         return "BUILD"

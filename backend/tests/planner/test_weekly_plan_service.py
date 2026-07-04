@@ -25,6 +25,43 @@ def _plan(week_start: date) -> TrainingPlan:
     )
 
 
+class _FakeHistoryRepo:
+
+    def __init__(self, week_starts):
+
+        self._plans = [_plan(ws) for ws in week_starts]
+
+    def history(self, profile):
+
+        return self._plans
+
+
+def test_training_week_counts_prior_weeks():
+
+    repo = _FakeHistoryRepo([
+        date(2026, 7, 6),
+        date(2026, 7, 13),
+        date(2026, 7, 27),  # futura, não conta
+    ])
+
+    # current = 20/07: semanas anteriores {06, 13} -> 4ª semana... não,
+    # 2 anteriores + 1 = 3ª semana de treino
+    assert (
+        WeeklyPlanService._training_week(repo, "renato", CURRENT_WEEK_START)
+        == 3
+    )
+
+
+def test_training_week_is_one_without_history():
+
+    repo = _FakeHistoryRepo([])
+
+    assert (
+        WeeklyPlanService._training_week(repo, "renato", CURRENT_WEEK_START)
+        == 1
+    )
+
+
 def test_week_start_monday_to_saturday_is_current_week_monday():
 
     # segunda 20/07 até sábado 25/07 -> segunda 20/07
@@ -101,10 +138,12 @@ def test_regenerates_when_stored_plan_is_from_a_previous_week():
 
         mock_planner.generate.assert_called_once()
 
-        _, kwargs = mock_planner.generate.call_args
-
-        # week_start é passado posicionalmente — confere via call_args.args
-        assert mock_planner.generate.call_args.args[-1] == CURRENT_WEEK_START
+        # week_start e training_week são passados posicionalmente ao final
+        assert (
+            mock_planner.generate.call_args.args[-2] == CURRENT_WEEK_START
+        )
+        # sem histórico anterior: primeira semana de treino
+        assert mock_planner.generate.call_args.args[-1] == 1
 
         mock_repo.save.assert_called_once_with("renato", fresh)
 
