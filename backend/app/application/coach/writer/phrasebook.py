@@ -85,13 +85,31 @@ RECOVERY_TEMPLATES = {
     RecoveryStatus.LONG.value: (
         "Evite sessões intensas antes da recuperação completa."
     ),
+    # "{when}" é preenchido pela RecoveryIntelligence conforme haja ou
+    # não um próximo treino no plano — nunca dizer "amanhã" às cegas.
     RecoveryStatus.MODERATE.value: (
-        "Priorize recuperação ativa amanhã."
+        "Priorize recuperação ativa {when}."
     ),
     RecoveryStatus.SHORT.value: (
         "Seu organismo respondeu bem ao estímulo."
     ),
 }
+
+# Frases de recuperação/fechamento do treino "moderado" dependem de haver
+# ou não um próximo treino no plano. Ficam aqui (com o resto da copy) e
+# são selecionadas em código, já que um template estático não ramifica.
+RECOVERY_WHEN_NEXT = "antes do próximo treino ({next_day})"
+
+RECOVERY_WHEN_WEEK_DONE = "nos próximos dias"
+
+CLOSING_MODERATE_NEXT = (
+    "No próximo treino ({next_day}), se ainda houver fadiga, "
+    "prefira pegar mais leve."
+)
+
+CLOSING_MODERATE_WEEK_DONE = (
+    "Semana concluída — aproveite o descanso; retomamos no próximo plano."
+)
 
 FATIGUE_TEMPLATES = {
     FatigueLevel.HIGH.value: (
@@ -114,6 +132,10 @@ CONSISTENCY_TEMPLATES = {
     ),
     ConsistencyLevel.LOW.value: (
         "Sua rotina ainda está irregular."
+    ),
+    ConsistencyLevel.BUILDING.value: (
+        "Ainda são poucas semanas pra avaliar sua regularidade — "
+        "seguimos construindo a rotina."
     ),
 }
 
@@ -148,13 +170,11 @@ ALL_TEMPLATES: dict[str, str | None] = {
     **WEEKLY_VOLUME_TEMPLATES,
 }
 
-# Reproduz literalmente o "next_action" do antigo coach/coach_engine.py.
+# Fechamento por status de recuperação. O caso MODERATE é resolvido em
+# código (CLOSING_MODERATE_*), pois depende de haver ou não próximo treino.
 CLOSING_TEMPLATES = {
     RecoveryStatus.LONG.value: (
         "Evite treinos intensos até recuperar totalmente."
-    ),
-    RecoveryStatus.MODERATE.value: (
-        "Se amanhã ainda houver fadiga, prefira uma rodagem leve."
     ),
     RecoveryStatus.SHORT.value: (
         "Você pode seguir normalmente com o planejamento."

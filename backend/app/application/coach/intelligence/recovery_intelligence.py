@@ -9,6 +9,11 @@ from app.application.coach.signals.finding import (
     Finding,
     FindingSeverity,
 )
+from app.application.coach.writer.phrasebook import (
+    RECOVERY_WHEN_NEXT,
+    RECOVERY_WHEN_WEEK_DONE,
+)
+from app.core.weekdays import weekday_label
 
 
 class RecoveryIntelligence:
@@ -36,11 +41,27 @@ class RecoveryIntelligence:
 
             severity = FindingSeverity.POSITIVE
 
+        # Sem próxima sessão no plano = semana concluída; o texto de
+        # recuperação/fechamento não pode falar em "amanhã" nesse caso.
+        next_day = (
+            weekday_label(context.next_planned.day)
+            if context.next_planned is not None
+            else None
+        )
+
+        when = (
+            RECOVERY_WHEN_NEXT.format(next_day=next_day)
+            if next_day is not None
+            else RECOVERY_WHEN_WEEK_DONE
+        )
+
         return Finding(
             code=code.value,
             severity=severity,
             params={
                 "recovery_hours": context.recovery_hours,
+                "when": when,
+                "next_day": next_day,
             },
         )
 

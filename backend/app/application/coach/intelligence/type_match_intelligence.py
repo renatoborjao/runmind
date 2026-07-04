@@ -9,6 +9,7 @@ from app.application.coach.signals.finding import (
     FindingSeverity,
 )
 from app.application.coach.writer.labels import (
+    LONG_RUN_LABEL_MIN_KM,
     plan_workout_label,
     workout_type_label,
 )
@@ -31,9 +32,23 @@ class TypeMatchIntelligence:
 
         executed_type = context.executed.training_type
 
+        compatible = set(_COMPATIBLE.get(planned_type, set()))
+
+        # Longão só é longão a partir de 10km. Abaixo disso o objetivo é,
+        # na prática, base aeróbica: uma rodagem leve/regenerativa
+        # executada não é desvio do plano — não faz sentido cobrar o
+        # "longão" de um treino planejado de 9km.
+        if (
+            planned_type == "LONG_RUN"
+            and (context.planned.planned_distance_km or 0)
+            < LONG_RUN_LABEL_MIN_KM
+        ):
+
+            compatible |= {"EASY", "RECOVERY"}
+
         matches = (
             planned_type == executed_type
-            or executed_type in _COMPATIBLE.get(planned_type, set())
+            or executed_type in compatible
         )
 
         if matches:

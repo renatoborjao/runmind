@@ -71,7 +71,6 @@ def test_closing_reflects_recovery_status():
 
     for code, expected in [
         (RecoveryStatus.LONG.value, "Evite treinos intensos até recuperar totalmente."),
-        (RecoveryStatus.MODERATE.value, "Se amanhã ainda houver fadiga, prefira uma rodagem leve."),
         (RecoveryStatus.SHORT.value, "Você pode seguir normalmente com o planejamento."),
     ]:
 
@@ -83,6 +82,56 @@ def test_closing_reflects_recovery_status():
         message = CoachWriter.write(context, summary)
 
         assert message.closing == expected
+
+
+def test_closing_moderate_without_next_session_is_week_done():
+    """Sem próximo treino no plano, o fechamento não fala em 'amanhã'."""
+
+    context = make_context()
+
+    summary = CoachSummary(
+        runner_name="Renato",
+        recovery=[
+            _finding(
+                RecoveryStatus.MODERATE.value,
+                {"when": "nos próximos dias", "next_day": None},
+            ),
+        ],
+    )
+
+    message = CoachWriter.write(context, summary)
+
+    assert message.closing == (
+        "Semana concluída — aproveite o descanso; retomamos no próximo plano."
+    )
+
+    assert "amanhã" not in message.closing
+
+
+def test_closing_moderate_with_next_session_names_the_day():
+    """Havendo próximo treino, o fechamento cita o dia — nunca 'amanhã'."""
+
+    context = make_context()
+
+    summary = CoachSummary(
+        runner_name="Renato",
+        recovery=[
+            _finding(
+                RecoveryStatus.MODERATE.value,
+                {
+                    "when": "antes do próximo treino (quinta-feira)",
+                    "next_day": "quinta-feira",
+                },
+            ),
+        ],
+    )
+
+    message = CoachWriter.write(context, summary)
+
+    assert message.closing == (
+        "No próximo treino (quinta-feira), se ainda houver fadiga, "
+        "prefira pegar mais leve."
+    )
 
 
 def test_greeting_uses_runner_name():

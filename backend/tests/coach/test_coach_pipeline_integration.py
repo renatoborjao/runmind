@@ -85,9 +85,15 @@ def test_full_chain_produces_final_whatsapp_message():
 
     assert "A carga foi significativa, mas dentro do esperado." in text
 
-    assert "Priorize recuperação ativa amanhã." in text
+    # sem próxima sessão no contexto = semana concluída: nada de "amanhã"
+    assert "Priorize recuperação ativa nos próximos dias." in text
 
-    assert "Se amanhã ainda houver fadiga, prefira uma rodagem leve." in text
+    assert "amanhã" not in text
+
+    assert (
+        "Semana concluída — aproveite o descanso; "
+        "retomamos no próximo plano." in text
+    )
 
     # exibição em pt-BR: sem enums crus
     assert "Intensidade: Alta" in text

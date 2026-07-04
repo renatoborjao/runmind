@@ -1,6 +1,9 @@
 from app.application.coach.context.coach_context import (
     CoachContext,
 )
+from app.application.history.consistency_calculator import (
+    ConsistencyCalculator,
+)
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
 )
@@ -53,6 +56,10 @@ class CoachContextBuilder:
             weekly_goal=assessment.recommended_weekly_volume,
 
             consistency=assessment.consistency,
+
+            history_weeks=ConsistencyCalculator.evaluated_weeks(
+                history,
+            ),
 
             injuries=runner.injuries,
 

@@ -44,6 +44,10 @@ class CoachContext:
 
     consistency: float = 0
 
+    # semanas completas que o cálculo de consistência avaliou — poucas
+    # semanas = cedo demais para chamar a rotina de "irregular"
+    history_weeks: int = 0
+
     # ==========================
     # Recuperação
     # ==========================
