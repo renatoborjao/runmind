@@ -12,7 +12,7 @@ MODULE = "app.application.events.coach_conversation"
 def _run_event(
     extraction_ops=None,
     extraction_error=None,
-    incoming_text="Como foi meu treino de ontem?",
+    incoming_text="Bom dia, coach! Tô animado, tudo certo por aí?",
 ):
 
     runner = make_runner(name="Renato", phone="+5511975658679")
@@ -101,7 +101,7 @@ def test_execute_orchestrates_context_reply_persistence_and_notification():
         runner_name="Renato",
         context_facts="Volume semanal atual: 30.0 km",
         conversation_history=[{"role": "user", "text": "oi"}],
-        incoming_text="Como foi meu treino de ontem?",
+        incoming_text="Bom dia, coach! Tô animado, tudo certo por aí?",
     )
 
     assert mock_repo.append_turn.call_count == 2
@@ -109,7 +109,7 @@ def test_execute_orchestrates_context_reply_persistence_and_notification():
     mock_repo.append_turn.assert_any_call(
         "renato",
         role="user",
-        text="Como foi meu treino de ontem?",
+        text="Bom dia, coach! Tô animado, tudo certo por aí?",
     )
 
     mock_repo.append_turn.assert_any_call(
@@ -282,7 +282,7 @@ def test_gemini_failure_sends_busy_reply_instead_of_silence():
         reply = asyncio.run(
             CoachConversationEvent.execute(
                 profile="renato",
-                incoming_text="qual meu treino de amanhã?",
+                incoming_text="e aí coach, tudo certo por aí?",
             )
         )
 
@@ -325,3 +325,100 @@ def test_trivial_message_skips_memory_extraction():
     # mensagem trivial: sem chamada de extração (economia de 1 call)
     mock_extraction.extract.assert_not_awaited()
     mock_memory_service.process.assert_not_called()
+
+
+def _run_intent_event(on_demand_reply, incoming_text):
+    """Executa a conversa com OnDemandAnswers dublado, para checar o
+    curto-circuito determinístico (sem passar pelo Gemini)."""
+
+    runner = make_runner(name="Renato", phone="+5511975658679")
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
+        patch(f"{MODULE}.ConversationContextBuilder") as mock_context,
+        patch(f"{MODULE}.ConversationRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as mock_engine,
+        patch(f"{MODULE}.OnDemandAnswers") as mock_on_demand,
+        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.RunnerMemoryRepository") as mock_memory_repo,
+        patch(f"{MODULE}.MemoryExtractionEngine") as mock_extraction,
+        patch(f"{MODULE}.RunnerMemoryService"),
+    ):
+
+        mock_load_runner.execute.return_value = runner
+
+        mock_context.build = AsyncMock(return_value="fatos")
+
+        mock_repo = MagicMock()
+        mock_repo.recent_turns.return_value = []
+        mock_repo_cls.return_value = mock_repo
+
+        mock_engine.reply = AsyncMock(return_value="resposta do gemini")
+
+        mock_on_demand.answer = AsyncMock(return_value=on_demand_reply)
+
+        mock_notification.send = AsyncMock()
+
+        mock_memory_repo.return_value.active.return_value = []
+        mock_extraction.extract = AsyncMock(
+            return_value={"add": [], "archive": []},
+        )
+
+        reply = asyncio.run(
+            CoachConversationEvent.execute(
+                profile="renato",
+                incoming_text=incoming_text,
+            )
+        )
+
+        return reply, mock_context, mock_engine, mock_notification, mock_extraction
+
+
+def test_intent_short_circuits_gemini_with_full_card():
+
+    (
+        reply,
+        mock_context,
+        mock_engine,
+        mock_notification,
+        mock_extraction,
+    ) = _run_intent_event(
+        on_demand_reply="📊 Análise completa do treino",
+        incoming_text="Como foi meu último treino?",
+    )
+
+    # o card determinístico vira a resposta, sem tocar no Gemini
+    assert reply == "📊 Análise completa do treino"
+
+    mock_engine.reply.assert_not_awaited()
+    mock_context.build.assert_not_awaited()
+
+    mock_notification.send.assert_awaited_once()
+    _, msg = mock_notification.send.await_args.args
+    assert msg == "📊 Análise completa do treino"
+
+    # pedido de card não tem fato durável: pula extração de memória
+    mock_extraction.extract.assert_not_awaited()
+
+
+def test_intent_without_deterministic_answer_falls_back_to_gemini():
+
+    (
+        reply,
+        mock_context,
+        mock_engine,
+        mock_notification,
+        mock_extraction,
+    ) = _run_intent_event(
+        on_demand_reply=None,  # ex.: ainda não há treino registrado
+        incoming_text="Como foi meu último treino?",
+    )
+
+    # sem resposta determinística, a conversa segue no Gemini normalmente
+    assert reply == "resposta do gemini"
+
+    mock_engine.reply.assert_awaited_once()
+    mock_context.build.assert_awaited_once()
+
+    # caiu no Gemini: memória volta a ser processada
+    mock_extraction.extract.assert_awaited_once()

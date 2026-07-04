@@ -1,5 +1,8 @@
+from datetime import date
+
 from app.application.coach.writer.labels import plan_workout_label
-from app.core.weekdays import weekday_label
+from app.core.clock import today_local
+from app.core.weekdays import weekday_label, weekday_name
 from app.domain.entities.training_plan import TrainingPlan
 
 # emoji por intensidade do treino
@@ -34,6 +37,97 @@ class WeeklyPlanMessageFormatter:
         lines.append("Bora treinar! 💪")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def next_session_message(
+        runner_name: str,
+        plan: TrainingPlan,
+        reference_date: date | None = None,
+    ) -> str:
+        """Próximo treino (a partir de hoje, incluindo hoje) já com o
+        detalhe de execução. Semana concluída vira mensagem de descanso."""
+
+        reference_date = reference_date or today_local()
+
+        session = WeeklyPlanMessageFormatter._next_session(
+            plan,
+            reference_date,
+        )
+
+        if session is None:
+
+            return (
+                f"🏃 {runner_name}, você já fechou os treinos desta "
+                f"semana! 🎉\n\nSeu novo plano chega no domingo. "
+                f"Aproveite pra descansar. 💪"
+            )
+
+        return WeeklyPlanMessageFormatter._single_session_message(
+            f"🏃 Seu próximo treino, {runner_name}:",
+            plan,
+            session,
+        )
+
+    @staticmethod
+    def today_session_message(
+        runner_name: str,
+        plan: TrainingPlan,
+        reference_date: date | None = None,
+    ) -> str | None:
+        """Treino de HOJE detalhado — ou None se hoje é dia de descanso
+        (usado pelo lembrete matinal, que aí não envia nada)."""
+
+        reference_date = reference_date or today_local()
+
+        session = plan.find_session_by_day(
+            weekday_name(reference_date),
+        )
+
+        if session is None:
+
+            return None
+
+        return WeeklyPlanMessageFormatter._single_session_message(
+            f"🏃 Bom dia, {runner_name}! Hoje é dia de treino 🌅",
+            plan,
+            session,
+        )
+
+    @staticmethod
+    def _single_session_message(
+        intro: str,
+        plan: TrainingPlan,
+        session,
+    ) -> str:
+
+        lines = [intro, ""]
+
+        lines.extend(
+            WeeklyPlanMessageFormatter._session_block(plan, session)
+        )
+
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _next_session(
+        plan: TrainingPlan,
+        reference_date: date,
+    ):
+        """Sessão mais próxima com data >= referência (hoje incluído)."""
+
+        upcoming = sorted(
+            plan.sessions,
+            key=lambda session: plan.session_date(session),
+        )
+
+        return next(
+            (
+                session
+                for session in upcoming
+                if plan.session_date(session) >= reference_date
+            ),
+            None,
+        )
 
     @staticmethod
     def session_lines(
