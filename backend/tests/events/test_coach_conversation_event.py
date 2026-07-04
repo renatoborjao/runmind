@@ -401,6 +401,64 @@ def test_intent_short_circuits_gemini_with_full_card():
     mock_extraction.extract.assert_not_awaited()
 
 
+def test_plan_preference_is_applied_and_short_circuits_gemini():
+
+    runner = make_runner(
+        name="Renato",
+        phone="+5511975658679",
+        preferred_running_days=["Tuesday", "Thursday", "Sunday"],
+    )
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
+        patch(f"{MODULE}.ConversationContextBuilder") as mock_context,
+        patch(f"{MODULE}.ConversationRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as mock_engine,
+        patch(f"{MODULE}.PlanPreferenceApplier") as mock_applier,
+        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.RunnerMemoryRepository") as mock_memory_repo,
+        patch(f"{MODULE}.MemoryExtractionEngine") as mock_extraction,
+        patch(f"{MODULE}.RunnerMemoryService"),
+    ):
+
+        mock_load_runner.execute.return_value = runner
+
+        mock_context.build = AsyncMock(return_value="fatos")
+
+        mock_repo = MagicMock()
+        mock_repo.recent_turns.return_value = []
+        mock_repo_cls.return_value = mock_repo
+
+        mock_engine.reply = AsyncMock(return_value="resposta do gemini")
+
+        mock_applier.apply = AsyncMock(
+            return_value="Fechou! Ajustei seu plano pra fazer o longão domingo.",
+        )
+
+        mock_notification.send = AsyncMock()
+
+        mock_memory_repo.return_value.active.return_value = []
+        mock_extraction.extract = AsyncMock(
+            return_value={"add": [], "archive": []},
+        )
+
+        reply = asyncio.run(
+            CoachConversationEvent.execute(
+                profile="renato",
+                incoming_text="domingo eu gosto de longão, pode manter",
+            )
+        )
+
+        # aplicou a preferência de verdade e não passou pelo Gemini
+        assert "Ajustei seu plano" in reply
+        mock_applier.apply.assert_awaited_once()
+        mock_engine.reply.assert_not_awaited()
+        mock_context.build.assert_not_awaited()
+
+        # pedido de plano não vira memória (já foi aplicado no perfil)
+        mock_extraction.extract.assert_not_awaited()
+
+
 def test_intent_without_deterministic_answer_falls_back_to_gemini():
 
     (

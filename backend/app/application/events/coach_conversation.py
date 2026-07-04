@@ -10,6 +10,12 @@ from app.application.coach.conversation.intent_router import (
 from app.application.coach.conversation.on_demand_answers import (
     OnDemandAnswers,
 )
+from app.application.coach.conversation.plan_preference_applier import (
+    PlanPreferenceApplier,
+)
+from app.application.coach.conversation.plan_preference_detector import (
+    PlanPreferenceDetector,
+)
 from app.application.coach.conversation.conversation_summary_engine import (
     ConversationSummaryEngine,
 )
@@ -72,7 +78,36 @@ class CoachConversationEvent:
 
         used_deterministic = False
 
-        intent = IntentRouter.detect(incoming_text)
+        # Pedido de mudança no plano ("longão no domingo") é aplicado de
+        # verdade e na hora — determinístico, sem passar pelo Gemini.
+        preference = PlanPreferenceDetector.detect(incoming_text)
+
+        if preference is not None:
+
+            try:
+
+                reply_text = await PlanPreferenceApplier.apply(
+                    profile,
+                    runner,
+                    preference,
+                )
+
+                used_deterministic = True
+
+            except Exception as e:
+
+                print(
+                    f"Falha ao aplicar preferência de plano de "
+                    f"'{profile}': {e}"
+                )
+
+                reply_text = None
+
+        intent = (
+            IntentRouter.detect(incoming_text)
+            if reply_text is None
+            else None
+        )
 
         if intent is not None:
 

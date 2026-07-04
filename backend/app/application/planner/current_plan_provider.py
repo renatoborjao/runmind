@@ -20,6 +20,7 @@ class CurrentPlanProvider:
     @staticmethod
     async def for_profile(
         profile: str,
+        force: bool = False,
     ) -> tuple[RunnerProfile, TrainingPlan]:
 
         runner = LoadRunnerProfile.execute(profile)
@@ -46,6 +47,7 @@ class CurrentPlanProvider:
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+            force=force,
         )
 
         return runner, plan
