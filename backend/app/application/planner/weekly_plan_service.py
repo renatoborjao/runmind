@@ -61,17 +61,42 @@ class WeeklyPlanService:
 
             return existing
 
+        training_week = WeeklyPlanService._training_week(
+            repository,
+            profile,
+            current_week_start,
+        )
+
         new_plan = TrainingPlanner.generate(
             runner,
             assessment,
             goal,
             metrics,
             current_week_start,
+            training_week,
         )
 
         repository.save(profile, new_plan)
 
         return new_plan
+
+    @staticmethod
+    def _training_week(
+        repository: WeeklyPlanRepository,
+        profile: str,
+        current_week_start: date,
+    ) -> int:
+        """Índice da semana de treino no RunMind: nº de semanas já
+        planejadas antes desta + 1. Determinístico (vem do histórico),
+        idempotente na regeração da mesma semana."""
+
+        past_weeks = {
+            plan.week_start
+            for plan in repository.history(profile)
+            if plan.week_start < current_week_start
+        }
+
+        return len(past_weeks) + 1
 
     @staticmethod
     def _week_start(

@@ -44,6 +44,9 @@ class TrainingPlan:
     # humano enviado pelo corredor (nunca ajustado automaticamente)
     source: str = "runmind"
 
+    # semana de corte (deload) do ciclo 3:1 — volume reduzido pra assimilar
+    is_deload: bool = False
+
     def session_date(
         self,
         session: PlannedSession,

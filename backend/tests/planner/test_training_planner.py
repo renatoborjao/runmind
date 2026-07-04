@@ -250,3 +250,37 @@ def test_long_run_respects_capacity_not_only_weekly_volume():
 
     long = next(s for s in plan.sessions if s.workout_type == "LONG_RUN")
     assert long.planned_distance_km >= 8.0
+
+
+def test_fourth_training_week_is_a_deload():
+
+    runner = make_runner(
+        preferred_running_days=["Tuesday", "Saturday"],
+    )
+
+    base = TrainingPlanner.generate(
+        runner, _assessment(), _goal(), _metrics(), WEEK_START,
+        training_week=1,
+    )
+
+    deload = TrainingPlanner.generate(
+        runner, _assessment(), _goal(), _metrics(), WEEK_START,
+        training_week=4,
+    )
+
+    assert base.is_deload is False
+    assert deload.is_deload is True
+    # semana de corte carrega menos volume que uma semana normal
+    assert deload.weekly_volume < base.weekly_volume
+
+
+def test_first_week_is_not_a_deload():
+
+    runner = make_runner(preferred_running_days=["Tuesday", "Saturday"])
+
+    plan = TrainingPlanner.generate(
+        runner, _assessment(), _goal(), _metrics(), WEEK_START,
+        training_week=1,
+    )
+
+    assert plan.is_deload is False

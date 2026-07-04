@@ -262,6 +262,36 @@ def test_week_plan_start_of_week_has_no_done_marks():
     assert "5x400m" in text  # detalhe do intervalado presente
 
 
+def test_plan_message_shows_phase():
+
+    text = WeeklyPlanMessageFormatter.format(
+        "Renato",
+        _plan([_session("Tuesday", "EASY", 6.0)]),
+    )
+
+    assert "Fase: Construção" in text
+
+
+def test_plan_message_shows_deload_notice():
+
+    plan = _plan([_session("Tuesday", "EASY", 6.0)])
+    plan.is_deload = True
+
+    text = WeeklyPlanMessageFormatter.format("Renato", plan)
+
+    assert "Semana de recuperação" in text
+
+
+def test_external_plan_has_no_phase_line():
+
+    plan = _plan([_session("Tuesday", "EASY", 6.0)])
+    plan.source = "externo"
+
+    text = WeeklyPlanMessageFormatter.format("Renato", plan)
+
+    assert "Fase:" not in text
+
+
 def test_session_lines_custom_past_label():
     """Onboarding marca dias passados como 'já passou', não 'já feito'."""
 

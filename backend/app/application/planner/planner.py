@@ -14,6 +14,10 @@ from app.domain.entities.training_plan import TrainingPlan
 
 class TrainingPlanner:
 
+    # Ciclo 3:1 — a cada 4ª semana de treino, deload (só em BASE/BUILD;
+    # PICO e TAPER já são reduzidos por fase).
+    DELOAD_EVERY = 4
+
     @staticmethod
     def generate(
         runner: RunnerProfile,
@@ -21,13 +25,20 @@ class TrainingPlanner:
         goal: TrainingGoal,
         metrics: RunnerMetrics,
         week_start: date,
+        training_week: int = 1,
     ) -> TrainingPlan:
 
         phase = PhaseEngine.execute(goal)
 
+        is_deload = (
+            training_week % TrainingPlanner.DELOAD_EVERY == 0
+            and phase in ("BASE", "BUILD")
+        )
+
         strategy = TrainingStrategy.build(
             assessment,
             phase,
+            is_deload,
         )
 
         running_days = DistributionEngine.execute(
@@ -63,6 +74,8 @@ class TrainingPlanner:
             week_start=week_start,
 
             sessions=sessions,
+
+            is_deload=is_deload,
         )
 
     @staticmethod
