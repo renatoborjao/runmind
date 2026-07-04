@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
 from app.application.planner.weekly_plan_service import WeeklyPlanService
@@ -22,6 +22,24 @@ def _plan(week_start: date) -> TrainingPlan:
         running_days=["Monday", "Wednesday", "Sunday"],
         week_start=week_start,
         sessions=[],
+    )
+
+
+def test_week_start_monday_to_saturday_is_current_week_monday():
+
+    # segunda 20/07 até sábado 25/07 -> segunda 20/07
+    for offset in range(6):  # seg..sab
+        day = date(2026, 7, 20) + timedelta(days=offset)
+        assert WeeklyPlanService._week_start(day) == date(2026, 7, 20)
+
+
+def test_week_start_on_sunday_targets_next_monday():
+
+    # domingo 26/07 é véspera: plano é pra semana que começa 27/07 —
+    # nunca a que está acabando (evita datas passadas no plano de domingo)
+    assert (
+        WeeklyPlanService._week_start(date(2026, 7, 26))
+        == date(2026, 7, 27)
     )
 
 

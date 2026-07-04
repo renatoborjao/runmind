@@ -94,10 +94,30 @@ def test_generic_greeting_is_not_intent():
     assert IntentRouter.detect("bom dia, tudo certo?") is None
 
 
-def test_plan_question_is_not_a_single_session_intent():
-    """'plano da semana' não é próximo/último treino específico."""
+def test_plano_da_semana_is_weekly_plan_intent():
 
-    assert IntentRouter.detect("me mostra o plano da semana") is None
+    assert (
+        IntentRouter.detect("me mostra o plano da semana")
+        == ChatIntent.WEEKLY_PLAN
+    )
+
+
+def test_qual_meu_plano_de_treino_is_weekly_plan():
+    """A pergunta original do Renato ('qual meu plano de treino')."""
+
+    assert (
+        IntentRouter.detect("Qual meu plano de treino?")
+        == ChatIntent.WEEKLY_PLAN
+    )
+
+
+def test_proximo_treino_is_not_weekly_plan():
+    """'próximo treino' é sessão única, não o plano inteiro."""
+
+    assert (
+        IntentRouter.detect("qual meu próximo treino?")
+        == ChatIntent.NEXT_TRAINING
+    )
 
 
 def test_ambiguous_last_and_next_returns_none():

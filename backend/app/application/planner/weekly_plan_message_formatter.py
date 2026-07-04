@@ -39,6 +39,36 @@ class WeeklyPlanMessageFormatter:
         return "\n".join(lines)
 
     @staticmethod
+    def week_plan_message(
+        runner_name: str,
+        plan: TrainingPlan,
+        reference_date: date | None = None,
+    ) -> str:
+        """Plano completo da semana, sob demanda ("qual meu plano?").
+        Marca os treinos já passados com ✅ para não parecer que ainda
+        estão por fazer — datas sempre honestas."""
+
+        reference_date = reference_date or today_local()
+
+        if not plan.sessions:
+
+            return (
+                f"🏃 {runner_name}, ainda não há um plano montado pra "
+                f"esta semana. Assim que fechar, te aviso! 💪"
+            )
+
+        lines = [f"🏃 Seu plano da semana, {runner_name}:", ""]
+
+        lines.extend(
+            WeeklyPlanMessageFormatter.session_lines(
+                plan,
+                reference_date,
+            )
+        )
+
+        return "\n".join(lines).strip()
+
+    @staticmethod
     def next_session_message(
         runner_name: str,
         plan: TrainingPlan,
@@ -132,9 +162,11 @@ class WeeklyPlanMessageFormatter:
     @staticmethod
     def session_lines(
         plan: TrainingPlan,
+        reference_date: date | None = None,
     ) -> list[str]:
         """Blocos detalhados por sessão, em ordem cronológica — reusado
-        pelo resumo, onboarding e plano externo."""
+        pelo resumo, onboarding e plano externo. Com `reference_date`,
+        sessões já passadas viram uma linha marcada com ✅."""
 
         sessions = sorted(
             plan.sessions,
@@ -146,7 +178,11 @@ class WeeklyPlanMessageFormatter:
         for session in sessions:
 
             lines.extend(
-                WeeklyPlanMessageFormatter._session_block(plan, session)
+                WeeklyPlanMessageFormatter._session_block(
+                    plan,
+                    session,
+                    reference_date,
+                )
             )
 
             lines.append("")
@@ -157,9 +193,12 @@ class WeeklyPlanMessageFormatter:
     def _session_block(
         plan: TrainingPlan,
         session,
+        reference_date: date | None = None,
     ) -> list[str]:
 
-        session_date = plan.session_date(session).strftime("%d/%m")
+        session_date_obj = plan.session_date(session)
+
+        session_date = session_date_obj.strftime("%d/%m")
 
         code = session.workout_type
 
@@ -173,6 +212,15 @@ class WeeklyPlanMessageFormatter:
             f"{emoji} {weekday_label(session.day)} ({session_date}) — "
             f"{label} · {distance:.1f} km"
         )
+
+        # Sessão já passou: uma linha marcada, sem detalhe de execução —
+        # não faz sentido "como executar" um treino que já foi.
+        if (
+            reference_date is not None
+            and session_date_obj < reference_date
+        ):
+
+            return [f"{header} ✅ (já feito)"]
 
         detail = WeeklyPlanMessageFormatter._execution_detail(
             code,

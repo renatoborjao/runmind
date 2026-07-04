@@ -219,3 +219,57 @@ def test_today_session_message_on_rest_day_is_none():
     )
 
     assert text is None
+
+
+# ==========================================================
+# week_plan_message — "qual meu plano da semana?" (marca os feitos)
+# ==========================================================
+
+def test_week_plan_marks_past_sessions_as_done():
+
+    # sábado 25/07: terça e quinta já passaram, sábado é hoje
+    text = WeeklyPlanMessageFormatter.week_plan_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 25),
+    )
+
+    assert "Seu plano da semana, Renato" in text
+
+    # terça e quinta marcadas como feitas, em uma linha só (sem detalhe)
+    assert "terça-feira (21/07) — Rodagem leve · 6.0 km ✅ (já feito)" in text
+    assert "quinta-feira (23/07)" in text
+    assert "✅ (já feito)" in text
+
+    # o treino de hoje (sábado) mantém o detalhe de execução
+    assert "sábado (25/07)" in text
+    assert "ritmo leve e constante" in text
+
+    # passados não repetem o detalhe de execução
+    assert "5x400m" not in text
+
+
+def test_week_plan_start_of_week_has_no_done_marks():
+
+    # segunda 20/07: nada passou ainda
+    text = WeeklyPlanMessageFormatter.week_plan_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 20),
+    )
+
+    assert "✅ (já feito)" not in text
+    assert "5x400m" in text  # detalhe do intervalado presente
+
+
+def test_week_plan_empty_plan_is_friendly():
+
+    plan = _plan([])
+
+    text = WeeklyPlanMessageFormatter.week_plan_message(
+        "Renato",
+        plan,
+        reference_date=date(2026, 7, 20),
+    )
+
+    assert "ainda não há um plano" in text

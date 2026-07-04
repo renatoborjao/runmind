@@ -40,4 +40,13 @@ class OnDemandAnswers:
                 plan,
             )
 
+        if intent == ChatIntent.WEEKLY_PLAN:
+
+            _, plan = await CurrentPlanProvider.for_profile(profile)
+
+            return WeeklyPlanMessageFormatter.week_plan_message(
+                runner.name,
+                plan,
+            )
+
         return None

@@ -182,7 +182,10 @@ class ConversationContextBuilder:
         lines = ["Plano da semana completo:"]
 
         lines.extend(
-            WeeklyPlanMessageFormatter.session_lines(plan)
+            WeeklyPlanMessageFormatter.session_lines(
+                plan,
+                today_local(),
+            )
         )
 
         if plan.source == "externo":
