@@ -1,5 +1,8 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.application.planner.daily_training_notifier import (
+    DailyTrainingNotifier,
+)
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
 from app.core.clock import DEFAULT_TIMEZONE
@@ -53,6 +56,16 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="weekly_review_notification",
+    )
+
+    # 06h todo dia: lembrete do treino do dia (dia de descanso não envia)
+    _scheduler.add_job(
+        DailyTrainingNotifier.notify_all,
+        trigger="cron",
+        hour=6,
+        minute=0,
+        misfire_grace_time=3600,
+        id="daily_training_reminder",
     )
 
     # autocura da sessão do WhatsApp (quedas transitórias)

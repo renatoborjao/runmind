@@ -3,6 +3,9 @@ from fastapi import APIRouter, HTTPException
 from app.application.events.training_completed import (
     TrainingCompletedEvent,
 )
+from app.application.planner.daily_training_notifier import (
+    DailyTrainingNotifier,
+)
 from app.application.review.weekly_review_notifier import (
     WeeklyReviewNotifier,
 )
@@ -45,6 +48,25 @@ async def weekly_review():
     try:
 
         await WeeklyReviewNotifier.notify_all()
+
+        return {
+            "status": "success",
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.post("/daily-reminder")
+async def daily_reminder():
+
+    try:
+
+        await DailyTrainingNotifier.notify_all()
 
         return {
             "status": "success",

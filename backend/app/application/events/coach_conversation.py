@@ -4,6 +4,12 @@ from app.application.coach.conversation.coach_conversation_engine import (
 from app.application.coach.conversation.conversation_context_builder import (
     ConversationContextBuilder,
 )
+from app.application.coach.conversation.intent_router import (
+    IntentRouter,
+)
+from app.application.coach.conversation.on_demand_answers import (
+    OnDemandAnswers,
+)
 from app.application.coach.conversation.conversation_summary_engine import (
     ConversationSummaryEngine,
 )
@@ -59,26 +65,58 @@ class CoachConversationEvent:
 
         history = repo.recent_turns(profile)
 
+        # Perguntas com dado canônico ("como foi meu último treino?",
+        # "qual meu próximo treino?") são respondidas de forma completa e
+        # determinística, sem passar pelo Gemini (que resumia/desconfigurava).
+        reply_text = None
+
+        used_deterministic = False
+
+        intent = IntentRouter.detect(incoming_text)
+
+        if intent is not None:
+
+            try:
+
+                reply_text = await OnDemandAnswers.answer(
+                    intent,
+                    profile,
+                    runner,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(
+                    f"Falha na resposta determinística ({intent}) "
+                    f"para '{profile}': {e}"
+                )
+
+                reply_text = None
+
         # indisponibilidade (Gemini/Strava fora do ar, rate limit)
         # não pode virar silêncio: o atleta sempre recebe resposta
-        try:
+        if reply_text is None:
 
-            context_facts = await ConversationContextBuilder.build(
-                profile,
-            )
+            try:
 
-            reply_text = await CoachConversationEngine.reply(
-                runner_name=runner.name,
-                context_facts=context_facts,
-                conversation_history=history,
-                incoming_text=incoming_text,
-            )
+                context_facts = await ConversationContextBuilder.build(
+                    profile,
+                )
 
-        except Exception as e:
+                reply_text = await CoachConversationEngine.reply(
+                    runner_name=runner.name,
+                    context_facts=context_facts,
+                    conversation_history=history,
+                    incoming_text=incoming_text,
+                )
 
-            print(f"Falha na conversa com '{profile}': {e}")
+            except Exception as e:
 
-            reply_text = BUSY_REPLY
+                print(f"Falha na conversa com '{profile}': {e}")
+
+                reply_text = BUSY_REPLY
 
         repo.append_turn(
             profile,
@@ -98,18 +136,22 @@ class CoachConversationEvent:
         )
 
         # A resposta já foi enviada: falha na memória nunca chega ao corredor.
-        try:
+        # Pergunta respondida por card (último/próximo treino) não carrega
+        # fato durável — pula a extração e economiza uma chamada Gemini.
+        if not used_deterministic:
 
-            await CoachConversationEvent._update_memory(
-                profile=profile,
-                runner_name=runner.name,
-                history=history,
-                incoming_text=incoming_text,
-            )
+            try:
 
-        except Exception as e:
+                await CoachConversationEvent._update_memory(
+                    profile=profile,
+                    runner_name=runner.name,
+                    history=history,
+                    incoming_text=incoming_text,
+                )
 
-            print(f"Falha ao atualizar memória de '{profile}': {e}")
+            except Exception as e:
+
+                print(f"Falha ao atualizar memória de '{profile}': {e}")
 
         try:
 

@@ -131,3 +131,91 @@ def test_sessions_in_chronological_order_ptbr():
 
     assert tuesday_index < saturday_index
     assert "Tuesday" not in text
+
+
+# ==========================================================
+# next_session_message — "qual meu próximo treino?"
+# ==========================================================
+
+def _week_plan() -> TrainingPlan:
+
+    return _plan([
+        _session("Tuesday", "EASY", 6.0),
+        _session("Thursday", "VO2", 6.5,
+                 target_pace_min="5:43", target_pace_max="5:43",
+                 notes="5x400m"),
+        _session("Saturday", "LONG_RUN", 12.0),
+    ])
+
+
+def test_next_session_includes_today_and_shows_detail():
+
+    # terça 21/07 é dia de treino — o "próximo" é o de hoje
+    text = WeeklyPlanMessageFormatter.next_session_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 21),
+    )
+
+    assert "Seu próximo treino, Renato" in text
+    assert "terça-feira" in text
+    assert "confortáveis" in text  # detalhe de execução presente
+
+
+def test_next_session_skips_to_future_session():
+
+    # quarta 22/07 é descanso — o próximo é quinta (intervalado)
+    text = WeeklyPlanMessageFormatter.next_session_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 22),
+    )
+
+    assert "quinta-feira" in text
+    assert "Série: 5x400m forte a 5:43/km" in text
+    assert "terça-feira" not in text
+
+
+def test_next_session_after_week_done_is_rest_message():
+
+    # domingo 26/07: semana encerrada
+    text = WeeklyPlanMessageFormatter.next_session_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 26),
+    )
+
+    assert "já fechou os treinos desta semana" in text
+    assert "domingo" in text
+
+
+# ==========================================================
+# today_session_message — lembrete matinal 06h
+# ==========================================================
+
+def test_today_session_message_on_training_day():
+
+    # quinta 23/07 tem treino
+    text = WeeklyPlanMessageFormatter.today_session_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 23),
+    )
+
+    assert text is not None
+    assert "Bom dia, Renato" in text
+    assert "Hoje é dia de treino" in text
+    assert "quinta-feira" in text
+    assert "Série: 5x400m forte a 5:43/km" in text
+
+
+def test_today_session_message_on_rest_day_is_none():
+
+    # quarta 22/07 é descanso
+    text = WeeklyPlanMessageFormatter.today_session_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 22),
+    )
+
+    assert text is None
