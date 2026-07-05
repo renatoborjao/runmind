@@ -53,15 +53,20 @@ def _generate(response):
         )
 
 
-def test_parses_a_rich_ai_plan():
+def test_parses_only_the_running_sessions():
 
     plan = _generate(RENATO_PLAN_JSON)
 
     assert "sub-50" in plan.weekly_objective
 
-    # frequência real: 3 corridas (ter/qui/sáb), o resto força/descanso
+    # SÓ corrida: 3 sessões (ter/qui/sáb). Musculação/descanso descartados.
+    assert len(plan.sessions) == 3
     assert plan.running_days == ["Tuesday", "Thursday", "Saturday"]
     assert plan.weekly_volume == 28.0   # 9 + 8 + 11
+
+    # nada de musculação/descanso no plano
+    assert plan.find_session_by_day("Monday") is None
+    assert plan.find_session_by_day("Sunday") is None
 
     speed = plan.find_session_by_day("Tuesday")
     assert speed.kind == "run"
@@ -69,13 +74,6 @@ def test_parses_a_rich_ai_plan():
     assert speed.target_pace_min == "4:45"
     assert "6x800" in speed.structure
     assert speed.purpose
-
-    strength = plan.find_session_by_day("Monday")
-    assert strength.kind == "strength"
-    assert strength.planned_distance_km is None
-
-    rest = plan.find_session_by_day("Sunday")
-    assert rest.kind == "rest"
 
 
 def test_invalid_json_raises_for_fallback():

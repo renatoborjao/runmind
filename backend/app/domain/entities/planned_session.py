@@ -32,9 +32,9 @@ class PlannedSession:
     #    "reps": 6, "cooldown_min": 5}
     intervals: dict | None = None
 
-    # Tipo de dia: "run" (corrida), "strength" (musculação), "rest"
-    # (descanso), "cross" (bike/cross-training). Dias não-corrida entram
-    # no plano da semana com estrutura/descanso, mas não contam volume.
+    # Modalidade da sessão: "run" (corrida), "walk" (caminhada) ou
+    # "run_walk" (corrida-caminhada, iniciante). O plano é SÓ de
+    # corrida/caminhada — musculação e outras atividades não entram.
     kind: str = "run"
 
     # Riqueza do plano gerado pela IA-treinadora: como executar (blocos,

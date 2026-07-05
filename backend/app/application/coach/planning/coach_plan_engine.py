@@ -13,7 +13,9 @@ MAX_OUTPUT_TOKENS = 2000
 
 VALID_DAYS = set(WEEKDAYS.values())
 
-VALID_KINDS = {"run", "strength", "rest", "cross"}
+# só planejamos corrida/caminhada; musculação, descanso, bike etc. NÃO são
+# nossos — o atleta cuida disso. Se a IA devolver, a gente descarta.
+RUNNING_KINDS = {"run", "walk", "run_walk"}
 
 PROMPT_TEMPLATE = """Você é um treinador de corrida experiente montando o plano \
 da PRÓXIMA SEMANA para um atleta específico. O plano tem que ser REAL e VIVO:
@@ -24,6 +26,9 @@ RETRATO REAL DO ATLETA (dados do histórico dele — use só isto, não invente)
 {context}
 
 REGRAS:
+- O plano é SÓ de corrida/caminhada. NÃO prescreva musculação, descanso, bike
+  ou qualquer outra atividade — isso não é seu (o atleta cuida por conta).
+  Apenas as sessões de corrida/caminhada nos dias de corrida dele.
 - Respeite a FREQUÊNCIA de corrida que funciona para ele (não adicione dias só
   para "encher"). Se ele responde bem a N corridas por semana, mantenha N.
 - NÃO aumente o volume sem motivo. Progrida com critério, seguindo a evolução
@@ -32,23 +37,20 @@ REGRAS:
 - Cada corrida com um PROPÓSITO distinto (velocidade, base/rodagem, longão,
   regenerativo...), com estrutura concreta (aquecimento, séries, strides,
   fechamento) e faixa de pace ancorada na META dele.
-- Preencha os outros dias com musculação/descanso conforme a rotina dele.
 - Respeite lesões/limitações e preferências que aparecerem no retrato.
 
 Responda APENAS com JSON:
 {{"weekly_objective": "objetivo/foco curto da semana",
   "sessions": [
-    {{"day": "Monday", "kind": "strength"}},
     {{"day": "Tuesday", "kind": "run", "workout_type": "Velocidade",
       "distance_km": 9.0, "pace_min": "4:45", "pace_max": "4:50",
       "structure": "Aquecimento 2 km + 6x800m (rec 400m trote) + 1,5 km leve",
-      "purpose": "aumentar o ritmo de prova"}},
-    {{"day": "Sunday", "kind": "rest"}}
+      "purpose": "aumentar o ritmo de prova"}}
   ]}}
 
-kind: "run" | "strength" | "rest" | "cross". Dias de corrida levam
-distance_km, paces, structure e purpose; os demais só o kind (structure
-opcional). Use os dias da semana em inglês (Monday..Sunday).
+Cada sessão é uma corrida/caminhada com distance_km, paces, structure e
+purpose. kind: "run" (corrida) ou "walk"/"run_walk" (caminhada/corrida-
+caminhada, iniciante). Use os dias da semana em inglês (Monday..Sunday).
 """
 
 
@@ -157,9 +159,10 @@ class CoachPlanEngine:
 
             kind = item.get("kind", "run")
 
-            if kind not in VALID_KINDS:
+            # descarta musculação/descanso/bike — não planejamos isso
+            if kind not in RUNNING_KINDS:
 
-                kind = "run"
+                continue
 
             distance = item.get("distance_km")
 
@@ -195,9 +198,8 @@ class CoachPlanEngine:
     def _default_type(kind: str) -> str:
 
         return {
-            "strength": "Musculação",
-            "rest": "Descanso",
-            "cross": "Cross-training",
+            "walk": "Caminhada",
+            "run_walk": "Corrida-caminhada",
         }.get(kind, "Corrida")
 
     @staticmethod
