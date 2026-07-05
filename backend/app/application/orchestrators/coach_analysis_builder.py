@@ -95,6 +95,7 @@ class CoachAnalysisBuilder:
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+            history=history,
         )
 
         # --------------------------------------------------

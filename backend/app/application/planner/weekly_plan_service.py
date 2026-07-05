@@ -1,11 +1,19 @@
 from datetime import date, timedelta
 
+from app.application.history.runner_baseline_builder import (
+    RunnerBaselineBuilder,
+)
+from app.application.planner.engines.progression_engine import (
+    ProgressionEngine,
+)
 from app.application.planner.planner import TrainingPlanner
+from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.core.clock import today_local
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_assessment import TrainingAssessment
 from app.domain.entities.training_goal import TrainingGoal
+from app.domain.entities.training_history import TrainingHistory
 from app.domain.entities.training_plan import TrainingPlan
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
@@ -23,6 +31,7 @@ class WeeklyPlanService:
         goal: TrainingGoal,
         reference_date: date | None = None,
         force: bool = False,
+        history: TrainingHistory | None = None,
     ) -> TrainingPlan:
 
         reference_date = reference_date or today_local()
@@ -69,6 +78,16 @@ class WeeklyPlanService:
             current_week_start,
         )
 
+        baseline, target_volume = WeeklyPlanService._progression(
+            profile,
+            runner,
+            assessment,
+            goal,
+            history,
+            repository,
+            current_week_start,
+        )
+
         new_plan = TrainingPlanner.generate(
             runner,
             assessment,
@@ -76,11 +95,85 @@ class WeeklyPlanService:
             metrics,
             current_week_start,
             training_week,
+            baseline=baseline,
+            target_volume=target_volume,
         )
 
         repository.save(profile, new_plan)
 
         return new_plan
+
+    @staticmethod
+    def _progression(
+        profile: str,
+        runner: RunnerProfile,
+        assessment: TrainingAssessment,
+        goal: TrainingGoal,
+        history: TrainingHistory | None,
+        repository: WeeklyPlanRepository,
+        current_week_start: date,
+    ):
+        """Volume-alvo da semana (Track A): parte do retrato real e progride
+        pela consistência + execução da semana anterior. Sem histórico
+        passado (ou sem base utilizável), volta ao caminho antigo (None)."""
+
+        if history is None:
+
+            return None, None
+
+        baseline = RunnerBaselineBuilder.build(history, runner)
+
+        if baseline.weekly_km <= 0:
+
+            return None, None
+
+        adherence = WeeklyPlanService._last_week_adherence(
+            profile,
+            repository,
+            history,
+            current_week_start,
+        )
+
+        target = ProgressionEngine.next_weekly_volume(
+            baseline=baseline,
+            consistency=assessment.consistency,
+            adherence=adherence,
+            has_race=goal.race_date is not None,
+        )
+
+        return baseline, target
+
+    @staticmethod
+    def _last_week_adherence(
+        profile: str,
+        repository: WeeklyPlanRepository,
+        history: TrainingHistory,
+        current_week_start: date,
+    ) -> float | None:
+        """Fração das sessões da semana anterior que o atleta cumpriu
+        (validado no histórico). None quando não há plano anterior."""
+
+        previous_start = current_week_start - timedelta(days=7)
+
+        previous = next(
+            (
+                plan
+                for plan in repository.history(profile)
+                if plan.week_start == previous_start
+            ),
+            None,
+        )
+
+        if previous is None or not previous.sessions:
+
+            return None
+
+        done = WeeklyPlanMatcher.fulfilled_days(
+            previous,
+            history.activities,
+        )
+
+        return len(done) / len(previous.sessions)
 
     @staticmethod
     def _training_week(

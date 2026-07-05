@@ -66,6 +66,7 @@ class ConversationContextBuilder:
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+            history=history,
         )
 
         facts = (

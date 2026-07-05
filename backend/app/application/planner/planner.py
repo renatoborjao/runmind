@@ -7,6 +7,7 @@ from app.application.planner.pace_formatter import PaceFormatter
 from app.application.planner.strategy.session_composer import SessionComposer
 from app.application.planner.strategy.training_strategy import TrainingStrategy
 from app.application.workouts.generator import WorkoutGenerator
+from app.domain.entities.runner_baseline import RunnerBaseline
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_assessment import TrainingAssessment
@@ -28,6 +29,8 @@ class TrainingPlanner:
         metrics: RunnerMetrics,
         week_start: date,
         training_week: int = 1,
+        baseline: RunnerBaseline | None = None,
+        target_volume: float | None = None,
     ) -> TrainingPlan:
 
         phase = PhaseEngine.execute(goal)
@@ -67,20 +70,43 @@ class TrainingPlanner:
             and phase in ("BASE", "BUILD")
         )
 
+        # Track A: com retrato real (histórico ou declarado), o volume-alvo
+        # é o da progressão e as distâncias saem ancoradas no que ele corre.
+        anchored = (
+            baseline is not None
+            and baseline.weekly_km > 0
+            and target_volume is not None
+        )
+
         strategy = TrainingStrategy.build(
             assessment,
             phase,
             is_deload,
+            base_volume=target_volume if anchored else None,
         )
 
-        sessions = TrainingPlanner._build_sessions(
-            strategy,
-            metrics,
-            running_days,
-            assessment.level,
-            phase,
-            runner.preferred_long_run_day,
-        )
+        if anchored:
+
+            sessions = TrainingPlanner._build_sessions_from_baseline(
+                strategy,
+                metrics,
+                running_days,
+                assessment.level,
+                phase,
+                baseline,
+                runner.preferred_long_run_day,
+            )
+
+        else:
+
+            sessions = TrainingPlanner._build_sessions(
+                strategy,
+                metrics,
+                running_days,
+                assessment.level,
+                phase,
+                runner.preferred_long_run_day,
+            )
 
         return TrainingPlan(
 
@@ -172,6 +198,92 @@ class TrainingPlanner:
                 distance = remaining * weight / total_weight
 
             session = WorkoutGenerator.generate(code, distance)
+
+            session.day = entry["day"]
+
+            TrainingPlanner._apply_pace(session, metrics)
+
+            sessions.append(session)
+
+        return sessions
+
+    # Distância "natural" de cada tipo relativa à rodagem típica do atleta
+    # (rodagem = 1.0). Preserva a FORMA real da semana; o conjunto é depois
+    # escalado pra fechar no volume-alvo.
+    _ANCHOR_FACTOR = {
+        "EASY": 1.0,
+        "RECOVERY": 0.7,
+        "PROGRESSION": 0.9,
+        "TEMPO": 0.9,
+        "VO2": 0.9,
+        "FARTLEK": 0.9,
+    }
+
+    @staticmethod
+    def _build_sessions_from_baseline(
+        strategy: dict,
+        metrics: RunnerMetrics,
+        running_days: list[str],
+        level: str,
+        phase: str,
+        baseline: RunnerBaseline,
+        preferred_long_run_day: str | None = None,
+    ) -> list:
+        """Longão pela capacidade (como antes — bom e seguro); as demais
+        sessões ancoradas na rodagem TÍPICA do atleta e escaladas pra
+        fechar o volume restante. A semana espelha a forma real dele."""
+
+        composed = SessionComposer.compose(
+            level,
+            phase,
+            running_days,
+            preferred_long_run_day,
+        )
+
+        if not composed:
+
+            return []
+
+        weekly_volume = strategy["weekly_volume"]
+
+        long_km = strategy["long_run"]
+
+        has_long = any(entry["type"] == "LONG_RUN" for entry in composed)
+
+        remaining = max(weekly_volume - (long_km if has_long else 0), 0.0)
+
+        typical = baseline.typical_run_km or 1.0
+
+        non_long_anchors = [
+            typical * TrainingPlanner._ANCHOR_FACTOR.get(entry["type"], 1.0)
+            for entry in composed
+            if entry["type"] != "LONG_RUN"
+        ]
+
+        natural = sum(non_long_anchors) or 1.0
+
+        scale = remaining / natural
+
+        sessions = []
+
+        for entry in composed:
+
+            if entry["type"] == "LONG_RUN":
+
+                distance = long_km
+
+            else:
+
+                anchor = typical * TrainingPlanner._ANCHOR_FACTOR.get(
+                    entry["type"], 1.0
+                )
+
+                distance = anchor * scale
+
+            session = WorkoutGenerator.generate(
+                entry["type"],
+                round(distance, 1),
+            )
 
             session.day = entry["day"]
 

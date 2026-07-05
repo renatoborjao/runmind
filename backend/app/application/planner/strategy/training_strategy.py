@@ -22,6 +22,7 @@ class TrainingStrategy:
         assessment: TrainingAssessment,
         phase: str = "BUILD",
         is_deload: bool = False,
+        base_volume: float | None = None,
     ) -> dict:
 
         factor = PHASE_VOLUME_FACTOR.get(phase, 1.0)
@@ -30,8 +31,16 @@ class TrainingStrategy:
 
             factor *= DELOAD_VOLUME_FACTOR
 
+        # base_volume = alvo da progressão (fiel ao histórico); sem ele,
+        # cai no volume recomendado do assessment (caminho antigo).
+        base = (
+            base_volume
+            if base_volume is not None
+            else assessment.recommended_weekly_volume
+        )
+
         weekly_volume = round(
-            assessment.recommended_weekly_volume * factor,
+            base * factor,
             1,
         )
 
