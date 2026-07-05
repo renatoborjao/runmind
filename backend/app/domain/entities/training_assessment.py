@@ -28,3 +28,7 @@ class TrainingAssessment:
     goal: str
 
     observations: list[str] = field(default_factory=list)
+
+    # Iniciante que deve começar correndo-caminhando (só caminha / alto
+    # IMC): o planejador usa a trilha run/walk em vez de corrida contínua.
+    run_walk: bool = False

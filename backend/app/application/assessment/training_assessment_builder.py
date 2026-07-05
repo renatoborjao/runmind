@@ -25,6 +25,8 @@ class TrainingAssessmentBuilder:
         if history.longest_run:
             longest = history.longest_run.distance / 1000
 
+        no_history = current_weekly_volume == 0
+
         # Sem histórico: usa o volume autodeclarado no onboarding
         # (ou o piso de estreante), sem progressão na primeira
         # semana (conservador).
@@ -77,6 +79,18 @@ class TrainingAssessmentBuilder:
             f"Última semana: {weekly['last_week']:.1f} km."
         )
 
+        run_walk = TrainingAssessmentBuilder._needs_run_walk(
+            runner,
+            level,
+            no_history,
+        )
+
+        if run_walk:
+
+            observations.append(
+                "Início por corrida-caminhada (run/walk)."
+            )
+
         return TrainingAssessment(
 
             level=level,
@@ -97,4 +111,41 @@ class TrainingAssessmentBuilder:
             goal=runner.goal,
 
             observations=observations,
+
+            run_walk=run_walk,
         )
+
+    # IMC a partir do qual (sem histórico de corrida) o início seguro é
+    # run/walk, mesmo sem o atleta se declarar caminhante — proteção
+    # articular para iniciante de alto peso.
+    RUN_WALK_BMI = 30.0
+
+    @staticmethod
+    def _needs_run_walk(
+        runner: RunnerProfile,
+        level: str,
+        no_history: bool,
+    ) -> bool:
+        """Só para iniciante sem histórico: começa run/walk quando o
+        atleta só caminha / faz trote-caminhada, ou quando o IMC é alto."""
+
+        if not (no_history and level == "Beginner"):
+
+            return False
+
+        if runner.mobility in ("walker", "run_walker"):
+
+            return True
+
+        bmi = TrainingAssessmentBuilder._bmi(runner)
+
+        return bmi >= TrainingAssessmentBuilder.RUN_WALK_BMI
+
+    @staticmethod
+    def _bmi(runner: RunnerProfile) -> float:
+
+        if not runner.height:
+
+            return 0.0
+
+        return runner.weight / (runner.height ** 2)

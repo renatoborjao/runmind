@@ -14,6 +14,8 @@ TYPE_EMOJI = {
     "TEMPO": "🟠",
     "VO2": "🔴",
     "LONG_RUN": "🔵",
+    "WALK": "🚶",
+    "RUN_WALK": "🔁",
 }
 
 # nome da fase do ciclo em pt-BR (ancorada na prova)
@@ -265,9 +267,22 @@ class WeeklyPlanMessageFormatter:
 
         label = plan_workout_label(code, distance)
 
+        # run/walk e caminhada são medidos em tempo; corrida, em km
+        if session.planned_distance_km:
+
+            size = f" · {session.planned_distance_km:.1f} km"
+
+        elif session.planned_duration_minutes:
+
+            size = f" · {session.planned_duration_minutes} min"
+
+        else:
+
+            size = ""
+
         header = (
             f"{emoji} {weekday_label(session.day)} ({session_date}) — "
-            f"{label} · {distance:.1f} km"
+            f"{label}{size}"
         )
 
         # Sessão já passou: uma linha marcada, sem detalhe de execução —
@@ -313,6 +328,24 @@ class WeeklyPlanMessageFormatter:
     ) -> list[str]:
 
         pace_range = WeeklyPlanMessageFormatter._pace_range(session)
+
+        if code == "WALK":
+
+            pace = (
+                f" (~{session.target_pace_min}/km)"
+                if session.target_pace_min
+                else ""
+            )
+
+            return [
+                f"Execução: {session.planned_duration_minutes} min de "
+                f"caminhada em ritmo confortável{pace}",
+                "Foco: criar o hábito e a base aeróbica, sem pressa",
+            ]
+
+        if code == "RUN_WALK":
+
+            return WeeklyPlanMessageFormatter._run_walk_detail(session)
 
         if code == "EASY":
 
@@ -391,6 +424,52 @@ class WeeklyPlanMessageFormatter:
         return [
             f"{(session.planned_distance_km or 0):.1f} km{pace_range}",
         ]
+
+    @staticmethod
+    def _run_walk_detail(session) -> list[str]:
+
+        iv = session.intervals or {}
+
+        warmup = iv.get("warmup_min", 5)
+
+        cooldown = iv.get("cooldown_min", 5)
+
+        reps = iv.get("reps", 0)
+
+        trot = WeeklyPlanMessageFormatter._duration(iv.get("trot_sec", 0))
+
+        walk = WeeklyPlanMessageFormatter._duration(iv.get("walk_sec", 0))
+
+        trot_pace = (
+            f" (~{session.target_pace_min}/km)"
+            if session.target_pace_min
+            else ""
+        )
+
+        return [
+            f"Aquecimento: {warmup} min de caminhada leve",
+            f"Série: {reps}x (trote {trot}{trot_pace} + caminhada {walk})",
+            "Foco: alternar sem forçar — se cansar, é só caminhar mais",
+            f"Desaquecimento: {cooldown} min de caminhada",
+        ]
+
+    @staticmethod
+    def _duration(seconds: int) -> str:
+        """Segundos -> texto curto: 60->'1 min', 30->'30s', 90->'1min30'."""
+
+        seconds = int(seconds)
+
+        if seconds < 60:
+
+            return f"{seconds}s"
+
+        minutes, rest = divmod(seconds, 60)
+
+        if rest == 0:
+
+            return f"{minutes} min"
+
+        return f"{minutes}min{rest:02d}"
 
     @staticmethod
     def _pace_range(session) -> str:

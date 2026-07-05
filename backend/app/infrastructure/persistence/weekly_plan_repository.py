@@ -164,6 +164,7 @@ class WeeklyPlanRepository:
             "week_start": plan.week_start.isoformat(),
             "source": plan.source,
             "is_deload": plan.is_deload,
+            "reviewed": plan.reviewed,
             "sessions": [
                 asdict(session)
                 for session in plan.sessions
@@ -188,4 +189,5 @@ class WeeklyPlanRepository:
             ],
             source=data.get("source", "runmind"),
             is_deload=data.get("is_deload", False),
+            reviewed=data.get("reviewed", False),
         )

@@ -152,6 +152,55 @@ def test_full_onboarding_without_strava_creates_profile(tmp_path):
     assert onboarding_repo.load(PHONE) is None
 
 
+NON_RUNNER_CONVERSATION = [
+    ("oi", {}),
+    ("Adolfo", {"name": "Adolfo"}),
+    ("35", {"age": 35}),
+    ("138kg", {"weight": 138.0}),
+    ("1,88", {"height": 1.88}),
+    ("sim", {"has_strava": True}),
+    ("não corro, só caminho", {"runs_today": False}),
+    (
+        "trote 1 min e caminho 3 min",
+        {
+            "mobility": "run_walker",
+            "continuous_run_minutes": 1,
+            "walk_speed_kmh": 5.5,
+        },
+    ),
+    ("de segunda a sexta", {"days": [
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+    ]}),
+    ("saúde", {"goal": "Saúde", "target_race": None,
+                "target_time": None}),
+    ("sim", {"confirmed": True}),
+]
+
+
+def test_non_runner_captures_movement_and_stores_capability(tmp_path):
+
+    replies, _, profile_repo = _run_conversation(
+        tmp_path,
+        NON_RUNNER_CONVERSATION,
+    )
+
+    # após "não corro", pergunta como ele se move hoje (base do run/walk)
+    assert "como você se movimenta" in replies[6]
+
+    # o resumo reflete a capacidade
+    assert "trote e caminhada" in replies[9]
+
+    assert "Cadastro feito, Adolfo" in replies[-1]
+
+    data = json.loads(
+        (profile_repo.storage / "adolfo.json").read_text(encoding="utf-8")
+    )
+
+    assert data["mobility"] == "run_walker"
+    assert data["continuous_run_minutes"] == 1.0
+    assert data["walk_pace_min_km"] == round(60 / 5.5, 2)
+
+
 def test_midweek_asks_week_choice_then_finishes(tmp_path):
     """Começo da semana, 2+ dias por vir: pergunta esta/próxima e só
     depois conclui com o plano."""
