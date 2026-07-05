@@ -1,9 +1,9 @@
 import json
 
-from google import genai
 from google.genai import types
 
 from app.core.config import get_settings
+from app.infrastructure.integrations.gemini.client import generate_text
 
 MAX_OUTPUT_TOKENS = 1500
 
@@ -48,11 +48,7 @@ class ExternalPlanExtractionEngine:
 
         settings = get_settings()
 
-        client = genai.Client(
-            api_key=settings.google_api_key,
-        )
-
-        response = await client.aio.models.generate_content(
+        raw = await generate_text(
             model=settings.gemini_extract_model,
             contents=[
                 types.Part.from_bytes(
@@ -71,9 +67,7 @@ class ExternalPlanExtractionEngine:
             ),
         )
 
-        return ExternalPlanExtractionEngine._parse_sessions(
-            response.text or "",
-        )
+        return ExternalPlanExtractionEngine._parse_sessions(raw)
 
     @staticmethod
     def _parse_sessions(

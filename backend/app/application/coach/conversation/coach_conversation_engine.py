@@ -1,7 +1,7 @@
-from google import genai
 from google.genai import types
 
 from app.core.config import get_settings
+from app.infrastructure.integrations.gemini.client import generate_text
 
 MAX_OUTPUT_TOKENS = 400
 
@@ -60,10 +60,6 @@ class CoachConversationEngine:
 
         settings = get_settings()
 
-        client = genai.Client(
-            api_key=settings.google_api_key,
-        )
-
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             runner_name=runner_name,
             context_facts=context_facts,
@@ -84,7 +80,10 @@ class CoachConversationEngine:
             }
         )
 
-        response = await client.aio.models.generate_content(
+        # require_text=True: resposta vazia (safety/finish_reason) é
+        # reenviada e, se persistir, levanta pro fallback do chamador —
+        # o atleta nunca recebe mensagem em branco.
+        return await generate_text(
             model=settings.gemini_chat_model,
             contents=contents,
             config=types.GenerateContentConfig(
@@ -97,6 +96,5 @@ class CoachConversationEngine:
                     thinking_budget=0,
                 ),
             ),
+            require_text=True,
         )
-
-        return response.text or ""

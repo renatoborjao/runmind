@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.application.coach.conversation.coach_conversation_engine import (
@@ -10,20 +9,11 @@ from app.application.coach.conversation.coach_conversation_engine import (
 MODULE = "app.application.coach.conversation.coach_conversation_engine"
 
 
-def _mock_response(text: str | None):
-
-    return SimpleNamespace(text=text)
-
-
 def test_reply_builds_system_and_contents_and_returns_text():
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+    with patch(f"{MODULE}.generate_text") as mock_generate:
 
-        mock_client = mock_client_cls.return_value
-
-        mock_client.aio.models.generate_content = AsyncMock(
-            return_value=_mock_response("Bom dia, Renato! Vamos com tudo hoje."),
-        )
+        mock_generate.return_value = "Bom dia, Renato! Vamos com tudo hoje."
 
         reply = asyncio.run(
             CoachConversationEngine.reply(
@@ -39,10 +29,13 @@ def test_reply_builds_system_and_contents_and_returns_text():
 
         assert reply == "Bom dia, Renato! Vamos com tudo hoje."
 
-        _, kwargs = mock_client.aio.models.generate_content.call_args
+        _, kwargs = mock_generate.call_args
 
         assert "Renato" in kwargs["config"].system_instruction
         assert "Volume semanal atual: 30.0 km" in kwargs["config"].system_instruction
+
+        # chat com o atleta: resposta vazia não pode virar mensagem em branco
+        assert kwargs["require_text"] is True
 
         assert kwargs["contents"] == [
             {"role": "user", "parts": [{"text": "Oi coach"}]},
@@ -51,26 +44,33 @@ def test_reply_builds_system_and_contents_and_returns_text():
         ]
 
 
-def test_reply_returns_empty_string_when_no_text():
+def test_reply_propagates_failure_so_caller_can_fall_back():
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+    # generate_text já esgotou os retries (ex: resposta sempre vazia);
+    # o engine deixa a exceção subir para o CoachConversationEvent decidir
+    # o fallback — melhor que devolver "" e mandar mensagem em branco.
+    with patch(f"{MODULE}.generate_text") as mock_generate:
 
-        mock_client = mock_client_cls.return_value
+        mock_generate.side_effect = RuntimeError("Gemini indisponível")
 
-        mock_client.aio.models.generate_content = AsyncMock(
-            return_value=_mock_response(None),
-        )
+        raised = False
 
-        reply = asyncio.run(
-            CoachConversationEngine.reply(
-                runner_name="Renato",
-                context_facts="",
-                conversation_history=[],
-                incoming_text="oi",
+        try:
+
+            asyncio.run(
+                CoachConversationEngine.reply(
+                    runner_name="Renato",
+                    context_facts="",
+                    conversation_history=[],
+                    incoming_text="oi",
+                )
             )
-        )
 
-        assert reply == ""
+        except RuntimeError:
+
+            raised = True
+
+        assert raised
 
 
 def test_system_prompt_contains_non_negotiable_guardrails():

@@ -87,12 +87,13 @@ FULL_CONVERSATION = [
     # mas mantemos o par para alinhar o side_effect
     ("oi", {}),
     ("me chamo Fulano", {"name": "Fulano"}),
-    ("33 anos, 91kg, 1,78", {"age": 33, "weight": 91.0, "height": 1.78}),
+    ("33", {"age": 33}),
+    ("91kg", {"weight": 91.0}),
+    ("1,78", {"height": 1.78}),
     ("não uso", {"has_strava": False}),
-    (
-        "corro 2x por semana, uns 5km",
-        {"runs_today": True, "runs_per_week": 2, "typical_km": 5.0},
-    ),
+    ("sim, corro", {"runs_today": True}),
+    ("2x por semana", {"runs_per_week": 2}),
+    ("uns 5km", {"typical_km": 5.0}),
     ("não, treino por conta", {"has_coach": False}),
     ("uns 32 minutos", {"typical_minutes": 32.0}),
     ("terça e sábado", {"days": ["Tuesday", "Saturday"]}),
@@ -107,6 +108,9 @@ FULL_CONVERSATION = [
     ("sim, pode montar", {"confirmed": True}),
 ]
 
+# índice da resposta que trata o Strava (após nome, idade, peso, altura)
+STRAVA_REPLY_INDEX = 5
+
 
 def test_full_onboarding_without_strava_creates_profile(tmp_path):
 
@@ -119,8 +123,11 @@ def test_full_onboarding_without_strava_creates_profile(tmp_path):
     assert "como você se chama" in replies[0]
 
     # sem conta no Strava: instrução de criar + link (obrigatório)
-    assert "cria" in replies[3].lower()
-    assert f"/api/v1/strava/connect?state=wa:{PHONE}" in replies[3]
+    assert "cria" in replies[STRAVA_REPLY_INDEX].lower()
+    assert (
+        f"/api/v1/strava/connect?state=wa:{PHONE}"
+        in replies[STRAVA_REPLY_INDEX]
+    )
 
     # a última conclui com o plano
     assert "Cadastro feito, Fulano" in replies[-1]
@@ -224,12 +231,13 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
     conversation = [
         ("oi", {}),
         ("Ciclano", {"name": "Ciclano"}),
-        ("40, 80kg, 1.70", {"age": 40, "weight": 80.0, "height": 1.70}),
+        ("40", {"age": 40}),
+        ("80kg", {"weight": 80.0}),
+        ("1.70", {"height": 1.70}),
         ("uso sim", {"has_strava": True}),
-        (
-            "corro 3x, 6km",
-            {"runs_today": True, "runs_per_week": 3, "typical_km": 6.0},
-        ),
+        ("sim", {"runs_today": True}),
+        ("3x", {"runs_per_week": 3}),
+        ("6km", {"typical_km": 6.0}),
         ("não tenho treinador", {"has_coach": False}),
         # pace é perguntado mesmo com Strava (a conexão pode demorar)
         ("uns 40 minutos", {"typical_minutes": 40.0}),
@@ -244,15 +252,17 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
 
     replies, _, profile_repo = _run_conversation(tmp_path, conversation)
 
-    # link de conexão com state=telefone
-    strava_reply = replies[3]
+    # link de conexão com state=telefone (após nome, idade, peso, altura)
+    strava_reply = replies[5]
     assert f"/api/v1/strava/connect?state=wa:{PHONE}" in strava_reply
 
-    # sequência: experiência -> treinador -> pace -> dias
+    # sequência: já corre? -> frequência -> km -> treinador -> pace -> dias
     assert "já corre hoje" in strava_reply
-    assert "treinador" in replies[4]
-    assert "em quanto tempo" in replies[5]
-    assert "Quais dias" in replies[6]
+    assert "Quantas vezes" in replies[6]
+    assert "quantos km" in replies[7]
+    assert "treinador" in replies[8]
+    assert "em quanto tempo" in replies[9]
+    assert "Quais dias" in replies[10]
 
     data = json.loads(
         (profile_repo.storage / "ciclano.json").read_text(
@@ -337,12 +347,13 @@ def test_decline_at_confirm_resets_onboarding(tmp_path):
 COACH_CONVERSATION_START = [
     ("oi", {}),
     ("Treinada", {"name": "Treinada"}),
-    ("30, 60kg, 1.60", {"age": 30, "weight": 60.0, "height": 1.60}),
+    ("30", {"age": 30}),
+    ("60kg", {"weight": 60.0}),
+    ("1.60", {"height": 1.60}),
     ("tenho sim", {"has_strava": True}),
-    (
-        "corro 4x, 8km",
-        {"runs_today": True, "runs_per_week": 4, "typical_km": 8.0},
-    ),
+    ("sim", {"runs_today": True}),
+    ("4x", {"runs_per_week": 4}),
+    ("8km", {"typical_km": 8.0}),
     ("sim, tenho treinador", {"has_coach": True}),
     ("45 minutos", {"typical_minutes": 45.0}),
     (

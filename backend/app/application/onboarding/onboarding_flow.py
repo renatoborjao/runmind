@@ -50,18 +50,29 @@ QUESTIONS = {
         "seus treinos de corrida por aqui.\n\n"
         "Pra começar: como você se chama?"
     ),
-    "ASK_BODY": (
+    "ASK_AGE": (
         "Prazer, {name}! 🙌\n\n"
-        "Me conta sua idade, peso e altura (ex: 33 anos, 91 kg, 1,78 m)."
+        "Quantos anos você tem?"
+    ),
+    "ASK_WEIGHT": (
+        "E quanto você pesa? (em kg)"
+    ),
+    "ASK_HEIGHT": (
+        "Qual a sua altura? (ex: 1,78 m)"
     ),
     "ASK_STRAVA": (
         "Você já tem conta no Strava? (sim/não)\n\n"
         "É por ele que eu recebo seus treinos e te dou feedback — "
         "então essa parte é obrigatória, mas a conta é gratuita. 😉"
     ),
-    "ASK_EXPERIENCE": (
-        "Você já corre hoje? Se sim, quantas vezes por semana e "
-        "quantos km por treino, mais ou menos?"
+    "ASK_RUNS_TODAY": (
+        "Você já corre hoje? (sim/não)"
+    ),
+    "ASK_RUNS_PER_WEEK": (
+        "Show! Quantas vezes por semana você costuma correr?"
+    ),
+    "ASK_TYPICAL_KM": (
+        "E quantos km, mais ou menos, em cada treino?"
     ),
     "ASK_COACH": (
         "Você já treina com um treinador ou segue uma planilha de "
@@ -178,43 +189,63 @@ class OnboardingFlow:
 
         state["slug"] = OnboardingFlow._unique_slug(name)
 
-        state["step"] = "ASK_BODY"
+        state["step"] = "ASK_AGE"
 
         repo.save(address, state)
 
-        return QUESTIONS["ASK_BODY"].format(name=name)
+        return QUESTIONS["ASK_AGE"].format(name=name)
 
     @staticmethod
-    async def _on_ask_body(address, state, parsed, repo) -> str:
+    async def _on_ask_age(address, state, parsed, repo) -> str:
 
         age = parsed.get("age")
 
+        if not (isinstance(age, int) and 10 <= age <= 100):
+
+            return RETRY_PREFIX + QUESTIONS["ASK_AGE"].format(
+                name=state["answers"]["name"],
+            )
+
+        state["answers"]["age"] = age
+
+        state["step"] = "ASK_WEIGHT"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_WEIGHT"]
+
+    @staticmethod
+    async def _on_ask_weight(address, state, parsed, repo) -> str:
+
         weight = parsed.get("weight")
+
+        if not (isinstance(weight, (int, float)) and 30 <= weight <= 250):
+
+            return RETRY_PREFIX + QUESTIONS["ASK_WEIGHT"]
+
+        state["answers"]["weight"] = float(weight)
+
+        state["step"] = "ASK_HEIGHT"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_HEIGHT"]
+
+    @staticmethod
+    async def _on_ask_height(address, state, parsed, repo) -> str:
 
         height = parsed.get("height")
 
-        # altura em cm por engano do parser
+        # altura em cm por engano do parser (ex: 178 -> 1.78)
         if isinstance(height, (int, float)) and height > 3:
 
             height = height / 100
 
-        valid = (
-            isinstance(age, int) and 10 <= age <= 100
-            and isinstance(weight, (int, float)) and 30 <= weight <= 250
-            and isinstance(height, (int, float)) and 1.2 <= height <= 2.3
-        )
+        if not (isinstance(height, (int, float)) and 1.2 <= height <= 2.3):
 
-        if not valid:
+            return RETRY_PREFIX + QUESTIONS["ASK_HEIGHT"]
 
-            return RETRY_PREFIX + QUESTIONS["ASK_BODY"].format(
-                name=state["answers"]["name"],
-            )
-
-        state["answers"].update(
-            age=age,
-            weight=float(weight),
-            height=round(float(height), 2),
-        )
+        state["answers"]["height"] = round(float(height), 2)
 
         state["step"] = "ASK_STRAVA"
 
@@ -233,7 +264,7 @@ class OnboardingFlow:
 
         state["answers"]["has_strava"] = has_strava
 
-        state["step"] = "ASK_EXPERIENCE"
+        state["step"] = "ASK_RUNS_TODAY"
 
         repo.save(address, state)
 
@@ -245,7 +276,7 @@ class OnboardingFlow:
                 "Ótimo! Conecta seu Strava neste link (pode fazer "
                 f"depois, com calma):\n{link}\n\n"
                 "Enquanto isso, seguimos por aqui. "
-                + QUESTIONS["ASK_EXPERIENCE"]
+                + QUESTIONS["ASK_RUNS_TODAY"]
             )
 
         # Strava é obrigatório: quem não tem cria a conta gratuita
@@ -254,54 +285,69 @@ class OnboardingFlow:
             "sua conta — é rapidinho. Depois conecta comigo neste "
             f"link:\n{link}\n\n"
             "Enquanto isso, seguimos por aqui. "
-            + QUESTIONS["ASK_EXPERIENCE"]
+            + QUESTIONS["ASK_RUNS_TODAY"]
         )
 
     @staticmethod
-    async def _on_ask_experience(address, state, parsed, repo) -> str:
+    async def _on_ask_runs_today(address, state, parsed, repo) -> str:
 
         runs_today = parsed.get("runs_today")
 
         if not isinstance(runs_today, bool):
 
-            return RETRY_PREFIX + QUESTIONS["ASK_EXPERIENCE"]
+            return RETRY_PREFIX + QUESTIONS["ASK_RUNS_TODAY"]
 
         state["answers"]["runs_today"] = runs_today
 
+        # já corre: pergunta frequência e distância, uma de cada vez
         if runs_today:
 
-            runs_per_week = parsed.get("runs_per_week")
-
-            typical_km = parsed.get("typical_km")
-
-            valid = (
-                isinstance(runs_per_week, int)
-                and 1 <= runs_per_week <= 7
-                and isinstance(typical_km, (int, float))
-                and 0 < typical_km <= 50
-            )
-
-            if not valid:
-
-                return RETRY_PREFIX + QUESTIONS["ASK_EXPERIENCE"]
-
-            state["answers"].update(
-                runs_per_week=runs_per_week,
-                typical_km=float(typical_km),
-            )
-
-            # quem já corre pode ter treinador
-            state["step"] = "ASK_COACH"
+            state["step"] = "ASK_RUNS_PER_WEEK"
 
             repo.save(address, state)
 
-            return QUESTIONS["ASK_COACH"]
+            return QUESTIONS["ASK_RUNS_PER_WEEK"]
 
         state["step"] = "ASK_DAYS"
 
         repo.save(address, state)
 
         return QUESTIONS["ASK_DAYS"]
+
+    @staticmethod
+    async def _on_ask_runs_per_week(address, state, parsed, repo) -> str:
+
+        runs_per_week = parsed.get("runs_per_week")
+
+        if not (isinstance(runs_per_week, int) and 1 <= runs_per_week <= 7):
+
+            return RETRY_PREFIX + QUESTIONS["ASK_RUNS_PER_WEEK"]
+
+        state["answers"]["runs_per_week"] = runs_per_week
+
+        state["step"] = "ASK_TYPICAL_KM"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_TYPICAL_KM"]
+
+    @staticmethod
+    async def _on_ask_typical_km(address, state, parsed, repo) -> str:
+
+        typical_km = parsed.get("typical_km")
+
+        if not (isinstance(typical_km, (int, float)) and 0 < typical_km <= 50):
+
+            return RETRY_PREFIX + QUESTIONS["ASK_TYPICAL_KM"]
+
+        state["answers"]["typical_km"] = float(typical_km)
+
+        # quem já corre pode ter treinador
+        state["step"] = "ASK_COACH"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_COACH"]
 
     @staticmethod
     async def _on_ask_coach(address, state, parsed, repo) -> str:
@@ -839,7 +885,7 @@ class OnboardingFlow:
 
         answers = state["answers"]
 
-        if step == "ASK_BODY":
+        if step == "ASK_AGE":
 
             return template.format(name=answers.get("name", ""))
 

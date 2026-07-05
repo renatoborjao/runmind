@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.application.coach.conversation.conversation_summary_engine import (
@@ -18,13 +17,9 @@ TURNS = [
 
 def _summarize(response_text: str | None, current_summary=""):
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+    mock_generate = AsyncMock(return_value=response_text or "")
 
-        mock_client = mock_client_cls.return_value
-
-        mock_client.aio.models.generate_content = AsyncMock(
-            return_value=SimpleNamespace(text=response_text),
-        )
+    with patch(f"{MODULE}.generate_text", new=mock_generate):
 
         result = asyncio.run(
             ConversationSummaryEngine.summarize(
@@ -34,7 +29,7 @@ def _summarize(response_text: str | None, current_summary=""):
             )
         )
 
-        _, kwargs = mock_client.aio.models.generate_content.call_args
+        _, kwargs = mock_generate.call_args
 
         return result, kwargs
 

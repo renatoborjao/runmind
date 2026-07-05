@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.application.coach.memory.memory_extraction_engine import (
@@ -8,11 +7,6 @@ from app.application.coach.memory.memory_extraction_engine import (
 from app.domain.entities.memory_entry import MemoryEntry
 
 MODULE = "app.application.coach.memory.memory_extraction_engine"
-
-
-def _mock_response(text: str | None):
-
-    return SimpleNamespace(text=text)
 
 
 def _memory(entry_id: str = "m-1") -> MemoryEntry:
@@ -28,13 +22,9 @@ def _memory(entry_id: str = "m-1") -> MemoryEntry:
 
 def _extract(response_text: str | None, **overrides):
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+    mock_generate = AsyncMock(return_value=response_text or "")
 
-        mock_client = mock_client_cls.return_value
-
-        mock_client.aio.models.generate_content = AsyncMock(
-            return_value=_mock_response(response_text),
-        )
+    with patch(f"{MODULE}.generate_text", new=mock_generate):
 
         kwargs = dict(
             runner_name="Renato",
@@ -49,7 +39,7 @@ def _extract(response_text: str | None, **overrides):
             MemoryExtractionEngine.extract(**kwargs)
         )
 
-        _, call_kwargs = mock_client.aio.models.generate_content.call_args
+        _, call_kwargs = mock_generate.call_args
 
         return ops, call_kwargs
 
