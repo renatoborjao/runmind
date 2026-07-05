@@ -15,6 +15,11 @@ MAX_OUTPUT_TOKENS = 400
 # alerta longo demais polui a mensagem do treino; corta com folga
 MAX_NOTE_CHARS = 140
 
+# A IA só REDUZ carga (nunca aumenta) e não abaixo destes limites — o motor
+# determinístico segue sendo o teto; a IA apara o excesso pra este atleta.
+MIN_KEEP_FRACTION = 0.4   # nunca corta pra menos de 40% do planejado
+MIN_DISTANCE_KM = 1.0
+
 PROMPT_TEMPLATE = """Você é um treinador de corrida experiente revisando um \
 plano gerado automaticamente, para garantir que ele é REALISTA e SEGURO para
 este atleta específico.
@@ -27,19 +32,24 @@ PLANO DA SEMANA (uma sessão por linha):
 
 Para CADA sessão que for claramente irreal ou insegura para este atleta
 (ex.: correr contínuo além do que ele aguenta, volume/intensidade alta demais
-para iniciante de alto peso, ritmo incompatível com a capacidade), retorne um
-alerta CURTO e prático (o que fazer no lugar). NÃO reescreva distâncias/tempos;
-apenas sinalize. Se o plano estiver adequado, retorne lista vazia.
+para iniciante de alto peso, ritmo incompatível com a capacidade):
+- retorne um alerta CURTO e prático em "note" (o que fazer no lugar);
+- se der pra tornar a sessão viável só REDUZINDO a distância, informe um teto
+  seguro em km em "suggested_max_km" (sempre MENOR que o planejado, nunca
+  maior; omita se não fizer sentido reduzir).
+
+Se o plano estiver adequado, retorne lista vazia.
 
 Responda APENAS com JSON:
-{{"concerns": [{{"day": "Monday", "note": "..."}}]}}
+{{"concerns": [{{"day": "Monday", "note": "...", "suggested_max_km": 5.0}}]}}
 """
 
 
 class PlanRealismReviewer:
     """IA revisora: por cima do plano determinístico, marca as sessões
-    irreais para o atleta com um alerta. O plano (números) continua sendo
-    do motor determinístico; se a IA falhar, o plano segue intacto."""
+    irreais para o atleta com um alerta e pode APARAR a distância (só pra
+    menos, com piso). O determinístico segue sendo o teto; se a IA falhar,
+    o plano segue intacto."""
 
     @staticmethod
     async def ensure_reviewed(
@@ -218,6 +228,35 @@ class PlanRealismReviewer:
             session.adjusted = True
 
             session.adjustment_reason = note[:MAX_NOTE_CHARS]
+
+            PlanRealismReviewer._cap_distance(
+                session,
+                concern.get("suggested_max_km"),
+            )
+
+    @staticmethod
+    def _cap_distance(session, suggested) -> None:
+        """Reduz a distância planejada para o teto sugerido pela IA — só
+        pra menos e nunca abaixo do piso (40% do planejado ou 1 km). Sessão
+        sem distância (run/walk, medida em tempo) não é mexida aqui."""
+
+        if not isinstance(suggested, (int, float)):
+
+            return
+
+        planned = session.planned_distance_km
+
+        if not planned:
+
+            return
+
+        floor = max(MIN_DISTANCE_KM, round(planned * MIN_KEEP_FRACTION, 1))
+
+        capped = round(min(max(suggested, floor), planned), 1)
+
+        if capped < planned:
+
+            session.planned_distance_km = capped
 
     @staticmethod
     def _parse(raw: str) -> list[dict]:
