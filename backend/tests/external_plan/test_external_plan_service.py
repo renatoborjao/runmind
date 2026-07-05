@@ -1,8 +1,8 @@
-from datetime import date
-
 from app.application.external_plan.external_plan_service import (
     ExternalPlanService,
 )
+from app.application.planner.weekly_plan_service import WeeklyPlanService
+from app.core.clock import today_local
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -62,9 +62,10 @@ def test_apply_builds_and_saves_external_plan(tmp_path, monkeypatch):
     assert plan.weekly_volume == 22.0
     assert plan.running_days == ["Tuesday", "Saturday"]
 
-    # week_start é a segunda da semana ISO atual
+    # week_start segue a régua do serviço (segunda da semana planejada;
+    # no domingo já aponta pra próxima) — sem depender do dia real de hoje
     assert plan.week_start.weekday() == 0
-    assert plan.week_start <= date.today()
+    assert plan.week_start == WeeklyPlanService._week_start(today_local())
 
     # persistido e recarregável com source
     loaded = repo.load("fulano")

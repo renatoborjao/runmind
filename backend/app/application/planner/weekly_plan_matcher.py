@@ -9,13 +9,25 @@ from app.domain.entities.training_plan import TrainingPlan
 class WeeklyPlanMatcher:
     """Casa um treino executado com a sessão que ele cumpriu no plano.
 
-    O plano é um guia, não uma obrigação de DIA: o corredor pode fazer a
-    rodagem na segunda em vez de terça. Então, em vez de casar por dia da
-    semana, casamos por DISTÂNCIA — cada corrida da semana credita a
-    sessão planejada de distância mais próxima ainda não cumprida. O que
-    exceder o número de sessões (ou cair fora da semana do plano) é treino
-    extra (None).
+    O plano é um guia, não uma obrigação de DIA, mas o DIA manda quando
+    bate: casamos em dois passos.
+
+    1. Por DIA: quem treinou num dia que tem sessão planejada cumpre a
+       sessão daquele dia (se houver mais de uma corrida no dia, a de
+       distância mais próxima fica com a sessão).
+    2. Por DISTÂNCIA: as corridas em dias SEM sessão casam com a sessão
+       restante de distância mais próxima — desde que dentro de uma
+       tolerância; longe demais é treino extra (None), não credita.
+
+    Fazer o passo do dia ANTES do da distância evita que uma corrida fora
+    do plano (ex.: segunda) roube a sessão de um dia planejado (ex.: o
+    longão de sábado) só por ter distância parecida.
     """
+
+    # Tolerância do casamento por distância (passo 2): credita a sessão só
+    # se a diferença ficar dentro de 2 km OU 30% da distância planejada.
+    TOLERANCE_KM = 2.0
+    TOLERANCE_FRACTION = 0.30
 
     @staticmethod
     def match(
@@ -61,10 +73,9 @@ class WeeklyPlanMatcher:
         plan: TrainingPlan,
         activities: list[Activity],
     ) -> dict[int, PlannedSession | None]:
-        """Atribuição gulosa e cronológica: percorre as corridas da semana
-        da mais antiga para a mais nova; cada uma pega a sessão restante de
-        distância mais próxima. Determinístico e previsível ('conforme vai
-        treinando')."""
+        """Dois passos: primeiro casa por DIA (corrida num dia planejado
+        cumpre aquela sessão), depois casa o resto por DISTÂNCIA dentro de
+        uma tolerância. Determinístico e previsível."""
 
         week_start = plan.week_start
 
@@ -83,51 +94,86 @@ class WeeklyPlanMatcher:
 
         assignments: dict[int, PlannedSession | None] = {}
 
-        for activity in week_activities:
+        # Passo 1 — por DIA: cada sessão fica com a corrida do mesmo dia da
+        # semana (a de distância mais próxima, se houver mais de uma).
+        for session in plan.sessions:
 
-            if not remaining:
+            same_day = [
+                activity
+                for activity in week_activities
+                if activity.id not in assignments
+                and weekday_name(activity.start_date).lower()
+                == session.day.lower()
+            ]
 
-                assignments[activity.id] = None
+            if not same_day:
 
                 continue
 
-            chosen = WeeklyPlanMatcher._match_one(activity, remaining)
+            chosen = min(
+                same_day,
+                key=lambda activity: abs(
+                    (session.planned_distance_km or 0)
+                    - activity.distance / 1000
+                ),
+            )
 
-            remaining.remove(chosen)
+            assignments[chosen.id] = session
+
+            remaining.remove(session)
+
+        # Passo 2 — por DISTÂNCIA: corridas em dias sem sessão casam com a
+        # sessão restante mais próxima, dentro da tolerância; senão, extra.
+        for activity in week_activities:
+
+            if activity.id in assignments:
+
+                continue
+
+            chosen = WeeklyPlanMatcher._closest_within_tolerance(
+                activity,
+                remaining,
+            )
 
             assignments[activity.id] = chosen
+
+            if chosen is not None:
+
+                remaining.remove(chosen)
 
         return assignments
 
     @staticmethod
-    def _match_one(
+    def _closest_within_tolerance(
         activity: Activity,
         remaining: list[PlannedSession],
-    ) -> PlannedSession:
-        """Prioriza o DIA: treinou num dia que tem sessão planejada ->
-        casa com a sessão daquele dia (o atleta cumpriu o dia). Só quando
-        treinou num dia SEM sessão (fora do plano) cai na distância mais
-        próxima."""
-
-        activity_day = weekday_name(activity.start_date)
-
-        same_day = next(
-            (
-                session
-                for session in remaining
-                if session.day.lower() == activity_day.lower()
-            ),
-            None,
-        )
-
-        if same_day is not None:
-
-            return same_day
+    ) -> PlannedSession | None:
+        """Sessão restante de distância mais próxima da corrida, desde que
+        dentro da tolerância; nenhuma perto o bastante -> None (extra)."""
 
         executed_km = activity.distance / 1000
 
+        def within(session: PlannedSession) -> bool:
+
+            planned = session.planned_distance_km or 0
+
+            limit = max(
+                WeeklyPlanMatcher.TOLERANCE_KM,
+                WeeklyPlanMatcher.TOLERANCE_FRACTION * planned,
+            )
+
+            return abs(planned - executed_km) <= limit
+
+        candidates = [
+            session for session in remaining if within(session)
+        ]
+
+        if not candidates:
+
+            return None
+
         return min(
-            remaining,
+            candidates,
             key=lambda session: abs(
                 (session.planned_distance_km or 0) - executed_km
             ),
