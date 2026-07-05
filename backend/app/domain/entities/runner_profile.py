@@ -59,6 +59,17 @@ class RunnerProfile:
 
     initial_weekly_km: float | None = None
 
+    # Capacidade de quem ainda não corre (extraída do texto livre no
+    # onboarding). Guia a trilha run/walk até o Strava trazer dados reais.
+    #   mobility: "walker" (só caminha) | "run_walker" (trote+caminhada) |
+    #             "runner" (já corre contínuo, pouco) | None
+    mobility: str | None = None
+
+    # Quanto tempo (min) consegue correr sem parar; walk pace declarado.
+    continuous_run_minutes: float | None = None
+
+    walk_pace_min_km: float | None = None
+
     # Tem treinador humano: o RunMind só acompanha os treinos enviados
     # (print/foto/PDF), nunca gera nem ajusta plano.
     external_coach: bool = False

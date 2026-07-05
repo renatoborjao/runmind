@@ -25,3 +25,9 @@ class PlannedSession:
     adjusted: bool = False
 
     adjustment_reason: str | None = None
+
+    # Estrutura de intervalos para run/walk (caminhada/trote). Quando
+    # presente, a sessão é medida em tempo, não em km. Ex:
+    #   {"warmup_min": 5, "trot_sec": 60, "walk_sec": 180,
+    #    "reps": 6, "cooldown_min": 5}
+    intervals: dict | None = None

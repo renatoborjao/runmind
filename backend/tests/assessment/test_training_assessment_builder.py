@@ -117,3 +117,59 @@ def test_level_is_beginner_when_low_volume_and_short_runs():
     )
 
     assert assessment.level == "Beginner"
+
+
+# ==========================================================
+# Início por corrida-caminhada (run/walk)
+# ==========================================================
+
+def test_run_walk_when_athlete_only_walks():
+
+    runner = make_runner(weight=90.0, height=1.80, mobility="walker")
+
+    assessment = TrainingAssessmentBuilder.build(
+        runner,
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.run_walk is True
+
+
+def test_run_walk_when_high_bmi_even_without_mobility():
+
+    # 130 kg, 1,80 m -> IMC ~40: começa run/walk por segurança articular
+    runner = make_runner(weight=130.0, height=1.80)
+
+    assessment = TrainingAssessmentBuilder.build(
+        runner,
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.run_walk is True
+
+
+def test_no_run_walk_for_normal_weight_beginner():
+
+    runner = make_runner(
+        weight=70.0, height=1.75, initial_weekly_km=8.0,
+    )
+
+    assessment = TrainingAssessmentBuilder.build(
+        runner,
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.run_walk is False
+
+
+def test_no_run_walk_when_declared_runner():
+
+    # diz que já corre contínuo (pouco) e IMC normal -> plano de corrida
+    runner = make_runner(weight=70.0, height=1.75, mobility="runner")
+
+    assessment = TrainingAssessmentBuilder.build(
+        runner,
+        TrainingHistory(activities=[]),
+    )
+
+    assert assessment.run_walk is False

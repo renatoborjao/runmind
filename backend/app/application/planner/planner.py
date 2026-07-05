@@ -2,6 +2,7 @@ from datetime import date
 
 from app.application.planner.engines.distribution_engine import DistributionEngine
 from app.application.planner.engines.phase_engine import PhaseEngine
+from app.application.planner.engines.run_walk_engine import RunWalkEngine
 from app.application.planner.pace_formatter import PaceFormatter
 from app.application.planner.strategy.session_composer import SessionComposer
 from app.application.planner.strategy.training_strategy import TrainingStrategy
@@ -31,6 +32,36 @@ class TrainingPlanner:
 
         phase = PhaseEngine.execute(goal)
 
+        running_days = DistributionEngine.execute(
+            runner
+        )
+
+        if not running_days:
+
+            raise Exception(
+                "Corredor sem dias de treino preferidos."
+            )
+
+        # Iniciante que começa por corrida-caminhada: trilha própria
+        # (caminhada + trote em intervalos, medida em tempo), sem volume
+        # de corrida contínua nem periodização de prova.
+        if assessment.run_walk:
+
+            return TrainingPlan(
+                athlete_name=runner.name,
+                objective=goal.name,
+                phase=phase,
+                weekly_volume=0.0,
+                running_days=running_days,
+                week_start=week_start,
+                sessions=RunWalkEngine.build(
+                    running_days,
+                    training_week,
+                    runner,
+                ),
+                is_deload=False,
+            )
+
         is_deload = (
             training_week % TrainingPlanner.DELOAD_EVERY == 0
             and phase in ("BASE", "BUILD")
@@ -41,16 +72,6 @@ class TrainingPlanner:
             phase,
             is_deload,
         )
-
-        running_days = DistributionEngine.execute(
-            runner
-        )
-
-        if not running_days:
-
-            raise Exception(
-                "Corredor sem dias de treino preferidos."
-            )
 
         sessions = TrainingPlanner._build_sessions(
             strategy,

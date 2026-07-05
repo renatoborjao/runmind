@@ -414,6 +414,40 @@ def _week_choice(text: str) -> dict | None:
 
 
 # ==========================================================
+# ASK_MOVEMENT (como o iniciante se move hoje)
+# ==========================================================
+
+
+def _movement(text: str) -> dict | None:
+    """Só resolve os casos triviais sem números; texto rico (tempos,
+    velocidades) fica pro Gemini extrair capacidade completa."""
+
+    normalized = _norm(text)
+
+    # tem número (tempo/velocidade): deixa o Gemini extrair tudo
+    if re.search(r"\d", normalized):
+
+        return None
+
+    has_walk = "caminh" in normalized
+
+    has_run = any(
+        marker in normalized
+        for marker in ("trote", "trot", "corr", "corro")
+    )
+
+    if has_run and has_walk:
+
+        return {"mobility": "run_walker"}
+
+    if has_walk:
+
+        return {"mobility": "walker"}
+
+    return None
+
+
+# ==========================================================
 # AWAIT_PLAN_MEDIA ("mando depois")
 # ==========================================================
 
@@ -454,6 +488,7 @@ _HANDLERS = {
     "ASK_RUNS_TODAY": _runs_today,
     "ASK_RUNS_PER_WEEK": _runs_per_week,
     "ASK_TYPICAL_KM": _typical_km,
+    "ASK_MOVEMENT": _movement,
     "ASK_COACH": lambda text: _yn(text, "has_coach"),
     "AWAIT_PLAN_MEDIA": _skip,
     "ASK_PACE": _pace,

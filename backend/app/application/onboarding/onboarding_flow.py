@@ -74,6 +74,12 @@ QUESTIONS = {
     "ASK_TYPICAL_KM": (
         "E quantos km, mais ou menos, em cada treino?"
     ),
+    "ASK_MOVEMENT": (
+        "Massa que quer começar! 🙌\n\n"
+        "Me conta como você se movimenta hoje: você caminha, faz um "
+        "trote leve, ou intercala os dois? E por quanto tempo aguenta?\n\n"
+        "(ex: \"caminho 30 min\" ou \"trote 1 min e caminho 3 min\")"
+    ),
     "ASK_COACH": (
         "Você já treina com um treinador ou segue uma planilha de "
         "treinos? (sim/não)"
@@ -307,6 +313,38 @@ class OnboardingFlow:
             repo.save(address, state)
 
             return QUESTIONS["ASK_RUNS_PER_WEEK"]
+
+        # ainda não corre: capta como ele se move hoje (base do run/walk)
+        state["step"] = "ASK_MOVEMENT"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_MOVEMENT"]
+
+    @staticmethod
+    async def _on_ask_movement(address, state, parsed, repo) -> str:
+
+        # passo opcional de capacidade: sempre avança (default seguro é
+        # caminhante) — não trava o cadastro se a extração vier pobre.
+        mobility = parsed.get("mobility")
+
+        if mobility not in ("walker", "run_walker", "runner"):
+
+            mobility = "walker"
+
+        state["answers"]["mobility"] = mobility
+
+        crm = parsed.get("continuous_run_minutes")
+
+        if isinstance(crm, (int, float)) and 0 < crm <= 60:
+
+            state["answers"]["continuous_run_minutes"] = float(crm)
+
+        kmh = parsed.get("walk_speed_kmh")
+
+        if isinstance(kmh, (int, float)) and 2 <= kmh <= 8:
+
+            state["answers"]["walk_pace_min_km"] = round(60 / kmh, 2)
 
         state["step"] = "ASK_DAYS"
 
@@ -587,6 +625,11 @@ class OnboardingFlow:
                     "initial_pace_min_km"
                 ),
                 "initial_weekly_km": initial_weekly_km,
+                "mobility": answers.get("mobility"),
+                "continuous_run_minutes": answers.get(
+                    "continuous_run_minutes"
+                ),
+                "walk_pace_min_km": answers.get("walk_pace_min_km"),
                 "external_coach": has_coach,
                 "notifications": True,
                 "timezone": "America/Sao_Paulo",
@@ -914,6 +957,14 @@ class OnboardingFlow:
                 f"corre {answers['runs_per_week']}x/semana, "
                 f"~{answers['typical_km']:.0f} km por treino"
             )
+
+        elif answers.get("mobility") == "run_walker":
+
+            experience = "ainda não corre — hoje faz trote e caminhada"
+
+        elif answers.get("mobility") == "walker":
+
+            experience = "ainda não corre — hoje caminha"
 
         coach_line = ""
 

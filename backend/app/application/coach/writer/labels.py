@@ -10,6 +10,8 @@ WORKOUT_TYPE_LABELS = {
     "VO2": "Intervalado",
     "FARTLEK": "Fartlek",
     "LONG_RUN": "Longão",
+    "WALK": "Caminhada",
+    "RUN_WALK": "Corrida-caminhada",
     "UNKNOWN": "—",
 }
 

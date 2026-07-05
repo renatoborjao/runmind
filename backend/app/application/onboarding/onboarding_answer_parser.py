@@ -49,6 +49,15 @@ STEP_INSTRUCTIONS = {
         '(número).\n'
         'Formato: {"typical_km": 5.0}'
     ),
+    "ASK_MOVEMENT": (
+        'O corredor ainda não corre. Classifique como ele se move hoje: '
+        '"walker" (só caminha), "run_walker" (alterna trote e caminhada) '
+        'ou "runner" (já corre contínuo, mesmo que pouco). Extraia também, '
+        'se houver, quantos minutos corre sem parar (continuous_run_minutes) '
+        'e a velocidade de caminhada em km/h (walk_speed_kmh).\n'
+        'Formato: {"mobility": "run_walker", "continuous_run_minutes": 1, '
+        '"walk_speed_kmh": 5.5} — campos sem info: null'
+    ),
     "ASK_COACH": (
         'O corredor já treina com um treinador ou segue uma planilha?\n'
         'Formato: {"has_coach": true}'

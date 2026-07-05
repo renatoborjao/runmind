@@ -199,6 +199,28 @@ def test_await_plan_media_skip():
 
 
 # ==========================================================
+# Movimento (como o iniciante se move hoje)
+# ==========================================================
+
+def test_movement_walker_only():
+
+    assert parse("ASK_MOVEMENT", "só caminho") == {"mobility": "walker"}
+
+
+def test_movement_run_walker():
+
+    assert parse("ASK_MOVEMENT", "faço trote e caminhada") == {
+        "mobility": "run_walker",
+    }
+
+
+def test_movement_with_numbers_defers_to_gemini():
+
+    # texto com tempos/velocidades vai pro Gemini extrair tudo
+    assert parse("ASK_MOVEMENT", "trote 1 min e caminho 3 min") is None
+
+
+# ==========================================================
 # Fronteiras
 # ==========================================================
 
