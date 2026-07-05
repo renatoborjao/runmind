@@ -47,6 +47,10 @@ class TrainingPlan:
     # semana de corte (deload) do ciclo 3:1 — volume reduzido pra assimilar
     is_deload: bool = False
 
+    # a IA revisora já passou por este plano (marca alertas de realidade
+    # nas sessões); evita reprocessar a mesma semana a cada entrega
+    reviewed: bool = False
+
     def session_date(
         self,
         session: PlannedSession,

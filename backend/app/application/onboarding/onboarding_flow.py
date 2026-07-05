@@ -4,6 +4,9 @@ from datetime import UTC, datetime, timedelta
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
+from app.application.coach.planning.plan_realism_reviewer import (
+    PlanRealismReviewer,
+)
 from app.application.external_plan.external_plan_extraction_engine import (
     ExternalPlanExtractionEngine,
 )
@@ -876,6 +879,14 @@ class OnboardingFlow:
             metrics=metrics,
             goal=goal,
             reference_date=reference_date,
+        )
+
+        # IA revisora do primeiro plano: sinaliza qualquer sessão irreal
+        # pra este atleta antes de mostrar (fallback = plano intacto).
+        plan = await PlanRealismReviewer.ensure_reviewed(
+            slug,
+            runner,
+            plan,
         )
 
         # dias já passados desta semana ficam marcados como "já passou"

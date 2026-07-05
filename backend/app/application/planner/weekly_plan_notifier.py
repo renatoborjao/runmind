@@ -8,6 +8,9 @@ from app.application.notifications.notification_service import (
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
+from app.application.coach.planning.plan_realism_reviewer import (
+    PlanRealismReviewer,
+)
 from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
@@ -81,6 +84,14 @@ class WeeklyPlanNotifier:
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+        )
+
+        # IA revisora: marca sessões irreais pra este atleta (uma vez por
+        # semana); se a IA falhar, o plano segue intacto.
+        plan = await PlanRealismReviewer.ensure_reviewed(
+            profile,
+            runner,
+            plan,
         )
 
         message = WeeklyPlanMessageFormatter.format(
