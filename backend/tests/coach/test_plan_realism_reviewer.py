@@ -118,3 +118,91 @@ def test_skips_external_coach_plan():
     )
 
     generate.assert_not_awaited()
+
+
+# ==========================================================
+# Capar números (só reduz, com piso)
+# ==========================================================
+
+def _long_plan(km: float = 9.1) -> TrainingPlan:
+
+    session = PlannedSession(
+        day="Saturday",
+        workout_type="LONG_RUN",
+        objective="Resistência",
+        planned_distance_km=km,
+        planned_duration_minutes=None,
+        target_pace_min=None,
+        target_pace_max=None,
+    )
+
+    return TrainingPlan(
+        athlete_name="X",
+        objective="Saúde",
+        phase="BASE",
+        weekly_volume=0.0,
+        running_days=["Saturday"],
+        week_start=date(2026, 7, 6),
+        sessions=[session],
+    )
+
+
+def _review(plan, response):
+
+    with (
+        patch(f"{MODULE}.generate_text", new=AsyncMock(return_value=response)),
+        patch(f"{MODULE}.WeeklyPlanRepository"),
+    ):
+
+        return asyncio.run(
+            PlanRealismReviewer.ensure_reviewed("x", make_runner(), plan)
+        )
+
+
+def test_caps_distance_down_to_suggested():
+
+    result = _review(
+        _long_plan(9.1),
+        '{"concerns": [{"day": "Saturday", "note": "muito longo",'
+        ' "suggested_max_km": 5.0}]}',
+    )
+
+    session = result.sessions[0]
+    assert session.planned_distance_km == 5.0
+    assert session.adjusted is True
+
+
+def test_cap_never_increases_distance():
+
+    result = _review(
+        _long_plan(5.0),
+        '{"concerns": [{"day": "Saturday", "note": "x",'
+        ' "suggested_max_km": 8.0}]}',
+    )
+
+    # teto acima do planejado é ignorado — nunca aumenta
+    assert result.sessions[0].planned_distance_km == 5.0
+
+
+def test_cap_is_floored_to_avoid_absurd_shrink():
+
+    result = _review(
+        _long_plan(9.1),
+        '{"concerns": [{"day": "Saturday", "note": "x",'
+        ' "suggested_max_km": 0.5}]}',
+    )
+
+    # piso = max(1.0, 40% de 9.1) = 3.6 km
+    assert result.sessions[0].planned_distance_km == 3.6
+
+
+def test_note_without_cap_only_flags():
+
+    result = _review(
+        _long_plan(9.1),
+        '{"concerns": [{"day": "Saturday", "note": "cuidado com o ritmo"}]}',
+    )
+
+    session = result.sessions[0]
+    assert session.planned_distance_km == 9.1  # número intacto
+    assert session.adjusted is True
