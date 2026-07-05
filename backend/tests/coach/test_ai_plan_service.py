@@ -32,7 +32,10 @@ def _plan(source="runmind", week=WEEK) -> TrainingPlan:
     )
 
 
-def _run(assessment=None, ai_result=None, ai_error=None, existing=None):
+def _run(
+    runner=None, assessment=None, ai_result=None,
+    ai_error=None, existing=None,
+):
 
     with (
         patch(f"{MODULE}.WeeklyPlanRepository") as repo_cls,
@@ -59,7 +62,8 @@ def _run(assessment=None, ai_result=None, ai_error=None, existing=None):
 
         plan = asyncio.run(
             AIPlanService.ensure_plan(
-                "renato", make_runner(), assessment or _assessment(),
+                "renato", runner or make_runner(),
+                assessment or _assessment(),
                 MagicMock(), MagicMock(), TrainingHistory([]), WEEK,
             )
         )
@@ -86,9 +90,21 @@ def test_falls_back_to_deterministic_on_ai_failure():
     assert plan.source == "deterministico"
 
 
-def test_run_walk_skips_ai_and_uses_deterministic():
+def test_run_walk_also_goes_through_ai():
 
+    # iniciante run/walk agora é gerado pela IA (com dados do onboarding)
     plan, coach, repo, wps = _run(assessment=_assessment(run_walk=True))
+
+    coach.generate.assert_awaited_once()
+    wps.get_or_generate.assert_not_called()
+    assert plan.source == "runmind"
+
+
+def test_external_coach_skips_ai_and_uses_deterministic():
+
+    plan, coach, repo, wps = _run(
+        runner=make_runner(external_coach=True),
+    )
 
     coach.generate.assert_not_awaited()
     wps.get_or_generate.assert_called_once()

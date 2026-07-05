@@ -52,8 +52,10 @@ class AIPlanService:
 
             return existing
 
-        # treinador externo ou trilha run/walk: determinístico cuida
-        if runner.external_coach or assessment.run_walk:
+        # só treinador externo fica fora da IA (RunMind só acompanha o
+        # plano dele). Iniciante run/walk TAMBÉM é gerado pela IA, com os
+        # dados do onboarding (peso/altura/capacidade) no contexto.
+        if runner.external_coach:
 
             return AIPlanService._deterministic(
                 profile, runner, assessment, metrics, goal,
@@ -64,7 +66,7 @@ class AIPlanService:
 
             context = AIPlanService._build_context(
                 profile, runner, metrics, goal, history,
-                repository, week_start, existing,
+                repository, week_start, existing, assessment.run_walk,
             )
 
             plan = await CoachPlanEngine.generate(
@@ -94,7 +96,7 @@ class AIPlanService:
     @staticmethod
     def _build_context(
         profile, runner, metrics, goal, history,
-        repository, week_start, previous_plan,
+        repository, week_start, previous_plan, run_walk,
     ) -> str:
 
         baseline = RunnerBaselineBuilder.build(history, runner)
@@ -119,6 +121,7 @@ class AIPlanService:
             last_plan=previous_plan,
             memory=memory,
             weeks_to_race=weeks_to_race,
+            run_walk=run_walk,
         )
 
     @staticmethod
