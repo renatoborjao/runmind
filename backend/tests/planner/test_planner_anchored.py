@@ -35,11 +35,11 @@ def _metrics() -> RunnerMetrics:
     )
 
 
-def _baseline(typical=7.0, longest=12.0) -> RunnerBaseline:
+def _baseline(typical=7.0, longest=12.0, runs_per_week=4.0) -> RunnerBaseline:
 
     return RunnerBaseline(
         has_history=True, weekly_km=15.0, last_week_km=15.0,
-        max_week_km=18.0, runs_per_week=4.0,
+        max_week_km=18.0, runs_per_week=runs_per_week,
         typical_run_km=typical, longest_km=longest, trend="estável",
     )
 
@@ -82,6 +82,46 @@ def test_without_baseline_falls_back_to_recommended_volume():
 
     # caminho antigo: volume = recommended do assessment
     assert plan.weekly_volume == 16.2
+
+
+def test_respects_the_chosen_days_even_at_low_frequency():
+
+    goal = BuildTrainingGoal.execute(_runner())
+
+    # frequência real baixa (2), mas o atleta ESCOLHEU 4 dias -> plano usa 4
+    plan = TrainingPlanner.generate(
+        _runner(), _assessment(longest=12.0), goal, _metrics(), WEEK_START,
+        training_week=1,
+        baseline=_baseline(typical=7.0, longest=12.0, runs_per_week=2.0),
+        target_volume=16.0,
+    )
+
+    assert len(plan.sessions) == 4
+
+    # cada apoio tem ao menos o piso (nada de corrida minúscula)
+    for session in plan.sessions:
+
+        if session.workout_type != "LONG_RUN":
+
+            assert session.planned_distance_km >= 1.9
+
+
+def test_long_run_is_faithful_but_leaves_room_for_supports():
+
+    goal = BuildTrainingGoal.execute(_runner())
+
+    plan = TrainingPlanner.generate(
+        _runner(), _assessment(longest=12.0), goal, _metrics(), WEEK_START,
+        training_week=1,
+        baseline=_baseline(typical=7.0, longest=12.0, runs_per_week=2.0),
+        target_volume=16.0,
+    )
+
+    long = next(s for s in plan.sessions if s.workout_type == "LONG_RUN")
+
+    # longão o mais fiel possível deixando piso pras 3 outras (vol 16,
+    # 3×2 de piso -> longão até 10), bem acima dos 9 do modelo antigo
+    assert long.planned_distance_km >= 9.5
 
 
 def test_target_volume_drives_the_week_not_recommended():

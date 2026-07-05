@@ -70,6 +70,13 @@ class RunnerProfile:
 
     walk_pace_min_km: float | None = None
 
+    # Retrato-base importado de um plano do atleta (ex.: plano gerado por
+    # outra IA acompanhando a evolução dele). Quando o histórico do Strava
+    # é fino/incompleto, isto vira o PISO do baseline — o motor planeja
+    # nesse nível em vez de subestimar. Chaves: weekly_km, runs_per_week,
+    # typical_km, longest_km.
+    plan_baseline: dict | None = None
+
     # Tem treinador humano: o RunMind só acompanha os treinos enviados
     # (print/foto/PDF), nunca gera nem ajusta plano.
     external_coach: bool = False

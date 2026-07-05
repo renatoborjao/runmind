@@ -31,3 +31,14 @@ class PlannedSession:
     #   {"warmup_min": 5, "trot_sec": 60, "walk_sec": 180,
     #    "reps": 6, "cooldown_min": 5}
     intervals: dict | None = None
+
+    # Modalidade da sessão: "run" (corrida), "walk" (caminhada) ou
+    # "run_walk" (corrida-caminhada, iniciante). O plano é SÓ de
+    # corrida/caminhada — musculação e outras atividades não entram.
+    kind: str = "run"
+
+    # Riqueza do plano gerado pela IA-treinadora: como executar (blocos,
+    # séries, strides, fechamento progressivo) e o porquê do treino.
+    structure: str = ""
+
+    purpose: str = ""

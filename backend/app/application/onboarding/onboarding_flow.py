@@ -4,9 +4,7 @@ from datetime import UTC, datetime, timedelta
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
-from app.application.coach.planning.plan_realism_reviewer import (
-    PlanRealismReviewer,
-)
+from app.application.coach.planning.ai_plan_service import AIPlanService
 from app.application.external_plan.external_plan_extraction_engine import (
     ExternalPlanExtractionEngine,
 )
@@ -872,22 +870,16 @@ class OnboardingFlow:
 
             reference_date = today
 
-        plan = WeeklyPlanService.get_or_generate(
+        # IA-treinadora gera o plano a partir do retrato real do atleta;
+        # run/walk, treinador externo e falha da IA caem no determinístico.
+        plan = await AIPlanService.ensure_plan(
             profile=slug,
             runner=runner,
             assessment=assessment,
             metrics=metrics,
             goal=goal,
-            reference_date=reference_date,
             history=history,
-        )
-
-        # IA revisora do primeiro plano: sinaliza qualquer sessão irreal
-        # pra este atleta antes de mostrar (fallback = plano intacto).
-        plan = await PlanRealismReviewer.ensure_reviewed(
-            slug,
-            runner,
-            plan,
+            reference_date=reference_date,
         )
 
         # dias já passados desta semana ficam marcados como "já passou"

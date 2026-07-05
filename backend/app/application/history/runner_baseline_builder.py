@@ -42,30 +42,65 @@ class RunnerBaselineBuilder:
         # (já corre X km/semana em Y dias) — mesma lógica de evolução.
         if not activities:
 
-            return RunnerBaselineBuilder._declared(runner)
+            base = RunnerBaselineBuilder._declared(runner)
 
-        weekly = WeeklyVolumeAnalyzer.analyze(history)
+        else:
 
-        distances_km = [
-            activity.distance / 1000 for activity in activities
-        ]
+            weekly = WeeklyVolumeAnalyzer.analyze(history)
 
-        longest_km = (
-            round(history.longest_run.distance / 1000, 1)
-            if history.longest_run
-            else 0.0
+            distances_km = [
+                activity.distance / 1000 for activity in activities
+            ]
+
+            longest_km = (
+                round(history.longest_run.distance / 1000, 1)
+                if history.longest_run
+                else 0.0
+            )
+
+            base = RunnerBaseline(
+                has_history=True,
+                weekly_km=weekly["average_4_weeks"],
+                last_week_km=weekly["last_week"],
+                max_week_km=weekly["max_week"],
+                runs_per_week=RunnerBaselineBuilder._runs_per_week(history),
+                typical_run_km=round(median(distances_km), 1),
+                longest_km=longest_km,
+                trend=RunnerBaselineBuilder._trend(history),
+            )
+
+        return RunnerBaselineBuilder._with_imported_floor(base, runner)
+
+    @staticmethod
+    def _with_imported_floor(
+        base: RunnerBaseline,
+        runner: RunnerProfile | None,
+    ) -> RunnerBaseline:
+        """Plano importado é o PISO: o retrato nunca fica abaixo do nível
+        que o atleta traz (o Strava fino não o subestima). Conforme o Strava
+        cresça acima disso, o real assume."""
+
+        seed = runner.plan_baseline if runner else None
+
+        if not seed:
+
+            return base
+
+        weekly = float(seed.get("weekly_km", 0) or 0)
+
+        base.weekly_km = max(base.weekly_km, weekly)
+        base.max_week_km = max(base.max_week_km, weekly)
+        base.runs_per_week = max(
+            base.runs_per_week, float(seed.get("runs_per_week", 0) or 0)
+        )
+        base.typical_run_km = max(
+            base.typical_run_km, float(seed.get("typical_km", 0) or 0)
+        )
+        base.longest_km = max(
+            base.longest_km, float(seed.get("longest_km", 0) or 0)
         )
 
-        return RunnerBaseline(
-            has_history=True,
-            weekly_km=weekly["average_4_weeks"],
-            last_week_km=weekly["last_week"],
-            max_week_km=weekly["max_week"],
-            runs_per_week=RunnerBaselineBuilder._runs_per_week(history),
-            typical_run_km=round(median(distances_km), 1),
-            longest_km=longest_km,
-            trend=RunnerBaselineBuilder._trend(history),
-        )
+        return base
 
     @staticmethod
     def _declared(runner: RunnerProfile | None) -> RunnerBaseline:

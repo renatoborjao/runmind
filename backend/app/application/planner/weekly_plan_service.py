@@ -127,7 +127,7 @@ class WeeklyPlanService:
 
             return None, None
 
-        adherence = WeeklyPlanService._last_week_adherence(
+        recent_adherence = WeeklyPlanService._recent_adherence(
             profile,
             repository,
             history,
@@ -137,43 +137,53 @@ class WeeklyPlanService:
         target = ProgressionEngine.next_weekly_volume(
             baseline=baseline,
             consistency=assessment.consistency,
-            adherence=adherence,
+            recent_adherence=recent_adherence,
             has_race=goal.race_date is not None,
         )
 
         return baseline, target
 
+    # nº de semanas anteriores olhadas pra decidir regressão (2+ = regride)
+    ADHERENCE_LOOKBACK_WEEKS = 2
+
     @staticmethod
-    def _last_week_adherence(
+    def _recent_adherence(
         profile: str,
         repository: WeeklyPlanRepository,
         history: TrainingHistory,
         current_week_start: date,
-    ) -> float | None:
-        """Fração das sessões da semana anterior que o atleta cumpriu
-        (validado no histórico). None quando não há plano anterior."""
+    ) -> list[float]:
+        """Fração das sessões cumpridas em cada uma das últimas semanas que
+        tiveram plano (cronológico, a mais recente por último). Uma semana
+        atípica isolada não derruba o plano — só 2+ seguidas."""
 
-        previous_start = current_week_start - timedelta(days=7)
+        by_week = {
+            plan.week_start: plan
+            for plan in repository.history(profile)
+        }
 
-        previous = next(
-            (
-                plan
-                for plan in repository.history(profile)
-                if plan.week_start == previous_start
-            ),
-            None,
-        )
+        recent = []
 
-        if previous is None or not previous.sessions:
+        for weeks_ago in range(
+            WeeklyPlanService.ADHERENCE_LOOKBACK_WEEKS, 0, -1
+        ):
 
-            return None
+            week_start = current_week_start - timedelta(days=7 * weeks_ago)
 
-        done = WeeklyPlanMatcher.fulfilled_days(
-            previous,
-            history.activities,
-        )
+            plan = by_week.get(week_start)
 
-        return len(done) / len(previous.sessions)
+            if plan is None or not plan.sessions:
+
+                continue
+
+            done = WeeklyPlanMatcher.fulfilled_days(
+                plan,
+                history.activities,
+            )
+
+            recent.append(len(done) / len(plan.sessions))
+
+        return recent
 
     @staticmethod
     def _training_week(
