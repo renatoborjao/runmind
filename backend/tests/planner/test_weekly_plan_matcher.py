@@ -126,6 +126,28 @@ def test_activity_outside_plan_week_is_extra():
     assert WeeklyPlanMatcher.match(plan, [outside], outside) is None
 
 
+def test_fulfilled_days_reflects_only_what_was_trained():
+    """Treinou só um dia -> só uma sessão conta como cumprida."""
+
+    plan = _typical_plan()  # Ter 3.5, Qui 4.2, Sáb 9.1
+
+    # treinou só na segunda (fora do plano), ~3.6 km -> credita 1 sessão
+    monday = _run(0, 3.6, 1)
+
+    done = WeeklyPlanMatcher.fulfilled_days(plan, [monday])
+
+    assert len(done) == 1
+    # as outras duas sessões NÃO estão cumpridas
+    assert {"Tuesday", "Thursday", "Saturday"} - done  # sobra algo
+
+
+def test_fulfilled_days_empty_without_training():
+
+    plan = _typical_plan()
+
+    assert WeeklyPlanMatcher.fulfilled_days(plan, []) == set()
+
+
 def test_no_sessions_means_extra():
     """Plano sem sessões (ex.: externo ainda vazio) -> tudo é extra."""
 

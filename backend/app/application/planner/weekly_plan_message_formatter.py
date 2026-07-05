@@ -88,10 +88,11 @@ class WeeklyPlanMessageFormatter:
         runner_name: str,
         plan: TrainingPlan,
         reference_date: date | None = None,
+        done_days: set[str] | None = None,
     ) -> str:
-        """Plano completo da semana, sob demanda ("qual meu plano?").
-        Marca os treinos já passados com ✅ para não parecer que ainda
-        estão por fazer — datas sempre honestas."""
+        """Plano completo da semana, sob demanda ("qual meu plano?"). Com
+        `done_days` (dias cumpridos, validados no histórico do Strava), os
+        treinos passados aparecem como ✅ feito ou ❌ não feito."""
 
         reference_date = reference_date or today_local()
 
@@ -110,6 +111,7 @@ class WeeklyPlanMessageFormatter:
             WeeklyPlanMessageFormatter.session_lines(
                 plan,
                 reference_date,
+                done_days=done_days,
             )
         )
 
@@ -211,11 +213,13 @@ class WeeklyPlanMessageFormatter:
         plan: TrainingPlan,
         reference_date: date | None = None,
         past_label: str = "✅ (já feito)",
+        done_days: set[str] | None = None,
     ) -> list[str]:
         """Blocos detalhados por sessão, em ordem cronológica — reusado
         pelo resumo, onboarding e plano externo. Com `reference_date`,
-        sessões já passadas viram uma linha marcada com `past_label`
-        (padrão "✅ já feito"; onboarding usa "já passou")."""
+        sessões já passadas viram uma linha marcada. Se `done_days` for
+        dado, marca ✅ feito / ❌ não feito validando o histórico; senão
+        usa `past_label` fixo (onboarding: "já passou")."""
 
         sessions = sorted(
             plan.sessions,
@@ -232,6 +236,7 @@ class WeeklyPlanMessageFormatter:
                     session,
                     reference_date,
                     past_label,
+                    done_days,
                 )
             )
 
@@ -245,6 +250,7 @@ class WeeklyPlanMessageFormatter:
         session,
         reference_date: date | None = None,
         past_label: str = "✅ (já feito)",
+        done_days: set[str] | None = None,
     ) -> list[str]:
 
         session_date_obj = plan.session_date(session)
@@ -271,7 +277,19 @@ class WeeklyPlanMessageFormatter:
             and session_date_obj < reference_date
         ):
 
-            return [f"{header} {past_label}"]
+            if done_days is not None:
+
+                mark = (
+                    "✅ (feito)"
+                    if session.day in done_days
+                    else "❌ (não feito)"
+                )
+
+            else:
+
+                mark = past_label
+
+            return [f"{header} {mark}"]
 
         detail = WeeklyPlanMessageFormatter._execution_detail(
             code,

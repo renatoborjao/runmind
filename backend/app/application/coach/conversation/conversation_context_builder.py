@@ -7,6 +7,9 @@ from app.application.coach.memory.runner_memory_service import (
 from app.application.history.metrics_resolver import (
     MetricsResolver,
 )
+from app.application.planner.weekly_plan_matcher import (
+    WeeklyPlanMatcher,
+)
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
@@ -81,7 +84,10 @@ class ConversationContextBuilder:
 
             facts = f"{facts}{race_line}\n"
 
-        week_plan = ConversationContextBuilder._week_plan_summary(plan)
+        week_plan = ConversationContextBuilder._week_plan_summary(
+            plan,
+            history,
+        )
 
         if week_plan:
 
@@ -171,13 +177,20 @@ class ConversationContextBuilder:
     @staticmethod
     def _week_plan_summary(
         plan,
+        history,
     ) -> str:
         """Plano completo da semana — permite ao coach responder
-        "qual meu treino de sábado?" sem inventar."""
+        "qual meu treino de sábado?" sem inventar. Marca feito x não feito
+        validando o histórico real (não assume que passou = feito)."""
 
         if not plan.sessions:
 
             return ""
+
+        done_days = WeeklyPlanMatcher.fulfilled_days(
+            plan,
+            history.activities,
+        )
 
         lines = ["Plano da semana completo:"]
 
@@ -185,6 +198,7 @@ class ConversationContextBuilder:
             WeeklyPlanMessageFormatter.session_lines(
                 plan,
                 today_local(),
+                done_days=done_days,
             )
         )
 

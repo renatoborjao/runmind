@@ -36,6 +36,27 @@ class WeeklyPlanMatcher:
         return assignments.get(current.id)
 
     @staticmethod
+    def fulfilled_days(
+        plan: TrainingPlan,
+        activities: list[Activity],
+    ) -> set[str]:
+        """Dias (da semana) das sessões que FORAM cumpridas — houve um
+        treino real casado com elas. Usado para o plano marcar feito x não
+        feito, validando contra o histórico do Strava."""
+
+        if not plan.sessions:
+
+            return set()
+
+        assignments = WeeklyPlanMatcher._assign_week(plan, activities)
+
+        return {
+            session.day
+            for session in assignments.values()
+            if session is not None
+        }
+
+    @staticmethod
     def _assign_week(
         plan: TrainingPlan,
         activities: list[Activity],
