@@ -1,10 +1,13 @@
 import json
 
-from google import genai
 from google.genai import types
 
+from app.application.onboarding.deterministic_onboarding_parser import (
+    DeterministicOnboardingParser,
+)
 from app.core.clock import today_local
 from app.core.config import get_settings
+from app.infrastructure.integrations.gemini.client import generate_text
 
 MAX_OUTPUT_TOKENS = 300
 
@@ -14,20 +17,37 @@ STEP_INSTRUCTIONS = {
         'Extraia o primeiro nome (ou apelido) do corredor.\n'
         'Formato: {"name": "..."}'
     ),
-    "ASK_BODY": (
-        'Extraia idade (anos, int), peso (kg, número) e altura '
-        '(metros, número — "1,78" ou "178cm" viram 1.78).\n'
-        'Formato: {"age": 33, "weight": 91.0, "height": 1.78}'
+    "ASK_AGE": (
+        'Extraia a idade do corredor em anos (int).\n'
+        'Formato: {"age": 33}'
+    ),
+    "ASK_WEIGHT": (
+        'Extraia o peso do corredor em kg (número).\n'
+        'Formato: {"weight": 91.0}'
+    ),
+    "ASK_HEIGHT": (
+        'Extraia a altura do corredor em metros (número — "1,78" ou '
+        '"178cm" viram 1.78).\n'
+        'Formato: {"height": 1.78}'
     ),
     "ASK_STRAVA": (
         'O corredor já tem conta no Strava?\n'
         'Formato: {"has_strava": true}'
     ),
-    "ASK_EXPERIENCE": (
-        'O corredor já corre hoje? Se sim, quantas vezes por semana e '
-        'quantos km por treino (números).\n'
-        'Formato: {"runs_today": true, "runs_per_week": 3, '
-        '"typical_km": 5.0} — se não corre: {"runs_today": false}'
+    "ASK_RUNS_TODAY": (
+        'O corredor já corre hoje?\n'
+        'Formato: {"runs_today": true} — se não corre: '
+        '{"runs_today": false}'
+    ),
+    "ASK_RUNS_PER_WEEK": (
+        'Extraia quantas vezes por semana o corredor costuma correr '
+        '(int, 1 a 7).\n'
+        'Formato: {"runs_per_week": 3}'
+    ),
+    "ASK_TYPICAL_KM": (
+        'Extraia quantos km o corredor costuma fazer por treino '
+        '(número).\n'
+        'Formato: {"typical_km": 5.0}'
     ),
     "ASK_COACH": (
         'O corredor já treina com um treinador ou segue uma planilha?\n'
@@ -105,11 +125,15 @@ class OnboardingAnswerParser:
 
             return {}
 
-        settings = get_settings()
+        # Determinístico primeiro: "sim", "terça e quinta", "33 anos..."
+        # não precisam do Gemini — e assim não há como "me embananar".
+        local = DeterministicOnboardingParser.parse(step, answer)
 
-        client = genai.Client(
-            api_key=settings.google_api_key,
-        )
+        if local is not None:
+
+            return local
+
+        settings = get_settings()
 
         prompt = PROMPT_TEMPLATE.format(
             today=today_local().isoformat(),
@@ -118,7 +142,7 @@ class OnboardingAnswerParser:
             answer=answer,
         )
 
-        response = await client.aio.models.generate_content(
+        raw = await generate_text(
             model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -133,9 +157,7 @@ class OnboardingAnswerParser:
             ),
         )
 
-        return OnboardingAnswerParser._parse_json(
-            response.text or "",
-        )
+        return OnboardingAnswerParser._parse_json(raw)
 
     @staticmethod
     def _parse_json(

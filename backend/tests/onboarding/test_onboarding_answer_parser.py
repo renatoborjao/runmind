@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.application.onboarding.onboarding_answer_parser import (
@@ -8,59 +7,61 @@ from app.application.onboarding.onboarding_answer_parser import (
 
 MODULE = "app.application.onboarding.onboarding_answer_parser"
 
+# frases livres que o parser determinístico NÃO resolve, forçando o
+# fallback do Gemini (o que estes testes exercitam).
+FREEFORM_ANSWER = "quero muito melhorar bastante nas corridas neste ano"
 
-def _parse(step: str, response_text: str | None):
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+def _parse(step: str, response_text: str | None, answer=FREEFORM_ANSWER):
 
-        mock_client = mock_client_cls.return_value
+    mock_generate = AsyncMock(return_value=response_text or "")
 
-        mock_client.aio.models.generate_content = AsyncMock(
-            return_value=SimpleNamespace(text=response_text),
-        )
+    with patch(f"{MODULE}.generate_text", new=mock_generate):
 
         result = asyncio.run(
             OnboardingAnswerParser.parse(
                 step=step,
                 question="pergunta",
-                answer="resposta do corredor",
+                answer=answer,
             )
         )
 
-        return result, mock_client
+        return result, mock_generate
 
 
-def test_parses_valid_json():
+def test_parses_valid_json_via_gemini_fallback():
 
-    result, mock_client = _parse(
-        "ASK_BODY",
-        '{"age": 33, "weight": 91.0, "height": 1.78}',
+    result, mock_generate = _parse(
+        "ASK_GOAL",
+        '{"goal": "10 km Sub 55"}',
     )
 
-    assert result == {"age": 33, "weight": 91.0, "height": 1.78}
+    assert result == {"goal": "10 km Sub 55"}
 
-    _, kwargs = mock_client.aio.models.generate_content.call_args
+    _, kwargs = mock_generate.call_args
     assert kwargs["config"].response_mime_type == "application/json"
-    assert "resposta do corredor" in kwargs["contents"]
+    assert FREEFORM_ANSWER in kwargs["contents"]
 
 
 def test_malformed_json_returns_empty():
 
-    result, _ = _parse("ASK_NAME", "não sou json")
+    result, _ = _parse("ASK_GOAL", "não sou json")
 
     assert result == {}
 
 
 def test_none_response_returns_empty():
 
-    result, _ = _parse("ASK_NAME", None)
+    result, _ = _parse("ASK_GOAL", None)
 
     assert result == {}
 
 
 def test_unknown_step_returns_empty_without_calling_gemini():
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+    mock_generate = AsyncMock(return_value="")
+
+    with patch(f"{MODULE}.generate_text", new=mock_generate):
 
         result = asyncio.run(
             OnboardingAnswerParser.parse(
@@ -72,4 +73,24 @@ def test_unknown_step_returns_empty_without_calling_gemini():
 
         assert result == {}
 
-        mock_client_cls.assert_not_called()
+        mock_generate.assert_not_awaited()
+
+
+def test_deterministic_step_skips_gemini():
+
+    # "sim" no passo do Strava é resolvido localmente — Gemini nem é chamado
+    mock_generate = AsyncMock(return_value="")
+
+    with patch(f"{MODULE}.generate_text", new=mock_generate):
+
+        result = asyncio.run(
+            OnboardingAnswerParser.parse(
+                step="ASK_STRAVA",
+                question="pergunta",
+                answer="sim, já tenho",
+            )
+        )
+
+        assert result == {"has_strava": True}
+
+        mock_generate.assert_not_awaited()

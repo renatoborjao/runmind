@@ -1,7 +1,7 @@
-from google import genai
 from google.genai import types
 
 from app.core.config import get_settings
+from app.infrastructure.integrations.gemini.client import generate_text
 
 MAX_OUTPUT_TOKENS = 400
 
@@ -38,17 +38,13 @@ class ConversationSummaryEngine:
 
         settings = get_settings()
 
-        client = genai.Client(
-            api_key=settings.google_api_key,
-        )
-
         prompt = SUMMARY_PROMPT_TEMPLATE.format(
             runner_name=runner_name,
             current_summary=current_summary or "(nenhum ainda)",
             turns=ConversationSummaryEngine._render_turns(turns),
         )
 
-        response = await client.aio.models.generate_content(
+        raw = await generate_text(
             model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -59,7 +55,7 @@ class ConversationSummaryEngine:
             ),
         )
 
-        updated = (response.text or "").strip()
+        updated = raw.strip()
 
         # resposta vazia não pode apagar o resumo existente
         return updated or current_summary

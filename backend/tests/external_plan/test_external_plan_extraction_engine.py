@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.application.external_plan.external_plan_extraction_engine import (
@@ -13,13 +12,9 @@ MODULE = (
 
 def _extract(response_text: str | None):
 
-    with patch(f"{MODULE}.genai.Client") as mock_client_cls:
+    mock_generate = AsyncMock(return_value=response_text or "")
 
-        mock_client = mock_client_cls.return_value
-
-        mock_client.aio.models.generate_content = AsyncMock(
-            return_value=SimpleNamespace(text=response_text),
-        )
+    with patch(f"{MODULE}.generate_text", new=mock_generate):
 
         sessions = asyncio.run(
             ExternalPlanExtractionEngine.extract(
@@ -28,12 +23,12 @@ def _extract(response_text: str | None):
             )
         )
 
-        return sessions, mock_client
+        return sessions, mock_generate
 
 
 def test_extract_parses_sessions():
 
-    sessions, mock_client = _extract(
+    sessions, mock_generate = _extract(
         '{"sessions": [{"day": "Tuesday", "workout_type": "Rodagem",'
         ' "distance_km": 6.0}]}'
     )
@@ -43,7 +38,7 @@ def test_extract_parses_sessions():
          "distance_km": 6.0},
     ]
 
-    _, kwargs = mock_client.aio.models.generate_content.call_args
+    _, kwargs = mock_generate.call_args
     assert kwargs["config"].response_mime_type == "application/json"
 
 

@@ -1,11 +1,11 @@
 import json
 from datetime import date
 
-from google import genai
 from google.genai import types
 
 from app.core.clock import today_local
 from app.core.config import get_settings
+from app.infrastructure.integrations.gemini.client import generate_text
 from app.domain.entities.memory_entry import (
     MEMORY_CATEGORIES,
     MemoryEntry,
@@ -72,10 +72,6 @@ class MemoryExtractionEngine:
 
         settings = get_settings()
 
-        client = genai.Client(
-            api_key=settings.google_api_key,
-        )
-
         prompt = EXTRACTION_PROMPT_TEMPLATE.format(
             runner_name=runner_name,
             today=today_local().isoformat(),
@@ -88,7 +84,7 @@ class MemoryExtractionEngine:
             incoming_text=incoming_text,
         )
 
-        response = await client.aio.models.generate_content(
+        raw = await generate_text(
             model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -103,9 +99,7 @@ class MemoryExtractionEngine:
             ),
         )
 
-        return MemoryExtractionEngine._parse_ops(
-            response.text or "",
-        )
+        return MemoryExtractionEngine._parse_ops(raw)
 
     @staticmethod
     def _render_memories(
