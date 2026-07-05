@@ -173,6 +173,49 @@ def test_run_on_a_planned_day_matches_that_day_over_distance():
     assert matched.planned_distance_km == 9.1
 
 
+def test_off_day_run_does_not_steal_a_planned_day_session():
+    """Bug real do Renato: plano Ter/Qui/Sáb; treinou SEGUNDA (7.2 km, fora
+    do plano) e SÁBADO (8.5 km, o longão). A segunda NÃO pode roubar a
+    sessão de sábado por distância — o sábado real tem que ser creditado."""
+
+    plan = _typical_plan()  # Ter 3.5, Qui 4.2, Sáb 9.1
+
+    monday = _run(0, 7.2, 1)     # fora do plano, longe de qualquer sessão
+    saturday = _run(5, 8.5, 2)   # o longão de verdade
+
+    activities = [monday, saturday]
+
+    # sábado casa com o longão (mesmo dia)
+    assert (
+        WeeklyPlanMatcher.match(plan, activities, saturday).day == "Saturday"
+    )
+
+    # a segunda de 7.2 km está longe demais de 3.5/4.2 -> treino extra
+    assert WeeklyPlanMatcher.match(plan, activities, monday) is None
+
+    # portanto só o sábado conta como cumprido (nada de quinta falsa)
+    done = WeeklyPlanMatcher.fulfilled_days(plan, activities)
+    assert done == {"Saturday"}
+
+
+def test_two_runs_same_day_best_distance_takes_the_session():
+    """Aquecimento curto + longão no mesmo dia: a sessão fica com a corrida
+    de distância mais próxima; a outra é extra."""
+
+    plan = _typical_plan()  # Sáb 9.1
+
+    warmup = _run(5, 1.1, 1)   # sábado, 1.1 km
+    long_run = _run(5, 8.5, 2)  # sábado, 8.5 km
+
+    activities = [warmup, long_run]
+
+    assert (
+        WeeklyPlanMatcher.match(plan, activities, long_run).planned_distance_km
+        == 9.1
+    )
+    assert WeeklyPlanMatcher.match(plan, activities, warmup) is None
+
+
 def test_distance_fallback_is_chronological_not_by_id():
     """Fora dos dias do plano, o fallback por distância respeita a ordem
     cronológica, independente do id."""
