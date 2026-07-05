@@ -15,26 +15,28 @@ DELOAD_FACTOR = 0.8
 STEP_RACE = {"high": 1.10, "mid": 1.05, "low": 1.02}
 STEP_HEALTH = {"high": 1.05, "mid": 1.03, "low": 1.02}
 
-# Aderência da última semana (fração das sessões planejadas cumpridas):
-# abaixo disso, recua pra recuperar; entre isso e 1.0, segura a carga.
-ADHERENCE_RECOVER = 0.5
+# "Não cumprida": semana em que o atleta fez menos da metade do plano.
+# Regride só quando isso se repete (2+ semanas) — uma semana atípica
+# isolada NÃO derruba o plano.
+MISS_THRESHOLD = 0.5
 
 
 class ProgressionEngine:
     """Decide o volume-alvo da próxima semana: parte do volume real
-    recente e dá um passo guiado pela CONSISTÊNCIA e pela EXECUÇÃO da
-    semana anterior. Sempre evolui, mas com teto na capacidade provada."""
+    recente e dá um passo guiado pela CONSISTÊNCIA e pela EXECUÇÃO das
+    últimas semanas. Sempre evolui, mas com teto na capacidade provada."""
 
     @staticmethod
     def next_weekly_volume(
         baseline: RunnerBaseline,
         consistency: float,
-        adherence: float | None,
+        recent_adherence: list[float],
         has_race: bool,
         is_deload: bool = False,
     ) -> float:
-        """`adherence`: fração (0..1) das sessões da última semana que o
-        atleta cumpriu — None quando não há semana anterior (1ª semana)."""
+        """`recent_adherence`: fração (0..1) das sessões cumpridas nas
+        últimas semanas (cronológico, a mais recente por último). Vazio =
+        sem semana anterior (1ª semana)."""
 
         anchor = baseline.weekly_km
 
@@ -45,7 +47,7 @@ class ProgressionEngine:
         step = ProgressionEngine._step(
             baseline,
             consistency,
-            adherence,
+            recent_adherence,
             has_race,
         )
 
@@ -69,20 +71,25 @@ class ProgressionEngine:
     def _step(
         baseline: RunnerBaseline,
         consistency: float,
-        adherence: float | None,
+        recent_adherence: list[float],
         has_race: bool,
     ) -> float:
 
-        # o loop semana-a-semana: a execução da última semana manda.
-        if adherence is not None:
+        last = recent_adherence[-1] if recent_adherence else None
 
-            if adherence < ADHERENCE_RECOVER:
+        # o loop semana-a-semana: a execução das últimas semanas manda.
+        if last is not None and last < 1.0:
 
-                return 0.90   # faltou muito: recua pra recuperar
+            last_two = recent_adherence[-2:]
 
-            if adherence < 1.0:
+            # regride SÓ com 2+ semanas seguidas não cumpridas
+            if len(last_two) >= 2 and all(
+                a < MISS_THRESHOLD for a in last_two
+            ):
 
-                return 1.0    # cumpriu em parte: segura a carga
+                return 0.90   # queda sustentada: recua pra recuperar
+
+            return 1.0        # semana atípica isolada / parcial: segura
 
         # cumpriu tudo (ou 1ª semana): sobe conforme a consistência
         table = STEP_RACE if has_race else STEP_HEALTH

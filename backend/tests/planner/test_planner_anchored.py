@@ -84,11 +84,11 @@ def test_without_baseline_falls_back_to_recommended_volume():
     assert plan.weekly_volume == 16.2
 
 
-def test_real_frequency_shapes_the_week_long_plus_support():
+def test_respects_the_chosen_days_even_at_low_frequency():
 
     goal = BuildTrainingGoal.execute(_runner())
 
-    # frequência real = 2/semana, mesmo tendo escolhido 4 dias
+    # frequência real baixa (2), mas o atleta ESCOLHEU 4 dias -> plano usa 4
     plan = TrainingPlanner.generate(
         _runner(), _assessment(longest=12.0), goal, _metrics(), WEEK_START,
         training_week=1,
@@ -96,13 +96,32 @@ def test_real_frequency_shapes_the_week_long_plus_support():
         target_volume=16.0,
     )
 
-    # 2 corridas: o longão + 1 apoio (a rotina real dele)
-    assert len(plan.sessions) == 2
+    assert len(plan.sessions) == 4
+
+    # cada apoio tem ao menos o piso (nada de corrida minúscula)
+    for session in plan.sessions:
+
+        if session.workout_type != "LONG_RUN":
+
+            assert session.planned_distance_km >= 1.9
+
+
+def test_long_run_is_faithful_but_leaves_room_for_supports():
+
+    goal = BuildTrainingGoal.execute(_runner())
+
+    plan = TrainingPlanner.generate(
+        _runner(), _assessment(longest=12.0), goal, _metrics(), WEEK_START,
+        training_week=1,
+        baseline=_baseline(typical=7.0, longest=12.0, runs_per_week=2.0),
+        target_volume=16.0,
+    )
 
     long = next(s for s in plan.sessions if s.workout_type == "LONG_RUN")
 
-    # longão FIEL ao real (~12), não cortado pra 9
-    assert long.planned_distance_km >= 11.0
+    # longão o mais fiel possível deixando piso pras 3 outras (vol 16,
+    # 3×2 de piso -> longão até 10), bem acima dos 9 do modelo antigo
+    assert long.planned_distance_km >= 9.5
 
 
 def test_target_volume_drives_the_week_not_recommended():

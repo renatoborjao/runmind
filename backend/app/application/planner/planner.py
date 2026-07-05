@@ -223,6 +223,10 @@ class TrainingPlanner:
     # é naturalmente grande; conforme o volume sobe, vira fração menor).
     _MAX_LONG_FRACTION = 0.75
 
+    # Piso de uma corrida de apoio: o longão cede espaço pra cada dia
+    # escolhido ter ao menos isso.
+    _SUPPORT_FLOOR_KM = 2.0
+
     @staticmethod
     def _build_sessions_from_baseline(
         strategy: dict,
@@ -233,11 +237,10 @@ class TrainingPlanner:
         baseline: RunnerBaseline,
         preferred_long_run_day: str | None = None,
     ) -> list:
-        """Fiel ao histórico: o LONGÃO respeita a distância real do atleta
-        (não corta pra 75% do pico), e o nº de corridas segue a FREQUÊNCIA
-        REAL dele — não os dias que ele marcou como disponíveis. Assim uma
-        semana enxuta é longão + 1-2 apoios (a rotina dele), e cresce
-        conforme o volume/frequência sobem."""
+        """Respeita os DIAS ESCOLHIDOS pelo atleta (todos entram) e mantém o
+        LONGÃO o mais fiel possível ao real, cortando só o necessário pra
+        sobrar um piso pras demais corridas. Conforme o volume sobe, o
+        longão chega ao real e os apoios crescem."""
 
         composed = SessionComposer.compose(
             level,
@@ -254,13 +257,6 @@ class TrainingPlanner:
 
         typical = baseline.typical_run_km or 1.0
 
-        # quantas corridas o atleta de fato faz por semana (cresce sozinho
-        # conforme ele treina mais); no máximo os dias que ele escolheu
-        real_days = min(
-            len(composed),
-            max(1, round(baseline.runs_per_week)),
-        )
-
         long_entry = next(
             (e for e in composed if e["type"] == "LONG_RUN"),
             None,
@@ -268,43 +264,45 @@ class TrainingPlanner:
 
         non_long = [e for e in composed if e["type"] != "LONG_RUN"]
 
-        # longão fiel ao real, limitado a uma fração da semana
-        long_km = 0.0
-
         if long_entry is not None:
 
+            # longão o mais próximo do real, deixando um piso pras outras
+            room = (
+                weekly_volume
+                - len(non_long) * TrainingPlanner._SUPPORT_FLOOR_KM
+            )
+
+            long_km = min(
+                baseline.longest_km or typical,
+                weekly_volume * TrainingPlanner._MAX_LONG_FRACTION,
+                room,
+            )
+
             long_km = round(
-                min(
-                    baseline.longest_km or typical,
-                    weekly_volume * TrainingPlanner._MAX_LONG_FRACTION,
-                ),
+                max(long_km, TrainingPlanner._SUPPORT_FLOOR_KM),
                 1,
             )
 
-            supporting = non_long[: max(real_days - 1, 0)]
+            remaining = max(weekly_volume - long_km, 0.0)
 
         else:
 
-            supporting = non_long[:real_days]
+            long_km = 0.0
 
-        remaining = max(weekly_volume - long_km, 0.0)
+            remaining = weekly_volume
 
         anchors = [
             typical * TrainingPlanner._ANCHOR_FACTOR.get(e["type"], 1.0)
-            for e in supporting
+            for e in non_long
         ]
 
         natural = sum(anchors) or 1.0
 
-        scale = remaining / natural if supporting else 0.0
-
-        kept = (
-            [long_entry] if long_entry is not None else []
-        ) + supporting
+        scale = remaining / natural if non_long else 0.0
 
         sessions = []
 
-        for entry in kept:
+        for entry in composed:
 
             if entry["type"] == "LONG_RUN":
 

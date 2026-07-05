@@ -23,7 +23,7 @@ def _vol(**kwargs):
     defaults = dict(
         baseline=_baseline(),
         consistency=100.0,
-        adherence=1.0,
+        recent_adherence=[1.0],
         has_race=True,
         is_deload=False,
     )
@@ -38,7 +38,7 @@ def test_no_history_returns_zero():
     base = _baseline(weekly=0.0)
 
     assert ProgressionEngine.next_weekly_volume(
-        base, consistency=0, adherence=None, has_race=False,
+        base, consistency=0, recent_adherence=[], has_race=False,
     ) == 0.0
 
 
@@ -62,26 +62,47 @@ def test_health_goal_progresses_gentler_than_race():
     assert health < race
 
 
-def test_poor_adherence_recovers():
+def test_first_week_progresses_without_prior_adherence():
 
-    # cumpriu menos da metade da semana passada: recua (×0.9)
-    assert _vol(adherence=0.3) == 13.5
+    # sem semana anterior (lista vazia): sobe pela consistência
+    assert _vol(recent_adherence=[]) == 16.5
 
 
-def test_partial_adherence_holds():
+# ==========================================================
+# Regressão só após 2+ semanas (uma atípica isolada segura)
+# ==========================================================
 
-    # cumpriu em parte: segura a carga (×1.0)
-    assert _vol(adherence=0.7) == 15.0
+def test_single_missed_week_holds_not_regress():
+
+    # UMA semana atípica (fez pouco) NÃO derruba o plano
+    assert _vol(recent_adherence=[0.3]) == 15.0
+
+
+def test_two_missed_weeks_regress():
+
+    # duas semanas seguidas não cumpridas: recua pra recuperar (×0.9)
+    assert _vol(recent_adherence=[0.3, 0.4]) == 13.5
+
+
+def test_recovers_after_a_good_week_between_misses():
+
+    # miss, depois semana boa: a última manda -> volta a subir
+    assert _vol(recent_adherence=[0.3, 1.0]) == 16.5
+
+
+def test_partial_last_week_holds():
+
+    # última semana parcial (não cumpriu tudo, mas não é "miss"): segura
+    assert _vol(recent_adherence=[0.8]) == 15.0
 
 
 def test_capacity_ceiling_caps_growth():
 
-    # volume já perto da melhor semana: teto = 18 * 1.1 = 19.8
     base = _baseline(weekly=19.0, maxw=18.0)
 
-    # 19 * 1.10 = 20.9, mas o teto 19.8 corta
+    # 19 * 1.10 = 20.9, mas o teto 18*1.1 = 19.8 corta
     assert ProgressionEngine.next_weekly_volume(
-        base, consistency=100.0, adherence=1.0, has_race=True,
+        base, consistency=100.0, recent_adherence=[1.0], has_race=True,
     ) == 19.8
 
 
@@ -89,9 +110,8 @@ def test_falling_trend_does_not_force_up():
 
     base = _baseline(trend="caindo")
 
-    # mesmo consistente, tendência caindo segura em ×1.0
     assert ProgressionEngine.next_weekly_volume(
-        base, consistency=100.0, adherence=1.0, has_race=True,
+        base, consistency=100.0, recent_adherence=[1.0], has_race=True,
     ) == 15.0
 
 

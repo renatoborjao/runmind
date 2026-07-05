@@ -70,7 +70,7 @@ def test_progression_returns_baseline_and_positive_target():
     assert target > 0
 
 
-def test_last_week_adherence_from_previous_plan():
+def test_recent_adherence_from_previous_plan():
 
     previous = TrainingPlan(
         athlete_name="Renato", objective="Saúde", phase="BUILD",
@@ -89,19 +89,20 @@ def test_last_week_adherence_from_previous_plan():
         id=1, start_date=datetime(2026, 6, 30, 7, 0, 0), distance=5000.0,
     )
 
-    adherence = WeeklyPlanService._last_week_adherence(
+    recent = WeeklyPlanService._recent_adherence(
         "p", repo, TrainingHistory([ran_tuesday]), CURRENT_WEEK,
     )
 
-    assert adherence == 0.5
+    # só a semana anterior tinha plano -> uma entrada
+    assert recent == [0.5]
 
 
-def test_adherence_none_without_previous_plan():
+def test_recent_adherence_empty_without_previous_plan():
 
     repo = SimpleNamespace(history=lambda profile: [])
 
-    adherence = WeeklyPlanService._last_week_adherence(
+    recent = WeeklyPlanService._recent_adherence(
         "p", repo, TrainingHistory([]), CURRENT_WEEK,
     )
 
-    assert adherence is None
+    assert recent == []
