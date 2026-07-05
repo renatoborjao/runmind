@@ -66,6 +66,10 @@ class WeeklyPlanMessageFormatter:
 
         lines = []
 
+        if plan.weekly_objective:
+
+            lines.append(f"🎯 {plan.weekly_objective}")
+
         label = PHASE_LABELS.get(plan.phase)
 
         if label:
@@ -326,6 +330,18 @@ class WeeklyPlanMessageFormatter:
         code: str,
         session,
     ) -> list[str]:
+
+        # Plano da IA-treinadora: a própria sessão traz a estrutura e o
+        # propósito prontos — renderiza direto, sem os templates por tipo.
+        if getattr(session, "structure", ""):
+
+            detail = [f"Execução: {session.structure}"]
+
+            if session.purpose:
+
+                detail.append(f"Foco: {session.purpose}")
+
+            return detail
 
         pace_range = WeeklyPlanMessageFormatter._pace_range(session)
 

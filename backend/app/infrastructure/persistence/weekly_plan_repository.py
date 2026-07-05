@@ -165,6 +165,7 @@ class WeeklyPlanRepository:
             "source": plan.source,
             "is_deload": plan.is_deload,
             "reviewed": plan.reviewed,
+            "weekly_objective": plan.weekly_objective,
             "sessions": [
                 asdict(session)
                 for session in plan.sessions
@@ -190,4 +191,5 @@ class WeeklyPlanRepository:
             source=data.get("source", "runmind"),
             is_deload=data.get("is_deload", False),
             reviewed=data.get("reviewed", False),
+            weekly_objective=data.get("weekly_objective", ""),
         )

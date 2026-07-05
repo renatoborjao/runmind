@@ -90,7 +90,7 @@ def test_notify_all_sends_to_every_profile():
         patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
         patch(f"{MODULE}.TrainingAssessmentBuilder"),
         patch(f"{MODULE}.MetricsResolver"),
-        patch(f"{MODULE}.WeeklyPlanService"),
+        patch(f"{MODULE}.AIPlanService") as mock_ai,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.NotificationService") as mock_notification,
     ):
@@ -105,6 +105,8 @@ def test_notify_all_sends_to_every_profile():
         ]
 
         mock_load_history.execute = AsyncMock(return_value=object())
+
+        mock_ai.ensure_plan = AsyncMock(return_value=MagicMock())
 
         mock_formatter.format.return_value = "mensagem"
 
@@ -130,7 +132,7 @@ def test_notify_all_continues_after_one_profile_fails():
         patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
         patch(f"{MODULE}.TrainingAssessmentBuilder"),
         patch(f"{MODULE}.MetricsResolver"),
-        patch(f"{MODULE}.WeeklyPlanService"),
+        patch(f"{MODULE}.AIPlanService") as mock_ai,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.NotificationService") as mock_notification,
     ):
@@ -145,6 +147,8 @@ def test_notify_all_continues_after_one_profile_fails():
         ]
 
         mock_load_history.execute = AsyncMock(return_value=object())
+
+        mock_ai.ensure_plan = AsyncMock(return_value=MagicMock())
 
         mock_formatter.format.return_value = "mensagem"
 
