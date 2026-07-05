@@ -51,6 +51,10 @@ class TrainingPlan:
     # nas sessões); evita reprocessar a mesma semana a cada entrega
     reviewed: bool = False
 
+    # Objetivo/foco da semana narrado pela IA-treinadora (ex.: "ganhar
+    # velocidade rumo ao sub-50 sem inflar volume").
+    weekly_objective: str = ""
+
     def session_date(
         self,
         session: PlannedSession,
