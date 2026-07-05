@@ -331,11 +331,15 @@ class WeeklyPlanMessageFormatter:
         session,
     ) -> list[str]:
 
-        # Plano da IA-treinadora: a própria sessão traz a estrutura e o
-        # propósito prontos — renderiza direto, sem os templates por tipo.
+        # Plano da IA-treinadora: a própria sessão traz a estrutura (um
+        # passo por linha) e o propósito prontos — renderiza cada passo.
         if getattr(session, "structure", ""):
 
-            detail = [f"Execução: {session.structure}"]
+            detail = [
+                step
+                for step in session.structure.split("\n")
+                if step.strip()
+            ]
 
             if session.purpose:
 

@@ -35,8 +35,11 @@ REGRAS:
   real e a aderência das últimas semanas; segure ou recue se ele não vem
   cumprindo.
 - Cada corrida com um PROPÓSITO distinto (velocidade, base/rodagem, longão,
-  regenerativo...), com estrutura concreta (aquecimento, séries, strides,
-  fechamento) e faixa de pace ancorada na META dele.
+  regenerativo...) e faixa de pace ancorada na META dele.
+- "structure" é uma LISTA de passos CLAROS e COMPLETOS, em linguagem simples
+  que qualquer corredor entende. Detalhe de verdade: aquecimento (distância +
+  pace), a parte principal (séries/distâncias/repetições/pace/recuperação
+  EXPLÍCITOS), o desaquecimento e uma dica prática. Um passo por item.
 - Respeite lesões/limitações e preferências que aparecerem no retrato.
 
 Responda APENAS com JSON:
@@ -44,13 +47,19 @@ Responda APENAS com JSON:
   "sessions": [
     {{"day": "Tuesday", "kind": "run", "workout_type": "Velocidade",
       "distance_km": 9.0, "pace_min": "4:45", "pace_max": "4:50",
-      "structure": "Aquecimento 2 km + 6x800m (rec 400m trote) + 1,5 km leve",
+      "structure": [
+        "Aquecimento: 2 km bem leve (6:30-7:00/km) + 3 educativos curtos",
+        "Série: 6x 800m no pace 4:45-4:50/km",
+        "Recuperação: 400m de trote leve entre cada tiro",
+        "Desaquecimento: 1,5 km leve soltando as pernas",
+        "Dica: comece o 1º tiro mais controlado pra não estourar no fim"
+      ],
       "purpose": "aumentar o ritmo de prova"}}
   ]}}
 
-Cada sessão é uma corrida/caminhada com distance_km, paces, structure e
-purpose. kind: "run" (corrida) ou "walk"/"run_walk" (caminhada/corrida-
-caminhada, iniciante). Use os dias da semana em inglês (Monday..Sunday).
+Cada sessão é uma corrida/caminhada com distance_km, paces, structure (lista
+de passos) e purpose. kind: "run" (corrida) ou "walk"/"run_walk" (caminhada/
+corrida-caminhada, iniciante). Dias da semana em inglês (Monday..Sunday).
 """
 
 
@@ -187,12 +196,27 @@ class CoachPlanEngine:
                     target_pace_min=CoachPlanEngine._pace(item.get("pace_min")),
                     target_pace_max=CoachPlanEngine._pace(item.get("pace_max")),
                     kind=kind,
-                    structure=str(item.get("structure", "")).strip(),
+                    structure=CoachPlanEngine._structure(
+                        item.get("structure"),
+                    ),
                     purpose=str(item.get("purpose", "")).strip(),
                 )
             )
 
         return sessions
+
+    @staticmethod
+    def _structure(value) -> str:
+        """Estrutura vem como lista de passos (preferido) ou string; guarda
+        um passo por linha pra o formatter renderizar cada um."""
+
+        if isinstance(value, list):
+
+            return "\n".join(
+                str(step).strip() for step in value if str(step).strip()
+            )
+
+        return str(value or "").strip()
 
     @staticmethod
     def _default_type(kind: str) -> str:

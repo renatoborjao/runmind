@@ -76,6 +76,27 @@ def test_parses_only_the_running_sessions():
     assert speed.purpose
 
 
+def test_structure_as_list_becomes_steps():
+
+    plan_json = (
+        '{"weekly_objective": "x", "sessions": [{"day": "Tuesday",'
+        ' "kind": "run", "distance_km": 9,'
+        ' "structure": ["Aquecimento: 2 km leve",'
+        ' "Série: 6x800m a 4:45", "Desaquecimento: 1 km"],'
+        ' "purpose": "velocidade"}]}'
+    )
+
+    plan = _generate(plan_json)
+
+    steps = plan.find_session_by_day("Tuesday").structure.split("\n")
+
+    assert steps == [
+        "Aquecimento: 2 km leve",
+        "Série: 6x800m a 4:45",
+        "Desaquecimento: 1 km",
+    ]
+
+
 def test_invalid_json_raises_for_fallback():
 
     with pytest.raises(ValueError):
