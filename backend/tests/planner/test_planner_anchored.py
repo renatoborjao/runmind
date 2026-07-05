@@ -35,11 +35,11 @@ def _metrics() -> RunnerMetrics:
     )
 
 
-def _baseline(typical=7.0, longest=12.0) -> RunnerBaseline:
+def _baseline(typical=7.0, longest=12.0, runs_per_week=4.0) -> RunnerBaseline:
 
     return RunnerBaseline(
         has_history=True, weekly_km=15.0, last_week_km=15.0,
-        max_week_km=18.0, runs_per_week=4.0,
+        max_week_km=18.0, runs_per_week=runs_per_week,
         typical_run_km=typical, longest_km=longest, trend="estável",
     )
 
@@ -82,6 +82,27 @@ def test_without_baseline_falls_back_to_recommended_volume():
 
     # caminho antigo: volume = recommended do assessment
     assert plan.weekly_volume == 16.2
+
+
+def test_real_frequency_shapes_the_week_long_plus_support():
+
+    goal = BuildTrainingGoal.execute(_runner())
+
+    # frequência real = 2/semana, mesmo tendo escolhido 4 dias
+    plan = TrainingPlanner.generate(
+        _runner(), _assessment(longest=12.0), goal, _metrics(), WEEK_START,
+        training_week=1,
+        baseline=_baseline(typical=7.0, longest=12.0, runs_per_week=2.0),
+        target_volume=16.0,
+    )
+
+    # 2 corridas: o longão + 1 apoio (a rotina real dele)
+    assert len(plan.sessions) == 2
+
+    long = next(s for s in plan.sessions if s.workout_type == "LONG_RUN")
+
+    # longão FIEL ao real (~12), não cortado pra 9
+    assert long.planned_distance_km >= 11.0
 
 
 def test_target_volume_drives_the_week_not_recommended():
