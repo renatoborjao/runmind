@@ -292,6 +292,22 @@ def test_external_plan_has_no_phase_line():
     assert "Fase:" not in text
 
 
+def test_week_plan_marks_done_and_not_done_from_history():
+    """Passado validado no histórico: cumprido = ✅ feito, resto = ❌."""
+
+    text = WeeklyPlanMessageFormatter.week_plan_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 25),   # sábado: ter e qui passaram
+        done_days={"Tuesday"},              # só a terça foi treinada
+    )
+
+    assert "terça-feira (21/07) — Rodagem leve · 6.0 km ✅ (feito)" in text
+    assert "quinta-feira (23/07) — Intervalado · 6.5 km ❌ (não feito)" in text
+    # nada de assumir que passou = feito
+    assert "já feito" not in text
+
+
 def test_session_lines_custom_past_label():
     """Onboarding marca dias passados como 'já passou', não 'já feito'."""
 

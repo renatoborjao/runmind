@@ -7,8 +7,14 @@ from app.application.orchestrators.last_training_report import (
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
 )
+from app.application.planner.weekly_plan_matcher import (
+    WeeklyPlanMatcher,
+)
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
+)
+from app.application.use_cases.load_training_history import (
+    LoadTrainingHistory,
 )
 from app.domain.entities.runner_profile import RunnerProfile
 
@@ -44,9 +50,19 @@ class OnDemandAnswers:
 
             _, plan = await CurrentPlanProvider.for_profile(profile)
 
+            # valida contra o histórico real: o que foi de fato treinado
+            # aparece como feito; o resto do passado, como não feito
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            done_days = WeeklyPlanMatcher.fulfilled_days(
+                plan,
+                history.activities,
+            )
+
             return WeeklyPlanMessageFormatter.week_plan_message(
                 runner.name,
                 plan,
+                done_days=done_days,
             )
 
         return None
