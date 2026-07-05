@@ -338,9 +338,12 @@ class WeeklyPlanMessageFormatter:
             )
 
             return [
+                "Aquecimento: comece devagar nos primeiros minutos",
                 f"Execução: {session.planned_duration_minutes} min de "
-                f"caminhada em ritmo confortável{pace}",
+                f"caminhada em ritmo confortável{pace}, respiração "
+                f"tranquila e postura ereta",
                 "Foco: criar o hábito e a base aeróbica, sem pressa",
+                "Dica: se sobrar fôlego, pode apertar o passo no fim",
             ]
 
         if code == "RUN_WALK":
