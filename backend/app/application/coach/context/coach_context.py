@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
@@ -26,6 +27,10 @@ class CoachContext:
     planned: PlannedSession | None
 
     executed: EnrichedActivity
+
+    # data (calendário) da sessão planejada que casou com o treino —
+    # para a análise mostrar "Sábado (04/07)" no bloco Planejado
+    planned_date: date | None = None
 
     # próxima sessão futura do plano (para o "🎯 Próximo treino")
     next_planned: PlannedSession | None = None
