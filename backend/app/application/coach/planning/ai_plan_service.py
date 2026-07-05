@@ -4,6 +4,9 @@ from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
+from app.application.coach.planning.executed_week_summary import (
+    ExecutedWeekSummary,
+)
 from app.application.coach.planning.plan_context_builder import (
     PlanContextBuilder,
 )
@@ -112,6 +115,11 @@ class AIPlanService:
 
         weeks_to_race = AIPlanService._weeks_to_race(goal, week_start)
 
+        executed = ExecutedWeekSummary.build(
+            previous_plan,
+            history.activities,
+        )
+
         return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
@@ -119,6 +127,7 @@ class AIPlanService:
             baseline=baseline,
             recent_adherence=recent_adherence,
             last_plan=previous_plan,
+            executed=executed,
             memory=memory,
             weeks_to_race=weeks_to_race,
             run_walk=run_walk,

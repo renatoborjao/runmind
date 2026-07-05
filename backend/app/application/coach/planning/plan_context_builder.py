@@ -23,6 +23,7 @@ class PlanContextBuilder:
         last_plan: TrainingPlan | None,
         memory: str,
         weeks_to_race: int | None,
+        executed: str = "",
         run_walk: bool = False,
     ) -> str:
 
@@ -71,6 +72,11 @@ class PlanContextBuilder:
         if last_plan is not None and last_plan.sessions:
 
             lines.append(PlanContextBuilder._last_plan_line(last_plan))
+
+        # o VIVO: o que ele realmente executou (pace/distância por treino)
+        if executed:
+
+            lines.append(executed)
 
         if runner.injuries:
 
