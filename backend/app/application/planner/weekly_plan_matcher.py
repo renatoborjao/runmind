@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from app.core.weekdays import weekday_name
 from app.domain.entities.activity import Activity
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
@@ -69,17 +70,44 @@ class WeeklyPlanMatcher:
 
                 continue
 
-            executed_km = activity.distance / 1000
+            chosen = WeeklyPlanMatcher._match_one(activity, remaining)
 
-            best = min(
-                remaining,
-                key=lambda session: abs(
-                    (session.planned_distance_km or 0) - executed_km
-                ),
-            )
+            remaining.remove(chosen)
 
-            remaining.remove(best)
-
-            assignments[activity.id] = best
+            assignments[activity.id] = chosen
 
         return assignments
+
+    @staticmethod
+    def _match_one(
+        activity: Activity,
+        remaining: list[PlannedSession],
+    ) -> PlannedSession:
+        """Prioriza o DIA: treinou num dia que tem sessão planejada ->
+        casa com a sessão daquele dia (o atleta cumpriu o dia). Só quando
+        treinou num dia SEM sessão (fora do plano) cai na distância mais
+        próxima."""
+
+        activity_day = weekday_name(activity.start_date)
+
+        same_day = next(
+            (
+                session
+                for session in remaining
+                if session.day.lower() == activity_day.lower()
+            ),
+            None,
+        )
+
+        if same_day is not None:
+
+            return same_day
+
+        executed_km = activity.distance / 1000
+
+        return min(
+            remaining,
+            key=lambda session: abs(
+                (session.planned_distance_km or 0) - executed_km
+            ),
+        )

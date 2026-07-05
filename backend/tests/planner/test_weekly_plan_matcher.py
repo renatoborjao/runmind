@@ -136,17 +136,33 @@ def test_no_sessions_means_extra():
     assert WeeklyPlanMatcher.match(plan, [run], run) is None
 
 
-def test_greedy_is_chronological_not_by_id():
-    """Corrida mais antiga escolhe primeiro, independente da ordem/id."""
+def test_run_on_a_planned_day_matches_that_day_over_distance():
+    """Bug do Renato: treinou no SÁBADO (dia do longão); mesmo correndo
+    uma distância curta, casa com a sessão do sábado — não com a de menor
+    diferença de distância (o intervalado de 4.2)."""
+
+    plan = _typical_plan()  # Ter 3.5, Qui 4.2, Sáb 9.1
+
+    saturday_short = _run(5, 4.3, 1)  # sábado, mas correu só 4.3 km
+
+    matched = WeeklyPlanMatcher.match(plan, [saturday_short], saturday_short)
+
+    assert matched.day == "Saturday"
+    assert matched.planned_distance_km == 9.1
+
+
+def test_distance_fallback_is_chronological_not_by_id():
+    """Fora dos dias do plano, o fallback por distância respeita a ordem
+    cronológica, independente do id."""
 
     plan = _plan([
         _session("Tuesday", 4.0, "EASY"),
         _session("Saturday", 9.0, "LONG_RUN"),
     ])
 
-    # id fora de ordem de propósito
-    long_first = _run(1, 9.0, 50)   # terça, longão
-    easy_later = _run(4, 4.0, 10)   # sexta, rodagem
+    # dias FORA do plano (segunda e quarta): cai na distância
+    long_first = _run(0, 9.0, 50)   # segunda, longo
+    easy_later = _run(2, 4.0, 10)   # quarta, leve
 
     activities = [easy_later, long_first]
 

@@ -33,6 +33,7 @@ from app.application.planner.pace_formatter import (
 )
 from app.core.weekdays import (
     weekday_label,
+    weekday_name,
 )
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
@@ -52,7 +53,10 @@ class CoachWriter:
 
         return CoachMessage(
             greeting=CoachWriter._greeting(summary.runner_name),
-            planned_lines=CoachWriter._planned_lines(context.planned),
+            planned_lines=CoachWriter._planned_lines(
+                context.planned,
+                context.planned_date,
+            ),
             executed_lines=CoachWriter._executed_lines(context.executed),
             positives=CoachWriter._render_all(summary.positives),
             improvements=CoachWriter._render_all(summary.improvements),
@@ -74,6 +78,7 @@ class CoachWriter:
     @staticmethod
     def _planned_lines(
         planned: PlannedSession | None,
+        planned_date=None,
     ) -> list[str]:
 
         # treino extra: sem sessão planejada, a seção some da mensagem
@@ -81,13 +86,27 @@ class CoachWriter:
 
             return []
 
-        return [
+        lines = []
+
+        # dia + data da sessão planejada (deixa claro qual dia do plano
+        # está sendo comparado — nada de se perder na data)
+        if planned_date is not None:
+
+            lines.append(
+                f"{weekday_label(planned.day)} "
+                f"({planned_date.strftime('%d/%m')})"
+            )
+
+        lines.append(
             plan_workout_label(
                 planned.workout_type,
                 planned.planned_distance_km,
-            ),
-            f"{(planned.planned_distance_km or 0):.1f} km",
-        ]
+            )
+        )
+
+        lines.append(f"{(planned.planned_distance_km or 0):.1f} km")
+
+        return lines
 
     @staticmethod
     def _executed_lines(
@@ -96,7 +115,11 @@ class CoachWriter:
 
         distance = executed.activity.distance / 1000
 
+        start = executed.activity.start_date
+
         return [
+            f"{weekday_label(weekday_name(start))} "
+            f"({start.strftime('%d/%m')})",
             f"{distance:.1f} km",
             f"Ritmo: {PaceFormatter.format(executed.pace_min_km)} min/km",
             f"Tipo identificado: {workout_type_label(executed.training_type)}",

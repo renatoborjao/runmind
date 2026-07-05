@@ -31,6 +31,7 @@ class CoachContextBuilder:
         history: TrainingHistory,
         assessment: TrainingAssessment,
         next_planned: PlannedSession | None = None,
+        planned_date=None,
     ) -> CoachContext:
 
         return CoachContext(
@@ -40,6 +41,8 @@ class CoachContextBuilder:
             planned=planned,
 
             executed=executed,
+
+            planned_date=planned_date,
 
             next_planned=next_planned,
 
