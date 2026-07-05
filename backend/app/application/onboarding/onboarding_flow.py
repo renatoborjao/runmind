@@ -879,6 +879,7 @@ class OnboardingFlow:
             metrics=metrics,
             goal=goal,
             reference_date=reference_date,
+            history=history,
         )
 
         # IA revisora do primeiro plano: sinaliza qualquer sessão irreal

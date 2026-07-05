@@ -48,6 +48,7 @@ class CurrentPlanProvider:
             metrics=metrics,
             goal=goal,
             force=force,
+            history=history,
         )
 
         return runner, plan

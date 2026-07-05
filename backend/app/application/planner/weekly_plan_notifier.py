@@ -84,6 +84,7 @@ class WeeklyPlanNotifier:
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+            history=history,
         )
 
         # IA revisora: marca sessões irreais pra este atleta (uma vez por

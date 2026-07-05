@@ -50,6 +50,7 @@ async def get_plan(profile: str = "renato"):
             assessment=assessment,
             metrics=metrics,
             goal=goal,
+            history=history,
         )
 
         return {

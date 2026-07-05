@@ -5,7 +5,19 @@ from app.application.history.weekly_volume_analyzer import (
     WeeklyVolumeAnalyzer,
 )
 from app.domain.entities.runner_baseline import RunnerBaseline
+from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
+
+_EMPTY = RunnerBaseline(
+    has_history=False,
+    weekly_km=0.0,
+    last_week_km=0.0,
+    max_week_km=0.0,
+    runs_per_week=0.0,
+    typical_run_km=0.0,
+    longest_km=0.0,
+    trend="estável",
+)
 
 # quantas semanas recentes definem a frequência real
 FREQUENCY_WINDOW_WEEKS = 4
@@ -19,22 +31,18 @@ class RunnerBaselineBuilder:
     determinístico — mesma base de treino, mesmo retrato."""
 
     @staticmethod
-    def build(history: TrainingHistory) -> RunnerBaseline:
+    def build(
+        history: TrainingHistory,
+        runner: RunnerProfile | None = None,
+    ) -> RunnerBaseline:
 
         activities = history.activities
 
+        # Sem histórico do Strava: usa o retrato DECLARADO no onboarding
+        # (já corre X km/semana em Y dias) — mesma lógica de evolução.
         if not activities:
 
-            return RunnerBaseline(
-                has_history=False,
-                weekly_km=0.0,
-                last_week_km=0.0,
-                max_week_km=0.0,
-                runs_per_week=0.0,
-                typical_run_km=0.0,
-                longest_km=0.0,
-                trend="estável",
-            )
+            return RunnerBaselineBuilder._declared(runner)
 
         weekly = WeeklyVolumeAnalyzer.analyze(history)
 
@@ -57,6 +65,32 @@ class RunnerBaselineBuilder:
             typical_run_km=round(median(distances_km), 1),
             longest_km=longest_km,
             trend=RunnerBaselineBuilder._trend(history),
+        )
+
+    @staticmethod
+    def _declared(runner: RunnerProfile | None) -> RunnerBaseline:
+        """Retrato inicial de quem declarou correr mas ainda não tem Strava:
+        volume/dias autodeclarados viram o ponto de partida da evolução."""
+
+        if runner is None or not runner.initial_weekly_km:
+
+            return _EMPTY
+
+        weekly = round(runner.initial_weekly_km, 1)
+
+        days = max(runner.weekly_training_days, 1)
+
+        typical = round(weekly / days, 1)
+
+        return RunnerBaseline(
+            has_history=False,
+            weekly_km=weekly,
+            last_week_km=weekly,
+            max_week_km=weekly,
+            runs_per_week=float(days),
+            typical_run_km=typical,
+            longest_km=typical,
+            trend="estável",
         )
 
     @staticmethod
