@@ -6,6 +6,9 @@ import httpx
 from app.application.services.strava.webhook_service import (
     WebhookService,
 )
+from app.application.use_cases.load_training_history import (
+    LoadTrainingHistory,
+)
 from app.core.config import get_settings
 from app.infrastructure.integrations.evolution.phone_normalizer import (
     PhoneNormalizer,
@@ -116,6 +119,22 @@ async def callback(
             profile,
             state,
             athlete_id,
+        )
+
+    # Assim que conecta, já puxa e ARQUIVA o histórico do Strava — o coach
+    # passa a conhecer o atleta na hora. Vale inclusive pra quem treina com
+    # treinador humano: o RunMind não gera o plano dele, mas usa o histórico
+    # como contexto/insight. Falha aqui não derruba a conexão (o histórico
+    # também carrega depois, no chat/treino/lembrete).
+    try:
+
+        await LoadTrainingHistory.execute(profile=profile)
+
+    except Exception as e:
+
+        print(
+            f"Falha ao pré-carregar histórico de '{profile}' "
+            f"na conexão do Strava: {e}"
         )
 
     return {

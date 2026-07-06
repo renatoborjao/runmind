@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -78,7 +78,10 @@ def test_callback_with_existing_profile_saves_tokens_and_athlete_id(
         patch(f"{MODULE}.OnboardingStateRepository",
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
+        patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
     ):
+
+        mock_history.execute = AsyncMock()
 
         client = TestClient(app)
 
@@ -96,6 +99,9 @@ def test_callback_with_existing_profile_saves_tokens_and_athlete_id(
         mock_token_store_cls.assert_called_once_with("fulano")
         saved_tokens = mock_token_store_cls.return_value.save.call_args[0][0]
         assert saved_tokens["access_token"] == "at"
+
+        # ao conectar, já puxa/arquiva o histórico do Strava do atleta
+        mock_history.execute.assert_awaited_once_with(profile="fulano")
 
         # athlete_id persistido, chaves extras preservadas
         data = json.loads(
@@ -126,7 +132,10 @@ def test_callback_during_onboarding_stashes_athlete_id_in_state(
         patch(f"{MODULE}.OnboardingStateRepository",
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
+        patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
     ):
+
+        mock_history.execute = AsyncMock()
 
         client = TestClient(app)
 
@@ -167,7 +176,10 @@ def test_callback_without_state_keeps_renato_behavior(tmp_path):
         patch(f"{MODULE}.OnboardingStateRepository",
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
+        patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
     ):
+
+        mock_history.execute = AsyncMock()
 
         client = TestClient(app)
 
