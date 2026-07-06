@@ -48,6 +48,71 @@ def test_format_includes_runner_name_and_week_start():
     assert "20/07" in text
 
 
+def test_external_session_shows_coach_text_without_duplicate_km():
+    """Plano do treinador (tipo desconhecido): o cabeçalho já traz a km;
+    o detalhe mostra o objetivo/observações do treinador, sem repetir a
+    distância."""
+
+    plan = _plan([
+        _session(
+            "Tuesday", "Caminhada com corrida", 5.0,
+            objective="HIIT 2x2k ritmo moderado",
+            notes="Inclinar a esteira 1-2%",
+        ),
+    ])
+
+    lines = WeeklyPlanMessageFormatter.session_lines(plan)
+
+    # cabeçalho com a distância uma única vez
+    header = lines[0]
+    assert "Caminhada com corrida · 5.0 km" in header
+
+    # detalhe traz o que o treinador escreveu, não a km repetida
+    # (bullets de detalhe são indentados: "   • ...")
+    detail = [line for line in lines if line.startswith("   •")]
+    assert any("HIIT 2x2k" in line for line in detail)
+    assert any("Inclinar a esteira" in line for line in detail)
+    assert not any("5.0 km" in line for line in detail)
+
+
+def test_external_session_splits_multiline_text_into_clean_bullets():
+    """Texto do treinador com várias linhas (e '•' crus embutidos) vira um
+    bullet limpo por linha — não um blocão só com o resto vazando."""
+
+    plan = _plan([
+        _session(
+            "Tuesday", "Caminhada com corrida", 5.0,
+            objective="Aquecimento + HIIT 2x2k",
+            notes="OBS: inclinar 1-2%\n• 2 x (2km HIIT)\n• 1km CAM",
+        ),
+    ])
+
+    lines = WeeklyPlanMessageFormatter.session_lines(plan)
+
+    detail = [line for line in lines if line.startswith("   •")]
+
+    assert "   • Aquecimento + HIIT 2x2k" in detail
+    assert "   • OBS: inclinar 1-2%" in detail
+    assert "   • 2 x (2km HIIT)" in detail
+    assert "   • 1km CAM" in detail
+    # nada de "•" cru duplicado herdado do texto do treinador
+    assert not any("• •" in line for line in detail)
+
+
+def test_external_session_without_extra_text_is_header_only():
+    """Sem objetivo/notas úteis, a sessão externa vira só o cabeçalho —
+    nenhum bullet repetindo a distância."""
+
+    plan = _plan([
+        _session("Tuesday", "Corrida", 5.0, objective="", notes=""),
+    ])
+
+    lines = WeeklyPlanMessageFormatter.session_lines(plan)
+
+    detail = [line for line in lines if line.startswith("   •")]
+    assert detail == []
+
+
 def test_workout_types_are_ptbr_runner_language():
 
     plan = _plan([

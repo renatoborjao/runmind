@@ -328,10 +328,46 @@ _DAY_ABBR = {
     "dom": "Sunday",
 }
 
+# posição de cada dia (0=segunda … 6=domingo), para expandir intervalos
+_DAY_INDEX = {
+    "segunda": 0, "terca": 1, "quarta": 2, "quinta": 3,
+    "sexta": 4, "sabado": 5, "domingo": 6,
+    "seg": 0, "ter": 1, "qua": 2, "qui": 3, "sex": 4, "sab": 5, "dom": 6,
+}
+
+_DAY_TOKEN = "|".join(_DAY_INDEX)
+
+# intervalo entre dois dias: "segunda a sexta", "de seg à sex",
+# "segunda até sexta", "seg-sex". O conector "e" NÃO entra aqui de
+# propósito — "segunda e sexta" são só esses dois dias, não o intervalo.
+_DAY_RANGE = re.compile(
+    rf"\b({_DAY_TOKEN})\b\s*(?:a|ate|ao|-|/)\s*\b({_DAY_TOKEN})\b"
+)
+
+# forma ordinal comum no Brasil: "2ª feira" = segunda … "6ª feira" = sexta.
+# _norm já transforma "ª" em "a" (NFKD), então casamos "2a", "3a"… "6a".
+# Exige o sufixo "a" de propósito: "5" solto NÃO é quinta (evita confundir
+# com quem responde "5" pensando em "5 dias por semana").
+_ORDINAL = {
+    "2": "segunda", "3": "terca", "4": "quarta", "5": "quinta", "6": "sexta",
+}
+
+_ORDINAL_RE = re.compile(r"\b([2-6])a(?:\s*feira)?\b")
+
+
+def _expand_ordinals(normalized: str) -> str:
+    """Reescreve "2a"/"2a feira" como "segunda", pra reusar a lógica de
+    lista e de intervalo ("2a a 6a" vira "segunda a sexta")."""
+
+    return _ORDINAL_RE.sub(
+        lambda match: f" {_ORDINAL[match.group(1)]} ",
+        normalized,
+    )
+
 
 def _days(text: str) -> dict | None:
 
-    normalized = _norm(text)
+    normalized = _expand_ordinals(_norm(text))
 
     if any(
         marker in normalized
@@ -349,6 +385,13 @@ def _days(text: str) -> dict | None:
 
         found += ["Saturday", "Sunday"]
 
+    # intervalo "segunda a sexta": expande todos os dias entre as pontas
+    for start, end in _DAY_RANGE.findall(normalized):
+
+        low, high = sorted((_DAY_INDEX[start], _DAY_INDEX[end]))
+
+        found += [WEEKDAYS[index] for index in range(low, high + 1)]
+
     # nome completo por substring ("terça-feira" contém "terca")
     for word, english in _DAY_FULL.items():
 
@@ -363,7 +406,8 @@ def _days(text: str) -> dict | None:
 
             found.append(english)
 
-    days = list(dict.fromkeys(found))
+    # dedup preservando a ordem da semana (segunda → domingo)
+    days = [day for day in WEEKDAYS.values() if day in found]
 
     return {"days": days} if days else None
 
@@ -411,6 +455,114 @@ def _week_choice(text: str) -> dict | None:
         return {"start_week": "current"}
 
     return None
+
+
+# ==========================================================
+# CONFIRM_DAYS / CONFIRM (sim/não OU correção na conferência)
+# ==========================================================
+
+# pistas de que o atleta está corrigindo, não confirmando ("na verdade
+# corro seg a sex"). Um único dia solto só conta como correção com uma
+# dessas pistas — assim "pode sim, começando segunda" segue como "sim".
+_CORRECTION_CUES = (
+    "na verdade",
+    "corrig",
+    "errad",
+    "errei",
+    "mud",
+    "troc",
+    "posso correr",
+    "consigo correr",
+    "quero correr",
+    "prefiro",
+    "seria",
+)
+
+# rótulos/unidades que indicam correção de OUTRO campo do resumo (peso,
+# idade, altura, nome, objetivo). Quando aparecem no CONFIRM, o determinístico
+# se cala (retorna None) e deixa o Gemini extrair o campo — nunca deve ler um
+# "sim" solto e finalizar com um dado que o atleta acabou de corrigir.
+_FIELD_SIGNAL_MARKERS = (
+    "kg",
+    "quilo",
+    "peso",
+    "pesa",
+    "anos",
+    "idade",
+    "altura",
+    "cm",
+    "metro",
+    "nome",
+    "chamo",
+    "objetivo",
+    "meta",
+    "prova",
+    "maratona",
+    "km",
+)
+
+# altura em metros ("1,90" / "1.90"): sinal de correção de altura
+_METER_RE = re.compile(r"\b[12][.,]\d")
+
+
+def _days_correction(text: str) -> list[str] | None:
+    """Reescrita de dias na conferência: 2+ dias (ou intervalo), ou 1 dia
+    com pista de correção. Devolve a lista, ou None se não for correção."""
+
+    parsed_days = _days(text)
+
+    if not parsed_days:
+
+        return None
+
+    days = parsed_days["days"]
+
+    has_cue = any(cue in _norm(text) for cue in _CORRECTION_CUES)
+
+    if len(days) >= 2 or has_cue:
+
+        return days
+
+    return None
+
+
+def _confirm_days_only(text: str) -> dict | None:
+    """CONFIRM_DAYS: só dias importam aqui — reescrita de dias tem prioridade
+    sobre o sim/não."""
+
+    days = _days_correction(text)
+
+    if days is not None:
+
+        return {"corrections": {"days": days}}
+
+    return _yn(text, "confirmed")
+
+
+def _confirm_summary(text: str) -> dict | None:
+    """CONFIRM (resumo completo): dias saem no determinístico; sinais de
+    correção de outros campos (kg, anos, altura, objetivo...) caem no Gemini
+    pra extração estruturada, mesmo que a frase contenha um "sim"."""
+
+    days = _days_correction(text)
+
+    if days is not None:
+
+        return {"corrections": {"days": days}}
+
+    normalized = _norm(text)
+
+    has_field_signal = (
+        any(marker in normalized for marker in _FIELD_SIGNAL_MARKERS)
+        or any(cue in normalized for cue in _CORRECTION_CUES)
+        or bool(_METER_RE.search(normalized))
+    )
+
+    if has_field_signal:
+
+        return None
+
+    return _yn(text, "confirmed")
 
 
 # ==========================================================
@@ -494,7 +646,8 @@ _HANDLERS = {
     "ASK_PACE": _pace,
     "ASK_DAYS": _days,
     "ASK_WEEK_CHOICE": _week_choice,
-    "CONFIRM": lambda text: _yn(text, "confirmed"),
+    "CONFIRM_DAYS": _confirm_days_only,
+    "CONFIRM": _confirm_summary,
     # ASK_GOAL fica só no Gemini: prova/tempo/data pedem interpretação.
 }
 

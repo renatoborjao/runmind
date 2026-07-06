@@ -87,8 +87,24 @@ STEP_INSTRUCTIONS = {
         'campos sem informação: null'
     ),
     "CONFIRM": (
-        'O corredor confirmou que quer o plano?\n'
-        'Formato: {"confirmed": true}'
+        'O corredor está revisando o resumo do cadastro. Ele pode: (a) '
+        'confirmar tudo -> {"confirmed": true}; (b) desistir do cadastro '
+        '("não quero", "deixa pra lá") -> {"confirmed": false}; (c) '
+        'corrigir um ou mais campos -> extraia SÓ os que ele citou, em '
+        '"corrections". Campos: name (str), age (int), weight (kg, número), '
+        'height (metros — "1,90"/"190cm" viram 1.9), days (lista '
+        'Monday..Sunday), goal (str) com target_race, target_time '
+        '(HH:MM:SS) e race_date (ISO) quando houver.\n'
+        'Formato correção: {"corrections": {"weight": 130}} — só o que '
+        'mudou. Não confunda desistir do cadastro com corrigir um campo.'
+    ),
+    "CONFIRM_DAYS": (
+        'Mostramos os dias de treino e pedimos confirmação. Se ele '
+        'confirmar, {"confirmed": true}; se disser que estão errados sem '
+        'dar novos, {"confirmed": false}; se ele corrigir citando outros '
+        'dias, liste-os em inglês capitalizado (Monday..Sunday).\n'
+        'Formato: {"confirmed": true} ou '
+        '{"corrections": {"days": ["Monday", "Wednesday", "Friday"]}}'
     ),
     "ASK_WEEK_CHOICE": (
         'O corredor quer começar o plano NESTA semana (atual) ou só na '

@@ -40,6 +40,72 @@ def test_confirm_maps_to_confirmed_key():
     assert parse("CONFIRM", "não, deixa pra lá") == {"confirmed": False}
 
 
+def test_confirm_days_correction_takes_priority():
+
+    # atleta reescreve os dias na conferência (bug do Adolfo)
+    assert parse(
+        "CONFIRM", "Eu posso correr segunda terça quarta quinta e sexta"
+    ) == {
+        "corrections": {
+            "days": [
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+            ],
+        },
+    }
+
+
+def test_confirm_days_range_correction_beats_negation():
+
+    # "não, corro de seg a sex" é correção — NÃO deve cancelar o cadastro
+    assert parse("CONFIRM", "não, corro de segunda a sexta") == {
+        "corrections": {
+            "days": [
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+            ],
+        },
+    }
+
+
+def test_confirm_single_day_without_cue_stays_yes():
+
+    # "pode sim, começando segunda" é confirmação, não correção de 1 dia
+    assert parse("CONFIRM", "pode sim, começando segunda") == {
+        "confirmed": True,
+    }
+
+
+def test_confirm_single_day_with_cue_is_correction():
+
+    assert parse("CONFIRM", "na verdade só quinta") == {
+        "corrections": {"days": ["Thursday"]},
+    }
+
+
+def test_confirm_field_correction_defers_to_gemini():
+
+    # correção de outro campo (rótulo/unidade) cai no Gemini pra extração
+    for answer in (
+        "na verdade meu peso é 130kg",
+        "tenho 36 anos",
+        "minha altura é 1,90",
+        "meu objetivo é a maratona de SP",
+    ):
+
+        assert parse("CONFIRM", answer) is None, answer
+
+
+def test_confirm_days_step_uses_corrections_shape():
+
+    assert parse("CONFIRM_DAYS", "segunda a sexta") == {
+        "corrections": {
+            "days": [
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+            ],
+        },
+    }
+    assert parse("CONFIRM_DAYS", "sim") == {"confirmed": True}
+
+
 # ==========================================================
 # Nome
 # ==========================================================
@@ -173,6 +239,64 @@ def test_days_weekend_and_everyday():
             "Friday", "Saturday", "Sunday",
         ],
     }
+
+
+def test_days_range_expands_all_days_between():
+
+    # "segunda a sexta" = o intervalo inteiro, não só as pontas (bug do Adolfo)
+    assert parse("ASK_DAYS", "segunda a sexta") == {
+        "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    }
+
+
+def test_days_range_variants():
+
+    for answer in (
+        "de segunda à sexta",
+        "segunda até sexta",
+        "seg a sex",
+        "seg-sex",
+    ):
+
+        assert parse("ASK_DAYS", answer) == {
+            "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        }, answer
+
+
+def test_days_conjunction_is_not_a_range():
+
+    # "segunda e sexta" continua sendo só esses dois dias
+    assert parse("ASK_DAYS", "segunda e sexta") == {
+        "days": ["Monday", "Friday"],
+    }
+
+
+def test_days_range_plus_extra_day():
+
+    assert parse("ASK_DAYS", "de terça a quinta e domingo") == {
+        "days": ["Tuesday", "Wednesday", "Thursday", "Sunday"],
+    }
+
+
+def test_days_ordinal_forms():
+
+    # "2ª feira" = segunda … "6ª feira" = sexta
+    assert parse("ASK_DAYS", "2ª, 4ª e 6ª feira") == {
+        "days": ["Monday", "Wednesday", "Friday"],
+    }
+
+
+def test_days_ordinal_range():
+
+    assert parse("ASK_DAYS", "de 2ª a 6ª") == {
+        "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    }
+
+
+def test_days_bare_number_is_not_a_day():
+
+    # "5" solto (ex.: pensando em "5 dias/semana") não vira quinta-feira
+    assert parse("ASK_DAYS", "5") is None
 
 
 def test_days_none_found_defers():

@@ -64,9 +64,10 @@ class ExternalPlanEvent:
             reply = (
                 "Plano do seu treinador registrado! ✅\n\n"
                 f"{sessions_block}\n\n"
-                "Vou acompanhar esses treinos e te dar feedback a "
-                "cada um. Se algo saiu diferente do plano, me manda "
-                "a foto de novo que eu atualizo."
+                "Vou acompanhar esses treinos e te dar feedback a cada "
+                "um. Se o plano tem mais dias, é só mandar os outros "
+                "prints que eu vou somando. Corrigiu algum dia? Manda a "
+                "foto de novo que eu atualizo."
             )
 
         await NotificationService.send(

@@ -137,10 +137,16 @@ class OnboardingFlow:
 
         step = state["step"]
 
-        # mídia só é aceita no passo do plano do treinador
+        # mídia só é aceita no fluxo do plano do treinador — e agora em
+        # VÁRIOS prints (um por dia): aceita no passo de mídia e também na
+        # conferência, acumulando as sessões até o atleta confirmar.
         if media is not None:
 
-            if step == "AWAIT_PLAN_MEDIA":
+            accepts_plan_media = step == "AWAIT_PLAN_MEDIA" or (
+                step == "CONFIRM" and state["answers"].get("has_coach")
+            )
+
+            if accepts_plan_media:
 
                 return await OnboardingFlow._on_plan_media(
                     address,
@@ -440,21 +446,104 @@ class OnboardingFlow:
         return QUESTIONS["ASK_DAYS"]
 
     @staticmethod
-    async def _on_ask_days(address, state, parsed, repo) -> str:
-
-        raw_days = parsed.get("days") or []
+    def _sanitize_days(raw_days) -> list[str]:
+        """Mantém só nomes válidos (Monday..Sunday), sem repetição e na
+        ordem em que vieram."""
 
         valid_names = set(WEEKDAYS.values())
 
-        days = []
+        days: list[str] = []
 
-        for day in raw_days:
+        for day in raw_days or []:
 
-            if isinstance(day, str) and day in valid_names:
+            if isinstance(day, str) and day in valid_names and day not in days:
 
-                if day not in days:
+                days.append(day)
 
-                    days.append(day)
+        return days
+
+    @staticmethod
+    def _apply_corrections(state: dict, corrections: dict) -> list[str]:
+        """Aplica correções de campos do resumo na conferência, cada uma com
+        a MESMA validação do passo original. Devolve os campos alterados
+        (vazio se nada válido veio — aí o CONFIRM segue como sim/não)."""
+
+        if not isinstance(corrections, dict):
+
+            return []
+
+        answers = state["answers"]
+
+        applied: list[str] = []
+
+        name = corrections.get("name")
+
+        if isinstance(name, str) and name.strip():
+
+            # slug (id interno) fica estável — corrige só o nome de exibição
+            answers["name"] = name.strip()
+
+            applied.append("name")
+
+        age = corrections.get("age")
+
+        if isinstance(age, int) and 10 <= age <= 100:
+
+            answers["age"] = age
+
+            applied.append("age")
+
+        weight = corrections.get("weight")
+
+        if isinstance(weight, (int, float)) and 30 <= weight <= 250:
+
+            answers["weight"] = float(weight)
+
+            applied.append("weight")
+
+        height = corrections.get("height")
+
+        # altura em cm por engano (ex: 190 -> 1.90)
+        if isinstance(height, (int, float)) and height > 3:
+
+            height = height / 100
+
+        if isinstance(height, (int, float)) and 1.2 <= height <= 2.3:
+
+            answers["height"] = round(float(height), 2)
+
+            applied.append("height")
+
+        days = OnboardingFlow._sanitize_days(corrections.get("days"))
+
+        if days:
+
+            answers["days"] = days
+
+            applied.append("days")
+
+        goal = corrections.get("goal")
+
+        if isinstance(goal, str) and goal.strip():
+
+            answers["goal"] = goal.strip()
+
+            answers["target_race"] = corrections.get("target_race")
+
+            answers["target_time"] = corrections.get("target_time")
+
+            answers["race_date"] = OnboardingFlow._valid_iso_date(
+                corrections.get("race_date"),
+            )
+
+            applied.append("goal")
+
+        return applied
+
+    @staticmethod
+    async def _on_ask_days(address, state, parsed, repo) -> str:
+
+        days = OnboardingFlow._sanitize_days(parsed.get("days"))
 
         if not days:
 
@@ -462,11 +551,59 @@ class OnboardingFlow:
 
         state["answers"]["days"] = days
 
-        state["step"] = "ASK_GOAL"
+        # confirma os dias antes de seguir: evita desvio de interpretação
+        # ("segunda a sexta" vs "segunda e sexta") passar batido
+        state["step"] = "CONFIRM_DAYS"
 
         repo.save(address, state)
 
-        return QUESTIONS["ASK_GOAL"]
+        return OnboardingFlow._days_confirm_question(state)
+
+    @staticmethod
+    async def _on_confirm_days(address, state, parsed, repo) -> str:
+
+        # atleta reescreveu os dias em vez de responder sim/não:
+        # atualiza e pede confirmação de novo
+        corrections = parsed.get("corrections") or {}
+
+        corrected = OnboardingFlow._sanitize_days(corrections.get("days"))
+
+        if corrected:
+
+            state["answers"]["days"] = corrected
+
+            repo.save(address, state)
+
+            return (
+                "Ajustei! "
+                + OnboardingFlow._days_confirm_question(state)
+            )
+
+        confirmed = parsed.get("confirmed")
+
+        if confirmed is True:
+
+            state["step"] = "ASK_GOAL"
+
+            repo.save(address, state)
+
+            return QUESTIONS["ASK_GOAL"]
+
+        if confirmed is False:
+
+            # dias errados: volta a perguntar do zero
+            state["step"] = "ASK_DAYS"
+
+            repo.save(address, state)
+
+            return (
+                "Sem problema, vamos de novo. " + QUESTIONS["ASK_DAYS"]
+            )
+
+        # não deu pra entender sim/não nem novos dias: repete a confirmação
+        return (
+            RETRY_PREFIX + OnboardingFlow._days_confirm_question(state)
+        )
 
     @staticmethod
     async def _on_ask_goal(address, state, parsed, repo) -> str:
@@ -546,16 +683,94 @@ class OnboardingFlow:
                 "Consegue mandar uma foto mais nítida (ou o PDF)?"
             )
 
-        state["answers"]["external_sessions"] = sessions
+        existing = state["answers"].get("external_sessions") or []
+
+        first_batch = not existing
+
+        merged = OnboardingFlow._merge_sessions(existing, sessions)
+
+        state["answers"]["external_sessions"] = merged
 
         state["step"] = "CONFIRM"
 
         repo.save(address, state)
 
-        return OnboardingFlow._summary(state)
+        # primeiro print: mostra o resumo completo do cadastro (com o convite
+        # a mandar os outros dias). Prints seguintes: só confirma o que chegou.
+        if first_batch:
+
+            return OnboardingFlow._summary(state)
+
+        return OnboardingFlow._plan_media_more_ack(merged)
+
+    @staticmethod
+    def _merge_sessions(
+        existing: list[dict],
+        incoming: list[dict],
+    ) -> list[dict]:
+        """Junta as sessões de vários prints do plano. Dedup por dia (um
+        print novo do mesmo dia substitui o anterior); sessões sem dia
+        reconhecível são todas mantidas."""
+
+        merged: list[dict] = []
+
+        index_by_day: dict[str, int] = {}
+
+        for session in existing + incoming:
+
+            day = session.get("day") if isinstance(session, dict) else None
+
+            if isinstance(day, str) and day in index_by_day:
+
+                merged[index_by_day[day]] = session
+
+                continue
+
+            if isinstance(day, str):
+
+                index_by_day[day] = len(merged)
+
+            merged.append(session)
+
+        return merged
+
+    @staticmethod
+    def _plan_media_more_ack(sessions: list[dict]) -> str:
+        """Confirmação leve a cada print extra do plano (já estamos no
+        CONFIRM): mostra quantos treinos entraram e como fechar."""
+
+        days = [
+            weekday_label(session["day"])
+            for session in sessions
+            if isinstance(session, dict)
+            and isinstance(session.get("day"), str)
+        ]
+
+        days_txt = ", ".join(dict.fromkeys(days)) or "os treinos"
+
+        return (
+            f"✅ Registrei {len(sessions)} treino(s) até agora "
+            f"({days_txt}).\n\n"
+            "Se tiver mais dias no plano, manda os outros prints. "
+            "Quando estiver tudo, responde *sim* que eu fecho o cadastro."
+        )
 
     @staticmethod
     async def _on_confirm(address, state, parsed, repo) -> str:
+
+        # correção de qualquer campo na conferência ("na verdade peso 130",
+        # "meu objetivo é maratona", "corro de seg a sex"): aplica o que veio
+        # e reapresenta o resumo em vez de finalizar com o dado velho.
+        applied = OnboardingFlow._apply_corrections(
+            state,
+            parsed.get("corrections") or {},
+        )
+
+        if applied:
+
+            repo.save(address, state)
+
+            return "Corrigido! ✅\n\n" + OnboardingFlow._summary(state)
 
         confirmed = parsed.get("confirmed")
 
@@ -921,6 +1136,10 @@ class OnboardingFlow:
 
             return OnboardingFlow._summary(state)
 
+        if step == "CONFIRM_DAYS":
+
+            return OnboardingFlow._days_confirm_question(state)
+
         if step == "ASK_WEEK_CHOICE":
 
             return OnboardingFlow._week_choice_question(
@@ -943,6 +1162,20 @@ class OnboardingFlow:
             )
 
         return template
+
+    @staticmethod
+    def _days_confirm_question(state: dict) -> str:
+        """Eco dos dias escolhidos, pra o atleta confirmar antes de seguir."""
+
+        days = ", ".join(
+            weekday_label(day) for day in state["answers"]["days"]
+        )
+
+        return (
+            "Deixa eu confirmar pra não errar 👇\n\n"
+            f"Seus dias de treino: *{days}*.\n\n"
+            "Tá certo? (sim/não)"
+        )
 
     @staticmethod
     def _summary(state: dict) -> str:
@@ -987,12 +1220,28 @@ class OnboardingFlow:
                 f"• Treinador: sim — {plan_status}\n"
             )
 
-        question = (
-            "Posso registrar seu cadastro e acompanhar os treinos "
-            "do seu treinador? (sim/não)"
-            if answers.get("has_coach")
-            else "Posso montar seu plano com esses dados? (sim/não)"
-        )
+        if answers.get("has_coach"):
+
+            if answers.get("external_sessions"):
+
+                # plano pode ter mais dias em outros prints — convida a mandar
+                # antes de fechar (evita registrar só o primeiro treino)
+                question = (
+                    "📸 Se o plano do seu treinador tem mais dias, manda "
+                    "os outros prints agora. Quando estiver tudo certo, "
+                    "posso registrar e acompanhar? (sim/não)"
+                )
+
+            else:
+
+                question = (
+                    "Posso registrar seu cadastro e acompanhar os treinos "
+                    "do seu treinador? (sim/não)"
+                )
+
+        else:
+
+            question = "Posso montar seu plano com esses dados? (sim/não)"
 
         return (
             "Fechou! Confere se está tudo certo:\n\n"

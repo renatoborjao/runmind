@@ -112,6 +112,45 @@ def test_apply_returns_none_when_nothing_usable(tmp_path, monkeypatch):
     assert repo.load("fulano") is None
 
 
+def test_second_print_same_week_merges_by_day(tmp_path, monkeypatch):
+    """Treinador manda o plano em vários prints: os dias acumulam (não
+    sobrescreve), e o mesmo dia reenviado é substituído."""
+
+    repo = _isolated_repo(tmp_path, monkeypatch)
+
+    runner = make_runner(name="Fulano")
+
+    # print 1: terça
+    ExternalPlanService.apply(
+        "fulano", runner,
+        [{"day": "Tuesday", "workout_type": "Intervalado",
+          "distance_km": 8.0}],
+    )
+
+    # print 2: quinta (dia novo) -> acumula
+    ExternalPlanService.apply(
+        "fulano", runner,
+        [{"day": "Thursday", "workout_type": "Rodagem",
+          "distance_km": 6.0}],
+    )
+
+    # print 3: terça de novo, corrigida -> substitui a terça
+    plan = ExternalPlanService.apply(
+        "fulano", runner,
+        [{"day": "Tuesday", "workout_type": "Longão",
+          "distance_km": 12.0}],
+    )
+
+    days = [s.day for s in plan.sessions]
+    assert days == ["Tuesday", "Thursday"]
+
+    tuesday = next(s for s in plan.sessions if s.day == "Tuesday")
+    assert tuesday.workout_type == "Longão"
+    assert tuesday.planned_distance_km == 12.0
+
+    assert plan.weekly_volume == 18.0  # 12 (terça) + 6 (quinta)
+
+
 def test_duration_only_session_is_kept(tmp_path, monkeypatch):
 
     _isolated_repo(tmp_path, monkeypatch)

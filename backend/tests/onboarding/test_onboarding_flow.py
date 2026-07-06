@@ -97,6 +97,7 @@ FULL_CONVERSATION = [
     ("não, treino por conta", {"has_coach": False}),
     ("uns 32 minutos", {"typical_minutes": 32.0}),
     ("terça e sábado", {"days": ["Tuesday", "Saturday"]}),
+    ("isso mesmo", {"confirmed": True}),
     (
         "quero correr 10km em 55 minutos",
         {
@@ -171,6 +172,7 @@ NON_RUNNER_CONVERSATION = [
     ("de segunda a sexta", {"days": [
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
     ]}),
+    ("sim", {"confirmed": True}),
     ("saúde", {"goal": "Saúde", "target_race": None,
                 "target_time": None}),
     ("sim", {"confirmed": True}),
@@ -187,8 +189,11 @@ def test_non_runner_captures_movement_and_stores_capability(tmp_path):
     # após "não corro", pergunta como ele se move hoje (base do run/walk)
     assert "como você se movimenta" in replies[6]
 
-    # o resumo reflete a capacidade
-    assert "trote e caminhada" in replies[9]
+    # os dias são confirmados antes de seguir (eco dos dias escolhidos)
+    assert "confirmar" in replies[8].lower()
+
+    # o resumo reflete a capacidade (agora um passo depois, após confirmar)
+    assert "trote e caminhada" in replies[10]
 
     assert "Cadastro feito, Adolfo" in replies[-1]
 
@@ -294,6 +299,7 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
             "segunda, quarta e sexta",
             {"days": ["Monday", "Wednesday", "Friday"]},
         ),
+        ("confirmo", {"confirmed": True}),
         ("saúde", {"goal": "Saúde", "target_race": None,
                     "target_time": None}),
         ("sim", {"confirmed": True}),
@@ -377,6 +383,171 @@ def test_unparsed_answer_repeats_question(tmp_path):
     assert "Prazer, Fulano" in replies[2]
 
 
+def test_confirm_days_step_echoes_chosen_days(tmp_path):
+    """Depois dos dias, o bot ecoa a escolha e pede confirmação antes de
+    ir pro objetivo (evita desvio de interpretação)."""
+
+    replies, onboarding_repo, _ = _run_conversation(
+        tmp_path,
+        FULL_CONVERSATION[:12],  # até a resposta dos dias
+    )
+
+    # resposta à escolha dos dias: eco + pedido de confirmação
+    days_confirm = replies[-1]
+    assert "confirmar" in days_confirm.lower()
+    assert "terça-feira" in days_confirm
+    assert "sábado" in days_confirm
+
+    # ainda não avançou pro objetivo
+    assert onboarding_repo.load(PHONE)["step"] == "CONFIRM_DAYS"
+
+
+def test_correction_at_confirm_days_updates_and_reasks(tmp_path):
+    """No passo de confirmar os dias, reescrever os dias atualiza e pede
+    confirmação de novo — não avança com o valor antigo."""
+
+    conversation = FULL_CONVERSATION[:12] + [
+        (
+            "na verdade segunda, quarta e sexta",
+            {"corrections": {"days": ["Monday", "Wednesday", "Friday"]}},
+        ),
+        ("agora sim", {"confirmed": True}),
+        ("saúde", {"goal": "Saúde", "target_race": None,
+                    "target_time": None}),
+        ("sim", {"confirmed": True}),
+    ]
+
+    replies, _, profile_repo = _run_conversation(tmp_path, conversation)
+
+    # eco inicial mostrava terça/sábado
+    assert "terça-feira" in replies[11]
+
+    # após a correção, reecoa já com os dias novos
+    corrected_echo = replies[12]
+    assert "Ajustei" in corrected_echo
+    assert "segunda-feira" in corrected_echo
+    assert "sexta-feira" in corrected_echo
+
+    # perfil final sai com os dias corrigidos
+    data = json.loads(
+        (profile_repo.storage / "fulano.json").read_text(encoding="utf-8")
+    )
+    assert data["preferred_running_days"] == [
+        "Monday", "Wednesday", "Friday",
+    ]
+
+
+def test_reject_at_confirm_days_reasks_days(tmp_path):
+    """Dizer "não" na confirmação dos dias volta a perguntar os dias —
+    não apaga o cadastro."""
+
+    conversation = FULL_CONVERSATION[:12] + [
+        ("não, tá errado", {"confirmed": False}),
+    ]
+
+    replies, onboarding_repo, _ = _run_conversation(tmp_path, conversation)
+
+    assert "Quais dias" in replies[-1]
+    assert onboarding_repo.load(PHONE)["step"] == "ASK_DAYS"
+
+
+def test_confirm_days_correction_updates_and_reconfirms(tmp_path):
+    """Atleta corrige os dias na conferência (bug do Adolfo): o cadastro
+    NÃO é finalizado com os dias velhos — atualiza e reapresenta o resumo."""
+
+    full_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+
+    conversation = FULL_CONVERSATION[:-1] + [
+        (
+            "na verdade corro de segunda a sexta",
+            {"corrections": {"days": full_week}},
+        ),
+        ("agora sim, pode montar", {"confirmed": True}),
+    ]
+
+    replies, onboarding_repo, profile_repo = _run_conversation(
+        tmp_path,
+        conversation,
+    )
+
+    # a resposta à correção reapresenta o resumo, já com a semana cheia
+    correction_reply = replies[-2]
+    assert "Corrigido" in correction_reply
+    assert "segunda-feira" in correction_reply
+    assert "sexta-feira" in correction_reply
+    # ainda não finalizou: espera a confirmação
+    assert "Cadastro feito" not in correction_reply
+
+    # após confirmar, o perfil sai com os 5 dias corrigidos
+    assert "Cadastro feito, Fulano" in replies[-1]
+
+    data = json.loads(
+        (profile_repo.storage / "fulano.json").read_text(encoding="utf-8")
+    )
+    assert data["preferred_running_days"] == full_week
+    assert data["weekly_training_days"] == 5
+
+    assert onboarding_repo.load(PHONE) is None
+
+
+def test_confirm_field_correction_updates_then_finalizes(tmp_path):
+    """Correção de um campo não-dia (peso e objetivo) na conferência:
+    aplica, reapresenta o resumo e só finaliza com o dado novo."""
+
+    conversation = FULL_CONVERSATION[:-1] + [
+        (
+            "na verdade meu peso é 130kg e quero maratona",
+            {"corrections": {
+                "weight": 130.0,
+                "goal": "Maratona",
+                "target_race": "42 km",
+                "target_time": None,
+            }},
+        ),
+        ("isso, pode montar", {"confirmed": True}),
+    ]
+
+    replies, onboarding_repo, profile_repo = _run_conversation(
+        tmp_path,
+        conversation,
+    )
+
+    # a correção reapresenta o resumo já com peso e objetivo novos
+    correction_reply = replies[-2]
+    assert "Corrigido" in correction_reply
+    assert "130 kg" in correction_reply
+    assert "Maratona" in correction_reply
+    assert "Cadastro feito" not in correction_reply
+
+    assert "Cadastro feito, Fulano" in replies[-1]
+
+    data = json.loads(
+        (profile_repo.storage / "fulano.json").read_text(encoding="utf-8")
+    )
+    assert data["weight"] == 130.0
+    assert data["goal"] == "Maratona"
+    assert data["target_race"] == "42 km"
+
+    assert onboarding_repo.load(PHONE) is None
+
+
+def test_invalid_correction_falls_back_to_confirm_question(tmp_path):
+    """Correção fora de faixa (peso absurdo) é ignorada — não altera nem
+    finaliza; pede confirmação de novo."""
+
+    conversation = FULL_CONVERSATION[:-1] + [
+        ("peso 999", {"corrections": {"weight": 999.0}}),
+    ]
+
+    replies, onboarding_repo, _ = _run_conversation(tmp_path, conversation)
+
+    assert "Só confirmando" in replies[-1]
+    # segue no CONFIRM, com o peso original intacto
+    state = onboarding_repo.load(PHONE)
+    assert state["step"] == "CONFIRM"
+    assert state["answers"]["weight"] == 91.0
+
+
 def test_decline_at_confirm_resets_onboarding(tmp_path):
 
     conversation = FULL_CONVERSATION[:-1] + [
@@ -409,6 +580,7 @@ COACH_CONVERSATION_START = [
         "terça, quinta, sábado e domingo",
         {"days": ["Tuesday", "Thursday", "Saturday", "Sunday"]},
     ),
+    ("sim", {"confirmed": True}),
     ("maratona de SP", {"goal": "Maratona de SP",
                         "target_race": "42 km", "target_time": None}),
 ]
@@ -483,7 +655,9 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         )
 
         assert "plano da semana recebido (2 treinos)" in media_reply
-        assert "acompanhar os treinos" in media_reply
+        # convida a mandar os outros dias antes de fechar
+        assert "outros prints" in media_reply
+        assert "registrar e acompanhar" in media_reply
 
         # confirmação final cria perfil external_coach e salva o plano
         final = asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, "sim"))
@@ -501,6 +675,93 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         args = mock_service.apply.call_args.args
         assert args[0] == "treinada"
         assert args[2] == EXTRACTED_SESSIONS
+
+
+def test_coach_plan_accepts_multiple_prints(tmp_path):
+    """Plano do treinador em vários prints (um por dia): todos os treinos
+    entram, não só o primeiro (bug do onboarding do Mauricio)."""
+
+    onboarding_repo, profile_repo = _repos(tmp_path)
+
+    with (
+        patch(
+            f"{MODULE}.OnboardingStateRepository",
+            return_value=onboarding_repo,
+        ),
+        patch(
+            f"{MODULE}.RunnerProfileRepository",
+            return_value=profile_repo,
+        ),
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.download_media") as mock_download,
+        patch(f"{MODULE}.ExternalPlanExtractionEngine") as mock_engine,
+        patch(f"{MODULE}.ExternalPlanService") as mock_service,
+        patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
+    ):
+
+        mock_token_store.return_value.load.return_value = {"t": 1}
+
+        mock_parser.parse = AsyncMock(
+            side_effect=[p for _, p in COACH_CONVERSATION_START[1:]]
+            + [{"confirmed": True}],
+        )
+
+        mock_download.return_value = (b"img", "image/jpeg")
+
+        # cada print traz um dia diferente do plano
+        mock_engine.extract = AsyncMock(
+            side_effect=[
+                [{"day": "Tuesday", "workout_type": "Intervalado",
+                  "distance_km": 5.0}],
+                [{"day": "Thursday", "workout_type": "HIIT",
+                  "distance_km": 6.0}],
+                [{"day": "Saturday", "workout_type": "Longão",
+                  "distance_km": 10.0}],
+            ],
+        )
+
+        mock_service.apply.return_value = MagicMock()
+        mock_formatter.session_lines.return_value = ["linha"]
+
+        for text, _ in COACH_CONVERSATION_START:
+            asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, text))
+
+        # três prints, um de cada vez
+        first = asyncio.run(OnboardingFlow.handle(
+            "whatsapp", PHONE, "", media={"key_id": "1"}))
+        second = asyncio.run(OnboardingFlow.handle(
+            "whatsapp", PHONE, "", media={"key_id": "2"}))
+        third = asyncio.run(OnboardingFlow.handle(
+            "whatsapp", PHONE, "", media={"key_id": "3"}))
+
+        # primeiro print: resumo completo convidando a mandar mais
+        assert "outros prints" in first
+        # prints seguintes: confirmação leve com a contagem acumulada
+        assert "2 treino" in second
+        assert "3 treino" in third
+
+        asyncio.run(OnboardingFlow.handle("whatsapp", PHONE, "sim"))
+
+        # o plano registrado tem os 3 dias (não só o primeiro)
+        mock_service.apply.assert_called_once()
+        sessions_arg = mock_service.apply.call_args.args[2]
+        days = [s["day"] for s in sessions_arg]
+        assert days == ["Tuesday", "Thursday", "Saturday"]
+
+
+def test_coach_plan_resend_same_day_replaces(tmp_path):
+    """Reenviar o print do mesmo dia substitui (não duplica) a sessão."""
+
+    existing = [{"day": "Tuesday", "workout_type": "Rodagem",
+                 "distance_km": 5.0}]
+    incoming = [{"day": "Tuesday", "workout_type": "Intervalado",
+                 "distance_km": 8.0}]
+
+    merged = OnboardingFlow._merge_sessions(existing, incoming)
+
+    assert merged == [{"day": "Tuesday", "workout_type": "Intervalado",
+                       "distance_km": 8.0}]
 
 
 def test_media_outside_plan_step_is_deferred(tmp_path):

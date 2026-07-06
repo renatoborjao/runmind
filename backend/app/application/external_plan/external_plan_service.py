@@ -28,6 +28,26 @@ class ExternalPlanService:
 
             return None
 
+        week_start = WeeklyPlanService._week_start(today_local())
+
+        repository = WeeklyPlanRepository()
+
+        existing = repository.load(profile)
+
+        # mais um print do plano da MESMA semana (treinador manda o plano em
+        # várias imagens): mescla por dia, novo print substitui o dia. Plano
+        # de outra semana (ou primeiro print) começa do zero.
+        if (
+            existing is not None
+            and existing.source == EXTERNAL_SOURCE
+            and existing.week_start == week_start
+        ):
+
+            planned = ExternalPlanService._merge_planned(
+                existing.sessions,
+                planned,
+            )
+
         plan = TrainingPlan(
             athlete_name=runner.name,
             objective=runner.goal,
@@ -40,14 +60,40 @@ class ExternalPlanService:
                 1,
             ),
             running_days=[session.day for session in planned],
-            week_start=WeeklyPlanService._week_start(today_local()),
+            week_start=week_start,
             sessions=planned,
             source=EXTERNAL_SOURCE,
         )
 
-        WeeklyPlanRepository().save(profile, plan)
+        repository.save(profile, plan)
 
         return plan
+
+    @staticmethod
+    def _merge_planned(
+        existing: list[PlannedSession],
+        incoming: list[PlannedSession],
+    ) -> list[PlannedSession]:
+        """Junta sessões de vários prints da mesma semana: dedup por dia,
+        a sessão nova substitui a antiga daquele dia."""
+
+        merged: list[PlannedSession] = []
+
+        index_by_day: dict[str, int] = {}
+
+        for session in list(existing) + list(incoming):
+
+            if session.day in index_by_day:
+
+                merged[index_by_day[session.day]] = session
+
+                continue
+
+            index_by_day[session.day] = len(merged)
+
+            merged.append(session)
+
+        return merged
 
     @staticmethod
     def _to_planned_sessions(

@@ -267,7 +267,9 @@ class WeeklyPlanMessageFormatter:
 
         distance = session.planned_distance_km or 0
 
-        emoji = TYPE_EMOJI.get(code, "•")
+        # tipo conhecido tem emoji por intensidade; plano externo (treinador)
+        # usa um marcador de dia neutro
+        emoji = TYPE_EMOJI.get(code, "🔹")
 
         label = plan_workout_label(code, distance)
 
@@ -443,10 +445,28 @@ class WeeklyPlanMessageFormatter:
                 "Dica: se estiver cansado, pode virar caminhada",
             ]
 
-        # tipo desconhecido: linha simples
-        return [
-            f"{(session.planned_distance_km or 0):.1f} km{pace_range}",
-        ]
+        # tipo desconhecido (ex.: plano externo do treinador): o texto do
+        # treinador (objetivo + observações) costuma vir com várias linhas —
+        # renderiza CADA linha como um item limpo (sem "•/-" crus embutidos e
+        # sem repetir a distância, que já está no cabeçalho).
+        detail: list[str] = []
+
+        for block in (
+            getattr(session, "objective", "") or "",
+            getattr(session, "notes", "") or "",
+        ):
+
+            for raw_line in block.split("\n"):
+
+                line = raw_line.strip().lstrip("•-*·").strip()
+
+                if not line or line == code or line in detail:
+
+                    continue
+
+                detail.append(line)
+
+        return detail
 
     @staticmethod
     def _run_walk_detail(session) -> list[str]:
