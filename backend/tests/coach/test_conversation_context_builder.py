@@ -266,6 +266,7 @@ def test_next_session_summary_includes_real_date_and_pace():
 
     summary = ConversationContextBuilder._next_session_summary(
         plan,
+        TrainingHistory(activities=[]),
         reference_date=date(2026, 7, 20),
     )
 
@@ -294,6 +295,7 @@ def test_next_session_summary_includes_adjustment_reason_when_present():
 
     summary = ConversationContextBuilder._next_session_summary(
         plan,
+        TrainingHistory(activities=[]),
         reference_date=date(2026, 7, 20),
     )
 
@@ -328,11 +330,66 @@ def test_next_session_summary_picks_closest_upcoming_not_first():
     # reference_date cai numa quarta — a segunda já passou, o próximo é domingo
     summary = ConversationContextBuilder._next_session_summary(
         plan,
+        TrainingHistory(activities=[]),
         reference_date=date(2026, 7, 22),
     )
 
     assert "domingo" in summary
     assert "Long Run" in summary
+
+
+def test_next_session_summary_no_past_fallback():
+    """Todas as sessões já passaram: não devolve uma data passada como
+    "próximo treino" — avisa que não há treino restante."""
+
+    plan = _plan([
+        PlannedSession(
+            day="Monday", workout_type="Easy Run", objective="Base",
+            planned_distance_km=6.0, planned_duration_minutes=None,
+            target_pace_min=None, target_pace_max=None,
+        ),
+        PlannedSession(
+            day="Wednesday", workout_type="Intervalado", objective="VO2",
+            planned_distance_km=8.0, planned_duration_minutes=None,
+            target_pace_min=None, target_pace_max=None,
+        ),
+    ])
+
+    summary = ConversationContextBuilder._next_session_summary(
+        plan,
+        TrainingHistory(activities=[]),
+        reference_date=date(2026, 7, 25),  # sábado, tudo já passou
+    )
+
+    assert "sem treino planejado restante" in summary
+    assert "22/07" not in summary  # não recita a data passada
+
+
+def test_week_plan_summary_flags_ended_week_for_stale_plan():
+    """Plano de semana já encerrada (ex.: externo não renovado): marca as
+    datas como passadas, pra o coach não recitar como semana atual."""
+
+    session = PlannedSession(
+        day="Tuesday", workout_type="Caminhada com corrida",
+        objective="HIIT 2x2k", planned_distance_km=5.0,
+        planned_duration_minutes=None,
+        target_pace_min=None, target_pace_max=None,
+    )
+
+    stale_plan = TrainingPlan(
+        athlete_name="Mauricio", objective="21k", phase="EXTERNO",
+        weekly_volume=5.0, running_days=["Tuesday"],
+        week_start=date(2020, 1, 6),  # semana bem no passado
+        sessions=[session], source="externo",
+    )
+
+    text = ConversationContextBuilder._week_plan_summary(
+        stale_plan,
+        TrainingHistory(activities=[]),
+    )
+
+    assert "JÁ ENCERRADA" in text
+    assert "aguardando o print do plano desta semana" in text
 
 
 def test_build_handles_no_planned_sessions():

@@ -76,7 +76,7 @@ class ConversationContextBuilder:
             f"(meta recomendada: {assessment.recommended_weekly_volume:.1f} km)\n"
             f"Consistência: {assessment.consistency:.0f}%\n"
             f"Último treino: {ConversationContextBuilder._last_activity_summary(history)}\n"
-            f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan)}\n"
+            f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan, history)}\n"
         )
 
         race_line = ConversationContextBuilder._race_summary(goal)
@@ -193,22 +193,52 @@ class ConversationContextBuilder:
             history.activities,
         )
 
-        lines = ["Plano da semana completo:"]
+        today = today_local()
+
+        # plano de uma semana já encerrada (ex.: treinador externo que ainda
+        # não mandou o desta semana): TODAS as sessões estão no passado.
+        # Deixa explícito, pra o coach NÃO recitar como se fosse a semana atual.
+        is_stale = all(
+            plan.session_date(session) < today
+            for session in plan.sessions
+        )
+
+        if is_stale:
+
+            header = (
+                f"Plano da semana de {plan.week_start.strftime('%d/%m')} "
+                "(JÁ ENCERRADA — ainda não há plano desta semana; as datas "
+                "abaixo são passadas):"
+            )
+
+        else:
+
+            header = "Plano da semana completo:"
+
+        lines = [header]
 
         lines.extend(
             WeeklyPlanMessageFormatter.session_lines(
                 plan,
-                today_local(),
+                today,
                 done_days=done_days,
             )
         )
 
         if plan.source == "externo":
 
-            lines.append(
+            note = (
                 "(plano montado pelo treinador do corredor — o "
-                "RunMind só acompanha)"
+                "RunMind só acompanha"
             )
+
+            note += (
+                "; aguardando o print do plano desta semana)"
+                if is_stale
+                else ")"
+            )
+
+            lines.append(note)
 
         return "\n".join(lines)
 
@@ -230,6 +260,7 @@ class ConversationContextBuilder:
     @staticmethod
     def _next_session_summary(
         plan,
+        history,
         reference_date=None,
     ) -> str:
 
@@ -239,19 +270,34 @@ class ConversationContextBuilder:
 
         today = reference_date or today_local()
 
+        done_days = {
+            day.lower()
+            for day in WeeklyPlanMatcher.fulfilled_days(
+                plan,
+                history.activities,
+            )
+        }
+
         upcoming = sorted(
             plan.sessions,
             key=lambda session: plan.session_date(session),
         )
 
+        # próximo = 1ª sessão futura ainda NÃO cumprida. Sem fallback pra
+        # sessão passada (não apresentar data velha como "próximo treino").
         session = next(
             (
                 s
                 for s in upcoming
                 if plan.session_date(s) >= today
+                and s.day.lower() not in done_days
             ),
-            upcoming[0],
+            None,
         )
+
+        if session is None:
+
+            return "sem treino planejado restante nesta semana"
 
         session_date = plan.session_date(session)
 

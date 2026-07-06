@@ -101,11 +101,16 @@ class TrainingPlan:
     def next_session_after(
         self,
         reference: date,
+        done_days: set[str] | None = None,
     ) -> PlannedSession | None:
         """
-        Próxima sessão do plano com data estritamente
-        posterior à referência.
+        Próxima sessão do plano com data estritamente posterior à
+        referência. `done_days` (dias já cumpridos, mesmo fora de ordem)
+        são pulados — quem já fez o longão de sábado na quinta não recebe
+        "sábado" como próximo treino.
         """
+
+        done = {day.lower() for day in (done_days or set())}
 
         upcoming = sorted(
             self.sessions,
@@ -114,7 +119,10 @@ class TrainingPlan:
 
         for session in upcoming:
 
-            if self.session_date(session) > reference:
+            if (
+                self.session_date(session) > reference
+                and session.day.lower() not in done
+            ):
 
                 return session
 

@@ -113,6 +113,43 @@ def test_external_session_without_extra_text_is_header_only():
     assert detail == []
 
 
+def test_next_session_message_skips_already_done_session():
+    """Fez o longão de sábado adiantado: o "próximo treino" pula sábado e
+    aponta a terça, em vez de mandar de volta o que já foi feito."""
+
+    plan = _plan([
+        _session("Tuesday", "EASY", 6.0),
+        _session("Saturday", "LONG_RUN", 12.0),
+    ])
+
+    msg = WeeklyPlanMessageFormatter.next_session_message(
+        "Renato", plan,
+        reference_date=date(2026, 7, 20),  # segunda
+        done_days={"Saturday"},
+    )
+
+    assert "terça-feira" in msg
+    assert "Longão" not in msg
+
+
+def test_next_session_message_rest_when_remaining_is_done():
+    """Só resta a sessão já cumprida -> mensagem de descanso, não repete o
+    treino feito."""
+
+    plan = _plan([
+        _session("Tuesday", "EASY", 6.0),
+        _session("Saturday", "LONG_RUN", 12.0),
+    ])
+
+    msg = WeeklyPlanMessageFormatter.next_session_message(
+        "Renato", plan,
+        reference_date=date(2026, 7, 23),  # quinta (terça já passou)
+        done_days={"Saturday"},
+    )
+
+    assert "fechou os treinos" in msg
+
+
 def test_workout_types_are_ptbr_runner_language():
 
     plan = _plan([

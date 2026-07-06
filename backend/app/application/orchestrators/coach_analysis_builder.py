@@ -120,11 +120,18 @@ class CoachAnalysisBuilder:
         )
 
         # --------------------------------------------------
-        # Próxima sessão futura (para o "próximo treino")
+        # Próxima sessão futura (para o "próximo treino"), pulando as
+        # sessões que o atleta já cumpriu (mesmo fora de ordem)
         # --------------------------------------------------
+
+        done_days = WeeklyPlanMatcher.fulfilled_days(
+            plan,
+            history.activities,
+        )
 
         next_planned = plan.next_session_after(
             enriched.activity.start_date.date(),
+            done_days=done_days,
         )
 
         # --------------------------------------------------

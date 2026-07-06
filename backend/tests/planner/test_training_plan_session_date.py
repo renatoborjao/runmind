@@ -89,3 +89,32 @@ def test_next_session_after_returns_none_past_last_session():
     plan = _plan([_session("Monday"), _session("Wednesday")])
 
     assert plan.next_session_after(date(2026, 7, 22)) is None
+
+
+def test_next_session_after_skips_already_done_days():
+
+    plan = _plan([
+        _session("Monday"),
+        _session("Wednesday"),
+        _session("Sunday"),
+    ])
+
+    # fez o longão de domingo adiantado (na segunda): quarta é a próxima,
+    # e domingo não deve reaparecer como "próximo"
+    next_session = plan.next_session_after(
+        date(2026, 7, 20),
+        done_days={"Sunday"},
+    )
+
+    assert next_session.day == "Wednesday"
+
+
+def test_next_session_after_none_when_only_remaining_is_done():
+
+    plan = _plan([_session("Monday"), _session("Sunday")])
+
+    # domingo já cumprido e nada mais à frente -> sem próximo
+    assert plan.next_session_after(
+        date(2026, 7, 20),
+        done_days={"Sunday"},
+    ) is None

@@ -128,15 +128,18 @@ class WeeklyPlanMessageFormatter:
         runner_name: str,
         plan: TrainingPlan,
         reference_date: date | None = None,
+        done_days: set[str] | None = None,
     ) -> str:
         """Próximo treino (a partir de hoje, incluindo hoje) já com o
-        detalhe de execução. Semana concluída vira mensagem de descanso."""
+        detalhe de execução. Semana concluída vira mensagem de descanso.
+        `done_days` pula sessões já cumpridas (mesmo fora de ordem)."""
 
         reference_date = reference_date or today_local()
 
         session = WeeklyPlanMessageFormatter._next_session(
             plan,
             reference_date,
+            done_days,
         )
 
         if session is None:
@@ -197,8 +200,12 @@ class WeeklyPlanMessageFormatter:
     def _next_session(
         plan: TrainingPlan,
         reference_date: date,
+        done_days: set[str] | None = None,
     ):
-        """Sessão mais próxima com data >= referência (hoje incluído)."""
+        """Sessão mais próxima com data >= referência (hoje incluído),
+        pulando as já cumpridas (`done_days`)."""
+
+        done = {day.lower() for day in (done_days or set())}
 
         upcoming = sorted(
             plan.sessions,
@@ -210,6 +217,7 @@ class WeeklyPlanMessageFormatter:
                 session
                 for session in upcoming
                 if plan.session_date(session) >= reference_date
+                and session.day.lower() not in done
             ),
             None,
         )

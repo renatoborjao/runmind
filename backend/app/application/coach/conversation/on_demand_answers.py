@@ -41,9 +41,18 @@ class OnDemandAnswers:
 
             _, plan = await CurrentPlanProvider.for_profile(profile)
 
+            # pula as sessões já cumpridas (mesmo fora de ordem)
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            done_days = WeeklyPlanMatcher.fulfilled_days(
+                plan,
+                history.activities,
+            )
+
             return WeeklyPlanMessageFormatter.next_session_message(
                 runner.name,
                 plan,
+                done_days=done_days,
             )
 
         if intent == ChatIntent.WEEKLY_PLAN:
