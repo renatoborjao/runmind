@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.domain.entities.activity import Activity
+from app.domain.entities.workout_structure import WorkoutStructure
 
 
 @dataclass(slots=True)
@@ -27,3 +28,6 @@ class EnrichedActivity:
     efficiency_score: float
 
     indoor: bool
+
+    # estrutura interna (splits/voltas); None quando não há detalhe
+    structure: WorkoutStructure | None = None

@@ -4,6 +4,9 @@ from app.application.coach.planning.plan_adjustment_engine import (
 from app.application.coach.summary.coach_summary_builder import (
     CoachSummaryBuilder,
 )
+from app.application.coach.writer.ai_analysis_writer import (
+    AIAnalysisWriter,
+)
 from app.application.coach.writer.coach_writer import (
     CoachWriter,
 )
@@ -61,6 +64,20 @@ class TrainingPipeline:
             coach_context,
             coach_summary,
         )
+
+        # --------------------------------------------------
+        # Análise pela IA-treinadora: escreve a seção "📊 Análise"
+        # ancorada nos fatos + na estrutura real do treino (splits).
+        # Se a IA falhar, mantém a análise determinística (fallback).
+        # --------------------------------------------------
+
+        ai_analysis = await AIAnalysisWriter.write(coach_context)
+
+        if ai_analysis:
+
+            coach_message.positives = ai_analysis
+
+            coach_message.improvements = []
 
         # --------------------------------------------------
         # Ajuste do plano (determinístico, com base na análise acima)

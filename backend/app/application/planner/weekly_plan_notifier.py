@@ -117,9 +117,9 @@ class WeeklyPlanNotifier:
 
             message = (
                 f"Bom domingo, {runner.name}! 🏃\n\n"
-                "Me manda um print, foto ou PDF do treino desta "
-                "semana do seu treinador pra eu acompanhar seus "
-                "treinos e te dar feedback. 📸"
+                "Me manda um print, foto ou PDF do treino da semana "
+                "que vem (começa segunda) do seu treinador pra eu "
+                "acompanhar seus treinos e te dar feedback. 📸"
             )
 
         await NotificationService.send(

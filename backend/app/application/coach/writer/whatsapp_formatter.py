@@ -28,6 +28,16 @@ class WhatsAppFormatter:
         )
 
         blocks += WhatsAppFormatter._section(
+            messages.INTERVALS_TITLE,
+            message.interval_lines,
+        )
+
+        blocks += WhatsAppFormatter._section(
+            messages.SPLITS_TITLE,
+            message.splits_lines,
+        )
+
+        blocks += WhatsAppFormatter._section(
             messages.ANALYSIS_TITLE,
             message.positives + message.improvements,
         )

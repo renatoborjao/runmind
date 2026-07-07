@@ -98,7 +98,7 @@ def test_full_chain_produces_final_whatsapp_message():
     # exibição em pt-BR: sem enums crus
     assert "Intensidade: Alta" in text
     assert "HIGH" not in text
-    assert "Ritmo: 5:00 min/km" in text
+    assert "Ritmo médio: 5:00 min/km" in text
 
 
 def _base_assessment() -> TrainingAssessment:

@@ -103,6 +103,55 @@ def test_10km_or_more_can_be_long_run():
     assert enriched.training_type == "LONG_RUN"
 
 
+def _split(pace_min_km: float) -> dict:
+
+    return {"distance": 1000, "average_speed": 1000 / (pace_min_km * 60)}
+
+
+def test_interval_splits_are_classified_as_interval():
+
+    # tiros de 4:00 alternando com trote de 6:30: a média (~5:15) sozinha
+    # viraria "rodagem", mas a estrutura dos splits entrega o intervalado
+    activity = make_activity(
+        distance=5000.0,
+        moving_time=1575,
+        average_heartrate=155.0,
+        raw={
+            "splits_metric": [
+                _split(4.0),
+                _split(6.5),
+                _split(4.0),
+                _split(6.5),
+                _split(4.0),
+            ],
+        },
+    )
+
+    enriched = ActivityEnricher.enrich(activity, _metrics())
+
+    assert enriched.structure.is_interval is True
+    assert enriched.training_type == "INTERVAL"
+
+
+def test_steady_run_without_structure_is_not_interval():
+
+    activity = make_activity(
+        distance=6000.0,
+        average_heartrate=150.0,
+        raw={
+            "splits_metric": [
+                _split(6.0),
+                _split(6.05),
+                _split(5.95),
+            ],
+        },
+    )
+
+    enriched = ActivityEnricher.enrich(activity, _metrics())
+
+    assert enriched.training_type != "INTERVAL"
+
+
 def test_tiny_activity_is_never_classified_as_long_run():
 
     # histórico minúsculo: max_long_run de 100 m fazia 100 m virar

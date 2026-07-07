@@ -191,3 +191,38 @@ class StravaClient:
         return StravaMapper.to_activity(
             data
         )
+
+    async def get_activity_streams(
+        self,
+        activity_id: int,
+        keys: str = "time,distance,velocity_smooth,heartrate,cadence,moving",
+    ) -> dict:
+        """Séries segundo a segundo do treino (velocidade, FC, distância).
+        É o único dado que revela tiros curtos (ex.: 8x400m) que os splits
+        por km borram. Retorna {tipo: [valores]}; {} se indisponível."""
+
+        access_token = await self._get_access_token()
+
+        async with httpx.AsyncClient(
+            timeout=15,
+        ) as client:
+
+            response = await client.get(
+                f"{self.BASE_URL}/activities/{activity_id}/streams",
+                headers={
+                    "Authorization": f"Bearer {access_token}"
+                },
+                params={
+                    "keys": keys,
+                    "key_by_type": "true",
+                },
+            )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        return {
+            stream_type: payload.get("data", [])
+            for stream_type, payload in data.items()
+        }

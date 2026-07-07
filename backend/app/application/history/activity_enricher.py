@@ -1,6 +1,9 @@
 from app.application.classification.training_classifier import (
     TrainingClassifier,
 )
+from app.application.history.workout_structure_builder import (
+    WorkoutStructureBuilder,
+)
 from app.domain.entities.activity import Activity
 from app.domain.entities.enriched_activity import EnrichedActivity
 from app.domain.entities.runner_metrics import RunnerMetrics
@@ -107,6 +110,8 @@ class ActivityEnricher:
 
         efficiency = hr / pace
 
+        structure = WorkoutStructureBuilder.build(activity)
+
         enriched = EnrichedActivity(
 
             activity=activity,
@@ -140,6 +145,8 @@ class ActivityEnricher:
             ),
 
             indoor=indoor,
+
+            structure=structure,
         )
 
         classification = TrainingClassifier.classify(
@@ -147,6 +154,8 @@ class ActivityEnricher:
             enriched,
 
             metrics,
+
+            structure,
 
         )
 

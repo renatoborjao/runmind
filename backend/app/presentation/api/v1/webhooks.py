@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi import BackgroundTasks
 from fastapi import Header
 from fastapi import HTTPException
 from fastapi import Query
@@ -38,6 +39,9 @@ from app.infrastructure.integrations.strava.client import (
 )
 from app.infrastructure.integrations.telegram.telegram_inbound_parser import (
     TelegramInboundParser,
+)
+from app.infrastructure.persistence.processed_activity_guard import (
+    ProcessedActivityGuard,
 )
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
@@ -88,6 +92,7 @@ async def verify_webhook(
 @router.post("/strava")
 async def receive_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
 ):
 
     payload = await request.json()
@@ -117,8 +122,34 @@ async def receive_webhook(
 
     activity_id = payload["object_id"]
 
-    # Falha aqui NUNCA pode virar 500: o Strava reenvia em erro e vira
-    # tempestade de retry.
+    # Idempotência: mesmo com ack rápido, o Strava pode reentregar o
+    # mesmo evento. check_and_mark é síncrono e barato — descarta a
+    # duplicata antes de agendar qualquer trabalho.
+    if not ProcessedActivityGuard().check_and_mark(activity_id):
+
+        return {"ignored": True, "reason": "duplicate activity"}
+
+    # ACK RÁPIDO: o Strava exige resposta em ~2s, senão considera falha e
+    # REENTREGA o evento (era a causa-raiz da mensagem duplicada). Buscar
+    # atividade + streams + IA + envio passa disso, então respondemos 200
+    # já e processamos em background.
+    background_tasks.add_task(
+        _process_strava_activity,
+        owner_id,
+        activity_id,
+    )
+
+    return {"queued": True, "activity_id": activity_id}
+
+
+async def _process_strava_activity(
+    owner_id: int,
+    activity_id: int,
+) -> None:
+    """Trabalho pesado do webhook, fora do caminho da resposta. Falha aqui
+    nunca derruba nada (o 200 já foi dado); só loga e solta a marca pra uma
+    eventual reentrega poder reprocessar."""
+
     try:
 
         profile = OwnerResolver.resolve(owner_id)
@@ -127,33 +158,40 @@ async def receive_webhook(
 
         activity = await client.get_activity(activity_id)
 
+        # stream segundo-a-segundo (velocidade/FC): revela tiros curtos
+        # que os splits por km borram. Indisponível NUNCA derruba o fluxo.
+        try:
+
+            activity.raw["_streams"] = await client.get_activity_streams(
+                activity_id,
+            )
+
+        except Exception as stream_error:
+
+            print(f"Streams indisponíveis p/ {activity_id}: {stream_error}")
+
         # pedalada/natação/musculação não geram feedback de corrida
         if not is_foot_sport(activity.sport):
 
-            return {
-                "ignored": True,
-                "reason": f"sport não suportado: {activity.sport}",
-            }
+            print(f"Ignorado: sport não suportado ({activity.sport})")
+
+            return
 
         await TrainingCompletedEvent.execute(
             profile=profile,
             activity=activity,
         )
 
-        return {
-            "success": True,
-            "profile": profile,
-            "activity_id": activity_id,
-        }
-
     except Exception as e:
+
+        # solta a marca pra uma reentrega legítima do Strava poder tentar
+        # de novo (senão o treino ficaria sem feedback pra sempre)
+        ProcessedActivityGuard().unmark(activity_id)
 
         print(
             f"Falha ao processar atividade {activity_id} "
             f"(owner {owner_id}): {e}"
         )
-
-        return {"success": False, "error": str(e)}
 
 
 # ==========================================================

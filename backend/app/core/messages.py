@@ -6,6 +6,10 @@ PLANNED_TITLE = "📅 Planejado"
 
 EXECUTED_TITLE = "✅ Executado"
 
+INTERVALS_TITLE = "🔁 Tiros (intervalado)"
+
+SPLITS_TITLE = "⏱️ Parciais por km"
+
 ANALYSIS_TITLE = "📊 Análise"
 
 HISTORY_TITLE = "📈 Histórico"

@@ -16,6 +16,14 @@ class CoachMessage:
         default_factory=list,
     )
 
+    interval_lines: list[str] = field(
+        default_factory=list,
+    )
+
+    splits_lines: list[str] = field(
+        default_factory=list,
+    )
+
     positives: list[str] = field(
         default_factory=list,
     )

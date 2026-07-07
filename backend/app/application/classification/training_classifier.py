@@ -13,12 +13,19 @@ from app.domain.entities.enriched_activity import (
 from app.domain.entities.runner_metrics import (
     RunnerMetrics,
 )
+from app.domain.entities.workout_structure import (
+    WorkoutStructure,
+)
 
 
 # Piso absoluto para pontuar como longão: sem isso, um histórico
 # minúsculo (max_long_run de 100 m) faz qualquer trote virar LONG_RUN.
 # Abaixo de 10 km não é longão, independente do histórico.
 MIN_LONG_RUN_KM = 10.0
+
+# Estrutura de tiros vence o retrato médio: sem isso, o intervalado se
+# dilui na média e vira "rodagem leve" (média de tiro + pausa).
+INTERVAL_STRUCTURE_POINTS = 80
 
 
 class TrainingClassifier:
@@ -27,6 +34,7 @@ class TrainingClassifier:
     def classify(
         activity: EnrichedActivity,
         metrics: RunnerMetrics,
+        structure: WorkoutStructure | None = None,
     ) -> TrainingClassification:
 
         distance = activity.activity.distance / 1000
@@ -48,6 +56,8 @@ class TrainingClassifier:
             TrainingScore(WorkoutType.VO2),
 
             TrainingScore(WorkoutType.LONG_RUN),
+
+            TrainingScore(WorkoutType.INTERVAL),
 
         ]
 
@@ -158,6 +168,17 @@ class TrainingClassifier:
             scores[3].add(
                 15,
                 "Sessão curta",
+            )
+
+        # ---------------- ESTRUTURA (splits/voltas) ----------------
+
+        # Tiros alternados detectados no detalhe do treino: sinal forte
+        # e decisivo, sobrepõe o retrato médio que apagaria o intervalado.
+        if structure is not None and structure.is_interval:
+
+            scores[5].add(
+                INTERVAL_STRUCTURE_POINTS,
+                "Tiros alternados nos splits/voltas",
             )
 
         winner = max(
