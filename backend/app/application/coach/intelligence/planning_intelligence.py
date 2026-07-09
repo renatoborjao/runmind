@@ -32,6 +32,7 @@ class PlanningIntelligence:
             cooldown="-",
             shoes="-",
             notes=planned.notes or "-",
+            session_date=context.next_planned_date,
         )
 
     @staticmethod

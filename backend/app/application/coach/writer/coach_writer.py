@@ -326,8 +326,19 @@ class CoachWriter:
 
             return []
 
+        # dia com a data do calendário — "quinta-feira (09/07)" tira
+        # qualquer ambiguidade sobre QUAL quinta é o próximo treino
+        day = weekday_label(next_training.day)
+
+        if next_training.session_date is not None:
+
+            day = (
+                f"{day} "
+                f"({next_training.session_date.strftime('%d/%m')})"
+            )
+
         lines = [
-            f"Dia: {weekday_label(next_training.day)}",
+            f"Dia: {day}",
             f"Tipo: {plan_workout_label(next_training.workout_type, next_training.distance_km)}",
         ]
 

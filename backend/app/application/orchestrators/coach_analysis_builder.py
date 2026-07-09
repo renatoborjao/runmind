@@ -144,6 +144,12 @@ class CoachAnalysisBuilder:
             else None
         )
 
+        next_planned_date = (
+            plan.session_date(next_planned)
+            if next_planned is not None
+            else None
+        )
+
         coach_context = CoachContextBuilder.build(
             runner=runner,
             planned=planned_session,
@@ -152,6 +158,7 @@ class CoachAnalysisBuilder:
             assessment=assessment,
             next_planned=next_planned,
             planned_date=planned_date,
+            next_planned_date=next_planned_date,
         )
 
         coach_analysis = CoachPipeline.execute(

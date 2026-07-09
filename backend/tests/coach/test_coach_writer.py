@@ -293,6 +293,57 @@ def test_external_next_training_notes_are_cleaned():
     assert "10:00 - CAM Moderado" in lines
 
 
+def test_next_training_day_includes_calendar_date():
+    """Caso do Mauricio: "Dia: quinta-feira" sozinho é ambíguo — o plano
+    do treinador externo tem data, então mostramos "quinta-feira (09/07)"."""
+
+    from datetime import date
+
+    from app.application.coach.models.next_training import NextTraining
+
+    nt = NextTraining(
+        day="Thursday",
+        workout_type="Caminhada com corrida",
+        objective="-",
+        distance_km=0,
+        pace="-",
+        heart_rate="-",
+        warmup="-",
+        main_set="-",
+        cooldown="-",
+        shoes="-",
+        notes="-",
+        session_date=date(2026, 7, 9),
+    )
+
+    lines = CoachWriter._render_next_training(nt)
+
+    assert "Dia: quinta-feira (09/07)" in lines
+
+
+def test_next_training_without_date_shows_only_weekday():
+
+    from app.application.coach.models.next_training import NextTraining
+
+    nt = NextTraining(
+        day="Thursday",
+        workout_type="Rodagem leve",
+        objective="-",
+        distance_km=5.0,
+        pace="-",
+        heart_rate="-",
+        warmup="-",
+        main_set="-",
+        cooldown="-",
+        shoes="-",
+        notes="-",
+    )
+
+    lines = CoachWriter._render_next_training(nt)
+
+    assert "Dia: quinta-feira" in lines
+
+
 def test_ai_plan_objective_is_kept_when_it_adds_value():
 
     from app.application.coach.models.next_training import NextTraining

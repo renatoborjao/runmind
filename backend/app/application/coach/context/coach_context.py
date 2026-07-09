@@ -35,6 +35,10 @@ class CoachContext:
     # próxima sessão futura do plano (para o "🎯 Próximo treino")
     next_planned: PlannedSession | None = None
 
+    # data (calendário) da próxima sessão — "quinta-feira (09/07)" em vez
+    # de só "quinta-feira" (planos de treinador externo têm data no doc)
+    next_planned_date: date | None = None
+
     # ==========================
     # Histórico
     # ==========================

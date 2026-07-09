@@ -157,6 +157,14 @@ class WeeklyPlanMatcher:
 
             planned = session.planned_distance_km or 0
 
+            # sessão sem distância (plano de treinador externo) só é
+            # creditada pelo DIA (passo 1) — sem distância planejada,
+            # "distância mais próxima" viraria coringa: um teste de 1 km
+            # na quarta casaria com a sessão de sábado (caso Mauricio)
+            if planned <= 0:
+
+                return False
+
             limit = max(
                 WeeklyPlanMatcher.TOLERANCE_KM,
                 WeeklyPlanMatcher.TOLERANCE_FRACTION * planned,

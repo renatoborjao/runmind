@@ -32,6 +32,7 @@ class CoachContextBuilder:
         assessment: TrainingAssessment,
         next_planned: PlannedSession | None = None,
         planned_date=None,
+        next_planned_date=None,
     ) -> CoachContext:
 
         return CoachContext(
@@ -45,6 +46,8 @@ class CoachContextBuilder:
             planned_date=planned_date,
 
             next_planned=next_planned,
+
+            next_planned_date=next_planned_date,
 
             fatigue=executed.fatigue_score,
 

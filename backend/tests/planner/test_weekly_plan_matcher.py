@@ -216,6 +216,43 @@ def test_two_runs_same_day_best_distance_takes_the_session():
     assert WeeklyPlanMatcher.match(plan, activities, warmup) is None
 
 
+def test_sessionless_distance_never_matches_off_day_run():
+    """Bug do Mauricio: plano de treinador externo SEM distâncias (None).
+    Um teste de 1 km na esteira, numa QUARTA sem sessão, casava com a
+    sessão de sábado (tolerância virava 2 km sobre distância 0). Sessão
+    sem distância só pode ser creditada pelo DIA."""
+
+    plan = _plan([
+        _session("Thursday", None, "WALK_RUN"),
+        _session("Saturday", None, "WALK_RUN"),
+    ])
+
+    wednesday_test = _run(2, 1.0, 1)  # quarta, 1 km na esteira
+
+    # nada de casar com sábado: é treino extra
+    assert WeeklyPlanMatcher.match(plan, [wednesday_test], wednesday_test) is None
+
+    # e nenhuma sessão fica marcada como cumprida
+    assert WeeklyPlanMatcher.fulfilled_days(plan, [wednesday_test]) == set()
+
+
+def test_sessionless_distance_still_matches_by_day():
+    """Plano externo sem distâncias: treinar no DIA planejado credita a
+    sessão daquele dia normalmente (passo 1 não depende de distância)."""
+
+    plan = _plan([
+        _session("Thursday", None, "WALK_RUN"),
+        _session("Saturday", None, "WALK_RUN"),
+    ])
+
+    thursday_run = _run(3, 1.0, 1)  # quinta, dia planejado
+
+    matched = WeeklyPlanMatcher.match(plan, [thursday_run], thursday_run)
+
+    assert matched is not None
+    assert matched.day == "Thursday"
+
+
 def test_distance_fallback_is_chronological_not_by_id():
     """Fora dos dias do plano, o fallback por distância respeita a ordem
     cronológica, independente do id."""

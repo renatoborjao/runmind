@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass(slots=True)
@@ -27,3 +28,6 @@ class NextTraining:
     shoes: str
 
     notes: str
+
+    # data (calendário) da sessão — mostrada junto do dia da semana
+    session_date: date | None = None
