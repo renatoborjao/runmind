@@ -78,8 +78,11 @@ class Settings(BaseSettings):
     # A cota gratuita é POR MODELO: conversa num modelo, extrações
     # estruturadas (parser/memória/resumo/plano) noutro mais leve —
     # separa os orçamentos e as extrações não roubam cota do chat.
-    gemini_chat_model: str = "gemini-2.5-flash"
-    gemini_extract_model: str = "gemini-2.5-flash-lite"
+    # Aliases flutuantes ("-latest"): o Google aposentou o
+    # gemini-2.5-flash e TODA análise caiu no fallback silenciosamente;
+    # o alias acompanha o flash estável e não some debaixo de nós.
+    gemini_chat_model: str = "gemini-flash-latest"
+    gemini_extract_model: str = "gemini-flash-lite-latest"
 
     @property
     def cors_origin_list(self) -> list[str]:
