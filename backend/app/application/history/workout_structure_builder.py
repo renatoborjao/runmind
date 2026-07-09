@@ -16,6 +16,12 @@ INTERVAL_SPREAD_KM = 0.20
 # Diferença entre metades pra chamar de negative/positive split.
 SPLIT_TREND_MARGIN = 0.03
 
+# Acima disto a desaceleração é ACENTUADA (quebra de verdade). Entre a
+# margem e isto é só a segunda metade mais lenta — variação normal
+# (subida, calor, farol), não "quebrou" (reclamação real do Renato:
+# diferença pequena no fim virou "quebrou" na análise da IA).
+SPLIT_FADE_STRONG = 0.10
+
 
 class WorkoutStructureBuilder:
     """Extrai a estrutura interna do treino do `raw` do Strava. Só leitura
@@ -159,9 +165,16 @@ class WorkoutStructureBuilder:
 
             return "negative"
 
-        if second > first * (1 + SPLIT_TREND_MARGIN):
+        # queda forte de ritmo é uma coisa; segunda metade um pouco mais
+        # lenta é outra — misturar as duas fazia a análise chamar
+        # variação normal de "quebra"
+        if second > first * (1 + SPLIT_FADE_STRONG):
 
             return "positive"
+
+        if second > first * (1 + SPLIT_TREND_MARGIN):
+
+            return "positive_mild"
 
         return "even"
 

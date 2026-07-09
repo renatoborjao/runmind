@@ -87,11 +87,23 @@ def test_negative_split_trend():
 
 def test_positive_split_trend():
 
+    # queda acentuada: 2ª metade ~12.6% mais lenta -> quebra de verdade
     structure = _build(
         {"splits_metric": _splits([5.5, 5.6, 6.2, 6.3])}
     )
 
     assert structure.split_trend == "positive"
+
+
+def test_mild_fade_is_not_a_break():
+    """Bug do Renato: 2ª metade ~4% mais lenta virava "positive" e a IA
+    dizia que ele QUEBROU. Diferença pequena é variação normal."""
+
+    structure = _build(
+        {"splits_metric": _splits([5.5, 5.5, 5.7, 5.75])}
+    )
+
+    assert structure.split_trend == "positive_mild"
 
 
 def test_short_laps_are_ignored():

@@ -93,4 +93,35 @@ def test_facts_feed_splits_and_interval_to_prompt():
 
     assert "splits:" in prompt
     assert "intervalado" in prompt
-    assert "km1 4:00" in prompt
+    # pace + FC por km: sem a FC a IA inventava "fadiga" em treino com
+    # FC caindo na segunda metade
+    assert "km1 4:00 (172bpm)" in prompt
+
+
+def test_mild_fade_fact_has_no_verdict():
+    """Bug do Renato: 2ª metade ~5% mais lenta chegava pra IA como
+    "apagou" e virava "você quebrou" na análise."""
+
+    executed = make_enriched_activity(
+        structure=_structure(
+            is_interval=False,
+            split_trend="positive_mild",
+        ),
+    )
+
+    context = make_context(executed=executed)
+
+    mock = AsyncMock(return_value='{"analysis": ["ok"]}')
+
+    with patch(f"{MODULE}.generate_text", new=mock):
+
+        asyncio.run(AIAnalysisWriter.write(context))
+
+    prompt = mock.await_args.kwargs["contents"]
+
+    # o FATO é neutro ("variação normal"), não um veredito de quebra
+    facts = prompt.split("REGRAS:")[0]
+
+    assert "variação normal" in facts
+    assert "apagou" not in facts
+    assert "queda acentuada" not in facts

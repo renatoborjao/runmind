@@ -18,10 +18,17 @@ MAX_OUTPUT_TOKENS = 700
 # Quantas bullets a IA pode devolver na seção de análise.
 MAX_BULLETS = 4
 
+# Fatos SEM veredito: "apagou/quebrou" é conclusão, não dado — quando o
+# rótulo já vinha com julgamento, a IA amplificava (+4% virava "você
+# quebrou"). O grau fica no fato; a leitura fica com a IA.
 TREND_LABELS = {
     "negative": "acelerou no fim (negative split)",
     "even": "ritmo constante do início ao fim",
-    "positive": "desacelerou no fim (apagou)",
+    "positive_mild": (
+        "segunda metade um pouco mais lenta que a primeira "
+        "(diferença pequena, faixa de variação normal)"
+    ),
+    "positive": "queda acentuada de ritmo na segunda metade",
     "unknown": "sem dado de progressão",
 }
 
@@ -45,6 +52,10 @@ podem divergir do real (o relógio estima). NÃO cobre diferença de distância 
 nem de pace do relógio: use a DISTÂNCIA PLANEJADA como referência e assuma que \
 o atleta cumpriu a prescrição. Foque em execução, FC/esforço, consistência dos \
 tiros e recuperação.
+- VOCABULÁRIO DE RITMO: só use palavras como "quebrou", "apagou" ou "não \
+aguentou" se os fatos disserem "queda ACENTUADA de ritmo". Segunda metade \
+"um pouco mais lenta" é variação normal de treino (subida, calor, semáforo) \
+— trate como normal, sem tom de falha.
 - Tom de treinador de verdade: direto, humano, encorajador e útil. Fale com \
 "você". Português do Brasil.
 - 2 a {max_bullets} frases curtas, cada uma um ponto. Sem emojis, sem títulos.
@@ -248,8 +259,18 @@ class AIAnalysisWriter:
 
         if structure.km_splits:
 
+            # pace + FC por km: sem a FC a IA já "viu" fadiga em treino
+            # onde a FC CAIU na segunda metade (pace estável + FC caindo
+            # = eficiência, não cansaço)
+            hr_by_km = structure.km_hr or []
+
             splits = ", ".join(
                 f"km{i + 1} {PaceFormatter.format(pace)}"
+                + (
+                    f" ({hr_by_km[i]}bpm)"
+                    if i < len(hr_by_km) and hr_by_km[i]
+                    else ""
+                )
                 for i, pace in enumerate(structure.km_splits)
             )
 

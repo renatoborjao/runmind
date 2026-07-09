@@ -30,7 +30,9 @@ class WorkoutStructure:
     slowest_km_pace: float | None
     pace_spread: float | None  # (mais lento - mais rápido) / mais rápido
 
-    # "negative" (acelerou no fim) | "even" | "positive" (apagou) | "unknown"
+    # "negative" (acelerou no fim) | "even" | "positive_mild" (2ª metade
+    # um pouco mais lenta — variação normal) | "positive" (queda
+    # acentuada de ritmo) | "unknown"
     split_trend: str
 
     # tiros alternados detectados pela variação entre voltas/kms
