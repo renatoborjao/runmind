@@ -82,6 +82,43 @@ class ActivityArchiveRepository:
                 indent=2,
             )
 
+    def remove(
+        self,
+        profile: str,
+        activity_id: int,
+    ) -> bool:
+        """Remove uma atividade apagada no Strava. Sem isso o arquivo
+        guardaria treinos que o atleta descartou (duplicados, registros
+        errados), inflando km de vida e histórico. Retorna se removeu."""
+
+        records = self.load(profile)
+
+        remaining = [
+            record for record in records
+            if record["id"] != activity_id
+        ]
+
+        if len(remaining) == len(records):
+
+            return False
+
+        file = self.storage / f"{profile}.json"
+
+        with open(
+            file,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                remaining,
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        return True
+
     def stats(
         self,
         profile: str,

@@ -81,6 +81,16 @@ class ProcessedActivityGuard:
 
         return True
 
+    def is_marked(
+        self,
+        activity_id: int,
+    ) -> bool:
+        """Consulta sem efeito colateral — usada pelo delete pra saber
+        se essa atividade chegou a ser processada (e portanto se o
+        atleta recebeu feedback que precisa de retratação)."""
+
+        return activity_id in self._load()
+
     def unmark(
         self,
         activity_id: int,

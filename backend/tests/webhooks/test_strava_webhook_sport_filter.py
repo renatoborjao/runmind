@@ -67,13 +67,30 @@ def test_run_triggers_training_completed_event():
     mock_event.execute.assert_awaited_once()
 
 
-def test_delete_event_is_ignored():
+def _post_delete(
+    feedback_was_sent: bool,
+    removed_from_archive: bool = True,
+):
 
     with (
         patch(f"{MODULE}.OwnerResolver") as mock_resolver,
         patch(f"{MODULE}.StravaClient") as mock_client_cls,
         patch(f"{MODULE}.TrainingCompletedEvent") as mock_event,
+        patch(f"{MODULE}.ProcessedActivityGuard") as mock_guard_cls,
+        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive_cls,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_profile_cls,
+        patch(f"{MODULE}.NotificationService") as mock_notify,
     ):
+
+        mock_resolver.resolve.return_value = "renato"
+
+        mock_guard = mock_guard_cls.return_value
+        mock_guard.is_marked.return_value = feedback_was_sent
+
+        mock_archive = mock_archive_cls.return_value
+        mock_archive.remove.return_value = removed_from_archive
+
+        mock_notify.send = AsyncMock()
 
         mock_event.execute = AsyncMock()
 
@@ -84,12 +101,104 @@ def test_delete_event_is_ignored():
             json={**PAYLOAD, "aspect_type": "delete"},
         )
 
-        body = response.json()
-        assert body["ignored"] is True
-        assert "delete" in body["reason"]
+        return (
+            response.json(),
+            mock_archive,
+            mock_guard,
+            mock_notify,
+            mock_event,
+            mock_client_cls,
+        )
 
-        # nem resolve o dono nem busca a atividade apagada
-        mock_resolver.resolve.assert_not_called()
+
+def test_delete_event_removes_from_archive():
+
+    body, mock_archive, mock_guard, _, mock_event, mock_client_cls = (
+        _post_delete(feedback_was_sent=False)
+    )
+
+    assert body["deleted"] is True
+    assert body["removed_from_archive"] is True
+
+    # tira do arquivo permanente e solta a marca de idempotência
+    mock_archive.remove.assert_called_once_with("renato", 123)
+    mock_guard.unmark.assert_called_once_with(123)
+
+    # não busca a atividade (já não existe) nem gera feedback
+    mock_client_cls.return_value.get_activity.assert_not_called()
+    mock_event.execute.assert_not_called()
+
+
+def test_delete_after_feedback_sends_retraction():
+
+    # atleta recebeu a análise e apagou o treino (ex.: teste na
+    # esteira): coach avisa que pode desconsiderar
+    body, _, _, mock_notify, _, _ = _post_delete(
+        feedback_was_sent=True,
+    )
+
+    assert body["retraction_queued"] is True
+
+    mock_notify.send.assert_awaited_once()
+
+    message = mock_notify.send.await_args.args[1]
+    assert "desconsiderar" in message
+
+
+def test_delete_without_feedback_sends_nothing():
+
+    # treino antigo (de antes do RunMind) apagado: some do arquivo,
+    # mas não houve análise — retratação seria sem sentido
+    body, _, _, mock_notify, _, _ = _post_delete(
+        feedback_was_sent=False,
+    )
+
+    assert body["retraction_queued"] is False
+
+    mock_notify.send.assert_not_awaited()
+
+
+def test_delete_of_ride_sends_no_retraction():
+
+    # pedalada: passou pelo webhook (marca no guard) mas nunca gerou
+    # análise (não está no arquivo) — nada de retratação
+    body, _, _, mock_notify, _, _ = _post_delete(
+        feedback_was_sent=True,
+        removed_from_archive=False,
+    )
+
+    assert body["retraction_queued"] is False
+
+    mock_notify.send.assert_not_awaited()
+
+
+def test_delete_event_from_unknown_owner_does_not_500():
+
+    with (
+        patch(f"{MODULE}.OwnerResolver") as mock_resolver,
+        patch(f"{MODULE}.TrainingCompletedEvent") as mock_event,
+        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive_cls,
+    ):
+
+        # atleta não cadastrado: resolve levanta exceção
+        mock_resolver.resolve.side_effect = Exception(
+            "Nenhum perfil encontrado",
+        )
+
+        mock_event.execute = AsyncMock()
+
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/webhooks/strava",
+            json={**PAYLOAD, "aspect_type": "delete"},
+        )
+
+        # 200 mesmo assim — senão o Strava reentrega pra sempre
+        assert response.status_code == 200
+        assert response.json()["ignored"] is True
+
+        mock_archive_cls.return_value.remove.assert_not_called()
         mock_event.execute.assert_not_called()
 
 

@@ -60,6 +60,40 @@ def test_upsert_updates_existing_and_sorts_by_date(tmp_path):
     assert repo.load("renato")[0]["distance"] == 5500.0
 
 
+def test_remove_deletes_only_the_given_activity(tmp_path):
+
+    repo = _isolated_repo(tmp_path)
+
+    repo.upsert_many("renato", [
+        make_activity(id=1, distance=10000.0),
+        make_activity(id=2, distance=8000.0),
+    ])
+
+    assert repo.remove("renato", 1) is True
+
+    records = repo.load("renato")
+
+    assert [r["id"] for r in records] == [2]
+
+
+def test_remove_unknown_activity_is_noop(tmp_path):
+
+    repo = _isolated_repo(tmp_path)
+
+    repo.upsert_many("renato", [make_activity(id=1)])
+
+    assert repo.remove("renato", 999) is False
+
+    assert len(repo.load("renato")) == 1
+
+
+def test_remove_from_empty_archive_is_noop(tmp_path):
+
+    repo = _isolated_repo(tmp_path)
+
+    assert repo.remove("renato", 1) is False
+
+
 def test_stats_aggregates_lifetime(tmp_path):
 
     from datetime import datetime

@@ -40,6 +40,9 @@ from app.infrastructure.integrations.strava.client import (
 from app.infrastructure.integrations.telegram.telegram_inbound_parser import (
     TelegramInboundParser,
 )
+from app.infrastructure.persistence.activity_archive_repository import (
+    ActivityArchiveRepository,
+)
 from app.infrastructure.persistence.processed_activity_guard import (
     ProcessedActivityGuard,
 )
@@ -109,8 +112,20 @@ async def receive_webhook(
 
         return {"ignored": True, "reason": "object_type != activity"}
 
-    # Só treino recém-criado gera feedback. update/delete não —
-    # buscar uma atividade apagada dá 404 e não há o que avaliar.
+    # Atividade apagada no Strava sai também do arquivo permanente —
+    # senão treinos descartados (duplicados, registros errados) inflam
+    # km de vida e histórico do atleta pra sempre. Tudo local e barato,
+    # cabe dentro do prazo de ~2s do ack.
+    if payload.get("aspect_type") == "delete":
+
+        return _handle_activity_deleted(
+            payload["owner_id"],
+            payload["object_id"],
+            background_tasks,
+        )
+
+    # Só treino recém-criado gera feedback. update não —
+    # o que havia pra avaliar já foi avaliado na criação.
     if payload.get("aspect_type") != "create":
 
         return {
@@ -140,6 +155,102 @@ async def receive_webhook(
     )
 
     return {"queued": True, "activity_id": activity_id}
+
+
+def _handle_activity_deleted(
+    owner_id: int,
+    activity_id: int,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """Reflete no RunMind uma atividade apagada no Strava: tira do
+    arquivo permanente, solta a marca de idempotência e — se o atleta
+    já recebeu feedback desse treino — manda uma retratação pra ele
+    saber que pode ignorar a análise (caso clássico: teste na esteira
+    apagado logo em seguida). Falha aqui nunca vira 500 — o Strava
+    reentregaria um evento que não temos como (nem por que)
+    reprocessar."""
+
+    try:
+
+        profile = OwnerResolver.resolve(owner_id)
+
+        guard = ProcessedActivityGuard()
+
+        # marca no guard = passou pelo webhook; registro no arquivo =
+        # gerou análise de corrida. Só as duas juntas provam que o
+        # atleta recebeu feedback — evita retratação falsa quando ele
+        # apaga uma pedalada ou um treino antigo de antes do RunMind.
+        feedback_was_sent = guard.is_marked(activity_id)
+
+        removed = ActivityArchiveRepository().remove(
+            profile,
+            activity_id,
+        )
+
+        # sem a atividade, a marca de "já processada" é órfã
+        guard.unmark(activity_id)
+
+        if feedback_was_sent and removed:
+
+            # envio fora do caminho do ack (Telegram pode demorar)
+            background_tasks.add_task(
+                _send_deletion_retraction,
+                profile,
+                activity_id,
+            )
+
+        print(
+            f"Atividade {activity_id} apagada no Strava "
+            f"({profile}): removida do arquivo = {removed}, "
+            f"retratação = {feedback_was_sent and removed}"
+        )
+
+        return {
+            "deleted": True,
+            "removed_from_archive": removed,
+            "retraction_queued": feedback_was_sent and removed,
+        }
+
+    except Exception as e:
+
+        # dono desconhecido (atleta não cadastrado) ou falha de disco:
+        # loga e responde 200 mesmo assim
+        print(
+            f"Falha ao tratar delete da atividade {activity_id} "
+            f"(owner {owner_id}): {e}"
+        )
+
+        return {"ignored": True, "reason": "delete não aplicável"}
+
+
+async def _send_deletion_retraction(
+    profile: str,
+    activity_id: int,
+) -> None:
+    """Avisa o atleta que a análise enviada não vale mais. Sem isso a
+    mensagem de parabéns por um teste/registro errado ficaria no chat
+    como se fosse treino de verdade."""
+
+    try:
+
+        runner = RunnerProfileRepository().load(profile)
+
+        await NotificationService.send(
+            runner,
+            (
+                "🏃 RunMind\n\n"
+                "Vi que você apagou aquele treino no Strava. 👍\n\n"
+                "Pode desconsiderar a análise que te mandei — "
+                "ele também já saiu do seu histórico por aqui."
+            ),
+        )
+
+    except Exception as e:
+
+        print(
+            f"Falha ao enviar retratação da atividade {activity_id} "
+            f"({profile}): {e}"
+        )
 
 
 async def _process_strava_activity(
