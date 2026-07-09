@@ -6,6 +6,7 @@ from app.application.planner.daily_training_notifier import (
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
 from app.core.clock import DEFAULT_TIMEZONE
+from app.core.config import get_settings
 from app.infrastructure.integrations.evolution.connection_watchdog import (
     ConnectionWatchdog,
 )
@@ -68,13 +69,17 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         id="daily_training_reminder",
     )
 
-    # autocura da sessão do WhatsApp (quedas transitórias)
-    _scheduler.add_job(
-        _watchdog_tick,
-        trigger="interval",
-        minutes=5,
-        id="whatsapp_connection_watchdog",
-    )
+    # autocura da sessão do WhatsApp (quedas transitórias) — só quando
+    # o canal está ligado; com WHATSAPP_ENABLED=false não fica batendo
+    # numa Evolution desligada a cada 5 min
+    if get_settings().whatsapp_enabled:
+
+        _scheduler.add_job(
+            _watchdog_tick,
+            trigger="interval",
+            minutes=5,
+            id="whatsapp_connection_watchdog",
+        )
 
     _scheduler.start()
 

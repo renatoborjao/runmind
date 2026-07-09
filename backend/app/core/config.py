@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     evolution_api_key: str = ""
     evolution_instance: str = ""
 
+    # desliga o canal WhatsApp inteiro (envio + watchdog) quando a
+    # instância Evolution está fora do ar — evita erro a cada 5 min
+    whatsapp_enabled: bool = True
+
     # ==========================
     # TELEGRAM
     # ==========================

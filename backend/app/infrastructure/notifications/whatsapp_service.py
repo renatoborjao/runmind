@@ -13,6 +13,17 @@ class WhatsAppService:
 
         settings = get_settings()
 
+        # canal desligado (Evolution fora do ar): loga alto e não tenta —
+        # melhor um aviso claro no console que um traceback por envio
+        if not settings.whatsapp_enabled:
+
+            print(
+                f"WhatsApp DESLIGADO (WHATSAPP_ENABLED=false) — "
+                f"mensagem para {phone} NÃO enviada."
+            )
+
+            return None
+
         async with httpx.AsyncClient(timeout=30) as client:
 
             response = await client.post(

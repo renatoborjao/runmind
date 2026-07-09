@@ -4,7 +4,7 @@
     {
       "label": "backend",
       "type": "shell",
-      "command": "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+      "command": "if (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue) { Write-Host '[backend] JA ESTA NO AR na porta 8000 - nao vou duplicar.' } else { python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 }",
       "options": { "cwd": "${workspaceFolder}/backend" },
       "isBackground": true,
       "presentation": {
@@ -18,7 +18,7 @@
     {
       "label": "ngrok",
       "type": "shell",
-      "command": "ngrok http --url=unopened-employed-cedar.ngrok-free.dev 8000",
+      "command": "if (Get-Process ngrok -ErrorAction SilentlyContinue) { Write-Host '[ngrok] JA ESTA RODANDO - nao vou duplicar.' } else { ngrok http --url=unopened-employed-cedar.ngrok-free.dev 8000 }",
       "isBackground": true,
       "presentation": {
         "group": "runmind",
