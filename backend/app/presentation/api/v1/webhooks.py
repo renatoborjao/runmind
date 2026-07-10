@@ -38,6 +38,9 @@ from app.infrastructure.integrations.evolution.inbound_parser import (
 from app.infrastructure.integrations.evolution.phone_normalizer import (
     PhoneNormalizer,
 )
+from app.infrastructure.integrations.garmin.garmin_client import (
+    GarminClient,
+)
 from app.infrastructure.integrations.strava.client import (
     StravaClient,
 )
@@ -271,6 +274,15 @@ async def _process_strava_activity(
     try:
 
         profile = OwnerResolver.resolve(owner_id)
+
+        # atleta com Garmin conectado é analisado pelos dados do Garmin
+        # (voltas rotuladas, tiros exatos) via poller — ignora o webhook do
+        # Strava pra não analisar o mesmo treino duas vezes.
+        if GarminClient.is_connected(profile):
+
+            print(f"Strava ignorado p/ '{profile}': análise vem do Garmin")
+
+            return
 
         client = StravaClient(profile)
 

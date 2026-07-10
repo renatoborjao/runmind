@@ -1,5 +1,8 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.application.garmin.garmin_activity_poller import (
+    GarminActivityPoller,
+)
 from app.application.planner.daily_training_notifier import (
     DailyTrainingNotifier,
 )
@@ -24,6 +27,18 @@ async def _watchdog_tick() -> None:
 
         # Evolution fora do ar etc. — só loga, tenta de novo em 5 min
         print(f"Watchdog do WhatsApp falhou: {e}")
+
+
+async def _garmin_poll_tick() -> None:
+
+    try:
+
+        await GarminActivityPoller.poll_all()
+
+    except Exception as e:
+
+        # Garmin fora do ar / token expirado — só loga, tenta em 10 min
+        print(f"Garmin poll falhou: {e}")
 
 
 def start_weekly_plan_scheduler() -> AsyncIOScheduler:
@@ -80,6 +95,15 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
             minutes=5,
             id="whatsapp_connection_watchdog",
         )
+
+    # Garmin não tem webhook: detecta treino novo por polling (~10 min).
+    # Barato quando ninguém tem Garmin (só checa arquivo de token).
+    _scheduler.add_job(
+        _garmin_poll_tick,
+        trigger="interval",
+        minutes=10,
+        id="garmin_activity_poll",
+    )
 
     _scheduler.start()
 

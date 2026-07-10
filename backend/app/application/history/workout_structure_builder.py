@@ -48,14 +48,20 @@ class WorkoutStructureBuilder:
 
         km_hr = [record["hr"] for record in km_records]
 
-        # tiros pelo stream (fonte de verdade pra intervalado curto)
-        streams = raw.get("_streams") or {}
+        # tiros EXATOS do Garmin (voltas rotuladas do treino estruturado)
+        # têm prioridade — sem inferência. Só cai no detector por stream
+        # (fuzzy) quando não vieram do Garmin (ex.: fonte Strava).
+        interval = raw.get("_garmin_interval")
 
-        interval = IntervalAnalyzer.analyze(
-            streams.get("velocity_smooth") or [],
-            streams.get("heartrate") or [],
-            streams.get("distance") or [],
-        )
+        if interval is None:
+
+            streams = raw.get("_streams") or {}
+
+            interval = IntervalAnalyzer.analyze(
+                streams.get("velocity_smooth") or [],
+                streams.get("heartrate") or [],
+                streams.get("distance") or [],
+            )
 
         lap_paces = WorkoutStructureBuilder._paces(
             [
