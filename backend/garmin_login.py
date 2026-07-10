@@ -33,10 +33,9 @@ def main(profile: str) -> None:
 
     garmin = Garmin(email, password, prompt_mfa=prompt_mfa)
 
-    garmin.login()
-
-    # salva os tokens (oauth1/oauth2) — a senha não é gravada
-    garmin.garth.dump(str(token_dir))
+    # login(tokenstore) autentica E salva o token no diretório — a senha
+    # não é gravada, só os tokens oauth
+    garmin.login(str(token_dir))
 
     print()
     print(f"✅ Conectado! Token salvo em {token_dir}")

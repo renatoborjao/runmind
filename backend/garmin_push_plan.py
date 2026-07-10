@@ -31,12 +31,12 @@ async def main(profile: str) -> None:
 
         if r.get("ok"):
 
-            print(f"✅ {r['day']} ({r['date']}) — {r['workout']} "
-                  f"→ Garmin (workout {r['workout_id']})")
+            print(f"[OK] {r['day']} ({r['date']}) - {r['workout']} "
+                  f"-> Garmin (workout {r['workout_id']})")
 
         else:
 
-            print(f"❌ {r['day']} ({r['date']}) — {r['workout']}: "
+            print(f"[FALHOU] {r['day']} ({r['date']}) - {r['workout']}: "
                   f"{r.get('error')}")
 
 
