@@ -1,9 +1,13 @@
+import hashlib
+import hmac
+
 from fastapi import APIRouter
 from fastapi import BackgroundTasks
 from fastapi import Header
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi.responses import PlainTextResponse
 
 from app.core.config import get_settings
 
@@ -39,6 +43,9 @@ from app.infrastructure.integrations.strava.client import (
 )
 from app.infrastructure.integrations.telegram.telegram_inbound_parser import (
     TelegramInboundParser,
+)
+from app.infrastructure.integrations.whatsapp_cloud.whatsapp_cloud_inbound_parser import (
+    WhatsAppCloudInboundParser,
 )
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
@@ -601,5 +608,129 @@ async def receive_telegram_webhook(
     except Exception as e:
 
         print(f"Falha ao processar mensagem Telegram de {chat_id}: {e}")
+
+        return {"success": False, "error": str(e)}
+
+
+# ==========================================================
+# WHATSAPP INBOUND (Cloud API oficial da Meta)
+# ==========================================================
+
+@router.get("/whatsapp-cloud")
+async def verify_whatsapp_cloud_webhook(
+    hub_mode: str = Query(default="", alias="hub.mode"),
+    hub_verify_token: str = Query(default="", alias="hub.verify_token"),
+    hub_challenge: str = Query(default="", alias="hub.challenge"),
+):
+    """Handshake da Meta: ela chama este GET uma vez ao configurar o
+    webhook e espera o hub.challenge de volta, em texto puro, se o token
+    conferir com o nosso."""
+
+    settings = get_settings()
+
+    if (
+        hub_mode == "subscribe"
+        and hub_verify_token == settings.whatsapp_verify_token
+        and settings.whatsapp_verify_token
+    ):
+
+        return PlainTextResponse(hub_challenge)
+
+    raise HTTPException(status_code=403, detail="Invalid verify token")
+
+
+def _valid_cloud_signature(
+    body: bytes,
+    signature_header: str,
+) -> bool:
+    """Confere o X-Hub-Signature-256 (HMAC-SHA256 do corpo cru com o app
+    secret). Sem app secret configurado, não bloqueia — deixa passar pra
+    não travar teste local; em produção configure WHATSAPP_APP_SECRET."""
+
+    settings = get_settings()
+
+    if not settings.whatsapp_app_secret:
+
+        return True
+
+    if not signature_header.startswith("sha256="):
+
+        return False
+
+    expected = hmac.new(
+        settings.whatsapp_app_secret.encode(),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    received = signature_header.split("sha256=", 1)[1]
+
+    return hmac.compare_digest(expected, received)
+
+
+@router.post("/whatsapp-cloud")
+async def receive_whatsapp_cloud_webhook(
+    request: Request,
+    x_hub_signature_256: str = Header(default=""),
+):
+
+    raw_body = await request.body()
+
+    if not _valid_cloud_signature(raw_body, x_hub_signature_256):
+
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
+    payload = await request.json()
+
+    print()
+    print("=" * 70)
+    print("WHATSAPP CLOUD WEBHOOK RECEBIDO")
+    print("=" * 70)
+    print(payload)
+    print("=" * 70)
+
+    parsed = WhatsAppCloudInboundParser.first_message(payload)
+
+    # status (entregue/lido), reações, etc. não têm mensagem de usuário
+    if parsed is None:
+
+        return {"ignored": True, "reason": "no user message"}
+
+    message = parsed["message"]
+
+    value = parsed["value"]
+
+    text = WhatsAppCloudInboundParser.extract_text(message)
+
+    media = WhatsAppCloudInboundParser.extract_media(message)
+
+    if not text and not media:
+
+        return {"ignored": True, "reason": "no supported content found"}
+
+    raw_phone = WhatsAppCloudInboundParser.sender_phone(message)
+
+    if not raw_phone:
+
+        return {"ignored": True, "reason": "no sender phone"}
+
+    phone = PhoneNormalizer.normalize(raw_phone)
+
+    # Falha aqui NUNCA pode virar 5xx: a Meta reentrega o webhook em erro,
+    # reprocessando a mesma mensagem (retry + chamadas duplicadas ao
+    # Gemini). Sempre 200 com o erro no corpo.
+    try:
+
+        return await route_inbound(
+            channel="whatsapp",
+            address=phone,
+            text=text,
+            media=media,
+            sender_name=WhatsAppCloudInboundParser.sender_name(value),
+        )
+
+    except Exception as e:
+
+        print(f"Falha ao processar mensagem Cloud de {phone}: {e}")
 
         return {"success": False, "error": str(e)}

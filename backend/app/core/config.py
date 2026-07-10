@@ -51,16 +51,36 @@ class Settings(BaseSettings):
     strava_refresh_token: str = ""
 
     # ==========================
-    # EVOLUTION
+    # WHATSAPP
     # ==========================
 
+    # qual driver de WhatsApp usar: "evolution" (não-oficial, Baileys) ou
+    # "cloud" (Cloud API oficial da Meta). A lógica do coach não muda; só
+    # troca quem entrega/recebe a mensagem.
+    whatsapp_provider: str = "evolution"
+
+    # desliga o canal WhatsApp inteiro (envio + watchdog) quando o driver
+    # está fora do ar — evita erro repetido no scheduler
+    whatsapp_enabled: bool = True
+
+    # --- Evolution (não-oficial) ---
     evolution_api_url: str = ""
     evolution_api_key: str = ""
     evolution_instance: str = ""
 
-    # desliga o canal WhatsApp inteiro (envio + watchdog) quando a
-    # instância Evolution está fora do ar — evita erro a cada 5 min
-    whatsapp_enabled: bool = True
+    # --- Cloud API oficial da Meta ---
+    # token permanente (System User) — Graph API
+    whatsapp_cloud_token: str = ""
+    # id do número registrado (Phone Number ID)
+    whatsapp_phone_number_id: str = ""
+    # id da conta comercial (WhatsApp Business Account ID)
+    whatsapp_business_account_id: str = ""
+    # segredo do app — valida a assinatura do webhook (X-Hub-Signature-256)
+    whatsapp_app_secret: str = ""
+    # token que NÓS definimos, conferido na verificação do webhook (GET)
+    whatsapp_verify_token: str = ""
+    # versão da Graph API nas chamadas
+    whatsapp_graph_version: str = "v21.0"
 
     # ==========================
     # TELEGRAM
