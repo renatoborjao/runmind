@@ -284,9 +284,12 @@ async def _process_strava_activity(
         # atividade já está no Garmin — então usamos o webhook como GATILHO
         # instantâneo pra analisar via Garmin (dedup evita repetir com o
         # poller de 10 min). Não consumimos o dado do Strava.
-        if GarminClient.is_connected(profile):
+        if (
+            GarminClient.is_connected(profile)
+            and GarminClient.analysis_enabled(profile)
+        ):
 
-            print(f"Garmin conectado: analisando '{profile}' via Garmin")
+            print(f"Garmin ligado: analisando '{profile}' via Garmin")
 
             await GarminActivityPoller.poll_one(profile)
 

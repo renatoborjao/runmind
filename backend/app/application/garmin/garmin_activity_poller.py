@@ -71,7 +71,11 @@ class GarminActivityPoller:
 
         for profile in RunnerProfileRepository().list_all():
 
-            if not GarminClient.is_connected(profile):
+            # análise via Garmin exige conexão E a válvula ligada
+            if not (
+                GarminClient.is_connected(profile)
+                and GarminClient.analysis_enabled(profile)
+            ):
 
                 continue
 
