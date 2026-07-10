@@ -96,7 +96,7 @@ class WeeklyPlanNotifier:
 
         # atleta com Garmin conectado: oferece mandar os treinos pro
         # relógio. Marca a oferta como pendente pra entender o "SIM".
-        if GarminSync.should_offer(profile):
+        if GarminSync.should_offer(profile, runner):
 
             message += GarminSync.offer_text()
 

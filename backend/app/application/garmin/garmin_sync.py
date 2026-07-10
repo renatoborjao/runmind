@@ -53,8 +53,14 @@ def _normalize(text: str) -> str:
 class GarminSync:
 
     @staticmethod
-    def should_offer(profile: str) -> bool:
-        """Só oferece se o atleta conectou o Garmin."""
+    def should_offer(profile: str, runner: RunnerProfile) -> bool:
+        """Oferece só quando o plano é do RunMind e o atleta conectou o
+        Garmin. Atleta com treinador externo já recebe os treinos pela
+        ferramenta do treinador — não duplicamos no relógio."""
+
+        if getattr(runner, "external_coach", False):
+
+            return False
 
         return GarminClient.is_connected(profile)
 
@@ -75,6 +81,12 @@ class GarminSync:
         """Se a mensagem for aceite da oferta ou pedido explícito de
         sincronizar, empurra o plano e responde. Senão devolve None (a
         conversa segue normal)."""
+
+        # atleta com treinador externo recebe os treinos pela ferramenta
+        # do treinador — o push do RunMind não se aplica a ele
+        if getattr(runner, "external_coach", False):
+
+            return None
 
         norm = _normalize(incoming_text)
 
