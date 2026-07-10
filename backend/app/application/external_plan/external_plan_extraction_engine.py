@@ -2,6 +2,9 @@ import json
 
 from google.genai import types
 
+from app.application.external_plan.treino_online_legend import (
+    legend_for_prompt,
+)
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import generate_text
 
@@ -9,6 +12,11 @@ MAX_OUTPUT_TOKENS = 1500
 
 EXTRACTION_PROMPT = """Você lê planilhas de treino de corrida (print, foto \
 ou PDF enviados por corredores brasileiros) e extrai as sessões da semana.
+
+Alguns planos usam SIGLAS de ferramentas de treinador. Se aparecer uma
+destas, use o NOME COMPLETO no "workout_type" (nunca a sigla crua):
+{legend}
+
 
 Responda APENAS com JSON neste formato:
 {"sessions": [
@@ -48,6 +56,10 @@ class ExternalPlanExtractionEngine:
 
         settings = get_settings()
 
+        # injeta a legenda das siglas (replace, não format: o prompt tem
+        # chaves {} do exemplo JSON que quebrariam o .format)
+        prompt = EXTRACTION_PROMPT.replace("{legend}", legend_for_prompt())
+
         raw = await generate_text(
             model=settings.gemini_extract_model,
             contents=[
@@ -55,7 +67,7 @@ class ExternalPlanExtractionEngine:
                     data=media_bytes,
                     mime_type=mimetype,
                 ),
-                EXTRACTION_PROMPT,
+                prompt,
             ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
