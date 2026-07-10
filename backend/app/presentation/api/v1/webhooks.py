@@ -38,6 +38,9 @@ from app.infrastructure.integrations.evolution.inbound_parser import (
 from app.infrastructure.integrations.evolution.phone_normalizer import (
     PhoneNormalizer,
 )
+from app.application.garmin.garmin_activity_poller import (
+    GarminActivityPoller,
+)
 from app.infrastructure.integrations.garmin.garmin_client import (
     GarminClient,
 )
@@ -275,12 +278,17 @@ async def _process_strava_activity(
 
         profile = OwnerResolver.resolve(owner_id)
 
-        # atleta com Garmin conectado é analisado pelos dados do Garmin
-        # (voltas rotuladas, tiros exatos) via poller — ignora o webhook do
-        # Strava pra não analisar o mesmo treino duas vezes.
+        # atleta com Garmin conectado é analisado pelos DADOS do Garmin
+        # (voltas rotuladas, tiros exatos). Como o Garmin é upstream do
+        # Strava (relógio→Garmin→Strava), quando este webhook chega a
+        # atividade já está no Garmin — então usamos o webhook como GATILHO
+        # instantâneo pra analisar via Garmin (dedup evita repetir com o
+        # poller de 10 min). Não consumimos o dado do Strava.
         if GarminClient.is_connected(profile):
 
-            print(f"Strava ignorado p/ '{profile}': análise vem do Garmin")
+            print(f"Garmin conectado: analisando '{profile}' via Garmin")
+
+            await GarminActivityPoller.poll_one(profile)
 
             return
 

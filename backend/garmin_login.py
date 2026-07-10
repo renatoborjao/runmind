@@ -40,7 +40,17 @@ def main(profile: str) -> None:
 
     print()
     print(f"✅ Conectado! Token salvo em {token_dir}")
-    print("A partir de agora o RunMind empurra treinos pro seu Garmin.")
+
+    # marca o histórico atual como 'já visto' — só treinos DEPOIS do login
+    # geram análise (nada de feedback retroativo do histórico antigo)
+    from app.application.garmin.garmin_activity_poller import (
+        GarminActivityPoller,
+    )
+
+    GarminActivityPoller.seed_history(profile)
+
+    print("Histórico marcado. A partir de agora o RunMind empurra treinos")
+    print("pro seu Garmin e analisa pelos dados dele.")
 
 
 if __name__ == "__main__":

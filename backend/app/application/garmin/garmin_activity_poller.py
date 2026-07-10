@@ -36,6 +36,37 @@ def _seeded_marker(profile: str) -> Path:
 class GarminActivityPoller:
 
     @staticmethod
+    def seed_history(profile: str) -> None:
+        """Marca as atividades recentes como 'já vistas' SEM analisar, e
+        grava o marcador. Chamado no LOGIN — assim o histórico antigo não
+        vira feedback retroativo, e qualquer treino DEPOIS do login é
+        analisado normalmente (pelo gatilho do Strava ou pelo poller)."""
+
+        if not GarminClient.is_connected(profile):
+
+            return
+
+        try:
+
+            garmin = GarminClient.connect(profile)
+
+            guard = ProcessedActivityGuard()
+
+            for item in garmin.get_activities(0, _RECENT_LIMIT) or []:
+
+                activity_id = item.get("activityId")
+
+                if activity_id is not None:
+
+                    guard.check_and_mark(activity_id)
+
+            _seeded_marker(profile).write_text("1", encoding="utf-8")
+
+        except Exception as e:
+
+            print(f"Garmin: falha ao semear histórico de '{profile}': {e}")
+
+    @staticmethod
     async def poll_all() -> None:
 
         for profile in RunnerProfileRepository().list_all():
@@ -46,24 +77,30 @@ class GarminActivityPoller:
 
             try:
 
-                await GarminActivityPoller._poll_one(profile)
+                await GarminActivityPoller.poll_one(profile)
 
             except Exception as e:
 
                 print(f"Garmin poll falhou para '{profile}': {e}")
 
     @staticmethod
-    async def _poll_one(profile: str) -> None:
+    async def poll_one(profile: str) -> None:
+        """Analisa treinos NOVOS do atleta (deduplicados). Serve tanto pro
+        poller de 10 min quanto pro gatilho instantâneo do webhook Strava."""
+
+        # atleta sem seed (logou antes deste fluxo): seed agora, sem
+        # analisar — evita despejar o histórico antigo de uma vez
+        if not _seeded_marker(profile).exists():
+
+            GarminActivityPoller.seed_history(profile)
+
+            return
 
         garmin = GarminClient.connect(profile)
 
         activities = garmin.get_activities(0, _RECENT_LIMIT) or []
 
         guard = ProcessedActivityGuard()
-
-        marker = _seeded_marker(profile)
-
-        seeded = marker.exists()
 
         for item in activities:
 
@@ -73,23 +110,12 @@ class GarminActivityPoller:
 
                 continue
 
-            # primeira passada: só marca (não analisa histórico antigo)
-            if not seeded:
-
-                guard.check_and_mark(activity_id)
-
-                continue
-
-            # já processado: pula (dedup)
+            # já processado: pula (dedup — cobre poller + gatilho)
             if not guard.check_and_mark(activity_id):
 
                 continue
 
             await GarminActivityPoller._analyze(profile, activity_id)
-
-        if not seeded:
-
-            marker.write_text("1", encoding="utf-8")
 
     @staticmethod
     async def _analyze(profile: str, activity_id: int) -> None:
