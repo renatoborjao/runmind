@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
+from app.domain.entities.workout_step import parse_steps
 from app.infrastructure.integrations.gemini.client import generate_text
 
 MAX_OUTPUT_TOKENS = 2000
@@ -40,6 +41,19 @@ REGRAS:
   que qualquer corredor entende. Detalhe de verdade: aquecimento (distância +
   pace), a parte principal (séries/distâncias/repetições/pace/recuperação
   EXPLÍCITOS), o desaquecimento e uma dica prática. Um passo por item.
+- "steps" é a MESMA prescrição em formato ESTRUTURADO (pra virar treino
+  guiado no relógio). Use os blocos reais do treino, na ordem:
+    * kind: "warmup" | "run" | "interval" | "recovery" | "rest" | "cooldown"
+      | "repeat"
+    * fim do bloco: "distance_m" OU "distance_km" OU "duration_min" (escolha
+      o que o treino pede; tiro costuma ser distance_m, rodagem distance_km,
+      recuperação pode ser duration_min)
+    * alvo: "pace_min"/"pace_max" (mm:ss por km; min = mais rápido) quando
+      houver ritmo; recuperação/aquecimento podem ir sem alvo
+    * "repeat" agrupa o que se repete: {{"kind":"repeat","reps":6,"steps":[
+      bloco de esforço, bloco de recuperação]}}
+  Monte o treino que fizer sentido pra evolução dele — contínuo, intervalado,
+  tempo, progressivo, fartlek: o formato aceita todos.
 - Respeite lesões/limitações e preferências que aparecerem no retrato.
 
 Responda APENAS com JSON:
@@ -54,12 +68,20 @@ Responda APENAS com JSON:
         "Desaquecimento: 1,5 km leve soltando as pernas",
         "Dica: comece o 1º tiro mais controlado pra não estourar no fim"
       ],
+      "steps": [
+        {{"kind": "warmup", "distance_km": 2, "pace_min": "6:30", "pace_max": "7:00"}},
+        {{"kind": "repeat", "reps": 6, "steps": [
+          {{"kind": "interval", "distance_m": 800, "pace_min": "4:45", "pace_max": "4:50"}},
+          {{"kind": "recovery", "distance_m": 400}}
+        ]}},
+        {{"kind": "cooldown", "distance_km": 1.5, "pace_min": "6:30", "pace_max": "7:00"}}
+      ],
       "purpose": "aumentar o ritmo de prova"}}
   ]}}
 
-Cada sessão é uma corrida/caminhada com distance_km, paces, structure (lista
-de passos) e purpose. kind: "run" (corrida) ou "walk"/"run_walk" (caminhada/
-corrida-caminhada, iniciante). Dias da semana em inglês (Monday..Sunday).
+Cada sessão é uma corrida/caminhada com distance_km, paces, structure (texto),
+steps (estruturado) e purpose. kind: "run" (corrida) ou "walk"/"run_walk"
+(caminhada/corrida-caminhada, iniciante). Dias em inglês (Monday..Sunday).
 """
 
 
@@ -200,6 +222,7 @@ class CoachPlanEngine:
                         item.get("structure"),
                     ),
                     purpose=str(item.get("purpose", "")).strip(),
+                    steps=parse_steps(item.get("steps")),
                 )
             )
 

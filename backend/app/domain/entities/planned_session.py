@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from app.domain.entities.workout_step import WorkoutStep
 
 
 @dataclass(slots=True)
@@ -42,3 +44,8 @@ class PlannedSession:
     structure: str = ""
 
     purpose: str = ""
+
+    # Passos ESTRUTURADOS do treino (aquecimento, séries, recuperação,
+    # desaquecimento...) — fonte de verdade pra montar o treino guiado no
+    # Garmin. Vazio = cai no fallback (distância+pace num passo só).
+    steps: list[WorkoutStep] = field(default_factory=list)
