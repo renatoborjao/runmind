@@ -15,7 +15,11 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import today_local
+from app.application.garmin.garmin_sync import GarminSync
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
+from app.infrastructure.integrations.garmin.garmin_offer_store import (
+    GarminOfferStore,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -89,6 +93,14 @@ class WeeklyPlanNotifier:
             runner.name,
             plan,
         )
+
+        # atleta com Garmin conectado: oferece mandar os treinos pro
+        # relógio. Marca a oferta como pendente pra entender o "SIM".
+        if GarminSync.should_offer(profile):
+
+            message += GarminSync.offer_text()
+
+            GarminOfferStore.set_pending(profile)
 
         await NotificationService.send(
             runner,

@@ -16,6 +16,7 @@ from app.application.coach.conversation.plan_preference_applier import (
 from app.application.coach.conversation.plan_preference_detector import (
     PlanPreferenceDetector,
 )
+from app.application.garmin.garmin_sync import GarminSync
 from app.application.coach.conversation.conversation_summary_engine import (
     ConversationSummaryEngine,
 )
@@ -78,9 +79,31 @@ class CoachConversationEvent:
 
         used_deterministic = False
 
+        # "SIM" pra oferta de mandar os treinos pro Garmin (ou pedido
+        # explícito "manda pro relógio") — sincroniza na hora, sem Gemini.
+        try:
+
+            reply_text = await GarminSync.handle_reply(
+                profile,
+                runner,
+                incoming_text,
+            )
+
+            used_deterministic = reply_text is not None
+
+        except Exception as e:
+
+            print(f"Falha no fluxo Garmin de '{profile}': {e}")
+
+            reply_text = None
+
         # Pedido de mudança no plano ("longão no domingo") é aplicado de
         # verdade e na hora — determinístico, sem passar pelo Gemini.
-        preference = PlanPreferenceDetector.detect(incoming_text)
+        preference = (
+            PlanPreferenceDetector.detect(incoming_text)
+            if reply_text is None
+            else None
+        )
 
         if preference is not None:
 
