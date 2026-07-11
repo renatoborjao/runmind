@@ -11,6 +11,7 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.integrations.weather.open_meteo_client import (
     OpenMeteoClient,
@@ -44,6 +45,28 @@ class DailyTrainingNotifier:
         profile: str,
     ) -> None:
 
+        result = await DailyTrainingNotifier.build(profile)
+
+        # Dia de descanso: nada a enviar.
+        if result is None:
+
+            return
+
+        runner, message = result
+
+        await NotificationService.send(
+            runner,
+            message,
+        )
+
+    @staticmethod
+    async def build(
+        profile: str,
+    ) -> tuple[RunnerProfile, str] | None:
+        """Mensagem do treino de hoje (+ clima), ou None em dia de descanso.
+        Separada do envio pra o briefing matinal poder juntar com o furo de
+        ontem num único envio."""
+
         runner, plan = await CurrentPlanProvider.for_profile(profile)
 
         message = WeeklyPlanMessageFormatter.today_session_message(
@@ -51,10 +74,9 @@ class DailyTrainingNotifier:
             plan,
         )
 
-        # Dia de descanso: nada a enviar.
         if message is None:
 
-            return
+            return None
 
         weather = await DailyTrainingNotifier._weather_line(profile)
 
@@ -62,10 +84,7 @@ class DailyTrainingNotifier:
 
             message = f"{message}\n\n{weather}"
 
-        await NotificationService.send(
-            runner,
-            message,
-        )
+        return runner, message
 
     @staticmethod
     async def _weather_line(

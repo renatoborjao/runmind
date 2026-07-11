@@ -3,8 +3,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.application.garmin.garmin_activity_poller import (
     GarminActivityPoller,
 )
-from app.application.planner.daily_training_notifier import (
-    DailyTrainingNotifier,
+from app.application.planner.morning_briefing_notifier import (
+    MorningBriefingNotifier,
 )
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
@@ -74,14 +74,16 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         id="weekly_review_notification",
     )
 
-    # 06h todo dia: lembrete do treino do dia (dia de descanso não envia)
+    # 06h todo dia: briefing matinal numa mensagem só — primeiro o furo de
+    # ONTEM (se houve; o treino teve a noite pra sincronizar), depois o
+    # lembrete do treino de HOJE. Descanso sem furo não envia nada.
     _scheduler.add_job(
-        DailyTrainingNotifier.notify_all,
+        MorningBriefingNotifier.notify_all,
         trigger="cron",
         hour=6,
         minute=0,
         misfire_grace_time=3600,
-        id="daily_training_reminder",
+        id="morning_briefing",
     )
 
     # autocura da sessão do WhatsApp (quedas transitórias) — só quando
