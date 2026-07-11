@@ -34,7 +34,7 @@ def _plan(source="runmind", week=WEEK) -> TrainingPlan:
 
 def _run(
     runner=None, assessment=None, ai_result=None,
-    ai_error=None, existing=None,
+    ai_error=None, existing=None, force=False,
 ):
 
     with (
@@ -65,6 +65,7 @@ def _run(
                 "renato", runner or make_runner(),
                 assessment or _assessment(),
                 MagicMock(), MagicMock(), TrainingHistory([]), WEEK,
+                force=force,
             )
         )
 
@@ -118,3 +119,14 @@ def test_cached_week_plan_is_reused():
     coach.generate.assert_not_awaited()
     wps.get_or_generate.assert_not_called()
     assert plan.week_start == WEEK
+
+
+def test_force_regenerates_by_ai_even_with_cached_plan():
+
+    # o atleta pediu mudança: força regenerar PELA IA (mantém o plano rico),
+    # nunca reaproveita o cache nem cai no determinístico
+    plan, coach, repo, wps = _run(existing=_plan(week=WEEK), force=True)
+
+    coach.generate.assert_awaited_once()
+    wps.get_or_generate.assert_not_called()
+    assert plan.source == "runmind"

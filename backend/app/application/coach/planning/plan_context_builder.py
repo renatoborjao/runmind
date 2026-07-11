@@ -47,6 +47,17 @@ class PlanContextBuilder:
             "essa frequência."
         )
 
+        # preferência de PADRÃO pro longão — não é regra fixa: algo mais
+        # recente (conversa/memória, mudança da semana) pode sobrepor. Tudo
+        # aqui é dinâmico e a IA relê fresco a cada geração.
+        if runner.preferred_long_run_day:
+
+            lines.append(
+                "Por padrão ele faz o longão "
+                f"{weekday_label(runner.preferred_long_run_day)} (pode mudar "
+                "se algo mais recente na conversa/memória pedir outro dia)."
+            )
+
         lines.append(
             "Volume real: ~%.1f km/sem (última %.1f, melhor %.1f), "
             "tendência %s."

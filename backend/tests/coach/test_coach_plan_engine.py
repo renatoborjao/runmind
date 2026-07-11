@@ -113,6 +113,39 @@ def test_plan_without_runs_raises():
         _generate(only_strength)
 
 
+def test_prompt_carries_the_aversion_directive():
+
+    # o retrato do atleta traz a aversão (via memória): o prompt tem que
+    # levar a aversão E a diretriz de COMO honrá-la (manter estímulo).
+    captured = {}
+
+    async def _capture(*args, **kwargs):
+
+        captured["contents"] = kwargs.get("contents")
+
+        return RENATO_PLAN_JSON
+
+    with patch(f"{MODULE}.generate_text", new=AsyncMock(side_effect=_capture)):
+
+        asyncio.run(
+            CoachPlanEngine.generate(
+                runner_name="Renato",
+                objective="10 km sub-50",
+                week_start=WEEK_START,
+                context=(
+                    "Memória do atleta:\n"
+                    "- [preferencia] acha tiro na pista chato"
+                ),
+            )
+        )
+
+    prompt = captured["contents"]
+
+    assert "AVERSÕES A TIPO DE TREINO" in prompt
+    assert "MANTENHA o estímulo" in prompt
+    assert "tiro na pista chato" in prompt
+
+
 def test_ai_failure_propagates_for_fallback():
 
     with patch(

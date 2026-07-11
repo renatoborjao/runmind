@@ -1,8 +1,8 @@
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
+from app.application.coach.planning.ai_plan_service import AIPlanService
 from app.application.history.metrics_resolver import MetricsResolver
-from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
@@ -41,14 +41,16 @@ class CurrentPlanProvider:
 
         goal = BuildTrainingGoal.execute(runner)
 
-        plan = WeeklyPlanService.get_or_generate(
+        # geração SEMPRE pela IA (plano rico do histórico/evolução); o
+        # determinístico só entra como fallback interno se a IA cair.
+        plan = await AIPlanService.ensure_plan(
             profile=profile,
             runner=runner,
             assessment=assessment,
             metrics=metrics,
             goal=goal,
-            force=force,
             history=history,
+            force=force,
         )
 
         return runner, plan

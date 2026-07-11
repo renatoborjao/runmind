@@ -40,6 +40,7 @@ class AIPlanService:
         goal: TrainingGoal,
         history: TrainingHistory,
         reference_date: date | None = None,
+        force: bool = False,
     ) -> TrainingPlan:
 
         reference_date = reference_date or today_local()
@@ -50,8 +51,14 @@ class AIPlanService:
 
         existing = repository.load(profile)
 
-        # já há plano desta semana (IA ou determinístico): reaproveita
-        if existing is not None and existing.week_start == week_start:
+        # já há plano desta semana (IA ou determinístico): reaproveita.
+        # force=True (o atleta pediu uma mudança) regenera pela IA — mantendo
+        # o plano RICO, nunca caindo pro determinístico como plano principal.
+        if (
+            not force
+            and existing is not None
+            and existing.week_start == week_start
+        ):
 
             return existing
 

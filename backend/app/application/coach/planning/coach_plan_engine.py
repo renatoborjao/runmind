@@ -54,7 +54,17 @@ REGRAS:
       bloco de esforço, bloco de recuperação]}}
   Monte o treino que fizer sentido pra evolução dele — contínuo, intervalado,
   tempo, progressivo, fartlek: o formato aceita todos.
-- Respeite lesões/limitações e preferências que aparecerem no retrato.
+- Respeite lesões/limitações que aparecerem no retrato.
+- AVERSÕES A TIPO DE TREINO: se o retrato disser que o atleta não gosta de um
+  tipo de treino, NÃO ignore — mas também NÃO jogue fora o estímulo que ele
+  precisa pra meta. Distinga o motivo:
+    * Gosto/tédio (ex.: "acha tiro na pista chato") -> MANTENHA o estímulo
+      fisiológico e troque só a FORMA (ex.: fartlek na rua no lugar de
+      intervalado na pista; progressivo no lugar de tempo em ritmo fixo).
+    * Restrição física/dor (ex.: "subida incomoda o joelho") -> ADAPTE ou
+      REMOVA de verdade aquele estímulo e compense com outro seguro.
+  Explique a troca no "purpose" da sessão, pra ele ver que você ouviu e por
+  que o objetivo foi mantido.
 
 Responda APENAS com JSON:
 {{"weekly_objective": "objetivo/foco curto da semana",
