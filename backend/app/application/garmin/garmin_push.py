@@ -52,11 +52,13 @@ def push_session(
     profile: str,
     session: PlannedSession,
     on_date: date,
+    garmin=None,
 ) -> dict:
     """Sobe e agenda UMA sessão. Retorna {ok, workout_id, date} ou
-    {ok: False, error}."""
+    {ok: False, error}. `garmin` já conectado é reusado (a reconciliação
+    conecta uma vez e reusa em todas as sessões, em vez de logar por op)."""
 
-    garmin = GarminClient.connect(profile)
+    garmin = garmin or GarminClient.connect(profile)
 
     workout = GarminWorkoutBuilder.build(
         session,
@@ -84,9 +86,44 @@ def push_session(
 
     date_str = on_date.isoformat()
 
-    garmin.schedule_workout(workout_id, date_str)
+    schedule = garmin.schedule_workout(workout_id, date_str)
 
-    return {"ok": True, "workout_id": workout_id, "date": date_str}
+    return {
+        "ok": True,
+        "workout_id": workout_id,
+        "schedule_id": _schedule_id(schedule),
+        "date": date_str,
+    }
+
+
+def _schedule_id(schedule) -> int | str | None:
+    """O id do AGENDAMENTO (não do treino) que o `schedule_workout`
+    devolve — é ele que o `unschedule_workout` usa pra tirar do calendário
+    sem apagar o template."""
+
+    if not isinstance(schedule, dict):
+
+        return None
+
+    return schedule.get("workoutScheduleId") or schedule.get("scheduleId")
+
+
+def remove_session(profile: str, record: dict, garmin=None) -> dict:
+    """Tira do Garmin o treino que uma sessão colocou lá. Confirmado no
+    device (perfil renato2, jul/2026): apagar o template com delete_workout
+    JÁ REMOVE o agendamento do calendário junto (cascateia) — não precisa
+    desagendar, então basta o workout_id (que vem confiável do upload).
+    `garmin` já conectado é reusado (evita novo login por remoção)."""
+
+    garmin = garmin or GarminClient.connect(profile)
+
+    workout_id = record.get("workout_id")
+
+    if workout_id:
+
+        garmin.delete_workout(workout_id)
+
+    return {"ok": True, "workout_id": workout_id}
 
 
 def push_week(

@@ -1,17 +1,24 @@
 """Empurra o plano REAL da semana do atleta pro Garmin — cada sessão de
 corrida na sua data do calendário. É isto que o fluxo opt-in ('quer no
 relógio? SIM') vai chamar: manda os treinos de verdade que o coach montou,
-não exemplos."""
+não exemplos.
 
-from app.application.garmin.garmin_push import push_session
+Passa pela reconciliação: o plano guarda o que já pôs no relógio, então
+chamar de novo NÃO duplica — só empurra o que falta ou mudou."""
+
+from datetime import date
+
+from app.application.garmin.garmin_reconciler import GarminReconciler
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
 )
 from app.core.clock import today_local
+from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
-
-_RUNNING_KINDS = {"run", "walk", "run_walk"}
+from app.infrastructure.persistence.weekly_plan_repository import (
+    WeeklyPlanRepository,
+)
 
 
 async def push_current_plan(
@@ -24,39 +31,23 @@ async def push_current_plan(
 
     runner, plan = await CurrentPlanProvider.for_profile(profile)
 
-    today = today_local()
+    reference = today_local() if only_future else date.min
 
-    results: list[dict] = []
+    # conecta UMA vez e reusa em todas as ops (antes: um login por sessão)
+    garmin = GarminClient.connect(profile)
 
-    for session in plan.sessions:
+    # o plano é o anterior E o atual: reconciliar contra ele mesmo empurra o
+    # que falta e ignora o que já está lá igual (idempotente)
+    results = GarminReconciler.reconcile(
+        profile,
+        previous_plan=plan,
+        current_plan=plan,
+        reference_date=reference,
+        garmin=garmin,
+    )
 
-        if session.kind not in _RUNNING_KINDS:
-
-            continue
-
-        on_date = plan.session_date(session)
-
-        if only_future and on_date < today:
-
-            continue
-
-        try:
-
-            outcome = push_session(profile, session, on_date)
-
-        except Exception as e:
-
-            outcome = {"ok": False, "error": str(e)}
-
-            print(f"Falha ao empurrar {session.day} pro Garmin: {e}")
-
-        results.append(
-            {
-                "day": session.day,
-                "date": on_date.isoformat(),
-                "workout": session.workout_type,
-                **outcome,
-            }
-        )
+    # persiste os registros de push (workout_id/schedule_id) gravados nas
+    # sessões, pra próxima mudança saber o que já está no relógio
+    WeeklyPlanRepository().save(profile, plan)
 
     return runner, plan, results

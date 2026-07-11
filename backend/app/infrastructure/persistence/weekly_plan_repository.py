@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
+from app.domain.entities.workout_step import parse_steps
 
 
 class WeeklyPlanRepository:
@@ -173,6 +174,23 @@ class WeeklyPlanRepository:
         }
 
     @staticmethod
+    def _session_from_dict(
+        session: dict,
+    ) -> PlannedSession:
+        """Reconstrói a sessão do disco. `steps` foi serializado por asdict
+        (viram dicts crus); sem reidratar pra WorkoutStep, o push guiado do
+        Garmin quebra (dict não tem .is_repeat) e o treino — tiros
+        especialmente — some do relógio. parse_steps lê o mesmo formato."""
+
+        session = dict(session)
+
+        if "steps" in session:
+
+            session["steps"] = parse_steps(session["steps"])
+
+        return PlannedSession(**session)
+
+    @staticmethod
     def _from_dict(
         data: dict,
     ) -> TrainingPlan:
@@ -185,7 +203,7 @@ class WeeklyPlanRepository:
             running_days=data["running_days"],
             week_start=date.fromisoformat(data["week_start"]),
             sessions=[
-                PlannedSession(**session)
+                WeeklyPlanRepository._session_from_dict(session)
                 for session in data["sessions"]
             ],
             source=data.get("source", "runmind"),

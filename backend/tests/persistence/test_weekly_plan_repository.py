@@ -40,6 +40,42 @@ def _plan() -> TrainingPlan:
     )
 
 
+def test_structured_steps_survive_the_disk_as_workout_steps(tmp_path):
+
+    # regressão: steps salvos por asdict voltavam como dict e o push guiado
+    # do Garmin quebrava (dict não tem .is_repeat) — tiro sumia do relógio
+    from app.application.garmin.garmin_workout_builder import (
+        GarminWorkoutBuilder,
+    )
+    from app.domain.entities.workout_step import WorkoutStep
+
+    repo = _isolated_repo(tmp_path)
+
+    plan = _plan()
+    plan.sessions[0].steps = [
+        WorkoutStep(kind="warmup", distance_m=2000, pace_min="6:30"),
+        WorkoutStep(
+            kind="repeat",
+            reps=6,
+            steps=[
+                WorkoutStep(kind="interval", distance_m=800, pace_min="4:45"),
+                WorkoutStep(kind="recovery", distance_m=400),
+            ],
+        ),
+    ]
+
+    repo.save("renato", plan)
+
+    loaded = repo.load("renato").sessions[0]
+
+    assert all(isinstance(step, WorkoutStep) for step in loaded.steps)
+    assert loaded.steps[1].is_repeat
+    assert loaded.steps[1].steps[0].distance_m == 800
+
+    # e o treino guiado monta a partir do plano recarregado (não quebra)
+    GarminWorkoutBuilder.build(loaded, name="x")
+
+
 def test_load_returns_none_when_no_file(tmp_path):
 
     repo = _isolated_repo(tmp_path)

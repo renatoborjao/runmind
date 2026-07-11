@@ -49,3 +49,11 @@ class PlannedSession:
     # desaquecimento...) — fonte de verdade pra montar o treino guiado no
     # Garmin. Vazio = cai no fallback (distância+pace num passo só).
     steps: list[WorkoutStep] = field(default_factory=list)
+
+    # Registro do que ESTA sessão colocou no Garmin do atleta — pra
+    # reconciliar mudanças no meio da semana sem duplicar nem deixar
+    # treino-fantasma no relógio. None = nunca empurrada. Chaves:
+    #   workout_id, schedule_id, date (ISO) e fingerprint (hash do
+    #   conteúdo empurrado: se o treino muda, o fingerprint muda e a
+    #   reconciliação desagenda o antigo e empurra o novo).
+    garmin: dict | None = None
