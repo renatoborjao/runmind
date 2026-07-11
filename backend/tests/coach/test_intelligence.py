@@ -341,6 +341,9 @@ def test_weekly_volume_no_goal():
 
 def test_weekly_volume_progress_boundaries():
 
+    # ainda há treino por fazer nesta semana (next_planned setado)
+    upcoming = make_planned_session(day="Sunday")
+
     cases = {
         10.0: WeeklyVolumeStatus.COMPLETED.value,
         9.9: WeeklyVolumeStatus.NEAR_COMPLETE.value,
@@ -353,11 +356,37 @@ def test_weekly_volume_progress_boundaries():
         context = make_context(
             weekly_goal=10.0,
             weekly_volume=weekly_volume,
+            next_planned=upcoming,
         )
 
         finding = HistoryIntelligence.process_weekly_volume(context)
 
         assert finding.code == expected_code
+
+
+def test_week_done_counts_as_completed_even_a_bit_short():
+    """Bug do Renato: fez TODOS os treinos (volume ~98%) e não há mais sessão
+    na semana -> 'concluído', não 'próximo de concluir'."""
+
+    context = make_context(
+        weekly_goal=10.0, weekly_volume=9.8, next_planned=None,
+    )
+
+    finding = HistoryIntelligence.process_weekly_volume(context)
+
+    assert finding.code == WeeklyVolumeStatus.COMPLETED.value
+
+
+def test_short_week_without_remaining_session_is_not_completed():
+    """Furou a semana (volume baixo) e ela acabou -> NÃO é 'concluído'."""
+
+    context = make_context(
+        weekly_goal=10.0, weekly_volume=5.0, next_planned=None,
+    )
+
+    finding = HistoryIntelligence.process_weekly_volume(context)
+
+    assert finding.code == WeeklyVolumeStatus.IN_PROGRESS.value
 
 
 # ==========================================================

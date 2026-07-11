@@ -93,7 +93,15 @@ class HistoryIntelligence:
 
         elif progress >= 80:
 
-            code = WeeklyVolumeStatus.NEAR_COMPLETE
+            # Sem mais treino planejado nesta semana + volume quase batido =
+            # semana CUMPRIDA. O km executado raramente crava 100% do
+            # planejado, então não chamar de "próximo de concluir" quando
+            # não há mais o que fazer (bug: atleta fez tudo e ouvia "quase").
+            code = (
+                WeeklyVolumeStatus.COMPLETED
+                if context.next_planned is None
+                else WeeklyVolumeStatus.NEAR_COMPLETE
+            )
 
         else:
 

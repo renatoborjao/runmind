@@ -15,9 +15,20 @@ from app.infrastructure.integrations.garmin.garmin_client import (
     GarminClient,
 )
 
-# tipos de volta do Garmin que são ESFORÇO (tiro) vs RECUPERAÇÃO
-_EFFORT_TYPES = {"INTERVAL", "ACTIVE"}
-_RECOVERY_TYPES = {"RECOVERY", "REST"}
+# O Garmin rotula as voltas do treino estruturado com sufixo: esforço =
+# "INTERVAL_ACTIVE" (ou "ACTIVE"/"INTERVAL"), recuperação = "INTERVAL_RECOVERY"
+# / "REST" (confirmado com atividade real). Casamos por SUBSTRING, checando
+# recuperação primeiro (senão "INTERVAL_RECOVERY" cairia como esforço).
+def _is_recovery_type(sp_type: str) -> bool:
+
+    return "RECOVERY" in sp_type or "REST" in sp_type
+
+
+def _is_effort_type(sp_type: str) -> bool:
+
+    return not _is_recovery_type(sp_type) and (
+        "ACTIVE" in sp_type or sp_type == "INTERVAL"
+    )
 
 
 def _first(d: dict, *keys, default=None):
@@ -56,6 +67,21 @@ class GarminActivitySource:
         summary = garmin.get_activity(activity_id)
 
         raw: dict = dict(summary)
+
+        summary_dto = summary.get("summaryDTO") or {}
+
+        # cadência pro pipeline atual (ficha/estrutura). O Garmin dá
+        # averageRunCadence em passos/min TOTAL (~162); o builder
+        # compartilhado dobra um valor por-perna (padrão Strava), então
+        # passamos a METADE pra o ×2 reconstituir o total certo.
+        if summary_dto.get("averageRunCadence") is not None:
+
+            raw["average_cadence"] = summary_dto["averageRunCadence"] / 2
+
+        # bundle RICO do que o Garmin mediu — pra análise ficar de acordo com
+        # o EXECUTADO: efeito de treino, dinâmica de corrida, potência,
+        # RPE/percepção, carga/recuperação, temperatura...
+        raw["_garmin_metrics"] = GarminActivitySource._rich_metrics(summary_dto)
 
         # ---- streams (série segundo-a-segundo) p/ o pipeline atual ----
         try:
@@ -103,20 +129,24 @@ class GarminActivitySource:
     @staticmethod
     def _to_activity(activity_id: int, s: dict, raw: dict) -> Activity:
 
-        activity_type = s.get("activityType") or {}
+        # get_activity devolve DTOs aninhados: os números vivem no summaryDTO,
+        # o tipo no activityTypeDTO, o fuso no timeZoneUnitDTO (confirmado com
+        # atividade real, perfil renato2)
+        sd = s.get("summaryDTO") or {}
 
-        type_key = (
-            activity_type.get("typeKey")
-            if isinstance(activity_type, dict)
-            else str(activity_type)
-        ) or "running"
+        type_dto = s.get("activityTypeDTO") or {}
 
-        start = _first(s, "startTimeGMT", "startTimeLocal")
+        tz_dto = s.get("timeZoneUnitDTO") or {}
+
+        type_key = str(type_dto.get("typeKey") or "running")
+
+        start = _first(sd, "startTimeGMT", "startTimeLocal")
 
         # esteira: análise trata distância/pace como estimados
         raw["trainer"] = bool(
-            _first(s, "isIndoor", default=False)
+            _first(sd, "isIndoor", default=False)
             or "treadmill" in type_key.lower()
+            or "indoor" in type_key.lower()
         )
 
         return Activity(
@@ -124,26 +154,78 @@ class GarminActivitySource:
             name=_first(s, "activityName", default="Corrida"),
             sport=GarminActivitySource._sport(type_key),
             start_date=GarminActivitySource._parse_date(start),
-            timezone=_first(s, "timeZoneId", default="UTC"),
-            distance=float(_first(s, "distance", default=0) or 0),
-            moving_time=int(_first(s, "movingDuration", "duration", default=0) or 0),
-            elapsed_time=int(_first(s, "duration", "elapsedDuration", default=0) or 0),
-            average_speed=float(_first(s, "averageSpeed", default=0) or 0),
-            max_speed=float(_first(s, "maxSpeed", default=0) or 0),
-            average_heartrate=_num(_first(s, "averageHR", "averageHeartRate")),
-            max_heartrate=_num(_first(s, "maxHR", "maxHeartRate")),
-            elevation_gain=float(_first(s, "elevationGain", default=0) or 0),
-            elevation_high=_num(_first(s, "maxElevation")),
-            elevation_low=_num(_first(s, "minElevation")),
-            start_latitude=_num(_first(s, "startLatitude")),
-            start_longitude=_num(_first(s, "startLongitude")),
-            end_latitude=_num(_first(s, "endLatitude")),
-            end_longitude=_num(_first(s, "endLongitude")),
+            timezone=_first(tz_dto, "timeZone", "unitKey", default="UTC"),
+            distance=float(_first(sd, "distance", default=0) or 0),
+            moving_time=int(
+                _first(sd, "movingDuration", "duration", default=0) or 0
+            ),
+            elapsed_time=int(
+                _first(sd, "elapsedDuration", "duration", default=0) or 0
+            ),
+            average_speed=float(_first(sd, "averageSpeed", default=0) or 0),
+            max_speed=float(_first(sd, "maxSpeed", default=0) or 0),
+            average_heartrate=_num(_first(sd, "averageHR", "averageHeartRate")),
+            max_heartrate=_num(_first(sd, "maxHR", "maxHeartRate")),
+            elevation_gain=float(_first(sd, "elevationGain", default=0) or 0),
+            elevation_high=_num(_first(sd, "maxElevation")),
+            elevation_low=_num(_first(sd, "minElevation")),
+            start_latitude=_num(_first(sd, "startLatitude")),
+            start_longitude=_num(_first(sd, "startLongitude")),
+            end_latitude=_num(_first(sd, "endLatitude")),
+            end_longitude=_num(_first(sd, "endLongitude")),
             kudos=0,
             comments=0,
             suffer_score=None,
             raw=raw,
         )
+
+    # métricas ricas do Garmin (chave nossa -> chave do summaryDTO). São o
+    # "de acordo com o executado": alimentam a análise (IA + ficha).
+    _RICH_FIELDS = {
+        "avg_cadence": "averageRunCadence",
+        "max_cadence": "maxRunCadence",
+        "avg_power": "averagePower",
+        "max_power": "maxPower",
+        "normalized_power": "normalizedPower",
+        "ground_contact_ms": "groundContactTime",
+        "stride_length_cm": "strideLength",
+        "vertical_oscillation_cm": "verticalOscillation",
+        "vertical_ratio": "verticalRatio",
+        "grade_adjusted_speed": "avgGradeAdjustedSpeed",
+        "training_effect": "trainingEffect",
+        "training_effect_label": "trainingEffectLabel",
+        "aerobic_effect_msg": "aerobicTrainingEffectMessage",
+        "anaerobic_effect": "anaerobicTrainingEffect",
+        "anaerobic_effect_msg": "anaerobicTrainingEffectMessage",
+        "workout_feel": "directWorkoutFeel",
+        "workout_rpe": "directWorkoutRpe",
+        "body_battery_delta": "differenceBodyBattery",
+        "moderate_minutes": "moderateIntensityMinutes",
+        "vigorous_minutes": "vigorousIntensityMinutes",
+        "calories": "calories",
+        "avg_temperature": "averageTemperature",
+        "max_temperature": "maxTemperature",
+        "min_hr": "minHR",
+        "steps": "steps",
+        "elevation_loss": "elevationLoss",
+    }
+
+    @staticmethod
+    def _rich_metrics(summary_dto: dict) -> dict:
+        """Só os campos presentes (não-nulos) entram — cada relógio/treino
+        traz um subconjunto (potência e dinâmica dependem de sensor)."""
+
+        out = {}
+
+        for ours, garmin_key in GarminActivitySource._RICH_FIELDS.items():
+
+            value = summary_dto.get(garmin_key)
+
+            if value is not None:
+
+                out[ours] = value
+
+        return out
 
     @staticmethod
     def _sport(type_key: str) -> str:
@@ -288,7 +370,7 @@ class GarminActivitySource:
 
             max_hr = _num(_first(sp, "maxHR", "maxHeartRate")) or hr
 
-            if sp_type in _EFFORT_TYPES:
+            if _is_effort_type(sp_type):
 
                 efforts.append(
                     {
@@ -300,7 +382,7 @@ class GarminActivitySource:
                     }
                 )
 
-            elif sp_type in _RECOVERY_TYPES and hr:
+            elif _is_recovery_type(sp_type) and hr:
 
                 recovery_hrs.append(hr)
 

@@ -1,4 +1,5 @@
 import json
+import re
 
 from google.genai import types
 
@@ -204,7 +205,189 @@ class AIAnalysisWriter:
             AIAnalysisWriter._structure_facts(executed.structure)
         )
 
+        # tudo que o Garmin mediu no relógio — deixa a leitura DE ACORDO com
+        # o executado (efeito de treino, percepção do atleta, dinâmica de
+        # corrida, potência, carga). Só aparece pra quem treina com Garmin.
+        garmin = AIAnalysisWriter._garmin_facts(
+            (activity.raw or {}).get("_garmin_metrics")
+        )
+
+        if garmin:
+
+            lines.append(garmin)
+
         return "\n".join(lines)
+
+    # sensação do atleta (directWorkoutFeel do Garmin, 0-100 em passos de 25)
+    _FEEL_WORDS = {
+        0: "muito cansado", 25: "cansado", 50: "normal",
+        75: "bem", 100: "forte",
+    }
+
+    @staticmethod
+    def _clean_msg(msg) -> str | None:
+        """Enum do Garmin ('OVERREACHING_14') -> texto legível
+        ('overreaching') — tira o código no fim e troca '_' por espaço."""
+
+        if not msg:
+
+            return None
+
+        text = re.sub(r"_\d+$", "", str(msg)).replace("_", " ").lower().strip()
+
+        return text or None
+
+    @staticmethod
+    def _garmin_facts(metrics: dict | None) -> str | None:
+        """Formata TODO o bundle rico do Garmin que faz sentido pra análise —
+        só os campos presentes (cada treino/relógio traz um subconjunto)."""
+
+        if not metrics:
+
+            return None
+
+        parts = []
+
+        # --- efeito de treino (o estímulo que o treino gerou) ---
+        te = metrics.get("training_effect")
+
+        if te is not None:
+
+            detail = " / ".join(
+                x for x in (
+                    metrics.get("training_effect_label"),
+                    AIAnalysisWriter._clean_msg(metrics.get("aerobic_effect_msg")),
+                ) if x
+            )
+
+            parts.append(
+                f"efeito aeróbico {te}/5" + (f" ({detail})" if detail else "")
+            )
+
+        ana = metrics.get("anaerobic_effect")
+
+        if ana is not None:
+
+            msg = AIAnalysisWriter._clean_msg(metrics.get("anaerobic_effect_msg"))
+
+            parts.append(
+                f"efeito anaeróbico {ana}/5" + (f" ({msg})" if msg else "")
+            )
+
+        # --- percepção do atleta ---
+        if metrics.get("workout_rpe"):
+
+            parts.append(
+                f"esforço percebido (RPE) {round(metrics['workout_rpe'] / 10)}/10"
+            )
+
+        feel = metrics.get("workout_feel")
+
+        if feel is not None:
+
+            word = AIAnalysisWriter._FEEL_WORDS.get(round(feel / 25) * 25)
+
+            parts.append(f"sensação do atleta: {word or feel}")
+
+        # --- pace ajustado ao relevo (esforço real em subida/descida) ---
+        gap = metrics.get("grade_adjusted_speed")
+
+        if gap:
+
+            parts.append(
+                f"pace ajustado ao relevo "
+                f"{PaceFormatter.format((1000 / gap) / 60)} min/km"
+            )
+
+        # --- dinâmica de corrida (forma) ---
+        dynamics = []
+
+        if metrics.get("ground_contact_ms"):
+
+            dynamics.append(
+                f"contato com o solo {round(metrics['ground_contact_ms'])} ms"
+            )
+
+        if metrics.get("stride_length_cm"):
+
+            dynamics.append(f"passada {round(metrics['stride_length_cm'])} cm")
+
+        if metrics.get("vertical_oscillation_cm"):
+
+            dynamics.append(
+                f"oscilação vertical {metrics['vertical_oscillation_cm']:.1f} cm"
+            )
+
+        if metrics.get("vertical_ratio"):
+
+            dynamics.append(f"razão vertical {metrics['vertical_ratio']:.1f}%")
+
+        if dynamics:
+
+            parts.append("dinâmica de corrida: " + ", ".join(dynamics))
+
+        # --- potência ---
+        if metrics.get("avg_power"):
+
+            extras = []
+
+            if metrics.get("normalized_power"):
+
+                extras.append(f"normalizada {round(metrics['normalized_power'])} W")
+
+            if metrics.get("max_power"):
+
+                extras.append(f"máx {round(metrics['max_power'])} W")
+
+            parts.append(
+                f"potência média {round(metrics['avg_power'])} W"
+                + (f" ({', '.join(extras)})" if extras else "")
+            )
+
+        # --- carga / gasto ---
+        if metrics.get("body_battery_delta") is not None:
+
+            parts.append(f"body battery {metrics['body_battery_delta']:+d}")
+
+        intensity = []
+
+        if metrics.get("vigorous_minutes"):
+
+            intensity.append(f"{metrics['vigorous_minutes']} vigorosos")
+
+        if metrics.get("moderate_minutes"):
+
+            intensity.append(f"{metrics['moderate_minutes']} moderados")
+
+        if intensity:
+
+            parts.append("minutos de intensidade: " + " + ".join(intensity))
+
+        if metrics.get("calories"):
+
+            parts.append(f"{round(metrics['calories'])} kcal")
+
+        # --- ambiente ---
+        temp = metrics.get("avg_temperature")
+
+        if temp is not None:
+
+            line = f"temperatura ~{round(temp)}°C"
+
+            if metrics.get("max_temperature"):
+
+                line += f" (máx {round(metrics['max_temperature'])}°C)"
+
+            parts.append(line)
+
+        if not parts:
+
+            return None
+
+        return (
+            "Dados do Garmin (medidos no relógio, de acordo com o "
+            "executado): " + "; ".join(parts)
+        )
 
     @staticmethod
     def _structure_facts(
