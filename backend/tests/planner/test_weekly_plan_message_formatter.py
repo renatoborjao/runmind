@@ -323,6 +323,27 @@ def test_today_session_message_on_rest_day_is_none():
     assert text is None
 
 
+def test_today_session_message_ignores_session_from_another_week():
+
+    # Bug real (domingo 12/07): o plano corrente já é o da semana que vem
+    # (week_start 13/07), com um Longão no DOMINGO 19/07. Hoje (12/07) é
+    # domingo e dia de descanso. O lembrete NÃO pode casar a sessão pelo
+    # nome do dia ("domingo") e mandar o longão de 19/07 como "treino de
+    # hoje" — tem que casar pela DATA real e retornar None.
+    next_week = _plan(
+        [_session("Sunday", "LONG_RUN", 12.0)],
+    )
+    next_week.week_start = date(2026, 7, 13)
+
+    text = WeeklyPlanMessageFormatter.today_session_message(
+        "Renato",
+        next_week,
+        reference_date=date(2026, 7, 12),
+    )
+
+    assert text is None
+
+
 # ==========================================================
 # week_plan_message — "qual meu plano da semana?" (marca os feitos)
 # ==========================================================

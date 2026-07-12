@@ -2,7 +2,7 @@ from datetime import date
 
 from app.application.coach.writer.labels import plan_workout_label
 from app.core.clock import today_local
-from app.core.weekdays import weekday_label, weekday_name
+from app.core.weekdays import weekday_label
 from app.domain.entities.training_plan import TrainingPlan
 
 # emoji por intensidade do treino
@@ -163,12 +163,20 @@ class WeeklyPlanMessageFormatter:
         reference_date: date | None = None,
     ) -> str | None:
         """Treino de HOJE detalhado — ou None se hoje é dia de descanso
-        (usado pelo lembrete matinal, que aí não envia nada)."""
+        (usado pelo lembrete matinal, que aí não envia nada). Casa pela
+        DATA real da sessão, NÃO pelo nome do dia: um plano de outra semana
+        (ex.: o da semana que vem, já gerado no domingo) jamais vira "treino
+        de hoje" só porque cai no mesmo dia da semana."""
 
         reference_date = reference_date or today_local()
 
-        session = plan.find_session_by_day(
-            weekday_name(reference_date),
+        session = next(
+            (
+                session
+                for session in plan.sessions
+                if plan.session_date(session) == reference_date
+            ),
+            None,
         )
 
         if session is None:
