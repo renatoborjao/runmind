@@ -79,7 +79,7 @@ class AIPlanService:
 
             context = AIPlanService._build_context(
                 profile, runner, metrics, goal, history,
-                repository, week_start, existing, assessment.run_walk,
+                repository, week_start, assessment.run_walk,
             )
 
             plan = await CoachPlanEngine.generate(
@@ -115,8 +115,20 @@ class AIPlanService:
     @staticmethod
     def _build_context(
         profile, runner, metrics, goal, history,
-        repository, week_start, previous_plan, run_walk,
+        repository, week_start, run_walk,
     ) -> str:
+
+        # "plano anterior" = o da SEMANA ANTERIOR (a que acabou), NÃO o da
+        # semana que estamos gerando. Antes vinha o plano guardado (o da
+        # semana-alvo, futura): o resumo do executado casava as sessões
+        # futuras contra zero atividade -> "zerou a semana" -> plano
+        # cauteloso demais (bug do Renato/Fernanda: "após uma semana zerada"
+        # mesmo tendo treinado). Vem do histórico, semana < alvo.
+        last_week_plan = AIPlanService._previous_week_plan(
+            repository,
+            profile,
+            week_start,
+        )
 
         baseline = RunnerBaselineBuilder.build(history, runner)
 
@@ -132,7 +144,7 @@ class AIPlanService:
         weeks_to_race = AIPlanService._weeks_to_race(goal, week_start)
 
         executed = ExecutedWeekSummary.build(
-            previous_plan,
+            last_week_plan,
             history.activities,
         )
 
@@ -142,12 +154,30 @@ class AIPlanService:
             metrics=metrics,
             baseline=baseline,
             recent_adherence=recent_adherence,
-            last_plan=previous_plan,
+            last_plan=last_week_plan,
             executed=executed,
             memory=memory,
             weeks_to_race=weeks_to_race,
             run_walk=run_walk,
         )
+
+    @staticmethod
+    def _previous_week_plan(repository, profile, week_start):
+        """Plano da SEMANA ANTERIOR mais recente (week_start < alvo), do
+        histórico. É contra ele que se mede o executado — nunca contra o da
+        semana-alvo (que ainda não aconteceu)."""
+
+        past = [
+            plan
+            for plan in repository.history(profile)
+            if plan.week_start < week_start
+        ]
+
+        if not past:
+
+            return None
+
+        return max(past, key=lambda plan: plan.week_start)
 
     @staticmethod
     def _weeks_to_race(goal: TrainingGoal, week_start: date) -> int | None:
