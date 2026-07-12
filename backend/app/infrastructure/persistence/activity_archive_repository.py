@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 from app.domain.entities.activity import Activity
@@ -44,6 +45,21 @@ class ActivityArchiveRepository:
         ) as f:
 
             return json.load(f)
+
+    def load_activities(
+        self,
+        profile: str,
+    ) -> list[Activity]:
+        """Reconstrói as atividades arquivadas como `Activity`. O arquivo
+        guarda campos reduzidos (o que basta pros agregados de histórico —
+        volume, consistência, casamento por distância/data); o que não é
+        persistido volta como default (raw vazio, sem GPS/streams). O treino
+        recém-concluído, esse com dados completos, entra à parte no fluxo."""
+
+        return [
+            ActivityArchiveRepository._from_record(record)
+            for record in self.load(profile)
+        ]
 
     def upsert_many(
         self,
@@ -145,6 +161,43 @@ class ActivityArchiveRepository:
             "first_date": records[0]["start_date"][:10],
             "longest_km": round(longest_km, 1),
         }
+
+    @staticmethod
+    def _from_record(
+        record: dict,
+    ) -> Activity:
+        """Record reduzido -> Activity, preenchendo com default o que o
+        arquivo não guarda (max_speed, GPS, raw, etc.). Suficiente pra
+        história/agregados; NÃO serve pra enriquecer splits (o treino atual
+        vem completo por outro caminho)."""
+
+        moving_time = int(record.get("moving_time", 0) or 0)
+
+        return Activity(
+            id=record["id"],
+            name=record.get("name", ""),
+            sport=record.get("sport", "Run"),
+            start_date=datetime.fromisoformat(record["start_date"]),
+            timezone=record.get("timezone", "UTC"),
+            distance=record.get("distance", 0.0),
+            moving_time=moving_time,
+            elapsed_time=int(record.get("elapsed_time", moving_time) or 0),
+            average_speed=record.get("average_speed", 0.0),
+            max_speed=record.get("max_speed", 0.0),
+            average_heartrate=record.get("average_heartrate"),
+            max_heartrate=record.get("max_heartrate"),
+            elevation_gain=record.get("elevation_gain", 0.0),
+            elevation_high=None,
+            elevation_low=None,
+            start_latitude=None,
+            start_longitude=None,
+            end_latitude=None,
+            end_longitude=None,
+            kudos=0,
+            comments=0,
+            suffer_score=None,
+            raw={},
+        )
 
     @staticmethod
     def _to_record(

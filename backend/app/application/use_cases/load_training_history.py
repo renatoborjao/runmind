@@ -28,10 +28,26 @@ class LoadTrainingHistory:
                 [activity],
             )
 
+            # Histórico = arquivo permanente (tudo que já passou) + a
+            # atividade recém-concluída à frente (newest-first). Antes
+            # retornava só [activity], então TODA análise pós-treino (Strava
+            # E Garmin passam a atividade) enxergava 1 corrida só — volume,
+            # consistência e comparações degeneravam ("poucas semanas pra
+            # avaliar" mesmo com meses de histórico arquivado).
+            archived = ActivityArchiveRepository().load_activities(profile)
+
+            past = sorted(
+                (
+                    past_activity
+                    for past_activity in archived
+                    if past_activity.id != activity.id
+                ),
+                key=lambda past_activity: past_activity.start_date,
+                reverse=True,
+            )
+
             return TrainingHistory(
-
-                activities=[activity]
-
+                activities=[activity] + past,
             )
 
         # atleta sem Strava conectado: histórico vazio, sem erro —

@@ -65,6 +65,9 @@ def test_direct_activity_bypasses_strava():
 
     with patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive:
 
+        # arquivo vazio: histórico = só a atividade nova
+        mock_archive.return_value.load_activities.return_value = []
+
         history = asyncio.run(
             LoadTrainingHistory.execute(activity=activity),
         )
@@ -73,6 +76,40 @@ def test_direct_activity_bypasses_strava():
         mock_archive.return_value.upsert_many.assert_called_once()
 
     assert history.activities == [activity]
+
+
+def test_direct_activity_is_merged_with_archived_history():
+    """Bug real (12/07): a análise pós-treino via só a corrida do dia e
+    dizia "poucas semanas pra avaliar" mesmo com meses arquivados. Agora o
+    arquivo entra junto, com a atividade nova à frente (newest-first) e sem
+    duplicar a que acabou de chegar."""
+
+    from datetime import datetime
+
+    new = make_activity(
+        id=7, sport="Run",
+        start_date=datetime(2026, 7, 12, 7, 0, 0),
+    )
+
+    archived = [
+        make_activity(id=5, start_date=datetime(2026, 7, 4, 7, 0, 0)),
+        make_activity(id=6, start_date=datetime(2026, 7, 9, 7, 0, 0)),
+        # a própria atividade nova, já arquivada em versão reduzida
+        make_activity(id=7, start_date=datetime(2026, 7, 12, 7, 0, 0)),
+    ]
+
+    with patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive:
+
+        mock_archive.return_value.load_activities.return_value = archived
+
+        history = asyncio.run(
+            LoadTrainingHistory.execute(activity=new),
+        )
+
+    # nova primeiro (mesmo objeto, dados completos), depois arquivo por data
+    # decrescente; sem duplicar id=7
+    assert [a.id for a in history.activities] == [7, 6, 5]
+    assert history.activities[0] is new
 
 
 def test_fetched_activities_are_archived():

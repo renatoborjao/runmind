@@ -209,9 +209,14 @@ def test_activity_404_does_not_500():
         patch(f"{MODULE}.StravaClient") as mock_client_cls,
         patch(f"{MODULE}.TrainingCompletedEvent") as mock_event,
         patch(f"{MODULE}.ProcessedActivityGuard") as mock_guard_cls,
+        patch(f"{MODULE}.GarminClient") as mock_garmin,
     ):
 
         mock_resolver.resolve.return_value = "renato2"
+
+        # força o caminho Strava (independe do estado real do Garmin em disco)
+        mock_garmin.is_connected.return_value = False
+        mock_garmin.analysis_enabled.return_value = False
 
         mock_client = mock_client_cls.return_value
         mock_client.get_activity = AsyncMock(
