@@ -8,7 +8,10 @@ from app.core.weekdays import WEEKDAYS
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
 from app.domain.entities.workout_step import parse_steps
-from app.infrastructure.integrations.gemini.client import generate_text
+from app.infrastructure.integrations.gemini.client import (
+    generate_json,
+    repair_json,
+)
 
 MAX_OUTPUT_TOKENS = 2000
 
@@ -111,7 +114,11 @@ class CoachPlanEngine:
 
         prompt = PROMPT_TEMPLATE.format(context=context)
 
-        raw = await generate_text(
+        # generate_json re-gera se o JSON do plano vier torto (blindagem) —
+        # o plano é core; não pode cair no determinístico por escorregada do
+        # modelo. Só cai no fallback (AIPlanService) se TODAS as tentativas
+        # falharem, aí levanta pra ele.
+        plan = await generate_json(
             model=settings.gemini_chat_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -121,15 +128,36 @@ class CoachPlanEngine:
                     thinking_budget=0,
                 ),
             ),
-            require_text=True,
+            parse=lambda raw: CoachPlanEngine._parse_plan(
+                raw, runner_name, objective, week_start,
+            ),
         )
 
-        return CoachPlanEngine._to_plan(
-            raw,
-            runner_name,
-            objective,
-            week_start,
-        )
+        if plan is None:
+
+            raise ValueError("plano da IA inválido após as tentativas")
+
+        return plan
+
+    @staticmethod
+    def _parse_plan(
+        raw: str,
+        runner_name: str,
+        objective: str,
+        week_start: date,
+    ) -> TrainingPlan | None:
+        """Wrapper de _to_plan pra o generate_json: devolve None em qualquer
+        problema (JSON torto, sem corridas) em vez de levantar, pra re-gerar."""
+
+        try:
+
+            return CoachPlanEngine._to_plan(
+                raw, runner_name, objective, week_start,
+            )
+
+        except (ValueError, json.JSONDecodeError, TypeError):
+
+            return None
 
     @staticmethod
     def _to_plan(
@@ -141,7 +169,7 @@ class CoachPlanEngine:
 
         try:
 
-            data = json.loads(raw)
+            data = json.loads(repair_json(raw))
 
         except (json.JSONDecodeError, TypeError) as e:
 

@@ -1,4 +1,6 @@
 import asyncio
+import json
+import re
 from functools import lru_cache
 
 import httpx
@@ -107,5 +109,81 @@ async def generate_text(
     raise last_exc  # type: ignore[misc]
 
 
+def repair_json(raw: str) -> str:
+    """Conserta as escorregadas comuns do modelo antes do json.loads: tira
+    cercas de markdown (```json ... ```) e recorta do primeiro { ou [ até o
+    último } ou ] (ignora texto solto em volta). Não garante validade — só
+    aumenta a chance de o json.loads passar."""
+
+    text = (raw or "").strip()
+
+    if text.startswith("```"):
+
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+
+        text = re.sub(r"\s*```$", "", text).strip()
+
+    opens = [i for i in (text.find("{"), text.find("[")) if i != -1]
+
+    start = min(opens) if opens else -1
+
+    end = max(text.rfind("}"), text.rfind("]"))
+
+    if start != -1 and end > start:
+
+        text = text[start:end + 1]
+
+    return text.strip()
+
+
+async def generate_json(
+    model: str,
+    contents,
+    config: types.GenerateContentConfig,
+    *,
+    parse,
+    attempts: int = 3,
+):
+    """Gera JSON estruturado com blindagem em CAMADAS, pra a análise/plano
+    nunca degradarem à toa:
+
+    1) generate_text já tenta de novo em falha de API (429/5xx/timeout);
+    2) aqui, se o JSON vier torto/incompleto (o modelo às vezes escorrega
+       mesmo no modo JSON), RE-GERA e re-parseia até `attempts` vezes;
+    3) `parse(raw)` deve reparar (repair_json) + validar e devolver None
+       quando não dá — o chamador então cai no fallback determinístico.
+
+    Nunca levanta por JSON ruim: devolve o objeto parseado ou None. Falha de
+    API (após os retries internos) propaga pro try/except do chamador."""
+
+    for attempt in range(attempts):
+
+        raw = await generate_text(
+            model=model,
+            contents=contents,
+            config=config,
+            require_text=True,
+        )
+
+        result = parse(raw)
+
+        if result is not None:
+
+            return result
+
+        print(
+            f"Gemini JSON inválido (tentativa {attempt + 1}/{attempts}): "
+            "re-gerando"
+        )
+
+    return None
+
+
 # reexport pra quem precisa montar Part/config sem importar o SDK direto
-__all__ = ["generate_text", "EmptyGeminiResponse", "genai_errors"]
+__all__ = [
+    "generate_text",
+    "generate_json",
+    "repair_json",
+    "EmptyGeminiResponse",
+    "genai_errors",
+]

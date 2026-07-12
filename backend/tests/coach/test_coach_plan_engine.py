@@ -7,6 +7,7 @@ import pytest
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
 
 MODULE = "app.application.coach.planning.coach_plan_engine"
+GEN_TEXT = "app.infrastructure.integrations.gemini.client.generate_text"
 
 WEEK_START = date(2026, 7, 6)
 
@@ -39,7 +40,7 @@ RENATO_PLAN_JSON = """
 def _generate(response):
 
     with patch(
-        f"{MODULE}.generate_text",
+        GEN_TEXT,
         new=AsyncMock(return_value=response),
     ):
 
@@ -125,7 +126,7 @@ def test_prompt_carries_the_aversion_directive():
 
         return RENATO_PLAN_JSON
 
-    with patch(f"{MODULE}.generate_text", new=AsyncMock(side_effect=_capture)):
+    with patch(GEN_TEXT, new=AsyncMock(side_effect=_capture)):
 
         asyncio.run(
             CoachPlanEngine.generate(
@@ -149,7 +150,7 @@ def test_prompt_carries_the_aversion_directive():
 def test_ai_failure_propagates_for_fallback():
 
     with patch(
-        f"{MODULE}.generate_text",
+        GEN_TEXT,
         new=AsyncMock(side_effect=RuntimeError("gemini fora do ar")),
     ):
 

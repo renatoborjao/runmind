@@ -13,6 +13,7 @@ from tests.coach.factories import (
 )
 
 MODULE = "app.application.coach.writer.ai_analysis_writer"
+GEN_TEXT = "app.infrastructure.integrations.gemini.client.generate_text"
 
 
 def _structure(**overrides) -> WorkoutStructure:
@@ -40,7 +41,7 @@ def _structure(**overrides) -> WorkoutStructure:
 
 def _write(context=None, **patch_kwargs):
 
-    with patch(f"{MODULE}.generate_text", new=AsyncMock(**patch_kwargs)):
+    with patch(GEN_TEXT, new=AsyncMock(**patch_kwargs)):
 
         return asyncio.run(
             AIAnalysisWriter.write(context or make_context())
@@ -87,7 +88,7 @@ def test_facts_feed_splits_and_interval_to_prompt():
 
     mock = AsyncMock(return_value='{"analysis": ["ok"]}')
 
-    with patch(f"{MODULE}.generate_text", new=mock):
+    with patch(GEN_TEXT, new=mock):
 
         asyncio.run(AIAnalysisWriter.write(context))
 
@@ -115,7 +116,7 @@ def test_mild_fade_fact_has_no_verdict():
 
     mock = AsyncMock(return_value='{"analysis": ["ok"]}')
 
-    with patch(f"{MODULE}.generate_text", new=mock):
+    with patch(GEN_TEXT, new=mock):
 
         asyncio.run(AIAnalysisWriter.write(context))
 
@@ -158,7 +159,7 @@ def test_external_coach_prescription_from_notes_reaches_prompt():
 
     mock = AsyncMock(return_value='{"analysis": ["ok"]}')
 
-    with patch(f"{MODULE}.generate_text", new=mock):
+    with patch(GEN_TEXT, new=mock):
 
         asyncio.run(AIAnalysisWriter.write(context))
 
@@ -206,7 +207,7 @@ def test_executed_laps_reach_prompt_for_external_coach():
 
     mock = AsyncMock(return_value='{"analysis": ["ok"]}')
 
-    with patch(f"{MODULE}.generate_text", new=mock):
+    with patch(GEN_TEXT, new=mock):
 
         asyncio.run(AIAnalysisWriter.write(context))
 

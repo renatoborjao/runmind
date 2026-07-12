@@ -15,7 +15,10 @@ from app.application.external_plan.treino_online_legend import (
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.config import get_settings
 from app.domain.entities.workout_structure import WorkoutStructure
-from app.infrastructure.integrations.gemini.client import generate_text
+from app.infrastructure.integrations.gemini.client import (
+    generate_json,
+    repair_json,
+)
 
 MAX_OUTPUT_TOKENS = 700
 
@@ -92,7 +95,11 @@ class AIAnalysisWriter:
 
             settings = get_settings()
 
-            raw = await generate_text(
+            # generate_json re-gera se o JSON vier torto (o modelo escorrega
+            # às vezes) — a análise é o coração do produto, não pode cair no
+            # genérico à toa. Só cai no fallback se TODAS as tentativas
+            # falharem.
+            return await generate_json(
                 model=settings.gemini_chat_model,
                 contents=PROMPT_TEMPLATE.format(
                     facts=facts,
@@ -105,10 +112,8 @@ class AIAnalysisWriter:
                         thinking_budget=0,
                     ),
                 ),
-                require_text=True,
+                parse=AIAnalysisWriter._parse,
             )
-
-            return AIAnalysisWriter._parse(raw)
 
         except Exception as e:
 
@@ -121,8 +126,16 @@ class AIAnalysisWriter:
     def _parse(
         raw: str,
     ) -> list[str] | None:
+        """Repara + valida a resposta. Devolve None em QUALQUER problema
+        (JSON torto, estrutura errada, vazio) pra o generate_json re-gerar."""
 
-        data = json.loads(raw)
+        try:
+
+            data = json.loads(repair_json(raw))
+
+        except (json.JSONDecodeError, TypeError, ValueError):
+
+            return None
 
         bullets = data.get("analysis") if isinstance(data, dict) else None
 
@@ -136,11 +149,7 @@ class AIAnalysisWriter:
             if str(item).strip()
         ]
 
-        if not lines:
-
-            return None
-
-        return lines[:MAX_BULLETS]
+        return lines[:MAX_BULLETS] if lines else None
 
     @staticmethod
     def _facts(
