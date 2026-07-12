@@ -13,7 +13,13 @@ from app.infrastructure.integrations.gemini.client import (
     repair_json,
 )
 
-MAX_OUTPUT_TOKENS = 2000
+# Pro pensa (thinking) e isso conta no orçamento de saída + é cobrado como
+# output. Damos um teto de thinking EXPLÍCITO (não dinâmico, que gastaria ~8k)
+# e um max_output com folga pra caber thinking + o JSON do plano — senão o
+# thinking come o orçamento e volta vazio (bug conhecido).
+THINKING_BUDGET = 1024
+
+MAX_OUTPUT_TOKENS = 4000
 
 VALID_DAYS = set(WEEKDAYS.values())
 
@@ -125,13 +131,13 @@ class CoachPlanEngine:
         # modelo. Só cai no fallback (AIPlanService) se TODAS as tentativas
         # falharem, aí levanta pra ele.
         plan = await generate_json(
-            model=settings.gemini_chat_model,
+            model=settings.gemini_coach_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 thinking_config=types.ThinkingConfig(
-                    thinking_budget=0,
+                    thinking_budget=THINKING_BUDGET,
                 ),
             ),
             parse=lambda raw: CoachPlanEngine._parse_plan(

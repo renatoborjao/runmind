@@ -20,7 +20,12 @@ from app.infrastructure.integrations.gemini.client import (
     repair_json,
 )
 
-MAX_OUTPUT_TOKENS = 700
+# Pro pensa (thinking) e isso conta no orçamento de saída + é cobrado como
+# output. Teto de thinking EXPLÍCITO + max_output com folga pra caber
+# thinking + a análise (senão o thinking come tudo e volta vazio).
+THINKING_BUDGET = 512
+
+MAX_OUTPUT_TOKENS = 2000
 
 # Quantas bullets a IA pode devolver na seção de análise.
 MAX_BULLETS = 4
@@ -100,7 +105,7 @@ class AIAnalysisWriter:
             # genérico à toa. Só cai no fallback se TODAS as tentativas
             # falharem.
             return await generate_json(
-                model=settings.gemini_chat_model,
+                model=settings.gemini_coach_model,
                 contents=PROMPT_TEMPLATE.format(
                     facts=facts,
                     max_bullets=MAX_BULLETS,
@@ -109,7 +114,7 @@ class AIAnalysisWriter:
                     response_mime_type="application/json",
                     max_output_tokens=MAX_OUTPUT_TOKENS,
                     thinking_config=types.ThinkingConfig(
-                        thinking_budget=0,
+                        thinking_budget=THINKING_BUDGET,
                     ),
                 ),
                 parse=AIAnalysisWriter._parse,

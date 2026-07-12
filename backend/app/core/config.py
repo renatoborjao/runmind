@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     # o alias acompanha o flash estável e não some debaixo de nós.
     gemini_chat_model: str = "gemini-flash-latest"
     gemini_extract_model: str = "gemini-flash-lite-latest"
+    # Cérebro do coach (plano + análise): modelo mais forte, pro raciocínio
+    # que define a qualidade. Alias flutuante do Pro (mesma lógica do flash).
+    # ATENÇÃO: o Pro NÃO desliga thinking (min 128, cobrado como output) —
+    # quem usa este modelo tem que passar thinking_budget>0 E max_output_tokens
+    # com folga pra caber thinking + resposta (senão volta vazio).
+    gemini_coach_model: str = "gemini-pro-latest"
 
     @property
     def cors_origin_list(self) -> list[str]:
