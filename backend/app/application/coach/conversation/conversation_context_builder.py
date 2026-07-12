@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
@@ -71,13 +73,28 @@ class ConversationContextBuilder:
 
         today = today_local()
 
-        # ÂNCORA DE DATA: sem isto a IA adivinha o dia da semana e erra
-        # ("amanhã é sexta" num sábado). Toda referência temporal parte daqui.
+        # ÂNCORA DE DATA: a IA NÃO calcula datas — ela LÊ. Damos hoje, amanhã
+        # e ontem JÁ RESOLVIDOS (dia da semana + data). Sem isto, mesmo com
+        # "hoje" dado, o Flash deduzia "amanhã" a partir das DATAS DO PLANO
+        # (viu o plano começando terça 14/07 e concluiu "hoje = segunda 13/07")
+        # — bug real do Renato, domingo virou segunda. Data errada é linha
+        # vermelha: nunca pode acontecer.
+        tomorrow = today + timedelta(days=1)
+
+        yesterday = today - timedelta(days=1)
+
+        def _date_line(day):
+            return f"{weekday_label(weekday_name(day))}, {day.strftime('%d/%m/%Y')}"
+
         facts = (
-            f"Hoje é {weekday_label(weekday_name(today))}, "
-            f"{today.strftime('%d/%m/%Y')}. Use SEMPRE esta data como "
-            f"referência de 'hoje', 'amanhã', 'ontem' e 'esta semana' — "
-            f"NUNCA deduza ou calcule o dia da semana por conta própria.\n"
+            "DATAS — use EXATAMENTE estas, NUNCA recalcule o dia da semana:\n"
+            f"- HOJE é {_date_line(today)}.\n"
+            f"- AMANHÃ é {_date_line(tomorrow)}.\n"
+            f"- ONTEM foi {_date_line(yesterday)}.\n"
+            "As datas do plano mais abaixo são o CRONOGRAMA da semana — elas "
+            "NÃO são 'hoje'. Para 'hoje/amanhã/ontem/esta semana' use SÓ as três "
+            "linhas acima; JAMAIS deduza o dia atual a partir das datas do "
+            "plano.\n"
             f"Corredor: {runner.name}\n"
             f"Meta: {runner.goal}\n"
             f"Volume semanal atual: {assessment.current_weekly_volume:.1f} km "

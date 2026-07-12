@@ -126,7 +126,11 @@ def test_build_includes_runner_facts_and_last_activity():
 
 def test_build_anchors_today_date():
     """Sem a data de hoje, a IA adivinha o dia da semana e erra ('amanhã é
-    sexta' num sábado). A âncora tem que estar nos fatos."""
+    sexta' num sábado). A âncora dá hoje/amanhã/ontem JÁ RESOLVIDOS pra a IA
+    não calcular (bug real: domingo virou segunda deduzindo das datas do
+    plano)."""
+
+    from datetime import timedelta
 
     from app.core.clock import today_local
     from app.core.weekdays import weekday_label, weekday_name
@@ -134,11 +138,19 @@ def test_build_anchors_today_date():
     text = asyncio.run(_build_with_mocks(history_activities=[], sessions=[]))
 
     today = today_local()
+    tomorrow = today + timedelta(days=1)
+    yesterday = today - timedelta(days=1)
 
-    assert "Hoje é" in text
-    assert weekday_label(weekday_name(today)) in text
-    assert today.strftime("%d/%m/%Y") in text
-    assert "NUNCA deduza" in text
+    # hoje, amanhã e ontem — todos com dia da semana + data explícitos
+    assert "HOJE é" in text
+    assert "AMANHÃ é" in text
+    assert "ONTEM foi" in text
+    for day in (today, tomorrow, yesterday):
+        assert weekday_label(weekday_name(day)) in text
+        assert day.strftime("%d/%m/%Y") in text
+    # avisa pra não deduzir a data de hoje a partir do cronograma do plano
+    assert "NUNCA recalcule" in text
+    assert "datas do plano" in text
 
 
 def test_build_includes_full_week_plan_when_sessions_exist():
