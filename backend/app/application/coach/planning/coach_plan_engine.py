@@ -41,9 +41,21 @@ REGRAS:
   Apenas as sessões de corrida/caminhada nos dias de corrida dele.
 - Respeite a FREQUÊNCIA de corrida que funciona para ele (não adicione dias só
   para "encher"). Se ele responde bem a N corridas por semana, mantenha N.
-- NÃO aumente o volume sem motivo. Progrida com critério, seguindo a evolução
-  real e a aderência das últimas semanas; segure ou recue se ele não vem
-  cumprindo.
+- TREINE RUMO À META — não faça manutenção. O plano deve EVOLUIR o atleta em
+  direção ao objetivo, não sentar no volume/ritmo médio atual dele. Quando ele
+  vem consistente, dê um passo a mais na semana: suba um pouco o volume
+  (progressão gradual, tipicamente +5 a +10%) OU aprofunde a qualidade (ritmo
+  mais perto do alvo, série um pouco maior) — sempre construindo o que a META
+  exige.
+- MAS COM CRITÉRIO, segurança primeiro: um PASSO por semana, nunca um salto
+  grande (risco de lesão). Respeite a capacidade real e a aderência — se ele
+  vem cumprindo pouco, segure ou recue; respeite a fase do ciclo (longe da
+  prova = construir base/volume; perto = afiar qualidade; véspera = poupar).
+  Nunca prescreva estímulo que o nível dele ainda não comporta.
+- 1º plano (sem aderência registrada): comece perto do volume atual, MAS já com
+  leve inclinação de evolução e a ESTRUTURA que a meta pede (ex.: se a meta é
+  de tempo, inclua um treino no ritmo-alvo). O atleta veio pra MELHORAR, não
+  pra manter.
 - Cada corrida com um PROPÓSITO distinto (velocidade, base/rodagem, longão,
   regenerativo...) e faixa de pace ancorada na META dele.
 - LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E
