@@ -242,6 +242,36 @@ def _typical_km(text: str) -> dict | None:
 
     normalized = _norm(text)
 
+    # FAIXA primeiro ("5 a 15", "5-15km", "entre 5 e 15", "de 5 a 15"):
+    # o atleta que corre entre X e Y não faz nem sempre X nem sempre Y —
+    # usamos a MÉDIA como distância típica (senão "5 a 15km" virava 15,
+    # inflando o volume semanal e o plano — bug da Fernanda). Guardamos os
+    # extremos pra o contexto saber que a rodagem dele VARIA.
+    faixa = re.search(
+        r"(\d+(?:[.,]\d+)?)\s*(?:a|-|—|ate|até|e)\s*(\d+(?:[.,]\d+)?)",
+        normalized,
+    )
+
+    if faixa:
+
+        low = float(faixa.group(1).replace(",", "."))
+
+        high = float(faixa.group(2).replace(",", "."))
+
+        if low > high:
+
+            low, high = high, low
+
+        avg = round((low + high) / 2, 1)
+
+        if 0 < avg <= 50:
+
+            return {
+                "typical_km": avg,
+                "typical_km_min": low,
+                "typical_km_max": high,
+            }
+
     labeled = re.search(r"(\d+(?:[.,]\d+)?)\s*km", normalized)
 
     if labeled:

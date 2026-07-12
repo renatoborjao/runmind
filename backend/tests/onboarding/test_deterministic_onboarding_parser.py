@@ -187,9 +187,23 @@ def test_typical_km_variants():
     assert parse("ASK_TYPICAL_KM", "7,5 km") == {"typical_km": 7.5}
 
 
-def test_typical_km_ambiguous_defers():
+def test_typical_km_range_uses_average():
+    """Bug da Fernanda: "5 a 15km" pegava o 15 (colado no km) e inflava o
+    volume. Faixa vira MÉDIA + guarda os extremos."""
 
-    assert parse("ASK_TYPICAL_KM", "entre 5 e 8") is None
+    for text in ("5 a 15km", "5-15km", "5 a 15", "entre 5 e 15", "de 5 a 15 km"):
+        assert parse("ASK_TYPICAL_KM", text) == {
+            "typical_km": 10.0,
+            "typical_km_min": 5.0,
+            "typical_km_max": 15.0,
+        }
+
+    # faixa invertida ("15 a 5") normaliza
+    assert parse("ASK_TYPICAL_KM", "entre 5 e 8") == {
+        "typical_km": 6.5,
+        "typical_km_min": 5.0,
+        "typical_km_max": 8.0,
+    }
 
 
 # ==========================================================

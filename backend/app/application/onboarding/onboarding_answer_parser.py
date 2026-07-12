@@ -46,7 +46,8 @@ STEP_INSTRUCTIONS = {
     ),
     "ASK_TYPICAL_KM": (
         'Extraia quantos km o corredor costuma fazer por treino '
-        '(número).\n'
+        '(número). Se ele der uma FAIXA (ex: "5 a 15", "5-15km", '
+        '"entre 5 e 15"), use a MÉDIA dos dois valores (5 a 15 -> 10).\n'
         'Formato: {"typical_km": 5.0}'
     ),
     "ASK_MOVEMENT": (
