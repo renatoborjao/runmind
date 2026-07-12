@@ -47,7 +47,9 @@ class LoadTrainingHistory:
             )
 
             return TrainingHistory(
-                activities=[activity] + past,
+                activities=LoadTrainingHistory._dedup(
+                    [activity] + past,
+                ),
             )
 
         # atleta sem Strava conectado: histórico vazio, sem erro —
@@ -82,6 +84,63 @@ class LoadTrainingHistory:
             activities=activities
 
         )
+
+    @staticmethod
+    def _dedup(
+        activities: list[Activity],
+    ) -> list[Activity]:
+        """Colapsa o MESMO treino vindo de fontes diferentes. Como todo
+        treino do Garmin sincroniza pro Strava, a mesma corrida pode existir
+        nas duas fontes (ids diferentes, ~3h de offset de fuso) numa
+        transição de fonte. Mantém a 1ª ocorrência — a lista vem newest-first,
+        então o treino recém-concluído (dados completos) ganha.
+
+        Tolerância APERTADA de propósito pra não fundir dois treinos reais do
+        mesmo dia: exige mesma DATA local + distância ~igual (0,5%) + tempo em
+        movimento ~igual (2%). Corridas distintas raramente batem os três."""
+
+        kept: list[Activity] = []
+
+        for activity in activities:
+
+            if any(
+                LoadTrainingHistory._same_run(activity, other)
+                for other in kept
+            ):
+
+                continue
+
+            kept.append(activity)
+
+        return kept
+
+    @staticmethod
+    def _same_run(
+        a: Activity,
+        b: Activity,
+    ) -> bool:
+
+        if a.id == b.id:
+
+            return True
+
+        if a.start_date.date() != b.start_date.date():
+
+            return False
+
+        biggest_dist = max(a.distance, b.distance, 1.0)
+
+        if abs(a.distance - b.distance) > 0.005 * biggest_dist:
+
+            return False
+
+        biggest_time = max(a.moving_time, b.moving_time, 1)
+
+        if abs(a.moving_time - b.moving_time) > 0.02 * biggest_time:
+
+            return False
+
+        return True
 
     @staticmethod
     def _archive(

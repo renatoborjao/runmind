@@ -112,6 +112,46 @@ def test_direct_activity_is_merged_with_archived_history():
     assert history.activities[0] is new
 
 
+def test_cross_source_duplicate_is_deduped():
+    """Garmin sincroniza tudo pro Strava: o mesmo treino pode chegar pelas
+    duas fontes (ids diferentes, ~3h de offset de fuso) numa transição.
+    O dedup colapsa e mantém a corrida recém-concluída (dados completos)."""
+
+    from datetime import datetime, timezone
+
+    # treino novo vindo do Garmin (UTC 10:00 = 07:00 BRT)
+    new = make_activity(
+        id=999, distance=5020.0, moving_time=2220,
+        start_date=datetime(2026, 7, 12, 10, 0, 0, tzinfo=timezone.utc),
+    )
+
+    # o MESMO treino já arquivado pelo Strava (hora local, id diferente)
+    strava_twin = make_activity(
+        id=111, distance=5020.0, moving_time=2225,
+        start_date=datetime(2026, 7, 12, 7, 0, 0),
+    )
+    # um treino real DISTINTO no mesmo dia (distância bem diferente): fica
+    other_run = make_activity(
+        id=222, distance=9000.0, moving_time=3000,
+        start_date=datetime(2026, 7, 12, 18, 0, 0),
+    )
+
+    with patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive:
+
+        mock_archive.return_value.load_activities.return_value = [
+            strava_twin,
+            other_run,
+        ]
+
+        history = asyncio.run(
+            LoadTrainingHistory.execute(activity=new),
+        )
+
+    ids = [a.id for a in history.activities]
+    assert 111 not in ids          # gêmeo do Strava colapsado
+    assert ids == [999, 222]       # fica a nova + o treino distinto do dia
+
+
 def test_fetched_activities_are_archived():
 
     activities = [
