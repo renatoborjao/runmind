@@ -16,6 +16,7 @@ from app.core.clock import today_local
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
+from app.infrastructure.persistence.pushed_plan_store import PushedPlanStore
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -36,11 +37,16 @@ async def push_current_plan(
     # conecta UMA vez e reusa em todas as ops (antes: um login por sessão)
     garmin = GarminClient.connect(profile)
 
-    # o plano é o anterior E o atual: reconciliar contra ele mesmo empurra o
-    # que falta e ignora o que já está lá igual (idempotente)
+    # reconcilia o plano ATUAL contra o ÚLTIMO que foi empurrado (snapshot).
+    # Assim, se o plano foi REGENERADO desde o último push (troca de dia,
+    # ritmo, etc.), o reconciliador remove os NOSSOS treinos antigos e empurra
+    # os novos — sem duplicar nem orfanar. Primeira vez (sem snapshot):
+    # reconcilia contra si mesmo (empurra tudo, idempotente).
+    previous = PushedPlanStore.load(profile)
+
     results = GarminReconciler.reconcile(
         profile,
-        previous_plan=plan,
+        previous_plan=previous or plan,
         current_plan=plan,
         reference_date=reference,
         garmin=garmin,
@@ -49,5 +55,8 @@ async def push_current_plan(
     # persiste os registros de push (workout_id/schedule_id) gravados nas
     # sessões, pra próxima mudança saber o que já está no relógio
     WeeklyPlanRepository().save(profile, plan)
+
+    # snapshot do que ficou no relógio agora — base da próxima reconciliação
+    PushedPlanStore.save(profile, plan)
 
     return runner, plan, results
