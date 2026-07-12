@@ -74,6 +74,19 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         id="weekly_review_notification",
     )
 
+    # Segunda 08h: reforço pro atleta de treinador externo que ainda não
+    # mandou o treino da semana (o pedido de domingo 15h não foi respondido).
+    # Sem o print, a semana começa sem plano e a análise fica sem prescrição.
+    _scheduler.add_job(
+        WeeklyPlanNotifier.remind_external_pending,
+        trigger="cron",
+        day_of_week="mon",
+        hour=8,
+        minute=0,
+        misfire_grace_time=3600,
+        id="external_plan_reminder",
+    )
+
     # 06h todo dia: briefing matinal numa mensagem só — primeiro o furo de
     # ONTEM (se houve; o treino teve a noite pra sincronizar), depois o
     # lembrete do treino de HOJE. Descanso sem furo não envia nada.

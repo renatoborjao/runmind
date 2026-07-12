@@ -160,3 +160,60 @@ def test_notify_all_continues_after_one_profile_fails():
         runner, msg = mock_notification.send.await_args.args
         assert runner.name == "Renato"
         assert msg == "mensagem"
+
+
+# ---- lembrete de segunda pro treinador externo ----
+
+CURRENT_WEEK = WeeklyPlanService._week_start(today_local())
+
+
+def _run_reminder(plan, external=True):
+
+    sent = {}
+
+    with (
+        patch(f"{MODULE}.RunnerProfileRepository") as repo_cls,
+        patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
+        patch(f"{MODULE}.WeeklyPlanRepository") as plan_repo_cls,
+        patch(f"{MODULE}.NotificationService") as notif,
+    ):
+
+        repo = MagicMock()
+        repo.list_all.return_value = ["fulano"]
+        repo_cls.return_value = repo
+
+        load_runner.execute.return_value = make_runner(
+            name="Fulano", external_coach=external,
+        )
+
+        plan_repo_cls.return_value.load.return_value = plan
+
+        async def _capture(runner, message):
+            sent["message"] = message
+
+        notif.send = AsyncMock(side_effect=_capture)
+
+        asyncio.run(WeeklyPlanNotifier.remind_external_pending())
+
+    return sent
+
+
+def test_reminds_external_when_no_current_week_plan():
+
+    sent = _run_reminder(plan=None)
+
+    assert "não recebi o treino desta semana" in sent["message"]
+
+
+def test_no_reminder_when_current_week_plan_exists():
+
+    sent = _run_reminder(plan=_external_plan(CURRENT_WEEK))
+
+    assert sent == {}
+
+
+def test_no_reminder_for_non_external_athlete():
+
+    sent = _run_reminder(plan=None, external=False)
+
+    assert sent == {}

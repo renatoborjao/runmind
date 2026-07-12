@@ -108,6 +108,57 @@ class WeeklyPlanNotifier:
         )
 
     @staticmethod
+    async def remind_external_pending() -> None:
+        """Segunda de manhã: reforça o pedido do treino da semana pro atleta
+        de treinador externo que AINDA não mandou (sem plano registrado desta
+        semana). Sem esse print, a semana começa sem plano — e a análise fica
+        sem a prescrição pra comparar. Falha de um atleta não derruba os
+        outros."""
+
+        for profile in RunnerProfileRepository().list_all():
+
+            try:
+
+                runner = LoadRunnerProfile.execute(profile)
+
+                if not runner.external_coach:
+
+                    continue
+
+                if WeeklyPlanNotifier._has_current_week_plan(profile):
+
+                    continue
+
+                await NotificationService.send(
+                    runner,
+                    WeeklyPlanNotifier._reminder_text(runner.name),
+                )
+
+            except Exception as e:
+
+                print(
+                    f"Falha no lembrete de plano externo '{profile}': {e}"
+                )
+
+    @staticmethod
+    def _has_current_week_plan(profile: str) -> bool:
+
+        plan = WeeklyPlanRepository().load(profile)
+
+        current_week = WeeklyPlanService._week_start(today_local())
+
+        return plan is not None and plan.week_start == current_week
+
+    @staticmethod
+    def _reminder_text(name: str) -> str:
+
+        return (
+            f"Oi, {name}! 🏃 Ainda não recebi o treino desta semana do seu "
+            "treinador. Quando puder, me manda o print, foto ou PDF que eu "
+            "acompanho e te dou o feedback certinho. 📸"
+        )
+
+    @staticmethod
     async def _notify_external(
         profile: str,
         runner,
