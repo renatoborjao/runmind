@@ -56,6 +56,30 @@ def test_positive_findings_go_to_positives_and_attention_to_improvements():
     assert summary.runner_name == "Renato"
 
 
+def test_extra_workout_drops_weekly_volume_from_history():
+    """Treino extra (fora do plano): o "📈 Histórico" não comenta o volume
+    semanal (soava errado — "próximo de concluir" logo após corrida a mais).
+    A consistência continua."""
+
+    analysis = CoachAnalysis(
+        distance=None,
+        type_match=None,
+        intensity=_finding("INTENSITY_MEDIUM", FindingSeverity.POSITIVE),
+        pace_effort=_finding("PACE_MODERATE", FindingSeverity.NEUTRAL),
+        recovery=_finding("RECOVERY_OK", FindingSeverity.POSITIVE),
+        fatigue=None,
+        consistency=_finding("CONSISTENCY_GOOD", FindingSeverity.POSITIVE),
+        weekly_volume=_finding("WEEKLY_VOLUME_NEAR", FindingSeverity.POSITIVE),
+        unplanned=_finding("UNPLANNED_WORKOUT", FindingSeverity.NEUTRAL),
+        next_training=None,
+    )
+
+    summary = CoachSummaryBuilder.build("Renato", analysis)
+
+    assert summary.history == [analysis.consistency]
+    assert analysis.weekly_volume not in summary.history
+
+
 def test_fatigue_finding_is_appended_to_recovery_when_present():
 
     analysis = CoachAnalysis(

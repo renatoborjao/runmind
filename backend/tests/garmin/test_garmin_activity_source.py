@@ -167,6 +167,28 @@ def test_to_activity_reads_nested_dtos():
     assert act.start_latitude == -23.5
 
 
+def test_start_date_uses_local_wall_clock_not_utc():
+    """Garmin manda startTimeLocal (07:00 BRT) e startTimeGMT (10:00 UTC).
+    Usamos a hora LOCAL (igual ao start_date_local do Strava) pra o dia da
+    semana bater e casar com a versão Strava do mesmo treino — não os +3h
+    do GMT, que jogariam corrida perto da meia-noite pro dia errado."""
+
+    summary = {
+        "activityId": 9,
+        "activityTypeDTO": {"typeKey": "running"},
+        "summaryDTO": {
+            "distance": 5000, "movingDuration": 1800, "duration": 1800,
+            "startTimeLocal": "2026-07-11T07:00:27.0",
+            "startTimeGMT": "2026-07-11T10:00:27.0",
+        },
+    }
+
+    act = GarminActivitySource._to_activity(9, summary, dict(summary))
+
+    assert act.start_date.hour == 7          # local, não 10 (UTC)
+    assert act.start_date.date().isoformat() == "2026-07-11"
+
+
 def test_rich_metrics_keeps_only_present_fields():
 
     summary_dto = {

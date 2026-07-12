@@ -185,7 +185,11 @@ class GarminActivitySource:
 
         type_key = str(type_dto.get("typeKey") or "running")
 
-        start = _first(sd, "startTimeGMT", "startTimeLocal")
+        # HORA LOCAL de parede primeiro (o Strava também usa start_date_local):
+        # startTimeGMT jogaria a corrida ~3h pra frente (07:00 BRT vira 10:00),
+        # errando o dia perto da meia-noite e o casamento com a versão Strava
+        # do mesmo treino. _parse_date marca +00:00, igual à convenção Strava.
+        start = _first(sd, "startTimeLocal", "startTimeGMT")
 
         # esteira: análise trata distância/pace como estimados
         raw["trainer"] = bool(

@@ -54,8 +54,16 @@ class CoachSummaryBuilder:
 
         history = [
             analysis.consistency,
-            analysis.weekly_volume,
         ]
+
+        # Treino EXTRA (fora do plano) não fala de "progresso do volume
+        # semanal": o atleta correu além/fora do planejado, então medir
+        # quanto "falta pra fechar a semana" vira ruído (e soava errado —
+        # "próximo de concluir" logo após uma corrida a mais). A
+        # consistência continua, essa faz sentido sempre.
+        if analysis.unplanned is None:
+
+            history.append(analysis.weekly_volume)
 
         recovery = [
             analysis.recovery,
