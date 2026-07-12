@@ -190,6 +190,32 @@ def test_executed_lines_carry_full_strava_data():
     assert "FC média: 168 · máx 185 bpm (Z4)" in joined
 
 
+def test_external_coach_hides_identified_type():
+    """Atleta com treinador: o tipo EXECUTADO inferido (que chamava o
+    fracionado de 'Longão') some da ficha — a verdade é o prescrito. A
+    intensidade (medida) fica."""
+
+    from tests.coach.factories import make_runner
+
+    context = make_context(runner=make_runner(external_coach=True))
+
+    message = CoachWriter.write(context, CoachSummary(runner_name="Mauricio"))
+
+    joined = "\n".join(message.executed_lines)
+
+    assert "Tipo identificado" not in joined
+    assert "Intensidade:" in joined
+
+
+def test_non_external_still_shows_identified_type():
+
+    context = make_context()
+
+    message = CoachWriter.write(context, CoachSummary(runner_name="Renato"))
+
+    assert "Tipo identificado" in "\n".join(message.executed_lines)
+
+
 def test_splits_lines_are_rendered():
 
     executed = make_enriched_activity(structure=_interval_structure())

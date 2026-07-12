@@ -6,8 +6,10 @@ from app.application.coach.writer.ai_analysis_writer import (
 )
 from app.domain.entities.workout_structure import WorkoutStructure
 from tests.coach.factories import (
+    make_activity,
     make_context,
     make_enriched_activity,
+    make_planned_session,
 )
 
 MODULE = "app.application.coach.writer.ai_analysis_writer"
@@ -140,6 +142,78 @@ FULL_GARMIN = {
     "body_battery_delta": -18, "vigorous_minutes": 76, "moderate_minutes": 1,
     "calories": 1176, "avg_temperature": 19.4, "max_temperature": 22,
 }
+
+
+def test_external_coach_prescription_from_notes_reaches_prompt():
+    """Treinador externo guarda a prescrição em notes (siglas), structure
+    vazio -> a IA precisa receber a prescrição E a legenda pra decodificar
+    (senão analisa o fracionado do Mauricio às cegas, como 'rodagem')."""
+
+    planned = make_planned_session(
+        workout_type="Caminhada com corrida",
+        notes="CCL 20' ritmo moderado + FF 25' (CCR3' + CAM2') + CAM 15'",
+    )
+
+    context = make_context(planned=planned)
+
+    mock = AsyncMock(return_value='{"analysis": ["ok"]}')
+
+    with patch(f"{MODULE}.generate_text", new=mock):
+
+        asyncio.run(AIAnalysisWriter.write(context))
+
+    prompt = mock.await_args.kwargs["contents"]
+
+    assert "Prescrição do treinador:" in prompt
+    assert "FF 25'" in prompt                  # a prescrição em si
+    assert "Legenda das siglas" in prompt
+    assert "FF = Forte e Fraco" in prompt       # a legenda decodifica
+
+
+def test_executed_laps_fact_formats_and_skips_empty():
+
+    laps = [
+        {"distance_m": 548, "duration_s": 180, "pace": 5.47, "avg_hr": 144},
+        {"distance_m": 0, "duration_s": 0, "pace": None, "avg_hr": None},
+        {"distance_m": 311, "duration_s": 120, "pace": 6.44, "avg_hr": 141},
+    ]
+
+    fact = AIAnalysisWriter._executed_laps_fact(laps)
+
+    assert "Execução por bloco" in fact
+    assert "3'00 548m" in fact
+    assert "2'00 311m" in fact
+    assert fact.count(";") == 1          # só os 2 blocos válidos
+
+
+def test_executed_laps_reach_prompt_for_external_coach():
+    """Treinador externo: os blocos EXECUTADOS (voltas do Garmin) chegam ao
+    prompt pra IA comparar com a estrutura prescrita — senão diz 'não fez o
+    fracionado' quando o atleta FEZ (os km achatam a estrutura)."""
+
+    planned = make_planned_session(
+        notes="FF 25' (CCR3' ritmo moderado + CAM2' ritmo moderado)",
+    )
+
+    executed = make_enriched_activity(
+        activity=make_activity(raw={"_garmin_laps": [
+            {"distance_m": 548, "duration_s": 180, "pace": 5.47, "avg_hr": 144},
+            {"distance_m": 311, "duration_s": 120, "pace": 6.44, "avg_hr": 141},
+        ]}),
+    )
+
+    context = make_context(planned=planned, executed=executed)
+
+    mock = AsyncMock(return_value='{"analysis": ["ok"]}')
+
+    with patch(f"{MODULE}.generate_text", new=mock):
+
+        asyncio.run(AIAnalysisWriter.write(context))
+
+    prompt = mock.await_args.kwargs["contents"]
+
+    assert "Execução por bloco" in prompt
+    assert "3'00 548m" in prompt
 
 
 def test_garmin_facts_none_without_metrics():

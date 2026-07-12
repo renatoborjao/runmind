@@ -31,6 +31,37 @@ def _is_effort_type(sp_type: str) -> bool:
     )
 
 
+# Gate anti-falso-positivo: o Garmin rotula run-walk / rodagem com pausas
+# como INTERVAL_ACTIVE/REST porcamente. Só é intervalado DE VERDADE se houver
+# CONTRASTE esforço x recuperação -- resposta de FC ou esforço bem mais rápido.
+_MIN_HR_SWING = 12          # bpm de queda da FC na recuperação
+_MIN_SPEED_RATIO = 1.15     # esforço >=15% mais rápido que a recuperação
+
+
+def _real_interval(
+    avg_peak_hr, avg_recovery_hr, effort_speeds, recovery_speeds
+) -> bool:
+    """Há contraste esforço x recuperação de treino de tiro DE VERDADE? A FC
+    caiu >= _MIN_HR_SWING na recuperação, OU os esforços foram
+    >= _MIN_SPEED_RATIO mais rápidos que as recuperações."""
+
+    hr_response = (
+        avg_peak_hr is not None
+        and avg_recovery_hr is not None
+        and avg_peak_hr - avg_recovery_hr >= _MIN_HR_SWING
+    )
+
+    pace_response = (
+        bool(effort_speeds)
+        and bool(recovery_speeds)
+        and (sum(effort_speeds) / len(effort_speeds))
+        / (sum(recovery_speeds) / len(recovery_speeds))
+        >= _MIN_SPEED_RATIO
+    )
+
+    return hr_response or pace_response
+
+
 def _first(d: dict, *keys, default=None):
     """Primeiro valor não-nulo entre as chaves (o Garmin varia o nome/local)."""
 
@@ -96,16 +127,30 @@ class GarminActivitySource:
 
             raw["_streams"] = {}
 
-        # ---- splits por km (ficha/parciais) ----
+        # ---- parciais por km: calculadas do STREAM (distância acumulada +
+        # velocidade + FC). As lapDTOs do Garmin são as VOLTAS do treino
+        # (por-km só quando NÃO há estrutura); num fracionado são de
+        # duração/botão e não podem virar "parciais por km" — bug do
+        # Mauricio, em que só sobravam 5 laps de 1km rotulados errado. O
+        # stream é a verdade real por quilômetro.
+        raw["splits_metric"] = GarminActivitySource._km_splits_from_streams(
+            raw.get("_streams") or {}
+        )
+
+        # ---- voltas/blocos do treino: num treino ESTRUTURADO (treinador
+        # externo) as lapDTOs são os PASSOS executados (ex.: 5×3'/2'). A IA
+        # compara bloco a bloco com a prescrição — não são "parciais por km".
         try:
 
             splits = garmin.get_activity_splits(activity_id)
 
-            raw["splits_metric"] = GarminActivitySource._km_splits(splits)
+            raw["_garmin_laps"] = GarminActivitySource._laps(splits)
 
         except Exception as e:
 
-            print(f"Garmin: splits indisponíveis p/ {activity_id}: {e}")
+            print(f"Garmin: voltas indisponíveis p/ {activity_id}: {e}")
+
+            raw["_garmin_laps"] = []
 
         # ---- typed splits: os tiros EXATOS (rotulados) ----
         try:
@@ -316,9 +361,10 @@ class GarminActivitySource:
         return {k: v for k, v in streams.items() if v}
 
     @staticmethod
-    def _km_splits(splits: dict) -> list[dict]:
-        """Voltas por km do Garmin -> formato splits_metric do Strava
-        ({distance, average_speed, average_heartrate})."""
+    def _laps(splits: dict) -> list[dict]:
+        """Voltas/blocos do treino (lapDTOs) -> distância, duração, pace e FC
+        média por volta. Num treino estruturado são os passos executados; a
+        IA os alinha com a prescrição (a prescrição é em TEMPO: 3'/2'...)."""
 
         items = (
             splits.get("lapDTOs")
@@ -330,12 +376,84 @@ class GarminActivitySource:
 
         for it in items:
 
+            hr = _num(_first(it, "averageHR", "averageHeartRate"))
+
             result.append(
                 {
-                    "distance": _first(it, "distance", default=0),
-                    "average_speed": _first(it, "averageSpeed", default=0),
-                    "average_heartrate": _first(
-                        it, "averageHR", "averageHeartRate"
+                    "distance_m": round(
+                        float(_first(it, "distance", default=0) or 0)
+                    ),
+                    "duration_s": round(
+                        float(
+                            _first(it, "duration", "movingDuration", default=0)
+                            or 0
+                        )
+                    ),
+                    "pace": _speed_to_pace(_first(it, "averageSpeed", default=0)),
+                    "avg_hr": int(hr) if hr else None,
+                }
+            )
+
+        return result
+
+    @staticmethod
+    def _km_splits_from_streams(streams: dict) -> list[dict]:
+        """Parciais REAIS por km, a partir do stream: distribui as amostras
+        de velocidade/FC em baldes de 1 km pela distância acumulada e tira a
+        média de cada. Só km COMPLETOS (descarta a sobra final). Formato
+        splits_metric do Strava ({distance, average_speed, average_heartrate})
+        pra o WorkoutStructureBuilder consumir igual."""
+
+        distance = streams.get("distance") or []
+
+        speed = streams.get("velocity_smooth") or []
+
+        hr = streams.get("heartrate") or []
+
+        if not distance or not speed:
+
+            return []
+
+        n = min(len(distance), len(speed))
+
+        buckets: dict[int, dict] = {}
+
+        for i in range(n):
+
+            km = int((distance[i] or 0) // 1000)
+
+            bucket = buckets.setdefault(km, {"speeds": [], "hrs": []})
+
+            if speed[i]:
+
+                bucket["speeds"].append(speed[i])
+
+            if i < len(hr) and hr[i]:
+
+                bucket["hrs"].append(hr[i])
+
+        total_km = int((distance[n - 1] or 0) // 1000)
+
+        result = []
+
+        for km in range(total_km):
+
+            bucket = buckets.get(km)
+
+            if not bucket or not bucket["speeds"]:
+
+                continue
+
+            result.append(
+                {
+                    "distance": 1000,
+                    "average_speed": (
+                        sum(bucket["speeds"]) / len(bucket["speeds"])
+                    ),
+                    "average_heartrate": (
+                        round(sum(bucket["hrs"]) / len(bucket["hrs"]))
+                        if bucket["hrs"]
+                        else None
                     ),
                 }
             )
@@ -356,7 +474,11 @@ class GarminActivitySource:
 
         efforts = []
 
+        effort_speeds = []
+
         recovery_hrs = []
+
+        recovery_speeds = []
 
         for sp in splits:
 
@@ -382,9 +504,19 @@ class GarminActivitySource:
                     }
                 )
 
-            elif _is_recovery_type(sp_type) and hr:
+                if avg_speed:
 
-                recovery_hrs.append(hr)
+                    effort_speeds.append(avg_speed)
+
+            elif _is_recovery_type(sp_type):
+
+                if hr:
+
+                    recovery_hrs.append(hr)
+
+                if avg_speed:
+
+                    recovery_speeds.append(avg_speed)
 
         if len(efforts) < 2:
 
@@ -394,15 +526,29 @@ class GarminActivitySource:
 
         peaks = [e["peak_hr"] for e in efforts if e["peak_hr"]]
 
+        avg_peak_hr = round(sum(peaks) / len(peaks)) if peaks else None
+
+        avg_recovery_hr = (
+            round(sum(recovery_hrs) / len(recovery_hrs))
+            if recovery_hrs
+            else None
+        )
+
+        # com dado de recuperação, exige contraste real (senão é run-walk /
+        # rodagem com pausas que o Garmin rotulou como intervalo). Sem
+        # recuperação nenhuma, confia no rótulo (tiro estruturado que
+        # empurramos, cujas voltas o Garmin devolve alinhadas).
+        if (recovery_hrs or recovery_speeds) and not _real_interval(
+            avg_peak_hr, avg_recovery_hr, effort_speeds, recovery_speeds
+        ):
+
+            return None
+
         return IntervalAnalysis(
             rep_count=len(efforts),
             avg_rep_pace=round(sum(paces) / len(paces), 3) if paces else 0,
-            avg_peak_hr=round(sum(peaks) / len(peaks)) if peaks else None,
-            avg_recovery_hr=(
-                round(sum(recovery_hrs) / len(recovery_hrs))
-                if recovery_hrs
-                else None
-            ),
+            avg_peak_hr=avg_peak_hr,
+            avg_recovery_hr=avg_recovery_hr,
             reps=efforts,
         )
 

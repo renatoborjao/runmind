@@ -73,6 +73,48 @@ def test_exact_interval_handles_real_suffixed_types():
     assert interval.avg_peak_hr == 171
 
 
+def test_labeled_interval_without_contrast_is_rejected():
+    """Bug do Mauricio: run-walk que o Garmin rotula como INTERVAL_ACTIVE/REST,
+    mas sem contraste real (FC quase não cai, esforço mal mais rápido que a
+    recuperação) -> NÃO é intervalado (cai no gate)."""
+
+    typed = {"splits": [
+        # esforço ~2.8 m/s, "recuperação" ~2.53 (ratio ~1.11 < 1.15) e FC
+        # swing ~8 (< 12) -- os dois abaixo do gate
+        {"type": "INTERVAL_ACTIVE", "distance": 600, "averageSpeed": 2.8,
+         "averageHR": 150, "maxHR": 159},
+        {"type": "INTERVAL_REST", "distance": 300, "averageSpeed": 2.55,
+         "averageHR": 151},
+        {"type": "INTERVAL_ACTIVE", "distance": 550, "averageSpeed": 2.8,
+         "averageHR": 155, "maxHR": 160},
+        {"type": "INTERVAL_REST", "distance": 300, "averageSpeed": 2.5,
+         "averageHR": 152},
+    ]}
+
+    assert GarminActivitySource._exact_interval(typed) is None
+
+
+def test_labeled_interval_with_hr_response_is_kept():
+    """Contraste real de FC (esforço pico bem acima da recuperação) -> mantém
+    como intervalado mesmo sem grande diferença de pace."""
+
+    typed = {"splits": [
+        {"type": "INTERVAL_ACTIVE", "distance": 800, "averageSpeed": 3.0,
+         "averageHR": 165, "maxHR": 172},
+        {"type": "INTERVAL_RECOVERY", "distance": 400, "averageSpeed": 2.6,
+         "averageHR": 130},
+        {"type": "INTERVAL_ACTIVE", "distance": 800, "averageSpeed": 3.0,
+         "averageHR": 167, "maxHR": 174},
+        {"type": "INTERVAL_RECOVERY", "distance": 400, "averageSpeed": 2.6,
+         "averageHR": 128},
+    ]}
+
+    interval = GarminActivitySource._exact_interval(typed)
+
+    assert interval is not None
+    assert interval.rep_count == 2
+
+
 def test_longao_typed_splits_do_not_become_interval():
     """Longão real (typed_splits do renato2 hoje): 1 bloco INTERVAL_ACTIVE +
     voltas RWD_* de run-walk-detection -> NÃO é intervalado."""
@@ -164,6 +206,56 @@ def test_streams_from_details_parallel_arrays():
     assert streams["velocity_smooth"] == [3.5, 3.4]
     assert streams["heartrate"] == [165, 166]
     assert streams["distance"] == [100, 110]
+
+
+def test_km_splits_computed_from_stream_not_laps():
+    """Parciais por km saem do STREAM (distância + velocidade + FC), em
+    baldes de 1 km — não das lapDTOs (que num treino estruturado são voltas
+    de duração, não por-km: o bug do Mauricio)."""
+
+    streams = {
+        "distance": [0, 500, 1000, 1500, 2000, 2500],
+        "velocity_smooth": [3.0, 3.0, 2.5, 2.5, 4.0, 4.0],
+        "heartrate": [150, 152, 145, 147, 165, 167],
+    }
+
+    splits = GarminActivitySource._km_splits_from_streams(streams)
+
+    # 2.5 km -> 2 km COMPLETOS (a sobra de 500m é descartada)
+    assert len(splits) == 2
+    assert splits[0]["distance"] == 1000
+    assert splits[0]["average_speed"] == 3.0
+    assert splits[0]["average_heartrate"] == 151     # média de 150 e 152
+    assert splits[1]["average_speed"] == 2.5
+    assert splits[1]["average_heartrate"] == 146
+
+
+def test_laps_maps_lapdtos_to_blocks_with_duration():
+    """Voltas do treino estruturado: duração é a chave (prescrição é em
+    tempo, 3'/2') + distância + pace + FC por bloco."""
+
+    splits = {"lapDTOs": [
+        {"distance": 548, "duration": 180, "averageSpeed": 3.05,
+         "averageHR": 144},
+        {"distance": 311, "duration": 120, "averageSpeed": 2.59,
+         "averageHR": 141},
+    ]}
+
+    laps = GarminActivitySource._laps(splits)
+
+    assert laps[0]["duration_s"] == 180
+    assert laps[0]["distance_m"] == 548
+    assert laps[0]["avg_hr"] == 144
+    assert laps[0]["pace"]
+    assert laps[1]["duration_s"] == 120
+
+
+def test_km_splits_from_streams_empty_when_no_data():
+
+    assert GarminActivitySource._km_splits_from_streams({}) == []
+    assert GarminActivitySource._km_splits_from_streams(
+        {"distance": [], "velocity_smooth": []}
+    ) == []
 
 
 def test_sport_mapping():

@@ -9,6 +9,9 @@ from app.application.coach.writer.labels import (
     plan_workout_label,
     workout_type_label,
 )
+from app.application.external_plan.treino_online_legend import (
+    legend_for_prompt,
+)
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.config import get_settings
 from app.domain.entities.workout_structure import WorkoutStructure
@@ -48,6 +51,12 @@ genérica que serviria pra qualquer treino.
 intervalado (não chame de leve).
 - Se o executado bateu com o planejado, reconheça; se fugiu, aponte com \
 naturalidade, sem bronca.
+- Se houver "Execução por bloco", COMPARE os blocos executados com a \
+estrutura PRESCRITA (use a legenda pra decodificar as siglas). O atleta pode \
+ter CUMPRIDO a estrutura (ex.: alternou 3' corrida / 2' caminhada) mesmo que \
+os splits por km pareçam constantes — os blocos revelam isso; não afirme que \
+ele "não fez" o treino sem olhar os blocos. Se cumpriu os blocos mas com \
+pouco contraste (recuperação rápida demais), aponte ISSO, não a ausência.
 - ESTEIRA: quando o treino for na esteira, a distância e o pace do RELÓGIO \
 podem divergir do real (o relógio estima). NÃO cobre diferença de distância \
 nem de pace do relógio: use a DISTÂNCIA PLANEJADA como referência e assuma que \
@@ -164,13 +173,40 @@ class AIAnalysisWriter:
 
             lines.append(f"Planejado: {planned_line}")
 
-            # prescrição (blocos/séries) pra IA comparar a execução com o
-            # que foi pedido, não só distância crua
-            if planned.structure:
+            # prescrição (blocos/séries) pra IA comparar a execução com o que
+            # foi pedido, não só distância crua. Treinador externo guarda a
+            # prescrição em `notes` (com siglas do "Treino Online"), não em
+            # `structure` — aí manda a LEGENDA junto pra IA decodificar
+            # (CCR/CCL/FF/CAM...) e comparar com o executado.
+            prescription = planned.structure or planned.notes
 
-                prescription = planned.structure.replace("\n", " | ")
+            if prescription:
 
-                lines.append(f"Prescrição do plano: {prescription}")
+                lines.append(
+                    "Prescrição do treinador: "
+                    + prescription.strip().replace("\n", " | ")[:700]
+                )
+
+                if not planned.structure and planned.notes:
+
+                    lines.append(
+                        "Legenda das siglas do treinador:\n"
+                        + legend_for_prompt()
+                    )
+
+            # execução POR BLOCO (voltas do Garmin) pra IA comparar com a
+            # estrutura prescrita. Decisivo no treinador externo: o treino é
+            # estruturado (5×3'/2', HIIT 2×2k...) e os splits por km achatam
+            # a estrutura — o atleta pode ter CUMPRIDO os blocos.
+            if planned.notes:
+
+                laps_fact = AIAnalysisWriter._executed_laps_fact(
+                    (activity.raw or {}).get("_garmin_laps") or []
+                )
+
+                if laps_fact:
+
+                    lines.append(laps_fact)
 
         else:
 
@@ -223,6 +259,45 @@ class AIAnalysisWriter:
         0: "muito cansado", 25: "cansado", 50: "normal",
         75: "bem", 100: "forte",
     }
+
+    @staticmethod
+    def _executed_laps_fact(laps: list[dict]) -> str:
+        """Formata as voltas EXECUTADAS (duração + distância + pace + FC) pra
+        IA alinhar com a prescrição. A prescrição vem em tempo (3'/2'), então
+        a duração de cada volta é a chave do casamento."""
+
+        parts = []
+
+        for lap in laps:
+
+            dur = lap.get("duration_s") or 0
+
+            if not dur or not lap.get("distance_m"):
+
+                continue
+
+            minutes, seconds = divmod(int(dur), 60)
+
+            seg = f"{minutes}'{seconds:02d} {lap['distance_m']}m"
+
+            if lap.get("pace"):
+
+                seg += f" {PaceFormatter.format(lap['pace'])}/km"
+
+            if lap.get("avg_hr"):
+
+                seg += f" FC{lap['avg_hr']}"
+
+            parts.append(seg)
+
+        if not parts:
+
+            return ""
+
+        return (
+            "Execução por bloco (voltas do relógio, compare com a prescrição "
+            "acima): " + "; ".join(parts)
+        )
 
     @staticmethod
     def _clean_msg(msg) -> str | None:
