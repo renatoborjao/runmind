@@ -72,12 +72,101 @@ def test_week_start_monday_to_saturday_is_current_week_monday():
 
 def test_week_start_on_sunday_targets_next_monday():
 
-    # domingo 26/07 é véspera: plano é pra semana que começa 27/07 —
-    # nunca a que está acabando (evita datas passadas no plano de domingo)
+    # domingo 26/07 é véspera: plano ESCRITO (print externo) é pra semana
+    # que começa 27/07 — nunca a que está acabando
     assert (
         WeeklyPlanService._week_start(date(2026, 7, 26))
         == date(2026, 7, 27)
     )
+
+
+def test_active_week_start_does_not_roll_on_sunday():
+
+    # LEITURA: domingo 12/07 ainda é da semana ativa que começou seg 06/07
+    # (ao contrário de _week_start, que adianta pra escrita/entrega)
+    assert (
+        WeeklyPlanService.active_week_start(date(2026, 7, 12))
+        == date(2026, 7, 6)
+    )
+    # dia de semana: segunda da própria semana
+    assert (
+        WeeklyPlanService.active_week_start(date(2026, 7, 8))
+        == date(2026, 7, 6)
+    )
+
+
+def test_upcoming_week_start_is_next_monday():
+
+    # a entrega de domingo 15h mira a próxima semana (13/07), seja o
+    # gatilho no domingo ou em outro dia da semana ativa
+    assert (
+        WeeklyPlanService.upcoming_week_start(date(2026, 7, 12))
+        == date(2026, 7, 13)
+    )
+    assert (
+        WeeklyPlanService.upcoming_week_start(date(2026, 7, 8))
+        == date(2026, 7, 13)
+    )
+
+
+def test_sunday_read_keeps_active_week_and_does_not_generate():
+
+    # Bug do Renato (domingo 12/07): a leitura da semana no domingo NÃO pode
+    # gerar/mostrar o plano da próxima semana — devolve o da semana ATIVA
+    # (06/07) sem gerar nada.
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as mock_repo_cls,
+        patch(f"{MODULE}.TrainingPlanner") as mock_planner,
+    ):
+
+        active = _plan(date(2026, 7, 6))
+
+        mock_repo = MagicMock()
+        mock_repo.load.return_value = active
+        mock_repo_cls.return_value = mock_repo
+
+        result = WeeklyPlanService.get_or_generate(
+            profile="renato",
+            runner=make_runner(),
+            assessment=object(),
+            metrics=object(),
+            goal=object(),
+            reference_date=date(2026, 7, 12),  # domingo
+        )
+
+        assert result is active
+        mock_planner.generate.assert_not_called()
+        mock_repo.save.assert_not_called()
+
+
+def test_read_keeps_future_delivered_plan_without_regenerating():
+
+    # Depois da entrega de domingo 15h, o slot já tem a PRÓXIMA semana
+    # (13/07). Uma leitura de domingo à tarde (semana ativa 06/07) não pode
+    # regenerar a semana atual por cima do plano já entregue.
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as mock_repo_cls,
+        patch(f"{MODULE}.TrainingPlanner") as mock_planner,
+    ):
+
+        delivered_next = _plan(date(2026, 7, 13))
+
+        mock_repo = MagicMock()
+        mock_repo.load.return_value = delivered_next
+        mock_repo_cls.return_value = mock_repo
+
+        result = WeeklyPlanService.get_or_generate(
+            profile="renato",
+            runner=make_runner(),
+            assessment=object(),
+            metrics=object(),
+            goal=object(),
+            reference_date=date(2026, 7, 12),  # domingo, semana ativa 06/07
+        )
+
+        assert result is delivered_next
+        mock_planner.generate.assert_not_called()
+        mock_repo.save.assert_not_called()
 
 
 def test_reuses_existing_plan_when_same_iso_week():

@@ -36,7 +36,7 @@ class WeeklyPlanService:
 
         reference_date = reference_date or today_local()
 
-        current_week_start = WeeklyPlanService._week_start(
+        current_week_start = WeeklyPlanService.active_week_start(
             reference_date,
         )
 
@@ -64,10 +64,16 @@ class WeeklyPlanService:
                 source="externo",
             )
 
+        # Reaproveita o plano guardado se ele for da semana ATIVA ou de uma
+        # semana FUTURA já preparada (a entrega de domingo 15h grava a
+        # próxima semana adiantada). Só regenera quando o guardado está
+        # DEFASADO (semana passada) ou não existe. Sem o >=, uma leitura de
+        # domingo à tarde regeneraria a semana atual por cima do plano da
+        # próxima que acabou de ser entregue.
         if (
             not force
             and existing is not None
-            and existing.week_start == current_week_start
+            and existing.week_start >= current_week_start
         ):
 
             return existing
@@ -204,15 +210,51 @@ class WeeklyPlanService:
         return len(past_weeks) + 1
 
     @staticmethod
+    def active_week_start(
+        reference_date: date,
+    ) -> date:
+        """Segunda-feira da semana ISO (seg–dom) que CONTÉM a data — a
+        semana ATIVA do atleta.
+
+        Diferente de `_week_start`, NÃO adianta no domingo: domingo ainda é
+        desta semana, então as leituras (briefing matinal, "meu plano",
+        análise) mostram a semana corrente até virar segunda. O plano da
+        semana seguinte só entra em cena quando a entrega de domingo 15h o
+        grava — aí o `>=` do cache passa a devolvê-lo. Com isso: (a) o
+        atleta nunca recebe o plano da próxima semana ANTES da entrega, e
+        (b) quem treina domingo recebe o lembrete do treino de hoje (a
+        sessão de domingo continua na semana ativa)."""
+
+        return reference_date - timedelta(
+            days=reference_date.weekday(),
+        )
+
+    @staticmethod
+    def upcoming_week_start(
+        reference_date: date | None = None,
+    ) -> date:
+        """Segunda-feira da PRÓXIMA semana — a que a entrega de domingo 15h
+        prepara e anuncia. É a base pra GERAR o plano semanal (só vira a
+        semana ativa depois de entregue)."""
+
+        reference_date = reference_date or today_local()
+
+        return WeeklyPlanService.active_week_start(
+            reference_date,
+        ) + timedelta(days=7)
+
+    @staticmethod
     def _week_start(
         reference_date: date,
     ) -> date:
-        """Segunda-feira da semana que o plano cobre.
+        """Segunda-feira da semana que um plano ESCRITO cobre (upload de
+        treinador externo).
 
-        Domingo é véspera: planejamos a semana que COMEÇA na segunda
-        seguinte, para o plano nunca nascer com datas passadas (o
-        notificador roda domingo 15h). Segunda a sábado usam a segunda
-        da própria semana corrente."""
+        Domingo é véspera: o print enviado no domingo é o da semana que
+        COMEÇA na segunda seguinte (o pedido de domingo 15h fala "semana que
+        vem"). Segunda a sábado usam a segunda da própria semana corrente.
+        Para LEITURA da semana ativa, use `active_week_start` (sem o pulo do
+        domingo)."""
 
         # weekday(): segunda=0 ... domingo=6
         if reference_date.weekday() == 6:

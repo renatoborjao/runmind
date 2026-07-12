@@ -123,6 +123,11 @@ def test_notify_all_sends_to_every_profile():
         assert {r.name for r, _ in sent} == {"Renato", "Camila"}
         assert all(msg == "mensagem" for _, msg in sent)
 
+        # a entrega gera o plano da PRÓXIMA semana, nunca a semana ativa
+        upcoming = WeeklyPlanService.upcoming_week_start()
+        for call in mock_ai.ensure_plan.await_args_list:
+            assert call.kwargs["reference_date"] == upcoming
+
 
 def test_notify_all_continues_after_one_profile_fails():
 

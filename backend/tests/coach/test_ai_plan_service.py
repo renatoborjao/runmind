@@ -47,7 +47,7 @@ def _run(
         repo = repo_cls.return_value
         repo.load.return_value = existing
 
-        wps._week_start.return_value = WEEK
+        wps.active_week_start.return_value = WEEK
         wps.get_or_generate.return_value = _plan(source="deterministico")
 
         if ai_error is not None:

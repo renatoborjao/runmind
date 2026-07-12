@@ -80,6 +80,9 @@ class WeeklyPlanNotifier:
 
         goal = BuildTrainingGoal.execute(runner)
 
+        # Entrega de domingo 15h: gera e anuncia o plano da PRÓXIMA semana.
+        # Só a partir daqui ele vira a semana ativa do atleta (o cache >= o
+        # devolve nas leituras seguintes) — nunca antes da entrega.
         plan = await AIPlanService.ensure_plan(
             profile=profile,
             runner=runner,
@@ -87,6 +90,7 @@ class WeeklyPlanNotifier:
             metrics=metrics,
             goal=goal,
             history=history,
+            reference_date=WeeklyPlanService.upcoming_week_start(),
         )
 
         message = WeeklyPlanMessageFormatter.format(

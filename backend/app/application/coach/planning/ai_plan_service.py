@@ -45,19 +45,21 @@ class AIPlanService:
 
         reference_date = reference_date or today_local()
 
-        week_start = WeeklyPlanService._week_start(reference_date)
+        week_start = WeeklyPlanService.active_week_start(reference_date)
 
         repository = WeeklyPlanRepository()
 
         existing = repository.load(profile)
 
-        # já há plano desta semana (IA ou determinístico): reaproveita.
-        # force=True (o atleta pediu uma mudança) regenera pela IA — mantendo
-        # o plano RICO, nunca caindo pro determinístico como plano principal.
+        # já há plano desta semana ATIVA (ou de uma futura já entregue):
+        # reaproveita. force=True (o atleta pediu uma mudança) regenera pela
+        # IA — mantendo o plano RICO, nunca caindo pro determinístico como
+        # plano principal. O `>=` evita que uma leitura de domingo à tarde
+        # regenere a semana atual por cima do plano da próxima já entregue.
         if (
             not force
             and existing is not None
-            and existing.week_start == week_start
+            and existing.week_start >= week_start
         ):
 
             return existing
