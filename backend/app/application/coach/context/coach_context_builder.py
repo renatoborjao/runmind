@@ -34,6 +34,7 @@ class CoachContextBuilder:
         next_planned: PlannedSession | None = None,
         planned_date=None,
         next_planned_date=None,
+        plan_weekly_volume: float = 0.0,
     ) -> CoachContext:
 
         return CoachContext(
@@ -68,7 +69,18 @@ class CoachContextBuilder:
                 executed,
             ),
 
-            weekly_goal=assessment.recommended_weekly_volume,
+            # Meta = volume PRESCRITO da semana (plano). A recomendação da
+            # avaliação vem da média histórica ×1.08; pra atleta NOVO (só a
+            # semana atual no histórico) a média = o volume da semana, então
+            # meta ≈ volume ×1.08 -> sempre ~92% ("próximo de concluir")
+            # mesmo tendo feito 1 de 3 treinos. O volume do plano é fixo e
+            # real. Fallback pra recomendação quando o plano não traz volume
+            # (ex.: plano vazio de treinador externo ainda sem print).
+            weekly_goal=(
+                plan_weekly_volume
+                if plan_weekly_volume and plan_weekly_volume > 0
+                else assessment.recommended_weekly_volume
+            ),
 
             consistency=assessment.consistency,
 

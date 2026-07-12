@@ -149,6 +149,36 @@ def test_weekly_volume_uses_current_iso_week_not_4wk_average():
     assert context.weekly_volume == 31.0
 
 
+def test_weekly_goal_uses_prescribed_plan_volume_not_history_average():
+    """Bug do dry-run (atleta novo): com só a semana atual no histórico, a
+    média ×1.08 vira ~92% fixo ("próximo de concluir") mesmo tendo feito 1 de
+    3 treinos. A meta passa a ser o volume PRESCRITO do plano."""
+
+    from datetime import datetime
+
+    new_run = make_activity(
+        id=1, distance=5000.0,
+        start_date=datetime(2026, 7, 13, 7, 0, 0),
+    )
+    executed = make_enriched_activity(
+        activity=new_run, training_type="EASY", pace_min_km=6.0,
+    )
+
+    context = CoachContextBuilder.build(
+        runner=make_runner(name="Joao"),
+        planned=None,
+        executed=executed,
+        history=TrainingHistory(activities=[new_run]),
+        assessment=_base_assessment(),      # recommended = 32.4
+        plan_weekly_volume=15.0,            # prescrito da semana
+    )
+
+    # meta = prescrito (15), não a média histórica (32.4); 5/15 = 33% (em
+    # andamento), não os 92% degenerados
+    assert context.weekly_goal == 15.0
+    assert context.weekly_volume == 5.0
+
+
 def _base_assessment() -> TrainingAssessment:
 
     return TrainingAssessment(

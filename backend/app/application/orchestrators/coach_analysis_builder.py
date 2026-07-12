@@ -159,6 +159,7 @@ class CoachAnalysisBuilder:
             next_planned=next_planned,
             planned_date=planned_date,
             next_planned_date=next_planned_date,
+            plan_weekly_volume=plan.weekly_volume,
         )
 
         coach_analysis = CoachPipeline.execute(

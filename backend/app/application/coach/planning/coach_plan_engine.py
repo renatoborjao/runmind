@@ -40,6 +40,12 @@ REGRAS:
   cumprindo.
 - Cada corrida com um PROPÓSITO distinto (velocidade, base/rodagem, longão,
   regenerativo...) e faixa de pace ancorada na META dele.
+- LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E
+  claramente ACIMA da rodagem típica dele. Se o atleta ainda corre pouco (ex.:
+  rodagem típica/maior treino ~5 km), NÃO rotule nenhuma corrida de "Longão" —
+  chame de rodagem/base. O longão só aparece quando o volume evolui e existe
+  uma corrida realmente mais longa. NUNCA dê o nome "Longão" a uma distância
+  igual (ou menor) à rodagem comum do atleta.
 - "structure" é uma LISTA de passos CLAROS e COMPLETOS, em linguagem simples
   que qualquer corredor entende. Detalhe de verdade: aquecimento (distância +
   pace), a parte principal (séries/distâncias/repetições/pace/recuperação
