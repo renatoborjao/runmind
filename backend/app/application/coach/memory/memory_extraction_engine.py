@@ -5,7 +5,10 @@ from google.genai import types
 
 from app.core.clock import today_local
 from app.core.config import get_settings
-from app.infrastructure.integrations.gemini.client import generate_text
+from app.infrastructure.integrations.gemini.client import (
+    generate_json,
+    repair_json,
+)
 from app.domain.entities.memory_entry import (
     MEMORY_CATEGORIES,
     MemoryEntry,
@@ -84,7 +87,7 @@ class MemoryExtractionEngine:
             incoming_text=incoming_text,
         )
 
-        raw = await generate_text(
+        ops = await generate_json(
             model=settings.gemini_extract_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -97,9 +100,12 @@ class MemoryExtractionEngine:
                     thinking_budget=0,
                 ),
             ),
+            parse=MemoryExtractionEngine._parse_ops,
         )
 
-        return MemoryExtractionEngine._parse_ops(raw)
+        # JSON torto até o fim das tentativas -> não extrai nada neste turno
+        # (o fato é recapturado quando o atleta mencionar de novo)
+        return ops if ops is not None else dict(EMPTY_OPS)
 
     @staticmethod
     def _render_memories(
@@ -132,19 +138,21 @@ class MemoryExtractionEngine:
     @staticmethod
     def _parse_ops(
         raw: str,
-    ) -> dict:
+    ) -> dict | None:
+        """None em JSON torto/estrutura errada (pra o generate_json re-gerar);
+        dict de ops (mesmo vazio) quando o JSON é válido."""
 
         try:
 
-            data = json.loads(raw)
+            data = json.loads(repair_json(raw))
 
         except (json.JSONDecodeError, TypeError):
 
-            return dict(EMPTY_OPS)
+            return None
 
         if not isinstance(data, dict):
 
-            return dict(EMPTY_OPS)
+            return None
 
         add = [
             item

@@ -7,6 +7,7 @@ from app.application.coach.memory.memory_extraction_engine import (
 from app.domain.entities.memory_entry import MemoryEntry
 
 MODULE = "app.application.coach.memory.memory_extraction_engine"
+GEN_TEXT = "app.infrastructure.integrations.gemini.client.generate_text"
 
 
 def _memory(entry_id: str = "m-1") -> MemoryEntry:
@@ -24,7 +25,7 @@ def _extract(response_text: str | None, **overrides):
 
     mock_generate = AsyncMock(return_value=response_text or "")
 
-    with patch(f"{MODULE}.generate_text", new=mock_generate):
+    with patch(GEN_TEXT, new=mock_generate):
 
         kwargs = dict(
             runner_name="Renato",

@@ -11,6 +11,7 @@ from app.domain.entities.training_plan import TrainingPlan
 from tests.coach.factories import make_runner
 
 MODULE = "app.application.coach.planning.aversion_swap_engine"
+GEN_TEXT = "app.infrastructure.integrations.gemini.client.generate_text"
 
 
 def _session(day, kind="run") -> PlannedSession:
@@ -97,7 +98,7 @@ def test_propose_calls_the_ai_and_returns_a_swap():
     plan = _plan(_session("Tuesday", kind="run"))
 
     with patch(
-        f"{MODULE}.generate_text",
+        GEN_TEXT,
         new=AsyncMock(return_value=_swap_json("Tuesday")),
     ):
 

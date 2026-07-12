@@ -10,7 +10,10 @@ from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
-from app.infrastructure.integrations.gemini.client import generate_text
+from app.infrastructure.integrations.gemini.client import (
+    generate_json,
+    repair_json,
+)
 
 VALID_DAYS = set(WEEKDAYS.values())
 
@@ -105,7 +108,7 @@ class AversionSwapEngine:
             message=incoming_text.replace('"', "'"),
         )
 
-        raw = await generate_text(
+        return await generate_json(
             model=settings.gemini_chat_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -113,10 +116,8 @@ class AversionSwapEngine:
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
-            require_text=True,
+            parse=lambda raw: AversionSwapEngine._parse(raw, plan),
         )
-
-        return AversionSwapEngine._parse(raw, plan)
 
     @staticmethod
     def _render_sessions(plan: TrainingPlan) -> str:
@@ -148,7 +149,7 @@ class AversionSwapEngine:
 
         try:
 
-            data = json.loads(raw)
+            data = json.loads(repair_json(raw))
 
         except (json.JSONDecodeError, TypeError):
 
