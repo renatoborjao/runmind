@@ -18,6 +18,7 @@ from app.application.coach.conversation.plan_preference_detector import (
 )
 from app.application.coach.conversation.proposal_flow import ProposalFlow
 from app.application.coach.conversation.aversion_flow import AversionFlow
+from app.application.coach.conversation.move_skip_flow import MoveSkipFlow
 from app.application.garmin.garmin_sync import GarminSync
 from app.application.coach.conversation.conversation_summary_engine import (
     ConversationSummaryEngine,
@@ -168,6 +169,26 @@ class CoachConversationEvent:
                     f"Falha na resposta determinística ({intent}) "
                     f"para '{profile}': {e}"
                 )
+
+                reply_text = None
+
+        # Pedido de mover/pular treino ("joga pra quarta" / "não treino hoje"):
+        # o coach PROPÕE a mudança no plano e guarda pro "sim".
+        if reply_text is None:
+
+            try:
+
+                reply_text = await MoveSkipFlow.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha no fluxo de mover/pular de '{profile}': {e}")
 
                 reply_text = None
 
