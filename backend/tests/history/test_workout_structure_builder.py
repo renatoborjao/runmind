@@ -62,6 +62,29 @@ def test_interval_detected_from_km_spread():
     assert structure.slowest_km_pace == 6.5
 
 
+def test_easy_run_with_cooldown_walk_is_not_interval():
+    """Bug real (12/07): corridinha leve progressiva (6:45→6:17) com 1 km
+    de desaquecimento caminhando (11:07) no fim. O spuro spread (77%) fazia
+    virar "Intervalado". Sem alternância rápido/lento repetida, é rodagem."""
+
+    structure = _build(
+        {"splits_metric": _splits([6.75, 6.43, 6.28, 6.28, 11.12])}
+    )
+
+    assert structure.is_interval is False
+
+
+def test_tempo_with_warmup_cooldown_is_not_interval():
+    """Aquecimento lento + trecho forte + desaquecimento lento tem UM bloco
+    rápido só — é tempo/limiar, não tiro."""
+
+    structure = _build(
+        {"splits_metric": _splits([7.0, 5.0, 5.0, 5.0, 7.0])}
+    )
+
+    assert structure.is_interval is False
+
+
 def test_interval_detected_from_manual_laps():
 
     raw = {

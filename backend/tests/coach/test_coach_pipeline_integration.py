@@ -101,6 +101,54 @@ def test_full_chain_produces_final_whatsapp_message():
     assert "Ritmo médio: 5:00 min/km" in text
 
 
+def test_weekly_volume_uses_current_iso_week_not_4wk_average():
+    """Bug do Renato (12/07): o progresso de volume vinha da média de 4
+    semanas contra 1.08x ela mesma -> ~92% fixo ("próximo de concluir")
+    mesmo num treino extra com a semana já fechada. Agora conta os km REAIS
+    da semana ISO do treino executado; a média histórica não entra."""
+
+    from datetime import datetime
+
+    def _run(day, km):
+        return make_activity(
+            id=day,
+            start_date=datetime(2026, 7, day, 7, 0, 0),
+            distance=km * 1000,
+        )
+
+    # semana ISO anterior (não deve contar) + a semana atual (6–12/07)
+    prev_week = _run(1, 10.0)              # 01/07, semana passada
+    this_week = [
+        _run(7, 8.0),                     # ter 07/07
+        _run(9, 8.0),                     # qui 09/07
+        _run(11, 10.0),                   # sáb 11/07
+    ]
+    extra = _run(12, 5.0)                 # dom 12/07, corrida extra
+
+    executed = make_enriched_activity(
+        activity=extra,
+        training_type="EASY",
+        intensity="LOW",
+        pace_min_km=6.5,
+    )
+
+    history = TrainingHistory(
+        activities=[prev_week, *this_week, extra],
+    )
+
+    context = CoachContextBuilder.build(
+        runner=make_runner(name="Renato"),
+        planned=None,
+        executed=executed,
+        history=history,
+        assessment=_base_assessment(),  # média/4sem = 30.0 (não deve vazar)
+    )
+
+    # só a semana ISO do treino executado: 8+8+10+5 = 31 (sem os 10 da
+    # semana passada, sem a média de 4 semanas)
+    assert context.weekly_volume == 31.0
+
+
 def _base_assessment() -> TrainingAssessment:
 
     return TrainingAssessment(

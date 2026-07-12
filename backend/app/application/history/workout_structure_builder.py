@@ -190,13 +190,23 @@ class WorkoutStructureBuilder:
         lap_paces: list[float],
     ) -> bool:
         """Tiros alternados: preferimos as voltas manuais (sinal forte de
-        treino estruturado); sem elas, caímos na variação entre kms."""
+        treino estruturado); sem elas, caímos na variação entre kms.
+
+        Além da variação (spread), exige ALTERNÂNCIA de verdade: tiro é
+        rápido/lento/rápido/lento várias vezes. Um único km lento no meio
+        de kms rápidos (desaquecimento, subida, volta pra respirar) infla o
+        spread mas NÃO é intervalado — é rodagem/progressivo. Sem isso, a
+        corridinha leve do Renato com 1 km de desaquecimento no fim virava
+        "Intervalado"."""
 
         if len(lap_paces) >= 4:
 
             spread = (max(lap_paces) - min(lap_paces)) / min(lap_paces)
 
-            if spread >= INTERVAL_SPREAD_LAPS:
+            if (
+                spread >= INTERVAL_SPREAD_LAPS
+                and WorkoutStructureBuilder._alternates(lap_paces)
+            ):
 
                 return True
 
@@ -204,11 +214,45 @@ class WorkoutStructureBuilder:
 
             spread = (max(km_splits) - min(km_splits)) / min(km_splits)
 
-            if spread >= INTERVAL_SPREAD_KM:
+            if (
+                spread >= INTERVAL_SPREAD_KM
+                and WorkoutStructureBuilder._alternates(km_splits)
+            ):
 
                 return True
 
         return False
+
+    @staticmethod
+    def _alternates(
+        paces: list[float],
+    ) -> bool:
+        """Assinatura do intervalado: >= 2 blocos RÁPIDOS separados por um
+        lento (rápido-lento-rápido...). Um único trecho rápido (tempo com
+        aquecimento/desaquecimento) ou um único trecho lento (rodagem com
+        1 km de desaquecimento) tem só 1 bloco rápido — não é tiro."""
+
+        if len(paces) < 4:
+
+            return False
+
+        threshold = (min(paces) + max(paces)) / 2
+
+        fast_blocks = 0
+
+        prev_fast = False
+
+        for pace in paces:
+
+            is_fast = pace <= threshold
+
+            if is_fast and not prev_fast:
+
+                fast_blocks += 1
+
+            prev_fast = is_fast
+
+        return fast_blocks >= 2
 
     @staticmethod
     def _cadence(

@@ -4,6 +4,7 @@ from app.application.coach.context.coach_context import (
 from app.application.history.consistency_calculator import (
     ConsistencyCalculator,
 )
+from app.application.history.weekly_buckets import activity_date
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
 )
@@ -57,7 +58,15 @@ class CoachContextBuilder:
                 history,
             ),
 
-            weekly_volume=assessment.current_weekly_volume,
+            # Progresso da semana = km REALMENTE acumulados na semana ISO
+            # do treino executado, comparado à meta. Antes vinha a média de
+            # 4 semanas (capacidade) contra 1.08× ela mesma -> dava ~92%
+            # fixo e o coach dizia "próximo de concluir o volume" sempre,
+            # mesmo em treino extra com a semana já fechada (bug do Renato).
+            weekly_volume=CoachContextBuilder._current_week_volume(
+                history,
+                executed,
+            ),
 
             weekly_goal=assessment.recommended_weekly_volume,
 
@@ -70,6 +79,25 @@ class CoachContextBuilder:
             injuries=runner.injuries,
 
         )
+
+    @staticmethod
+    def _current_week_volume(
+        history: TrainingHistory,
+        executed: EnrichedActivity,
+    ) -> float:
+        """Km somados na semana ISO (seg–dom) a que o treino executado
+        pertence. É o volume REAL da semana, não a média histórica — é o
+        que faz sentido pra dizer quanto falta pra fechar a semana."""
+
+        week_key = activity_date(executed.activity).isocalendar()[:2]
+
+        total_m = sum(
+            activity.distance
+            for activity in history.activities
+            if activity_date(activity).isocalendar()[:2] == week_key
+        )
+
+        return round(total_m / 1000, 1)
 
     @staticmethod
     def _previous_trainings(
