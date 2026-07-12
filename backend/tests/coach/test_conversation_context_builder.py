@@ -124,6 +124,23 @@ def test_build_includes_runner_facts_and_last_activity():
     assert "Rodagem, 10.5 km" in text
 
 
+def test_build_anchors_today_date():
+    """Sem a data de hoje, a IA adivinha o dia da semana e erra ('amanhã é
+    sexta' num sábado). A âncora tem que estar nos fatos."""
+
+    from app.core.clock import today_local
+    from app.core.weekdays import weekday_label, weekday_name
+
+    text = asyncio.run(_build_with_mocks(history_activities=[], sessions=[]))
+
+    today = today_local()
+
+    assert "Hoje é" in text
+    assert weekday_label(weekday_name(today)) in text
+    assert today.strftime("%d/%m/%Y") in text
+    assert "NUNCA deduza" in text
+
+
 def test_build_includes_full_week_plan_when_sessions_exist():
 
     session = PlannedSession(

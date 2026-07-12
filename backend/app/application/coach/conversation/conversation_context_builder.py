@@ -23,7 +23,7 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import today_local
-from app.core.weekdays import weekday_label
+from app.core.weekdays import weekday_label, weekday_name
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
@@ -69,7 +69,15 @@ class ConversationContextBuilder:
             history=history,
         )
 
+        today = today_local()
+
+        # ÂNCORA DE DATA: sem isto a IA adivinha o dia da semana e erra
+        # ("amanhã é sexta" num sábado). Toda referência temporal parte daqui.
         facts = (
+            f"Hoje é {weekday_label(weekday_name(today))}, "
+            f"{today.strftime('%d/%m/%Y')}. Use SEMPRE esta data como "
+            f"referência de 'hoje', 'amanhã', 'ontem' e 'esta semana' — "
+            f"NUNCA deduza ou calcule o dia da semana por conta própria.\n"
             f"Corredor: {runner.name}\n"
             f"Meta: {runner.goal}\n"
             f"Volume semanal atual: {assessment.current_weekly_volume:.1f} km "
