@@ -13,6 +13,7 @@ from app.application.coach.planning.plan_context_builder import (
 from app.application.history.runner_baseline_builder import (
     RunnerBaselineBuilder,
 )
+from app.application.planner.engines.phase_engine import PhaseEngine
 from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.core.clock import today_local
 from app.domain.entities.runner_metrics import RunnerMetrics
@@ -87,6 +88,12 @@ class AIPlanService:
                 week_start=week_start,
                 context=context,
             )
+
+            # Fase real do ciclo (ancorada na prova): a IA não sabe "que
+            # semana do macrociclo é esta", então marca "IA" ao montar; aqui
+            # gravamos a fase calculada (BASE/BUILD/PICO/TAPER) pra a mensagem
+            # do plano mostrar "📈 Fase" igual ao caminho determinístico.
+            plan.phase = PhaseEngine.execute(goal, week_start)
 
             repository.save(profile, plan)
 

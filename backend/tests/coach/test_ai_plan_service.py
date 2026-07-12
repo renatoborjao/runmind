@@ -64,7 +64,8 @@ def _run(
             AIPlanService.ensure_plan(
                 "renato", runner or make_runner(),
                 assessment or _assessment(),
-                MagicMock(), MagicMock(), TrainingHistory([]), WEEK,
+                MagicMock(), MagicMock(race_date=None),
+                TrainingHistory([]), WEEK,
                 force=force,
             )
         )
@@ -80,6 +81,8 @@ def test_ai_generates_and_saves_the_plan():
     repo.save.assert_called_once()
     wps.get_or_generate.assert_not_called()
     assert plan.source == "runmind"
+    # a fase real substitui o marcador "IA" (sem prova -> BUILD)
+    assert plan.phase == "BUILD"
 
 
 def test_falls_back_to_deterministic_on_ai_failure():
