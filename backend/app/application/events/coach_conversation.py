@@ -18,6 +18,7 @@ from app.application.coach.conversation.plan_preference_detector import (
 )
 from app.application.coach.conversation.proposal_flow import ProposalFlow
 from app.application.coach.conversation.aversion_flow import AversionFlow
+from app.application.coach.conversation.negotiation_flow import NegotiationFlow
 from app.application.coach.conversation.move_skip_flow import MoveSkipFlow
 from app.application.garmin.garmin_sync import GarminSync
 from app.application.coach.conversation.conversation_summary_engine import (
@@ -209,6 +210,28 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha no fluxo de aversão de '{profile}': {e}")
+
+                reply_text = None
+
+        # Negociação geral ("deixa mais leve", "quero mais rodagens"): o coach
+        # remonta a semana com critério (segura o essencial da meta), mostra a
+        # versão revisada e guarda pro 'sim'. Depois da aversão (tipo) e do
+        # mover/pular (dia) — pega o que sobra.
+        if reply_text is None:
+
+            try:
+
+                reply_text = await NegotiationFlow.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha no fluxo de negociação de '{profile}': {e}")
 
                 reply_text = None
 
