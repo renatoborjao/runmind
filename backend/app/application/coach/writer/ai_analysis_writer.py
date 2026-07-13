@@ -30,6 +30,21 @@ MAX_OUTPUT_TOKENS = 2000
 # Quantas bullets a IA pode devolver na seção de análise.
 MAX_BULLETS = 4
 
+# Saída ESTRUTURADA: o modelo é obrigado a emitir {"analysis": [str...]} —
+# elimina a quebra de JSON (e o retry PAGO). É de graça (config na mesma
+# chamada). Só o corte por token ainda pode quebrar — daí o max_output com
+# folga.
+ANALYSIS_SCHEMA = types.Schema(
+    type=types.Type.OBJECT,
+    properties={
+        "analysis": types.Schema(
+            type=types.Type.ARRAY,
+            items=types.Schema(type=types.Type.STRING),
+        ),
+    },
+    required=["analysis"],
+)
+
 # Fatos SEM veredito: "apagou/quebrou" é conclusão, não dado — quando o
 # rótulo já vinha com julgamento, a IA amplificava (+4% virava "você
 # quebrou"). O grau fica no fato; a leitura fica com a IA.
@@ -112,6 +127,7 @@ class AIAnalysisWriter:
                 ),
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    response_schema=ANALYSIS_SCHEMA,
                     max_output_tokens=MAX_OUTPUT_TOKENS,
                     thinking_config=types.ThinkingConfig(
                         thinking_budget=THINKING_BUDGET,

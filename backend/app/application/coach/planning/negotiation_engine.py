@@ -24,7 +24,10 @@ RUNNING_KINDS = {"run", "walk", "run_walk"}
 # vazio). Mesmos números do plano.
 THINKING_BUDGET = 1024
 
-MAX_OUTPUT_TOKENS = 4000
+# Folga generosa pra o JSON da semana ajustada + thinking do Pro caberem sem
+# CORTE (JSON cortado = principal causa de quebra e de retry PAGO). Só paga o
+# que gera, não o teto — a folga é de graça e derruba os retries.
+MAX_OUTPUT_TOKENS = 6000
 
 PROMPT_TEMPLATE = """Você é o treinador de corrida do RunMind. O atleta \
 {runner_name} mandou uma mensagem que PODE ser um pedido pra AJUSTAR o plano \

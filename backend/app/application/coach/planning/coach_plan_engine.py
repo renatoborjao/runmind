@@ -19,7 +19,11 @@ from app.infrastructure.integrations.gemini.client import (
 # thinking come o orçamento e volta vazio (bug conhecido).
 THINKING_BUDGET = 1024
 
-MAX_OUTPUT_TOKENS = 4000
+# Folga generosa: o JSON do plano (3-5 sessões com steps aninhados) + o
+# thinking do Pro precisam caber sem CORTE — JSON cortado é a principal
+# causa de quebra e do retry PAGO. Só paga o que gera, não o teto; então a
+# folga é de graça e derruba os retries.
+MAX_OUTPUT_TOKENS = 6000
 
 VALID_DAYS = set(WEEKDAYS.values())
 
