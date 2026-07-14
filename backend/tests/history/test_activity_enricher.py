@@ -152,6 +152,24 @@ def test_steady_run_without_structure_is_not_interval():
     assert enriched.training_type != "INTERVAL"
 
 
+def test_zero_distance_activity_does_not_crash():
+
+    # corrida sem distância (esteira/HIIT sem sensor): average_speed 0 daria
+    # ZeroDivisionError no cálculo de pace — o guard mantém pace/eficiência 0
+    # sem crashar (a entrada webhook/poller já pula essas atividades)
+    activity = make_activity(
+        distance=0.0,
+        average_speed=0.0,
+        average_heartrate=None,
+        max_heartrate=None,
+    )
+
+    enriched = ActivityEnricher.enrich(activity, _metrics())
+
+    assert enriched.pace_min_km == 0.0
+    assert enriched.efficiency_score == 0.0
+
+
 def test_tiny_activity_is_never_classified_as_long_run():
 
     # histórico minúsculo: max_long_run de 100 m fazia 100 m virar

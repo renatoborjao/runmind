@@ -134,6 +134,14 @@ class GarminActivityPoller:
 
                 return
 
+            # corrida sem distância (esteira/HIIT sem sensor): não dá pra
+            # analisar pace — pula sem crashar (o enricher dividiria por zero)
+            if not activity.distance:
+
+                print(f"Garmin {activity_id}: sem distância, pulado")
+
+                return
+
             await TrainingCompletedEvent.execute(
                 profile=profile,
                 activity=activity,

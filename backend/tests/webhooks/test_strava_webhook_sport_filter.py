@@ -15,7 +15,7 @@ PAYLOAD = {
 }
 
 
-def _post_webhook(sport: str):
+def _post_webhook(sport: str, distance: float = 10000.0):
 
     with (
         patch(f"{MODULE}.OwnerResolver") as mock_resolver,
@@ -28,7 +28,7 @@ def _post_webhook(sport: str):
 
         mock_client = mock_client_cls.return_value
         mock_client.get_activity = AsyncMock(
-            return_value=make_activity(sport=sport),
+            return_value=make_activity(sport=sport, distance=distance),
         )
 
         mock_event.execute = AsyncMock()
@@ -65,6 +65,17 @@ def test_run_triggers_training_completed_event():
     assert body["queued"] is True
 
     mock_event.execute.assert_awaited_once()
+
+
+def test_run_without_distance_is_ignored():
+
+    # corrida sem distância (esteira/HIIT sem sensor): não dá pra analisar
+    # pace — pula no background sem crashar nem gerar feedback
+    body, mock_event = _post_webhook("Run", distance=0.0)
+
+    assert body["queued"] is True
+
+    mock_event.execute.assert_not_awaited()
 
 
 def _post_delete(

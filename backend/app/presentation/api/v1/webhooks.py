@@ -318,6 +318,14 @@ async def _process_strava_activity(
 
             return
 
+        # corrida sem distância (esteira/HIIT sem sensor): não dá pra analisar
+        # pace — pula sem crashar (o enricher dividiria por zero)
+        if not activity.distance:
+
+            print(f"Ignorado: atividade sem distância ({activity_id})")
+
+            return
+
         await TrainingCompletedEvent.execute(
             profile=profile,
             activity=activity,

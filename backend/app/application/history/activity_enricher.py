@@ -17,9 +17,14 @@ class ActivityEnricher:
         metrics: RunnerMetrics,
     ) -> EnrichedActivity:
 
+        # Sem velocidade média (corrida sem distância — esteira/HIIT sem
+        # sensor de distância) não dá pra derivar pace. Guard defensivo pra
+        # NUNCA dividir por zero; a entrada (webhook/poller) já pula a análise
+        # dessas atividades, então na prática isto é cinto-e-suspensório.
         pace = (
-            (1000 / activity.average_speed)
-            / 60
+            (1000 / activity.average_speed) / 60
+            if activity.average_speed
+            else 0.0
         )
 
         distance = activity.distance / 1000
@@ -108,7 +113,7 @@ class ActivityEnricher:
 
             recovery = 48
 
-        efficiency = hr / pace
+        efficiency = hr / pace if pace else 0.0
 
         structure = WorkoutStructureBuilder.build(activity)
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.application.garmin.garmin_activity_poller import (
     GarminActivityPoller,
 )
+from tests.coach.factories import make_activity
 
 MODULE = "app.application.garmin.garmin_activity_poller"
 
@@ -84,6 +85,39 @@ def test_seed_history_marks_without_analyzing():
         # marcou os 3 e gravou o marcador
         assert guard.check_and_mark.call_count == 3
         marker.write_text.assert_called_once()
+
+
+def test_analyze_skips_activity_without_distance():
+    """Corrida sem distância (esteira/HIIT sem sensor): pula sem crashar nem
+    enviar — senão o enricher dividiria por zero (bug do Mauricio)."""
+
+    with (
+        patch(f"{MODULE}.GarminActivitySource") as source,
+        patch(f"{MODULE}.TrainingCompletedEvent") as event,
+    ):
+
+        source.fetch.return_value = make_activity(sport="Run", distance=0.0)
+        event.execute = AsyncMock()
+
+        asyncio.run(GarminActivityPoller._analyze("mauricio", 999))
+
+        event.execute.assert_not_awaited()
+
+
+def test_analyze_processes_activity_with_distance():
+    """Controle: corrida com distância segue pra análise normalmente."""
+
+    with (
+        patch(f"{MODULE}.GarminActivitySource") as source,
+        patch(f"{MODULE}.TrainingCompletedEvent") as event,
+    ):
+
+        source.fetch.return_value = make_activity(sport="Run", distance=8000.0)
+        event.execute = AsyncMock()
+
+        asyncio.run(GarminActivityPoller._analyze("renato2", 999))
+
+        event.execute.assert_awaited_once()
 
 
 def test_seed_history_skips_when_not_connected():
