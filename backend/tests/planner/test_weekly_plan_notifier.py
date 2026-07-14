@@ -32,7 +32,7 @@ def _run_external(plan):
         patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
         patch(f"{MODULE}.WeeklyPlanRepository") as mock_plan_repo_cls,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
-        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.CoachOutbox") as mock_notification,
     ):
 
         mock_repo = MagicMock()
@@ -92,7 +92,7 @@ def test_notify_all_sends_to_every_profile():
         patch(f"{MODULE}.MetricsResolver"),
         patch(f"{MODULE}.AIPlanService") as mock_ai,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
-        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.CoachOutbox") as mock_notification,
     ):
 
         mock_repo = MagicMock()
@@ -139,7 +139,7 @@ def test_notify_all_continues_after_one_profile_fails():
         patch(f"{MODULE}.MetricsResolver"),
         patch(f"{MODULE}.AIPlanService") as mock_ai,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
-        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.CoachOutbox") as mock_notification,
     ):
 
         mock_repo = MagicMock()
@@ -180,7 +180,7 @@ def _run_reminder(plan, external=True):
         patch(f"{MODULE}.RunnerProfileRepository") as repo_cls,
         patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
         patch(f"{MODULE}.WeeklyPlanRepository") as plan_repo_cls,
-        patch(f"{MODULE}.NotificationService") as notif,
+        patch(f"{MODULE}.CoachOutbox") as notif,
     ):
 
         repo = MagicMock()

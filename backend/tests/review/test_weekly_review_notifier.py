@@ -15,7 +15,7 @@ def _run_notify_all(profiles, runners, messages):
         patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
         patch(f"{MODULE}.WeeklyReviewBuilder"),
         patch(f"{MODULE}.WeeklyReviewMessageFormatter") as mock_formatter,
-        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.CoachOutbox") as mock_notification,
     ):
 
         mock_repo = MagicMock()

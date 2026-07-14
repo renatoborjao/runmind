@@ -1,5 +1,5 @@
-from app.application.notifications.notification_service import (
-    NotificationService,
+from app.application.notifications.coach_outbox import (
+    CoachOutbox,
 )
 from app.application.planner.daily_training_notifier import (
     DailyTrainingNotifier,
@@ -61,7 +61,7 @@ class MorningBriefingNotifier:
 
             return
 
-        await NotificationService.send(
+        await CoachOutbox.send(
             runner,
             "\n\n".join(parts),
         )

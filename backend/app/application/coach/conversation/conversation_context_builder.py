@@ -29,6 +29,9 @@ from app.core.weekdays import weekday_label, weekday_name
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
+from app.infrastructure.persistence.coach_outbox_repository import (
+    CoachOutboxRepository,
+)
 from app.infrastructure.persistence.conversation_repository import (
     ConversationRepository,
 )
@@ -130,6 +133,16 @@ class ConversationContextBuilder:
         if week_plan:
 
             facts = f"{facts}\n{week_plan}\n"
+
+        # o que o COACH mandou por conta própria (análise, briefing, plano) —
+        # não está no histórico de chat, mas o atleta comenta sobre isso
+        recent_coach = ConversationContextBuilder._recent_coach_messages(
+            profile,
+        )
+
+        if recent_coach:
+
+            facts = f"{facts}\n{recent_coach}\n"
 
         lifetime = ConversationContextBuilder._lifetime_summary(
             profile,
@@ -355,6 +368,42 @@ class ConversationContextBuilder:
             f"Treino de HOJE ({session.workout_type}): ainda NÃO registrado "
             "(o atleta pode não ter feito ainda, ou não sincronizou)."
         )
+
+    @staticmethod
+    def _recent_coach_messages(
+        profile: str,
+        limit: int = 2,
+        max_chars: int = 700,
+    ) -> str:
+        """As últimas mensagens AUTOMÁTICAS que o coach enviou (análise,
+        briefing, plano) — não entram no histórico de chat, mas o atleta
+        comenta sobre elas. Compactadas numa linha e truncadas pra não inflar
+        o contexto."""
+
+        entries = CoachOutboxRepository().recent(profile, limit)
+
+        if not entries:
+
+            return ""
+
+        lines = [
+            "MENSAGENS QUE VOCÊ (coach) JÁ ENVIOU ao atleta recentemente "
+            "(análise/briefing/plano — NÃO estão no histórico de chat acima, "
+            "mas o atleta pode comentar sobre elas; reconheça o que já disse "
+            "em vez de repetir tudo):"
+        ]
+
+        for entry in entries:
+
+            text = " ".join(str(entry.get("text", "")).split())
+
+            if len(text) > max_chars:
+
+                text = text[:max_chars] + "…"
+
+            lines.append(f"- {text}")
+
+        return "\n".join(lines)
 
     @staticmethod
     def _next_session_summary(

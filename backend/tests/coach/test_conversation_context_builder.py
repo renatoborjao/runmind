@@ -69,6 +69,7 @@ async def _build_with_mocks(
     memory="",
     summary="",
     lifetime_stats=None,
+    coach_outbox=None,
 ):
 
     with (
@@ -80,7 +81,10 @@ async def _build_with_mocks(
         patch(f"{MODULE}.RunnerMemoryService") as mock_memory_service,
         patch(f"{MODULE}.ConversationRepository") as mock_conv_repo,
         patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive,
+        patch(f"{MODULE}.CoachOutboxRepository") as mock_outbox,
     ):
+
+        mock_outbox.return_value.recent.return_value = coach_outbox or []
 
         mock_load_runner.execute.return_value = make_runner()
 
@@ -187,6 +191,34 @@ def test_build_omits_week_plan_without_sessions():
     )
 
     assert "Plano da semana completo" not in text
+
+
+def test_build_includes_recent_coach_messages():
+    """As mensagens automáticas que o coach enviou (análise/briefing) entram no
+    contexto — o atleta comenta sobre elas mas elas não estão no chat."""
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+            coach_outbox=[
+                {"text": "Parabéns pelo treino! Intervalado 5x600m no alvo.",
+                 "timestamp": "2026-07-14T10:00:00+00:00"},
+            ],
+        )
+    )
+
+    assert "MENSAGENS QUE VOCÊ (coach) JÁ ENVIOU" in text
+    assert "Intervalado 5x600m no alvo" in text
+
+
+def test_build_omits_coach_messages_when_none():
+
+    text = asyncio.run(
+        _build_with_mocks(history_activities=[], sessions=[]),
+    )
+
+    assert "MENSAGENS QUE VOCÊ" not in text
 
 
 def test_build_includes_conversation_summary_when_present():

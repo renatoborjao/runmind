@@ -18,7 +18,7 @@ def _run(missed, today):
     with (
         patch(f"{MODULE}.MissedWorkoutFlow") as flow,
         patch(f"{MODULE}.DailyTrainingNotifier") as daily,
-        patch(f"{MODULE}.NotificationService") as notifier,
+        patch(f"{MODULE}.CoachOutbox") as notifier,
     ):
 
         flow.process = AsyncMock(

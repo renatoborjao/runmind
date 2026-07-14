@@ -1,5 +1,5 @@
-from app.application.notifications.notification_service import (
-    NotificationService,
+from app.application.notifications.coach_outbox import (
+    CoachOutbox,
 )
 from app.application.review.weekly_review_builder import (
     WeeklyReviewBuilder,
@@ -63,7 +63,7 @@ class WeeklyReviewNotifier:
 
             return
 
-        await NotificationService.send(
+        await CoachOutbox.send(
             runner,
             message,
         )

@@ -1,8 +1,8 @@
 from app.application.coach.intelligence.proactive_aversion_detector import (
     ProactiveAversionDetector,
 )
-from app.application.notifications.notification_service import (
-    NotificationService,
+from app.application.notifications.coach_outbox import (
+    CoachOutbox,
 )
 from app.application.orchestrators.training_pipeline import (
     TrainingPipeline,
@@ -27,7 +27,9 @@ class TrainingCompletedEvent:
 
         runner = result["runner"]
 
-        await NotificationService.send(
+        # CoachOutbox: envia E registra no outbox (pra o coach lembrar da
+        # análise quando o atleta comentar depois no chat)
+        await CoachOutbox.send(
             runner,
             result["message"],
         )
@@ -45,7 +47,7 @@ class TrainingCompletedEvent:
 
             if nudge:
 
-                await NotificationService.send(runner, nudge)
+                await CoachOutbox.send(runner, nudge)
 
         except Exception as e:
 

@@ -2,8 +2,8 @@ from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
 from app.application.history.metrics_resolver import MetricsResolver
-from app.application.notifications.notification_service import (
-    NotificationService,
+from app.application.notifications.coach_outbox import (
+    CoachOutbox,
 )
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
@@ -106,7 +106,7 @@ class WeeklyPlanNotifier:
 
             GarminOfferStore.set_pending(profile)
 
-        await NotificationService.send(
+        await CoachOutbox.send(
             runner,
             message,
         )
@@ -133,7 +133,7 @@ class WeeklyPlanNotifier:
 
                     continue
 
-                await NotificationService.send(
+                await CoachOutbox.send(
                     runner,
                     WeeklyPlanNotifier._reminder_text(runner.name),
                 )
@@ -189,7 +189,7 @@ class WeeklyPlanNotifier:
                 "acompanhar seus treinos e te dar feedback. 📸"
             )
 
-        await NotificationService.send(
+        await CoachOutbox.send(
             runner,
             message,
         )
