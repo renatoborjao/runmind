@@ -101,6 +101,32 @@ def test_facts_feed_splits_and_interval_to_prompt():
     assert "km1 4:00 (172bpm)" in prompt
 
 
+def test_facts_flag_outdoor_when_gps_present():
+    """Treino com GPS (rua/parque) recebe 'AR LIVRE' explícito pra a IA NÃO
+    assumir esteira a partir da prescrição (bug do Renato: correu no parque e
+    a análise disse 'vi que você rodou na esteira')."""
+
+    executed = make_enriched_activity(
+        indoor=False,
+        activity=make_activity(start_latitude=-23.5, start_longitude=-46.7),
+    )
+
+    facts = AIAnalysisWriter._facts(make_context(executed=executed))
+
+    assert "AR LIVRE" in facts
+    assert "ESTEIRA" not in facts
+
+
+def test_facts_flag_treadmill_when_indoor():
+
+    executed = make_enriched_activity(indoor=True)
+
+    facts = AIAnalysisWriter._facts(make_context(executed=executed))
+
+    assert "ESTEIRA" in facts
+    assert "AR LIVRE" not in facts
+
+
 def test_mild_fade_fact_has_no_verdict():
     """Bug do Renato: 2ª metade ~5% mais lenta chegava pra IA como
     "apagou" e virava "você quebrou" na análise."""

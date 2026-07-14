@@ -167,6 +167,44 @@ def test_to_activity_reads_nested_dtos():
     assert act.start_latitude == -23.5
 
 
+def test_gps_activity_is_never_treadmill():
+    """Treino com GPS (coordenada de partida) NUNCA é esteira, mesmo com
+    isIndoor/typeKey de esteira — glitch de perda de GPS no meio do treino
+    (caso real do Renato: correu no parque, relógio quebrou/reiniciou)."""
+
+    summary = {
+        "activityId": 1, "activityName": "Parque",
+        "activityTypeDTO": {"typeKey": "treadmill_running"},
+        "summaryDTO": {
+            "distance": 6000, "duration": 2000, "averageSpeed": 3.0,
+            "isIndoor": True,
+            "startLatitude": -23.5, "startLongitude": -46.7,
+            "startTimeGMT": "2026-07-14T10:00:00.0",
+        },
+    }
+
+    act = GarminActivitySource._to_activity(1, summary, dict(summary))
+
+    assert act.raw["trainer"] is False
+
+
+def test_indoor_activity_without_gps_is_treadmill():
+    """Sem GPS + tipo/flag de esteira: aí sim é esteira (distância estimada)."""
+
+    summary = {
+        "activityId": 2, "activityName": "Esteira",
+        "activityTypeDTO": {"typeKey": "treadmill_running"},
+        "summaryDTO": {
+            "distance": 5000, "duration": 1800, "averageSpeed": 2.7,
+            "startTimeGMT": "2026-07-14T10:00:00.0",
+        },
+    }
+
+    act = GarminActivitySource._to_activity(2, summary, dict(summary))
+
+    assert act.raw["trainer"] is True
+
+
 def test_start_date_uses_local_wall_clock_not_utc():
     """Garmin manda startTimeLocal (07:00 BRT) e startTimeGMT (10:00 UTC).
     Usamos a hora LOCAL (igual ao start_date_local do Strava) pra o dia da

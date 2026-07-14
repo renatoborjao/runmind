@@ -191,11 +191,19 @@ class GarminActivitySource:
         # do mesmo treino. _parse_date marca +00:00, igual à convenção Strava.
         start = _first(sd, "startTimeLocal", "startTimeGMT")
 
-        # esteira: análise trata distância/pace como estimados
+        # esteira: análise trata distância/pace como estimados. GPS presente
+        # (o treino tem coordenada de partida) MANDA — foi na rua, nunca é
+        # esteira, mesmo que o relógio venha com isIndoor/typeKey estranho
+        # (glitch de perda de GPS no meio do treino, caso real do Renato).
+        has_gps = _num(_first(sd, "startLatitude")) is not None
+
         raw["trainer"] = bool(
-            _first(sd, "isIndoor", default=False)
-            or "treadmill" in type_key.lower()
-            or "indoor" in type_key.lower()
+            not has_gps
+            and (
+                _first(sd, "isIndoor", default=False)
+                or "treadmill" in type_key.lower()
+                or "indoor" in type_key.lower()
+            )
         )
 
         return Activity(

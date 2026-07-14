@@ -80,11 +80,14 @@ ter CUMPRIDO a estrutura (ex.: alternou 3' corrida / 2' caminhada) mesmo que \
 os splits por km pareçam constantes — os blocos revelam isso; não afirme que \
 ele "não fez" o treino sem olhar os blocos. Se cumpriu os blocos mas com \
 pouco contraste (recuperação rápida demais), aponte ISSO, não a ausência.
-- ESTEIRA: quando o treino for na esteira, a distância e o pace do RELÓGIO \
-podem divergir do real (o relógio estima). NÃO cobre diferença de distância \
-nem de pace do relógio: use a DISTÂNCIA PLANEJADA como referência e assuma que \
-o atleta cumpriu a prescrição. Foque em execução, FC/esforço, consistência dos \
-tiros e recuperação.
+- AMBIENTE: descubra onde o treino foi SÓ pela linha "Ambiente" dos fatos — \
+NUNCA deduza da prescrição nem de preferências (a prescrição pode SUGERIR \
+esteira como opção sem que o atleta a tenha usado). Se "Ambiente: ESTEIRA", a \
+distância e o pace do RELÓGIO podem divergir do real (o relógio estima): NÃO \
+cobre diferença de distância nem de pace, use a DISTÂNCIA PLANEJADA como \
+referência e foque em execução, FC/esforço, consistência dos tiros e \
+recuperação. Se "Ambiente: AR LIVRE", a distância e o pace são REAIS — JAMAIS \
+chame de esteira nem justifique diferença de distância com "esteira".
 - VOCABULÁRIO DE RITMO: só use palavras como "quebrou", "apagou" ou "não \
 aguentou" se os fatos disserem "queda ACENTUADA de ritmo". Segunda metade \
 "um pouco mais lenta" é variação normal de treino (subida, calor, semáforo) \
@@ -247,6 +250,17 @@ class AIAnalysisWriter:
             lines.append(
                 "Ambiente: ESTEIRA — distância/pace do relógio podem "
                 "divergir do real; a referência de distância é a do plano."
+            )
+
+        elif activity.start_latitude is not None:
+
+            # tem GPS = correu na RUA/parque. Sinal POSITIVO explícito pra a IA
+            # NÃO assumir esteira a partir da prescrição (que pode mencionar
+            # esteira como opção) — bug real do Renato (correu no parque e a
+            # análise disse "vi que você rodou na esteira").
+            lines.append(
+                "Ambiente: AR LIVRE (rua/parque, treino COM GPS) — a "
+                "distância e o pace do relógio são REAIS; NÃO é esteira."
             )
 
         lines.append(
