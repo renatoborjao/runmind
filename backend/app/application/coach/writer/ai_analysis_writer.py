@@ -59,6 +59,10 @@ TREND_LABELS = {
     "unknown": "sem dado de progressão",
 }
 
+# abaixo disso a "volta" é fantasma (relógio reiniciando, lap acidental), não
+# um bloco de treino de verdade
+_MIN_LAP_M = 30
+
 PROMPT_TEMPLATE = """Você é um treinador de corrida experiente comentando o treino \
 que ACABOU de sair de um atleta específico, por mensagem (WhatsApp). Escreva a \
 seção de ANÁLISE: leitura honesta e ESPECÍFICA deste treino.
@@ -79,7 +83,11 @@ estrutura PRESCRITA (use a legenda pra decodificar as siglas). O atleta pode \
 ter CUMPRIDO a estrutura (ex.: alternou 3' corrida / 2' caminhada) mesmo que \
 os splits por km pareçam constantes — os blocos revelam isso; não afirme que \
 ele "não fez" o treino sem olhar os blocos. Se cumpriu os blocos mas com \
-pouco contraste (recuperação rápida demais), aponte ISSO, não a ausência.
+pouco contraste (recuperação rápida demais), aponte ISSO, não a ausência. \
+As voltas executadas podem estar em ordem diferente ou faltar um bloco \
+prescrito (ex.: aquecimento que o relógio não registrou por ter reiniciado) — \
+ALINHE por bom senso e NÃO acuse o atleta de ter pulado um bloco que só não \
+foi gravado.
 - AMBIENTE: descubra onde o treino foi SÓ pela linha "Ambiente" dos fatos — \
 NUNCA deduza da prescrição nem de preferências (a prescrição pode SUGERIR \
 esteira como opção sem que o atleta a tenha usado). Se "Ambiente: ESTEIRA", a \
@@ -216,7 +224,7 @@ class AIAnalysisWriter:
             if prescription:
 
                 lines.append(
-                    "Prescrição do treinador: "
+                    "Prescrição do treino: "
                     + prescription.strip().replace("\n", " | ")[:700]
                 )
 
@@ -228,18 +236,18 @@ class AIAnalysisWriter:
                     )
 
             # execução POR BLOCO (voltas do Garmin) pra IA comparar com a
-            # estrutura prescrita. Decisivo no treinador externo: o treino é
-            # estruturado (5×3'/2', HIIT 2×2k...) e os splits por km achatam
-            # a estrutura — o atleta pode ter CUMPRIDO os blocos.
-            if planned.notes:
+            # prescrição — vale pra QUALQUER tipo (tempo/progressivo/fartlek/
+            # tiro), não só treinador externo. O Garmin devolve ~uma volta por
+            # bloco quando o atleta segue o treino guiado; a IA ALINHA com a
+            # prescrição acima (robusto a desvio: relógio que reinicia e perde
+            # o aquecimento, volta acidental etc. — pareamento rígido erraria).
+            laps_fact = AIAnalysisWriter._executed_laps_fact(
+                (activity.raw or {}).get("_garmin_laps") or []
+            )
 
-                laps_fact = AIAnalysisWriter._executed_laps_fact(
-                    (activity.raw or {}).get("_garmin_laps") or []
-                )
+            if laps_fact:
 
-                if laps_fact:
-
-                    lines.append(laps_fact)
+                lines.append(laps_fact)
 
         else:
 
@@ -316,13 +324,18 @@ class AIAnalysisWriter:
 
             dur = lap.get("duration_s") or 0
 
-            if not dur or not lap.get("distance_m"):
+            dist = lap.get("distance_m") or 0
+
+            # descarta volta-fantasma (relógio reiniciando / lap acidental):
+            # um bloco real de corrida tem pelo menos ~30 m (caso do Renato:
+            # laps de 5 m e 13 m quando o relógio quebrou e reiniciou)
+            if not dur or dist < _MIN_LAP_M:
 
                 continue
 
             minutes, seconds = divmod(int(dur), 60)
 
-            seg = f"{minutes}'{seconds:02d} {lap['distance_m']}m"
+            seg = f"{minutes}'{seconds:02d} {dist}m"
 
             if lap.get("pace"):
 

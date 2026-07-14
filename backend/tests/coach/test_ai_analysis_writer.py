@@ -117,6 +117,45 @@ def test_facts_flag_outdoor_when_gps_present():
     assert "ESTEIRA" not in facts
 
 
+def test_executed_laps_fact_drops_phantom_laps():
+    """Voltas-fantasma (relógio reiniciando: 5 m, 13 m) saem; bloco real fica."""
+
+    laps = [
+        {"distance_m": 5, "duration_s": 5, "pace": 15.7, "avg_hr": 131},
+        {"distance_m": 600, "duration_s": 190, "pace": 5.27, "avg_hr": 157},
+        {"distance_m": 13, "duration_s": 6, "pace": 6.9, "avg_hr": 169},
+    ]
+
+    fact = AIAnalysisWriter._executed_laps_fact(laps)
+
+    assert "600m" in fact
+    assert "; " not in fact  # só um bloco real (os 2 fantasmas caíram)
+
+
+def test_facts_include_executed_blocks_for_internal_plan():
+    """A execução por bloco (voltas do Garmin) agora vai pra IA em QUALQUER
+    plano, não só treinador externo — pra comparar bloco a bloco (tempo,
+    progressivo, tiro...)."""
+
+    executed = make_enriched_activity(
+        activity=make_activity(
+            raw={
+                "_garmin_laps": [
+                    {"distance_m": 600, "duration_s": 190,
+                     "pace": 5.27, "avg_hr": 157},
+                    {"distance_m": 400, "duration_s": 172,
+                     "pace": 7.18, "avg_hr": 155},
+                ]
+            },
+        ),
+    )
+
+    facts = AIAnalysisWriter._facts(make_context(executed=executed))
+
+    assert "Execução por bloco" in facts
+    assert "600m" in facts
+
+
 def test_facts_flag_treadmill_when_indoor():
 
     executed = make_enriched_activity(indoor=True)
@@ -191,7 +230,7 @@ def test_external_coach_prescription_from_notes_reaches_prompt():
 
     prompt = mock.await_args.kwargs["contents"]
 
-    assert "Prescrição do treinador:" in prompt
+    assert "Prescrição do treino:" in prompt
     assert "FF 25'" in prompt                  # a prescrição em si
     assert "Legenda das siglas" in prompt
     assert "FF = Forte e Fraco" in prompt       # a legenda decodifica
