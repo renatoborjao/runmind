@@ -34,6 +34,31 @@ def test_ambiguous_yes_no_defers_to_gemini():
     assert parse("ASK_STRAVA", "sei lá, talvez") is None
 
 
+# ==========================================================
+# AWAIT_STRAVA_SIGNUP (criou a conta?)
+# ==========================================================
+
+def test_strava_signup_created_variants():
+
+    for answer in ("criei", "pronto", "feito", "consegui!", "já criei",
+                   "prontinho", "baixei e criei", "sim"):
+
+        assert parse("AWAIT_STRAVA_SIGNUP", answer) == {"created": True}, answer
+
+
+def test_strava_signup_not_yet_variants():
+
+    for answer in ("ainda não", "não consegui", "depois", "mais tarde",
+                   "não criei ainda"):
+
+        assert parse("AWAIT_STRAVA_SIGNUP", answer) == {"created": False}, answer
+
+
+def test_strava_signup_ambiguous_defers_to_gemini():
+
+    assert parse("AWAIT_STRAVA_SIGNUP", "e aí, como é mesmo?") is None
+
+
 def test_confirm_maps_to_confirmed_key():
 
     assert parse("CONFIRM", "pode sim") == {"confirmed": True}
@@ -221,6 +246,44 @@ def test_pace_variants():
 def test_pace_ambiguous_multiple_numbers_defers():
 
     assert parse("ASK_PACE", "sei lá, entre 30 e 40") is None
+
+
+def test_pace_compound_hours_and_minutes():
+    """'1h20'/'1 hora e 20' somam horas+minutos (antes largavam os 20)."""
+
+    for answer in ("1h20", "1h20min", "1 hora e 20", "1 hora e 20 min"):
+
+        assert parse("ASK_PACE", answer) == {"typical_minutes": 80}, answer
+
+    assert parse("ASK_PACE", "1h30") == {"typical_minutes": 90}
+
+    # só horas segue igual
+    assert parse("ASK_PACE", "1h") == {"typical_minutes": 60.0}
+    assert parse("ASK_PACE", "2 horas") == {"typical_minutes": 120.0}
+
+
+# ==========================================================
+# ASK_PACE_RUN (km + tempo de um treino concreto)
+# ==========================================================
+
+def test_pace_run_extracts_distance_and_time():
+
+    assert parse("ASK_PACE_RUN", "8 km em 50 min") == {
+        "pace_distance_km": 8.0, "typical_minutes": 50.0,
+    }
+    # tempo composto no treino concreto
+    assert parse("ASK_PACE_RUN", "10km em 1h20") == {
+        "pace_distance_km": 10.0, "typical_minutes": 80,
+    }
+    # sem unidade no tempo, mas a distância isola o número do tempo
+    assert parse("ASK_PACE_RUN", "fiz 8 km em 50") == {
+        "pace_distance_km": 8.0, "typical_minutes": 50.0,
+    }
+
+
+def test_pace_run_without_distance_defers_to_gemini():
+
+    assert parse("ASK_PACE_RUN", "uns 50 minutos") is None
 
 
 # ==========================================================

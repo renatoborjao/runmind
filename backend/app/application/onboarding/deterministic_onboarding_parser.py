@@ -304,7 +304,22 @@ def _pace(text: str) -> dict | None:
 
         return {"typical_minutes": 30.0}
 
-    hour = re.search(r"(\d+(?:[.,]\d+)?)\s*h(?:ora)?", normalized)
+    # HORAS + MINUTOS juntos: "1h20", "1h20min", "1 hora e 20",
+    # "1 hora e 20 min" -> 80. Vem ANTES do "só horas" pra não largar os
+    # minutos ("1h20" virava 60).
+    hour_min = re.search(
+        r"(\d+)\s*h(?:ora)?s?\s*(?:e\s*)?(\d{1,2})\s*(?:min|minuto)?s?\b",
+        normalized,
+    )
+
+    if hour_min:
+
+        return {
+            "typical_minutes": int(hour_min.group(1)) * 60
+            + int(hour_min.group(2)),
+        }
+
+    hour = re.search(r"(\d+(?:[.,]\d+)?)\s*h(?:ora)?s?\b", normalized)
 
     if hour and "min" not in normalized:
 
@@ -332,6 +347,50 @@ def _pace(text: str) -> dict | None:
         return {"typical_minutes": float(bare[0])}
 
     return None
+
+
+# ==========================================================
+# ASK_PACE_RUN (km + tempo de um treino concreto)
+# ==========================================================
+
+
+def _pace_run(text: str) -> dict | None:
+    """Um treino concreto: distância (km) + tempo. Usado quando o km típico
+    veio de uma FAIXA — aí o pace é calculado da distância que o atleta CRAVA,
+    não da média. Extrai a distância rotulada em km e reaproveita o parser de
+    tempo no resto da frase (assim "8 km em 1h20" também funciona)."""
+
+    normalized = _norm(text)
+
+    dist_match = re.search(
+        r"(\d+(?:[.,]\d+)?)\s*(?:km|kms|quilometros?|quilometro|k)\b",
+        normalized,
+    )
+
+    if not dist_match:
+
+        return None
+
+    distance = float(dist_match.group(1).replace(",", "."))
+
+    if not 0 < distance <= 50:
+
+        return None
+
+    # tira o trecho da distância e extrai o tempo do que sobra (senão o "8"
+    # dos km entraria na conta do tempo)
+    rest = normalized[: dist_match.start()] + " " + normalized[dist_match.end():]
+
+    time_parsed = _pace(rest)
+
+    if not time_parsed:
+
+        return None
+
+    return {
+        "pace_distance_km": distance,
+        "typical_minutes": time_parsed["typical_minutes"],
+    }
 
 
 # ==========================================================
@@ -630,6 +689,45 @@ def _movement(text: str) -> dict | None:
 
 
 # ==========================================================
+# AWAIT_STRAVA_SIGNUP (criou a conta no Strava?)
+# ==========================================================
+
+# "criei", "pronto", "feito"... = criou a conta
+_STRAVA_CREATED_MARKERS = (
+    "criei", "criada", "criado", "cria conta", "fiz", "feito", "pronto",
+    "consegui", "terminei", "acabei", "ja tenho", "tenho conta",
+    "instalei", "baixei", "prontinho", "finalizei",
+)
+
+# stall / recusa / dúvida = ainda não criou (fica no passo)
+_STRAVA_NOT_YET_MARKERS = (
+    "ainda nao", "nao consegui", "nao criei", "depois", "mais tarde",
+    "agora nao", "nao vou", "nao quero", "nao sei", "como faco",
+    "como faz", "nao entendi", "nao tenho como",
+)
+
+
+def _strava_created(text: str) -> dict | None:
+    """Passo de espera da criação da conta. Stall/recusa tem prioridade
+    ("não consegui criar" = ainda não). Sim/não genérico como último
+    recurso; ambíguo -> None (cai no Gemini)."""
+
+    normalized = _norm(text)
+
+    if any(marker in normalized for marker in _STRAVA_NOT_YET_MARKERS):
+
+        return {"created": False}
+
+    if any(marker in normalized for marker in _STRAVA_CREATED_MARKERS):
+
+        return {"created": True}
+
+    value = _yes_no(text)
+
+    return None if value is None else {"created": value}
+
+
+# ==========================================================
 # AWAIT_PLAN_MEDIA ("mando depois")
 # ==========================================================
 
@@ -667,6 +765,7 @@ _HANDLERS = {
     "ASK_WEIGHT": _weight,
     "ASK_HEIGHT": _height,
     "ASK_STRAVA": lambda text: _yn(text, "has_strava"),
+    "AWAIT_STRAVA_SIGNUP": _strava_created,
     "ASK_RUNS_TODAY": _runs_today,
     "ASK_RUNS_PER_WEEK": _runs_per_week,
     "ASK_TYPICAL_KM": _typical_km,
@@ -674,6 +773,7 @@ _HANDLERS = {
     "ASK_COACH": lambda text: _yn(text, "has_coach"),
     "AWAIT_PLAN_MEDIA": _skip,
     "ASK_PACE": _pace,
+    "ASK_PACE_RUN": _pace_run,
     "ASK_DAYS": _days,
     "ASK_WEEK_CHOICE": _week_choice,
     "CONFIRM_DAYS": _confirm_days_only,

@@ -147,6 +147,35 @@ def test_prompt_carries_the_aversion_directive():
     assert "tiro na pista chato" in prompt
 
 
+def test_prompt_carries_the_multiple_objectives_directive():
+
+    # a meta pode reunir vários objetivos (saúde + performance): o prompt tem
+    # que mandar contemplar TODOS, equilibrando (não virar só máquina de prova)
+    captured = {}
+
+    async def _capture(*args, **kwargs):
+
+        captured["contents"] = kwargs.get("contents")
+
+        return RENATO_PLAN_JSON
+
+    with patch(GEN_TEXT, new=AsyncMock(side_effect=_capture)):
+
+        asyncio.run(
+            CoachPlanEngine.generate(
+                runner_name="Renato",
+                objective="saúde e 10 km sub-50",
+                week_start=WEEK_START,
+                context="Meta: saúde, emagrecer e correr 10 km sub-50.",
+            )
+        )
+
+    prompt = captured["contents"]
+
+    assert "VÁRIOS OBJETIVOS" in prompt
+    assert "CONTEMPLE" in prompt
+
+
 def test_ai_failure_propagates_for_fallback():
 
     with patch(

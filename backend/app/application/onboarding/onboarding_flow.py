@@ -66,6 +66,14 @@ QUESTIONS = {
         "É por ele que eu recebo seus treinos e te dou feedback — "
         "então essa parte é obrigatória, mas a conta é gratuita. 😉"
     ),
+    "AWAIT_STRAVA_SIGNUP": (
+        "Sem problema — criar é rápido e de graça! 📱\n\n"
+        "1️⃣ Baixe o app *Strava* (Play Store / App Store) ou acesse "
+        "strava.com\n"
+        "2️⃣ Crie sua conta (dá pra entrar com Google ou Apple, "
+        "leva 1 minutinho)\n\n"
+        "Quando terminar, me manda um *\"criei\"* que a gente continua. 😉"
+    ),
     "ASK_RUNS_TODAY": (
         "Você já corre hoje? (sim/não)"
     ),
@@ -93,6 +101,11 @@ QUESTIONS = {
     ),
     "ASK_PACE": (
         "E em quanto tempo você costuma fazer esses {typical_km:.0f} km?"
+    ),
+    "ASK_PACE_RUN": (
+        "Como sua distância varia, me conta um treino recente pra eu pegar "
+        "seu ritmo: quantos km e em quanto tempo?\n\n"
+        "(ex: \"8 km em 50 min\")"
     ),
     "ASK_DAYS": (
         "Quais dias da semana você pode correr? "
@@ -277,13 +290,14 @@ class OnboardingFlow:
 
         state["answers"]["has_strava"] = has_strava
 
-        state["step"] = "ASK_RUNS_TODAY"
-
-        repo.save(address, state)
-
-        link = OnboardingFlow._connect_link(state)
-
+        # já tem conta: manda o link de conexão e segue o cadastro
         if has_strava:
+
+            state["step"] = "ASK_RUNS_TODAY"
+
+            repo.save(address, state)
+
+            link = OnboardingFlow._connect_link(state)
 
             return (
                 "Ótimo! Conecta seu Strava neste link (pode fazer "
@@ -292,13 +306,43 @@ class OnboardingFlow:
                 + QUESTIONS["ASK_RUNS_TODAY"]
             )
 
-        # Strava é obrigatório: quem não tem cria a conta gratuita
+        # NÃO tem conta: o Strava é o coração do RunMind (sem ele o coach não
+        # recebe treino nem dá feedback), então ele CRIA antes de seguir. Fica
+        # no passo de espera até confirmar que criou — só aí manda o link de
+        # conexão e avança.
+        state["step"] = "AWAIT_STRAVA_SIGNUP"
+
+        repo.save(address, state)
+
+        return QUESTIONS["AWAIT_STRAVA_SIGNUP"]
+
+    @staticmethod
+    async def _on_await_strava_signup(address, state, parsed, repo) -> str:
+
+        created = parsed.get("created")
+
+        # confirmou que criou: manda o link de conexão e segue o cadastro
+        if created is True:
+
+            state["step"] = "ASK_RUNS_TODAY"
+
+            repo.save(address, state)
+
+            link = OnboardingFlow._connect_link(state)
+
+            return (
+                "Show! 🎉 Agora é só conectar seu Strava comigo neste "
+                f"link (pode fazer com calma):\n{link}\n\n"
+                "Seguindo por aqui. "
+                + QUESTIONS["ASK_RUNS_TODAY"]
+            )
+
+        # ainda não criou (ou resposta ambígua): insiste com carinho, sem
+        # avançar — é a parte que destrava todo o resto.
         return (
-            "Sem problema! Baixa o app do Strava (gratuito) e cria "
-            "sua conta — é rapidinho. Depois conecta comigo neste "
-            f"link:\n{link}\n\n"
-            "Enquanto isso, seguimos por aqui. "
-            + QUESTIONS["ASK_RUNS_TODAY"]
+            "Essa conta é o que me deixa acompanhar seus treinos e te dar "
+            "feedback de verdade — então vale o minutinho pra criar. 💚\n\n"
+            + QUESTIONS["AWAIT_STRAVA_SIGNUP"]
         )
 
     @staticmethod
@@ -387,6 +431,19 @@ class OnboardingFlow:
 
         state["answers"]["typical_km"] = float(typical_km)
 
+        # respondeu uma FAIXA ("5 a 15km"): guarda os extremos — a média é
+        # ambígua pra ancorar o pace (o atleta pode cravar o tempo de outra
+        # distância), então o passo do pace vai pedir um treino concreto.
+        low = parsed.get("typical_km_min")
+
+        high = parsed.get("typical_km_max")
+
+        if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+
+            state["answers"]["typical_km_min"] = float(low)
+
+            state["answers"]["typical_km_max"] = float(high)
+
         # quem já corre pode ter treinador
         state["step"] = "ASK_COACH"
 
@@ -405,14 +462,42 @@ class OnboardingFlow:
 
         state["answers"]["has_coach"] = has_coach
 
-        # pace declarado vale para os dois caminhos (fallback de
-        # métricas até o histórico do Strava chegar)
+        # pace declarado vale para os dois caminhos (fallback de métricas até
+        # o histórico do Strava chegar). Se o km típico veio de uma FAIXA, a
+        # média é ambígua pra ancorar o tempo — pede um treino concreto (km +
+        # tempo) e calcula o pace da distância que o atleta cravar; km único
+        # segue com a pergunta ancorada, que é inequívoca.
+        if OnboardingFlow._typical_km_is_range(state):
+
+            state["step"] = "ASK_PACE_RUN"
+
+            repo.save(address, state)
+
+            return QUESTIONS["ASK_PACE_RUN"]
+
         state["step"] = "ASK_PACE"
 
         repo.save(address, state)
 
         return QUESTIONS["ASK_PACE"].format(
             typical_km=state["answers"]["typical_km"],
+        )
+
+    @staticmethod
+    def _typical_km_is_range(state: dict) -> bool:
+        """O km típico veio de uma faixa (min != max)? Aí a média não serve
+        de âncora pro pace."""
+
+        answers = state["answers"]
+
+        low = answers.get("typical_km_min")
+
+        high = answers.get("typical_km_max")
+
+        return (
+            isinstance(low, (int, float))
+            and isinstance(high, (int, float))
+            and low != high
         )
 
     @staticmethod
@@ -436,6 +521,41 @@ class OnboardingFlow:
             return RETRY_PREFIX + QUESTIONS["ASK_PACE"].format(
                 typical_km=typical_km,
             )
+
+        state["answers"]["initial_pace_min_km"] = round(pace, 2)
+
+        state["step"] = "ASK_DAYS"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_DAYS"]
+
+    @staticmethod
+    async def _on_ask_pace_run(address, state, parsed, repo) -> str:
+        """Faixa de km: o atleta descreve um treino concreto (km + tempo) e o
+        pace sai da distância que ELE cravou — não da média ambígua."""
+
+        distance = parsed.get("pace_distance_km")
+
+        minutes = parsed.get("typical_minutes")
+
+        valid = (
+            isinstance(distance, (int, float))
+            and 0 < distance <= 50
+            and isinstance(minutes, (int, float))
+            and minutes > 0
+        )
+
+        if not valid:
+
+            return RETRY_PREFIX + QUESTIONS["ASK_PACE_RUN"]
+
+        pace = minutes / distance
+
+        # pace fora da realidade (2:00 a 20:00 min/km)
+        if not 2 <= pace <= 20:
+
+            return RETRY_PREFIX + QUESTIONS["ASK_PACE_RUN"]
 
         state["answers"]["initial_pace_min_km"] = round(pace, 2)
 

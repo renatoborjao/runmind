@@ -60,6 +60,12 @@ REGRAS:
   leve inclinação de evolução e a ESTRUTURA que a meta pede (ex.: se a meta é
   de tempo, inclua um treino no ritmo-alvo). O atleta veio pra MELHORAR, não
   pra manter.
+- VÁRIOS OBJETIVOS: a meta do atleta pode reunir MAIS DE UM objetivo (ex.:
+  saúde + emagrecer + uma marca de tempo). Leia a meta inteira e CONTEMPLE
+  TODOS eles, equilibrando: se além da performance ele quer saúde/bem-estar/
+  constância, não vire só máquina de prova — cuide da sustentabilidade e do
+  prazer de correr. Se NÃO houver alvo de performance (só saúde/evolução
+  geral), priorize regularidade e progressão gentil, sem puxar ritmo agressivo.
 - Cada corrida com um PROPÓSITO distinto (velocidade, base/rodagem, longão,
   regenerativo...) e faixa de pace ancorada na META dele.
 - LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E

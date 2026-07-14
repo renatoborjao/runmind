@@ -34,6 +34,14 @@ STEP_INSTRUCTIONS = {
         'O corredor já tem conta no Strava?\n'
         'Formato: {"has_strava": true}'
     ),
+    "AWAIT_STRAVA_SIGNUP": (
+        'Pedimos pro corredor CRIAR a conta no Strava e avisar quando '
+        'terminar. Ele já criou/terminou (ex: "criei", "pronto", "feito", '
+        '"consegui", "já tenho")? -> {"created": true}. Ainda não / vai '
+        'fazer depois / não conseguiu / não quer (ex: "ainda não", '
+        '"depois", "não consegui") -> {"created": false}.\n'
+        'Formato: {"created": true}'
+    ),
     "ASK_RUNS_TODAY": (
         'O corredor já corre hoje?\n'
         'Formato: {"runs_today": true} — se não corre: '
@@ -71,8 +79,15 @@ STEP_INSTRUCTIONS = {
     "ASK_PACE": (
         'Extraia o tempo que o corredor leva na distância habitual, em '
         'minutos totais (número — "32 minutos" vira 32, "meia hora" '
-        'vira 30).\n'
+        'vira 30, "1h20"/"1 hora e 20" viram 80).\n'
         'Formato: {"typical_minutes": 32.0}'
+    ),
+    "ASK_PACE_RUN": (
+        'O corredor descreve um treino concreto: a DISTÂNCIA em km e o '
+        'TEMPO total em minutos. Extraia os dois ("8 km em 50 min" -> '
+        '8 e 50; "1h20"/"1 hora e 20" = 80 min).\n'
+        'Formato: {"pace_distance_km": 8.0, "typical_minutes": 50.0} — '
+        'faltando algum, use null'
     ),
     "ASK_DAYS": (
         'Extraia os dias da semana em que o corredor pode correr, em '
@@ -80,12 +95,16 @@ STEP_INSTRUCTIONS = {
         'Formato: {"days": ["Tuesday", "Thursday", "Saturday"]}'
     ),
     "ASK_GOAL": (
-        'Extraia o objetivo do corredor: descrição curta e, se houver, '
-        'distância alvo (km), tempo alvo (HH:MM:SS) e data da prova '
-        '(ISO; sem dia exato, use o dia 15 do mês citado).\n'
-        'Formato: {"goal": "10 km Sub 55", "target_race": "10 km", '
-        '"target_time": "00:55:00", "race_date": "2026-08-15"} — '
-        'campos sem informação: null'
+        'Extraia TODOS os objetivos do corredor — ele pode citar VÁRIOS '
+        '(ex.: saúde, emagrecer, evoluir, correr 10 km em 55 min). Em '
+        '"goal", escreva uma descrição curta que PRESERVE todos eles, sem '
+        'jogar nenhum fora. Se houver um objetivo de PERFORMANCE concreto '
+        '(prova/distância/tempo), extraia também — do principal/mais '
+        'concreto — a distância alvo (km), o tempo alvo (HH:MM:SS) e a data '
+        'da prova (ISO; sem dia exato, use o dia 15 do mês citado).\n'
+        'Formato: {"goal": "saúde, emagrecer e correr 10 km em 55 min", '
+        '"target_race": "10 km", "target_time": "00:55:00", '
+        '"race_date": null} — campos de performance sem informação: null'
     ),
     "CONFIRM": (
         'O corredor está revisando o resumo do cadastro. Ele pode: (a) '
