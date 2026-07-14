@@ -306,6 +306,66 @@ def test_next_session_summary_includes_real_date_and_pace():
     assert "4:21-4:21" in summary
 
 
+def test_next_session_summary_flags_today():
+    """Sessão de hoje vem marcada [É HOJE] — sem isso o modelo lê "próximo
+    treino ... 14/07" e chama de "amanhã" (bug real do Renato)."""
+
+    session = PlannedSession(
+        day="Monday", workout_type="Velocidade", objective="tiros",
+        planned_distance_km=8.0, planned_duration_minutes=None,
+        target_pace_min="5:15", target_pace_max="5:30",
+    )
+
+    plan = _plan([session])  # week_start = segunda 2026-07-20
+
+    summary = ConversationContextBuilder._next_session_summary(
+        plan,
+        TrainingHistory(activities=[]),
+        reference_date=date(2026, 7, 20),  # a própria segunda
+    )
+
+    assert "[É HOJE]" in summary
+
+
+def test_next_session_summary_flags_tomorrow():
+
+    session = PlannedSession(
+        day="Tuesday", workout_type="Velocidade", objective="tiros",
+        planned_distance_km=8.0, planned_duration_minutes=None,
+        target_pace_min="5:15", target_pace_max="5:30",
+    )
+
+    plan = _plan([session])  # terça = 2026-07-21
+
+    summary = ConversationContextBuilder._next_session_summary(
+        plan,
+        TrainingHistory(activities=[]),
+        reference_date=date(2026, 7, 20),  # segunda: a terça é amanhã
+    )
+
+    assert "[É AMANHÃ]" in summary
+
+
+def test_next_session_summary_no_today_flag_for_future_session():
+
+    session = PlannedSession(
+        day="Thursday", workout_type="Intervalado", objective="VO2",
+        planned_distance_km=8.0, planned_duration_minutes=None,
+        target_pace_min="4:21", target_pace_max="4:21",
+    )
+
+    plan = _plan([session])  # quinta = 2026-07-23
+
+    summary = ConversationContextBuilder._next_session_summary(
+        plan,
+        TrainingHistory(activities=[]),
+        reference_date=date(2026, 7, 20),
+    )
+
+    assert "[É HOJE]" not in summary
+    assert "[É AMANHÃ]" not in summary
+
+
 def test_next_session_summary_includes_adjustment_reason_when_present():
 
     session = PlannedSession(

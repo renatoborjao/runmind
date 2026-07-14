@@ -326,6 +326,23 @@ class ConversationContextBuilder:
 
         session_date = plan.session_date(session)
 
+        # Marca EXPLÍCITA de hoje/amanhã: sem isto o modelo lê "Próximo treino
+        # ... 14/07" e, mesmo com HOJE=14/07 na âncora, chama de "amanhã" (a
+        # palavra "próximo" o empurra pro futuro e ele não cruza as datas com
+        # thinking_budget=0). Bug real do Renato (2026-07-14). Data errada é
+        # linha vermelha — ver feedback_validar_datas_sempre.
+        if session_date == today:
+
+            when = " [É HOJE]"
+
+        elif session_date == today + timedelta(days=1):
+
+            when = " [É AMANHÃ]"
+
+        else:
+
+            when = ""
+
         pace = ""
 
         if session.target_pace_min and session.target_pace_max:
@@ -340,7 +357,7 @@ class ConversationContextBuilder:
 
         return (
             f"{weekday_label(session.day)} "
-            f"({session_date.strftime('%d/%m')}) — "
+            f"({session_date.strftime('%d/%m')}){when} — "
             f"{session.workout_type} "
             f"({session.planned_distance_km or 0:.1f} km) — "
             f"{session.objective}{pace}{adjustment}"
