@@ -1,7 +1,12 @@
+from datetime import datetime
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.application.garmin.garmin_activity_poller import (
     GarminActivityPoller,
+)
+from app.application.strava.strava_activity_catchup import (
+    StravaActivityCatchup,
 )
 from app.application.planner.morning_briefing_notifier import (
     MorningBriefingNotifier,
@@ -39,6 +44,18 @@ async def _garmin_poll_tick() -> None:
 
         # Garmin fora do ar / token expirado — só loga, tenta em 10 min
         print(f"Garmin poll falhou: {e}")
+
+
+async def _strava_catchup_tick() -> None:
+
+    try:
+
+        await StravaActivityCatchup.run_all()
+
+    except Exception as e:
+
+        # Strava fora do ar / rate limit — só loga, tenta na próxima passada
+        print(f"Strava catch-up falhou: {e}")
 
 
 def start_weekly_plan_scheduler() -> AsyncIOScheduler:
@@ -118,6 +135,18 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         trigger="interval",
         minutes=10,
         id="garmin_activity_poll",
+    )
+
+    # Rede de segurança do webhook Strava (atleta só-Strava): roda LOGO no
+    # startup (recupera o feedback perdido enquanto o servidor esteve fora) e
+    # a cada 15 min (cobre entregas que o Strava perdeu). Dedup pelo mesmo
+    # guard do webhook — não reprocessa o que já saiu.
+    _scheduler.add_job(
+        _strava_catchup_tick,
+        trigger="interval",
+        minutes=15,
+        id="strava_activity_catchup",
+        next_run_time=datetime.now(DEFAULT_TIMEZONE),
     )
 
     _scheduler.start()
