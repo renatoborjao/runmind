@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
 from app.application.coach.conversation.conversation_context_builder import (
@@ -277,6 +277,92 @@ def test_build_handles_no_recent_activity():
     )
 
     assert "nenhum treino recente encontrado" in text
+
+
+def test_today_status_marks_concluded_when_fulfilled():
+    """Treino de hoje já cumprido: o coach precisa saber que ACABOU (e foi
+    analisado), pra não tratar o atleta como se estivesse no meio da sessão."""
+
+    session = PlannedSession(
+        day="Monday", workout_type="Velocidade", objective="tiros",
+        planned_distance_km=8.0, planned_duration_minutes=None,
+        target_pace_min="5:15", target_pace_max="5:30",
+    )
+
+    plan = _plan([session])  # week_start = segunda 2026-07-20
+
+    with patch(f"{MODULE}.WeeklyPlanMatcher") as matcher:
+
+        matcher.fulfilled_days.return_value = {"Monday"}
+
+        status = ConversationContextBuilder._today_training_status(
+            plan,
+            TrainingHistory(activities=[]),
+            reference_date=date(2026, 7, 20),
+        )
+
+    assert "JÁ CONCLUÍDO" in status
+    assert "no meio" in status  # regra explícita pro coach
+
+
+def test_today_status_pending_when_not_fulfilled():
+
+    session = PlannedSession(
+        day="Monday", workout_type="Velocidade", objective="tiros",
+        planned_distance_km=8.0, planned_duration_minutes=None,
+        target_pace_min="5:15", target_pace_max="5:30",
+    )
+
+    plan = _plan([session])
+
+    with patch(f"{MODULE}.WeeklyPlanMatcher") as matcher:
+
+        matcher.fulfilled_days.return_value = set()
+
+        status = ConversationContextBuilder._today_training_status(
+            plan,
+            TrainingHistory(activities=[]),
+            reference_date=date(2026, 7, 20),
+        )
+
+    assert "ainda NÃO registrado" in status
+
+
+def test_today_status_empty_on_rest_day():
+    """Hoje é descanso (sessão só na quinta): sem linha de status."""
+
+    session = PlannedSession(
+        day="Thursday", workout_type="Rodagem", objective="base",
+        planned_distance_km=9.0, planned_duration_minutes=None,
+        target_pace_min="6:30", target_pace_max="7:00",
+    )
+
+    plan = _plan([session])
+
+    status = ConversationContextBuilder._today_training_status(
+        plan,
+        TrainingHistory(activities=[]),
+        reference_date=date(2026, 7, 20),  # segunda: nada planejado
+    )
+
+    assert status == ""
+
+
+def test_last_activity_summary_flags_today():
+
+    act = make_activity(
+        name="Corrida da tarde",
+        distance=6000.0,
+        start_date=datetime(2026, 7, 20, 16, 0),
+    )
+
+    summary = ConversationContextBuilder._last_activity_summary(
+        TrainingHistory(activities=[act]),
+        reference_date=date(2026, 7, 20),
+    )
+
+    assert "(HOJE)" in summary
+    assert "6.0 km" in summary
 
 
 def test_next_session_summary_includes_real_date_and_pace():

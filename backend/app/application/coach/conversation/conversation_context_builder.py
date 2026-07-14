@@ -104,6 +104,18 @@ class ConversationContextBuilder:
             f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan, history)}\n"
         )
 
+        # Status do treino de HOJE: sem isto o coach não sabe que a sessão de
+        # hoje já foi feita+analisada e trata o atleta como se estivesse no
+        # MEIO do treino ("termine os tiros") — bug real do Renato.
+        today_status = ConversationContextBuilder._today_training_status(
+            plan,
+            history,
+        )
+
+        if today_status:
+
+            facts = f"{facts}{today_status}\n"
+
         race_line = ConversationContextBuilder._race_summary(goal)
 
         if race_line:
@@ -270,6 +282,7 @@ class ConversationContextBuilder:
     @staticmethod
     def _last_activity_summary(
         history,
+        reference_date=None,
     ) -> str:
 
         latest = history.latest
@@ -280,7 +293,68 @@ class ConversationContextBuilder:
 
         distance_km = latest.distance / 1000
 
-        return f"{latest.name}, {distance_km:.1f} km"
+        # data (e marca HOJE) pra o coach saber se o treino já foi feito hoje —
+        # sem isso "Corrida da tarde, 6 km" não diz QUANDO foi.
+        today = reference_date or today_local()
+
+        activity_day = latest.start_date.date()
+
+        when = (
+            " (HOJE)"
+            if activity_day == today
+            else f" ({activity_day.strftime('%d/%m')})"
+        )
+
+        return f"{latest.name}, {distance_km:.1f} km{when}"
+
+    @staticmethod
+    def _today_training_status(
+        plan,
+        history,
+        reference_date=None,
+    ) -> str:
+        """Status do treino de HOJE: concluído (feito + já analisado), pendente
+        ou descanso. É o que impede o coach de tratar o atleta como se estivesse
+        no MEIO da sessão quando ele comenta um treino que JÁ acabou."""
+
+        today = reference_date or today_local()
+
+        session = next(
+            (
+                s
+                for s in plan.sessions
+                if plan.session_date(s) == today
+            ),
+            None,
+        )
+
+        # descanso hoje (ou plano de outra semana): sem linha
+        if session is None:
+
+            return ""
+
+        fulfilled = {
+            day.lower()
+            for day in WeeklyPlanMatcher.fulfilled_days(
+                plan,
+                history.activities,
+            )
+        }
+
+        if session.day.lower() in fulfilled:
+
+            return (
+                f"Treino de HOJE ({session.workout_type}): JÁ CONCLUÍDO — o "
+                "atleta já treinou e JÁ RECEBEU a análise deste treino. NÃO "
+                "peça pra ele 'terminar' nem oriente como se estivesse no meio "
+                "da sessão; qualquer comentário dele sobre este treino é "
+                "PÓS-treino (relato/ajuste do que já aconteceu)."
+            )
+
+        return (
+            f"Treino de HOJE ({session.workout_type}): ainda NÃO registrado "
+            "(o atleta pode não ter feito ainda, ou não sincronizou)."
+        )
 
     @staticmethod
     def _next_session_summary(
