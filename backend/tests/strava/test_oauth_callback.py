@@ -79,9 +79,11 @@ def test_callback_with_existing_profile_saves_tokens_and_athlete_id(
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
+        patch(f"{MODULE}.StravaConnectRefresh") as mock_refresh,
     ):
 
         mock_history.execute = AsyncMock()
+        mock_refresh.refresh = AsyncMock()
 
         client = TestClient(app)
 
@@ -100,8 +102,10 @@ def test_callback_with_existing_profile_saves_tokens_and_athlete_id(
         saved_tokens = mock_token_store_cls.return_value.save.call_args[0][0]
         assert saved_tokens["access_token"] == "at"
 
-        # ao conectar, já puxa/arquiva o histórico do Strava do atleta
-        mock_history.execute.assert_awaited_once_with(profile="fulano")
+        # perfil já cadastrado (late connector): agenda o refresh do plano
+        # com o histórico real — não carrega histórico inline no callback
+        mock_refresh.refresh.assert_awaited_once_with("fulano")
+        mock_history.execute.assert_not_awaited()
 
         # athlete_id persistido, chaves extras preservadas
         data = json.loads(
@@ -133,9 +137,11 @@ def test_callback_during_onboarding_stashes_athlete_id_in_state(
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
+        patch(f"{MODULE}.StravaConnectRefresh") as mock_refresh,
     ):
 
         mock_history.execute = AsyncMock()
+        mock_refresh.refresh = AsyncMock()
 
         client = TestClient(app)
 
@@ -148,6 +154,11 @@ def test_callback_during_onboarding_stashes_athlete_id_in_state(
 
         # tokens já ficam no slug reservado
         mock_token_store_cls.assert_called_once_with("ciclano")
+
+        # onboarding em andamento: arquiva o histórico aqui; o plano é
+        # montado na conclusão do cadastro, então NÃO agenda refresh
+        mock_history.execute.assert_awaited_once_with(profile="ciclano")
+        mock_refresh.refresh.assert_not_awaited()
 
         # athlete_id guardado no estado (vai pro perfil na conclusão)
         state = onboarding_repo.load("5511900000000")
@@ -177,9 +188,11 @@ def test_callback_without_state_keeps_renato_behavior(tmp_path):
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
+        patch(f"{MODULE}.StravaConnectRefresh") as mock_refresh,
     ):
 
         mock_history.execute = AsyncMock()
+        mock_refresh.refresh = AsyncMock()
 
         client = TestClient(app)
 
@@ -191,6 +204,9 @@ def test_callback_without_state_keeps_renato_behavior(tmp_path):
         assert response.json()["profile"] == "renato"
 
         mock_token_store_cls.assert_called_once_with("renato")
+
+        # sem state = perfil renato (source profile): agenda o refresh
+        mock_refresh.refresh.assert_awaited_once_with("renato")
 
 
 def test_callback_with_unknown_state_returns_400(tmp_path):
@@ -239,7 +255,10 @@ def test_callback_with_telegram_state_resolves_by_chat_id(tmp_path):
         patch(f"{MODULE}.OnboardingStateRepository",
               return_value=onboarding_repo),
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
+        patch(f"{MODULE}.StravaConnectRefresh") as mock_refresh,
     ):
+
+        mock_refresh.refresh = AsyncMock()
 
         client = TestClient(app)
 
@@ -250,6 +269,9 @@ def test_callback_with_telegram_state_resolves_by_chat_id(tmp_path):
 
         assert response.json()["profile"] == "tonho"
         mock_token_store_cls.assert_called_once_with("tonho")
+
+        # perfil por telegram_id (source profile): agenda o refresh do plano
+        mock_refresh.refresh.assert_awaited_once_with("tonho")
 
         data = json.loads(
             (profile_repo.storage / "tonho.json").read_text("utf-8")

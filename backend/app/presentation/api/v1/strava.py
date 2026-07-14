@@ -1,8 +1,12 @@
 from fastapi import APIRouter
+from fastapi import BackgroundTasks
 from fastapi import HTTPException
 from fastapi.responses import RedirectResponse
 import httpx
 
+from app.application.planner.strava_connect_refresh import (
+    StravaConnectRefresh,
+)
 from app.application.services.strava.webhook_service import (
     WebhookService,
 )
@@ -65,6 +69,7 @@ async def connect(state: str = ""):
 
 @router.get("/callback")
 async def callback(
+    background_tasks: BackgroundTasks,
     code: str,
     state: str = "",
 ):
@@ -121,21 +126,35 @@ async def callback(
             athlete_id,
         )
 
-    # Assim que conecta, já puxa e ARQUIVA o histórico do Strava — o coach
-    # passa a conhecer o atleta na hora. Vale inclusive pra quem treina com
-    # treinador humano: o RunMind não gera o plano dele, mas usa o histórico
-    # como contexto/insight. Falha aqui não derruba a conexão (o histórico
-    # também carrega depois, no chat/treino/lembrete).
-    try:
+    # Perfil já cadastrado (LATE CONNECTOR): conectou o Strava depois do
+    # cadastro, quando o plano já saiu conservador (histórico vazio). Agora
+    # que o histórico chegou, regenera o plano da semana com o retrato real
+    # e manda pro atleta — em BACKGROUND, porque gerar o plano pela IA passa
+    # do tempo do redirect do OAuth. O refresh já carrega e arquiva o
+    # histórico (e cobre treinador externo / reconexão internamente).
+    #
+    # Onboarding em andamento: aqui só arquiva o histórico (o plano é montado
+    # na conclusão do cadastro, que já usa o Strava recém-conectado). Falha
+    # não derruba a conexão (o histórico também carrega depois).
+    if source == "profile":
 
-        await LoadTrainingHistory.execute(profile=profile)
-
-    except Exception as e:
-
-        print(
-            f"Falha ao pré-carregar histórico de '{profile}' "
-            f"na conexão do Strava: {e}"
+        background_tasks.add_task(
+            StravaConnectRefresh.refresh,
+            profile,
         )
+
+    else:
+
+        try:
+
+            await LoadTrainingHistory.execute(profile=profile)
+
+        except Exception as e:
+
+            print(
+                f"Falha ao pré-carregar histórico de '{profile}' "
+                f"na conexão do Strava: {e}"
+            )
 
     return {
 
