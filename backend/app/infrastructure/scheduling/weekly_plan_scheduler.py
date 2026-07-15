@@ -70,47 +70,43 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         timezone=DEFAULT_TIMEZONE.key,
     )
 
+    # MULTI-FUSO: os jobs abaixo rodam de HORA EM HORA; cada notifier decide,
+    # por atleta, se é o horário LOCAL de enviar (domingo 15h/20h, segunda 8h,
+    # 06h diário no fuso DELE) e faz dedup pra não repetir. Assim o amigo de
+    # Portugal recebe no horário de Lisboa, não no do Brasil.
+
+    # Entrega do plano — domingo 15h local (gate no WeeklyPlanNotifier).
     _scheduler.add_job(
         WeeklyPlanNotifier.notify_all,
         trigger="cron",
-        day_of_week="sun",
-        hour=15,
         minute=0,
         misfire_grace_time=3600,
         id="weekly_plan_notification",
     )
 
-    # 20h fecha a semana ISO inteira (pega o long run de domingo)
+    # Review — domingo 20h local (fecha a semana ISO inteira).
     _scheduler.add_job(
         WeeklyReviewNotifier.notify_all,
         trigger="cron",
-        day_of_week="sun",
-        hour=20,
         minute=0,
         misfire_grace_time=3600,
         id="weekly_review_notification",
     )
 
-    # Segunda 08h: reforço pro atleta de treinador externo que ainda não
-    # mandou o treino da semana (o pedido de domingo 15h não foi respondido).
-    # Sem o print, a semana começa sem plano e a análise fica sem prescrição.
+    # Reforço do treinador externo — segunda 8h local.
     _scheduler.add_job(
         WeeklyPlanNotifier.remind_external_pending,
         trigger="cron",
-        day_of_week="mon",
-        hour=8,
         minute=0,
         misfire_grace_time=3600,
         id="external_plan_reminder",
     )
 
-    # 06h todo dia: briefing matinal numa mensagem só — primeiro o furo de
-    # ONTEM (se houve; o treino teve a noite pra sincronizar), depois o
-    # lembrete do treino de HOJE. Descanso sem furo não envia nada.
+    # Briefing matinal — 06h local: furo de ONTEM (se houve) + treino de HOJE
+    # numa mensagem só. Descanso sem furo não envia nada.
     _scheduler.add_job(
         MorningBriefingNotifier.notify_all,
         trigger="cron",
-        hour=6,
         minute=0,
         misfire_grace_time=3600,
         id="morning_briefing",

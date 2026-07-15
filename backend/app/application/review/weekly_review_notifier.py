@@ -11,10 +11,11 @@ from app.application.review.weekly_review_narrative_writer import (
     WeeklyReviewNarrativeWriter,
 )
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
-from app.core.clock import use_athlete_timezone
+from app.core.clock import now_in, use_athlete_timezone
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -22,11 +23,25 @@ from app.infrastructure.persistence.runner_profile_repository import (
 # cobre as 8 semanas da tendência com folga
 HISTORY_LIMIT = 60
 
+# domingo (weekday 6) 20h LOCAL: fecha a semana ISO inteira
+_SUNDAY = 6
+
+REVIEW_HOUR = 20
+
+
+def _week_key(local) -> str:
+
+    iso = local.isocalendar()
+
+    return f"{iso[0]}-W{iso[1]:02d}"
+
 
 class WeeklyReviewNotifier:
 
     @staticmethod
     async def notify_all() -> None:
+        """Roda de HORA EM HORA; cada _notify_one decide se é o horário local
+        do atleta (domingo 20h) e faz dedup."""
 
         for profile in RunnerProfileRepository().list_all():
 
@@ -49,6 +64,21 @@ class WeeklyReviewNotifier:
         runner = LoadRunnerProfile.execute(profile)
 
         use_athlete_timezone(runner.timezone)
+
+        local = now_in(runner.timezone)
+
+        # só no domingo 20h LOCAL do atleta, uma vez por semana (dedup)
+        if local.weekday() != _SUNDAY or local.hour != REVIEW_HOUR:
+
+            return
+
+        period = _week_key(local)
+
+        if DispatchGuard.already_sent("weekly_review", profile, period):
+
+            return
+
+        DispatchGuard.mark("weekly_review", profile, period)
 
         history = await LoadTrainingHistory.execute(
             profile=profile,

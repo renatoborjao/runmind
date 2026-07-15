@@ -10,7 +10,9 @@ def _reset_module_state():
     scheduler_module._scheduler = None
 
 
-def test_registers_plan_and_review_cron_jobs():
+def test_registers_hourly_notifier_jobs_for_multi_timezone():
+    """Multi-fuso: os jobs de notificação rodam de HORA EM HORA (minute=0, sem
+    dia/hora fixos); cada notifier decide o horário LOCAL do atleta."""
 
     _reset_module_state()
 
@@ -27,17 +29,19 @@ def test_registers_plan_and_review_cron_jobs():
             for _, kwargs in mock_instance.add_job.call_args_list
         }
 
-        plan = jobs["weekly_plan_notification"]
-        assert plan["trigger"] == "cron"
-        assert plan["day_of_week"] == "sun"
-        assert plan["hour"] == 15
-        assert plan["minute"] == 0
+        for job_id in (
+            "weekly_plan_notification",
+            "weekly_review_notification",
+            "external_plan_reminder",
+            "morning_briefing",
+        ):
 
-        review = jobs["weekly_review_notification"]
-        assert review["trigger"] == "cron"
-        assert review["day_of_week"] == "sun"
-        assert review["hour"] == 20
-        assert review["minute"] == 0
+            job = jobs[job_id]
+            assert job["trigger"] == "cron"
+            assert job["minute"] == 0
+            # de hora em hora: sem dia/hora fixos (o gate local resolve)
+            assert "day_of_week" not in job
+            assert "hour" not in job
 
         mock_instance.start.assert_called_once()
 

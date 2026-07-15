@@ -14,7 +14,8 @@ from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
-from app.core.clock import today_local, use_athlete_timezone
+from app.core.clock import now_in, today_local, use_athlete_timezone
+from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 from app.application.garmin.garmin_sync import GarminSync
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.infrastructure.integrations.garmin.garmin_offer_store import (
@@ -28,10 +29,30 @@ from app.infrastructure.persistence.weekly_plan_repository import (
 )
 
 
+# domingo (weekday 6) 15h LOCAL: entrega do plano. Segunda (0) 8h: lembrete
+# do treinador externo.
+_SUNDAY = 6
+
+_MONDAY = 0
+
+PLAN_HOUR = 15
+
+EXTERNAL_REMINDER_HOUR = 8
+
+
+def _week_key(local) -> str:
+
+    iso = local.isocalendar()
+
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
 class WeeklyPlanNotifier:
 
     @staticmethod
     async def notify_all() -> None:
+        """Roda de HORA EM HORA; cada _notify_one decide se é o horário local
+        do atleta (domingo 15h) e faz dedup."""
 
         for profile in RunnerProfileRepository().list_all():
 
@@ -54,6 +75,21 @@ class WeeklyPlanNotifier:
         runner = LoadRunnerProfile.execute(profile)
 
         use_athlete_timezone(runner.timezone)
+
+        local = now_in(runner.timezone)
+
+        # só no domingo 15h LOCAL do atleta, uma vez por semana (dedup)
+        if local.weekday() != _SUNDAY or local.hour != PLAN_HOUR:
+
+            return
+
+        period = _week_key(local)
+
+        if DispatchGuard.already_sent("weekly_plan", profile, period):
+
+            return
+
+        DispatchGuard.mark("weekly_plan", profile, period)
 
         # atleta com treinador humano: pede o treino da semana em vez
         # de gerar plano
@@ -129,7 +165,25 @@ class WeeklyPlanNotifier:
 
                 use_athlete_timezone(runner.timezone)
 
+                local = now_in(runner.timezone)
+
+                # segunda 8h LOCAL, uma vez (dedup diário)
+                if (
+                    local.weekday() != _MONDAY
+                    or local.hour != EXTERNAL_REMINDER_HOUR
+                ):
+
+                    continue
+
                 if not runner.external_coach:
+
+                    continue
+
+                period = local.date().isoformat()
+
+                if DispatchGuard.already_sent(
+                    "external_reminder", profile, period
+                ):
 
                     continue
 
@@ -141,6 +195,8 @@ class WeeklyPlanNotifier:
                     runner,
                     WeeklyPlanNotifier._reminder_text(runner.name),
                 )
+
+                DispatchGuard.mark("external_reminder", profile, period)
 
             except Exception as e:
 

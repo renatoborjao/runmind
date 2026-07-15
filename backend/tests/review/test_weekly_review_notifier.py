@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
@@ -17,7 +18,11 @@ def _run_notify_all(profiles, runners, messages):
         patch(f"{MODULE}.WeeklyReviewNarrativeWriter") as mock_narrative,
         patch(f"{MODULE}.WeeklyReviewMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
+        patch(f"{MODULE}.DispatchGuard") as mock_guard,
     ):
+
+        mock_guard.already_sent.return_value = False
 
         mock_narrative.write = AsyncMock(return_value=None)
 

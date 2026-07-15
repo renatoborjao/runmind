@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 from app.application.planner.morning_briefing_notifier import (
@@ -11,7 +12,7 @@ MODULE = "app.application.planner.morning_briefing_notifier"
 RUNNER = make_runner()
 
 
-def _run(missed, today):
+def _run(missed, today, local_hour=6, already_sent=False):
 
     sent = {}
 
@@ -20,7 +21,12 @@ def _run(missed, today):
         patch(f"{MODULE}.DailyTrainingNotifier") as daily,
         patch(f"{MODULE}.CoachOutbox") as notifier,
         patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
+        patch(f"{MODULE}.now_in") as now_in,
+        patch(f"{MODULE}.DispatchGuard") as guard,
     ):
+
+        now_in.return_value = datetime(2026, 7, 14, local_hour, 0)
+        guard.already_sent.return_value = already_sent
 
         load_runner.execute.return_value = RUNNER
 
@@ -69,5 +75,24 @@ def test_only_today_when_there_was_no_miss():
 def test_nothing_sent_when_no_miss_and_rest_day():
 
     sent = _run(missed=None, today=None)
+
+    assert sent == {}
+
+
+def test_no_briefing_outside_local_06h():
+    """Fora das 06h locais do atleta, nada sai (o job roda de hora em hora)."""
+
+    sent = _run(missed="Furou ontem", today="🏃 Hoje", local_hour=10)
+
+    assert sent == {}
+
+
+def test_no_briefing_when_already_sent_today():
+    """Dedup: já enviado hoje -> não repete mesmo no horário certo."""
+
+    sent = _run(
+        missed="Furou ontem", today="🏃 Hoje",
+        local_hour=6, already_sent=True,
+    )
 
     assert sent == {}

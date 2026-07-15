@@ -6,10 +6,14 @@ from app.application.planner.daily_training_notifier import (
 )
 from app.application.planner.missed_workout_flow import MissedWorkoutFlow
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
-from app.core.clock import use_athlete_timezone
+from app.core.clock import now_in, today_local, use_athlete_timezone
+from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+
+# hora LOCAL do atleta em que o briefing sai
+BRIEFING_HOUR = 6
 
 
 class MorningBriefingNotifier:
@@ -20,6 +24,8 @@ class MorningBriefingNotifier:
 
     @staticmethod
     async def notify_all() -> None:
+        """Roda de HORA EM HORA; cada _notify_one decide se é 06h no fuso do
+        atleta e faz dedup (uma vez por dia)."""
 
         for profile in RunnerProfileRepository().list_all():
 
@@ -36,21 +42,34 @@ class MorningBriefingNotifier:
         profile: str,
     ) -> None:
 
-        parts: list[str] = []
+        runner = LoadRunnerProfile.execute(profile)
 
         # fuso do atleta primeiro: ontem/hoje/semana no horário dele
-        use_athlete_timezone(
-            LoadRunnerProfile.execute(profile).timezone,
-        )
+        use_athlete_timezone(runner.timezone)
 
-        runner = None
+        local = now_in(runner.timezone)
+
+        # só quando é 06h LOCAL do atleta, uma vez por dia (dedup)
+        if local.hour != BRIEFING_HOUR:
+
+            return
+
+        period = local.date().isoformat()
+
+        if DispatchGuard.already_sent("briefing", profile, period):
+
+            return
+
+        DispatchGuard.mark("briefing", profile, period)
+
+        parts: list[str] = []
 
         # Furo de ONTEM primeiro (pode guardar uma proposta pro 'sim').
         missed = await MissedWorkoutFlow.process(profile)
 
         if missed is not None:
 
-            runner, missed_message = missed
+            _, missed_message = missed
 
             parts.append(missed_message)
 
@@ -59,7 +78,7 @@ class MorningBriefingNotifier:
 
         if today is not None:
 
-            runner, today_message = today
+            _, today_message = today
 
             parts.append(today_message)
 
