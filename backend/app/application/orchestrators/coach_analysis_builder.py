@@ -22,6 +22,7 @@ from app.application.planner.weekly_plan_service import (
 from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
+from app.core.clock import use_athlete_timezone
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
@@ -60,6 +61,9 @@ class CoachAnalysisBuilder:
         runner = LoadRunnerProfile.execute(
             profile,
         )
+
+        # datas da análise/plano no fuso do atleta
+        use_athlete_timezone(runner.timezone)
 
         # --------------------------------------------------
         # Assessment

@@ -19,7 +19,10 @@ def _run(missed, today):
         patch(f"{MODULE}.MissedWorkoutFlow") as flow,
         patch(f"{MODULE}.DailyTrainingNotifier") as daily,
         patch(f"{MODULE}.CoachOutbox") as notifier,
+        patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
     ):
+
+        load_runner.execute.return_value = RUNNER
 
         flow.process = AsyncMock(
             return_value=(RUNNER, missed) if missed else None

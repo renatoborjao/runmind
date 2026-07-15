@@ -86,3 +86,8 @@ class RunnerProfile:
     channel: str = "whatsapp"
 
     telegram_id: str | None = None
+
+    # Fuso horário do atleta (IANA, ex.: "Europe/Lisbon"). Guia as datas do
+    # coach (hoje/amanhã, semana) e o horário dos disparos. Default Brasil;
+    # ajustável por atleta (ex.: amigo em Portugal).
+    timezone: str = "America/Sao_Paulo"

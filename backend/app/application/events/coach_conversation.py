@@ -36,6 +36,7 @@ from app.application.notifications.notification_service import (
 from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
+from app.core.clock import use_athlete_timezone
 from app.infrastructure.persistence.conversation_repository import (
     ConversationRepository,
 )
@@ -71,6 +72,9 @@ class CoachConversationEvent:
     ) -> str:
 
         runner = LoadRunnerProfile.execute(profile)
+
+        # todas as datas da conversa (hoje/amanhã, semana) no fuso do atleta
+        use_athlete_timezone(runner.timezone)
 
         repo = ConversationRepository()
 

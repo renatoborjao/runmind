@@ -11,6 +11,7 @@ from app.application.review.weekly_review_narrative_writer import (
     WeeklyReviewNarrativeWriter,
 )
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+from app.core.clock import use_athlete_timezone
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
@@ -46,6 +47,8 @@ class WeeklyReviewNotifier:
     ) -> None:
 
         runner = LoadRunnerProfile.execute(profile)
+
+        use_athlete_timezone(runner.timezone)
 
         history = await LoadTrainingHistory.execute(
             profile=profile,

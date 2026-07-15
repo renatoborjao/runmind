@@ -5,6 +5,8 @@ from app.application.planner.daily_training_notifier import (
     DailyTrainingNotifier,
 )
 from app.application.planner.missed_workout_flow import MissedWorkoutFlow
+from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+from app.core.clock import use_athlete_timezone
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -35,6 +37,11 @@ class MorningBriefingNotifier:
     ) -> None:
 
         parts: list[str] = []
+
+        # fuso do atleta primeiro: ontem/hoje/semana no horário dele
+        use_athlete_timezone(
+            LoadRunnerProfile.execute(profile).timezone,
+        )
 
         runner = None
 

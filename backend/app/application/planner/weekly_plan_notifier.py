@@ -14,7 +14,7 @@ from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
-from app.core.clock import today_local
+from app.core.clock import today_local, use_athlete_timezone
 from app.application.garmin.garmin_sync import GarminSync
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.infrastructure.integrations.garmin.garmin_offer_store import (
@@ -52,6 +52,8 @@ class WeeklyPlanNotifier:
     ) -> None:
 
         runner = LoadRunnerProfile.execute(profile)
+
+        use_athlete_timezone(runner.timezone)
 
         # atleta com treinador humano: pede o treino da semana em vez
         # de gerar plano
@@ -124,6 +126,8 @@ class WeeklyPlanNotifier:
             try:
 
                 runner = LoadRunnerProfile.execute(profile)
+
+                use_athlete_timezone(runner.timezone)
 
                 if not runner.external_coach:
 
