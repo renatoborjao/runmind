@@ -53,13 +53,72 @@ def test_format_renders_full_message():
     message = WeeklyReviewMessageFormatter.format("Renato", _review())
 
     assert "Resumo da semana" in message
-    assert "Fala, Renato! Fechando a semana de 29/06:" in message
+    assert "Fala, Renato! Fechando a semana de 29/06." in message
+    assert "📝 Como foi sua semana" in message
     assert "• Volume: 7.2 km (14.1 km na anterior, -48.9%)" in message
     assert "• Treinos: 1 (2 na anterior)" in message
     assert "• Pace médio: 5:59 min/km (5:30 min/km na anterior)" in message
     assert "• Volume: caindo (-11.7%)" in message
     assert "• Pace: mais rápido (-7.2%)" in message
-    assert "Consistência nas últimas semanas: 66.7%" in message
+    assert "Consistência nas últimas semanas: 67%" in message
+
+
+def test_format_uses_ai_narrative_when_given():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(),
+        narrative=["Semana sólida rumo ao sub-50.", "Segue firme!"],
+    )
+
+    assert "Semana sólida rumo ao sub-50." in message
+    assert "Você fechou a semana com" not in message  # não usa o fallback
+
+
+def test_format_uses_fallback_narrative_when_none():
+
+    message = WeeklyReviewMessageFormatter.format("Renato", _review())
+
+    assert "Você fechou a semana com 1 treino(s) e 7.2 km" in message
+
+
+def test_format_shows_adherence_and_longest():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence={"planned": 3, "done": 3}, longest_km=12.0),
+    )
+
+    assert "• Treinos do plano: 3 de 3 ✅" in message
+    assert "• Longão da semana: 12.0 km" in message
+    # com aderência, some a contagem simples de treinos
+    assert "• Treinos: 1 (2 na anterior)" not in message
+
+
+def test_format_shows_race_goal_countdown():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(goal={
+            "name": "10 km sub-50", "has_race": True,
+            "weeks_to_race": 5, "target_time": "00:50:00",
+        }),
+    )
+
+    assert "🎯 Rumo à meta" in message
+    assert "• 10 km sub-50 — faltam 5 semanas, alvo 00:50:00" in message
+
+
+def test_format_shows_health_goal_without_countdown():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(goal={"name": "saúde e emagrecer", "has_race": False}),
+    )
+
+    assert "🎯 Seu objetivo" in message
+    assert "• saúde e emagrecer" in message
+    assert "faltam" not in message  # sem cobrança de prazo/prova
 
 
 def test_format_returns_none_when_both_weeks_empty():

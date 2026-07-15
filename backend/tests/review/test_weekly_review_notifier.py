@@ -14,9 +14,12 @@ def _run_notify_all(profiles, runners, messages):
         patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
         patch(f"{MODULE}.WeeklyReviewBuilder"),
+        patch(f"{MODULE}.WeeklyReviewNarrativeWriter") as mock_narrative,
         patch(f"{MODULE}.WeeklyReviewMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
     ):
+
+        mock_narrative.write = AsyncMock(return_value=None)
 
         mock_repo = MagicMock()
         mock_repo.list_all.return_value = profiles

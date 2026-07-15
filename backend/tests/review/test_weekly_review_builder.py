@@ -45,3 +45,49 @@ def test_build_assembles_comparison_trends_and_consistency():
 
     # 1 dia treinado por semana com meta de 1 dia/semana -> 100%
     assert review["consistency"] == 100.0
+
+
+def test_build_goal_race_countdown():
+    """Atleta com prova futura: contagem regressiva de semanas."""
+
+    runner = make_runner(
+        goal="10 km sub-50", race_date="2026-08-15",
+        target_time="00:50:00",
+    )
+
+    history = TrainingHistory(activities=[_run(0, 10000.0, 3000)])
+
+    review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["goal"]["has_race"] is True
+    assert review["goal"]["weeks_to_race"] == 5  # 05/07 -> 15/08
+    assert review["goal"]["name"] == "10 km sub-50"
+
+
+def test_build_goal_health_when_no_race():
+
+    runner = make_runner(goal="saúde e emagrecer")
+
+    history = TrainingHistory(activities=[_run(0, 10000.0, 3000)])
+
+    review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["goal"]["has_race"] is False
+    assert review["goal"]["weeks_to_race"] is None
+
+
+def test_build_longest_km_of_the_closing_week():
+
+    runner = make_runner(weekly_training_days=3)
+
+    history = TrainingHistory(
+        activities=[
+            _run(0, 8000.0, 2400),
+            _run(0, 14000.0, 4600),   # o maior da semana que fecha
+            _run(1, 20000.0, 6600),   # semana anterior: não conta
+        ],
+    )
+
+    review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["longest_km"] == 14.0

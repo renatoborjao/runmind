@@ -7,6 +7,9 @@ from app.application.review.weekly_review_builder import (
 from app.application.review.weekly_review_message_formatter import (
     WeeklyReviewMessageFormatter,
 )
+from app.application.review.weekly_review_narrative_writer import (
+    WeeklyReviewNarrativeWriter,
+)
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
@@ -54,9 +57,17 @@ class WeeklyReviewNotifier:
             history,
         )
 
+        # a IA escreve a "leitura da semana" guiada pelo objetivo do atleta;
+        # se falhar, o formatter usa o fallback determinístico
+        narrative = await WeeklyReviewNarrativeWriter.write(
+            runner.name,
+            review,
+        )
+
         message = WeeklyReviewMessageFormatter.format(
             runner.name,
             review,
+            narrative,
         )
 
         if message is None:
