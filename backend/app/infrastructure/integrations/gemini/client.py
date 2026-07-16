@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 import re
 from functools import lru_cache
 
@@ -17,10 +18,72 @@ MAX_ATTEMPTS = 3
 
 BASE_DELAY_SECONDS = 0.6
 
+# teto do backoff INLINE: uma tarefa de background não deve ficar parada
+# minutos esperando o rate limit resetar. Esperas longas (reset de RPM) são
+# problema da camada de retry ADIADO do webhook, não daqui.
+MAX_BACKOFF_SECONDS = 8.0
+
 # Status HTTP que melhoram com retry: rate limit e indisponibilidade do
 # servidor. 400/401/403 (pedido inválido, credencial, cota diária esgotada)
 # não adiantam repetir — sobem direto pro fallback do chamador.
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+# CASCATA DE MODELOS: se o primário está com a cota estourada (429) ou
+# sobrecarregado (503), a gente NÃO desiste — tenta outro modelo cuja cota é
+# independente ANTES do fallback "me embananei". No nível gratuito cada
+# modelo tem seu próprio balde de RPM/RPD, então trocar de modelo resgata a
+# esmagadora maioria dos 429. flash-lite quase nunca satura; é a rede final.
+# Ordem = qualidade decrescente a partir do primário.
+_FALLBACK_MODELS = {
+    "gemini-pro-latest": [
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+    ],
+    "gemini-flash-latest": [
+        "gemini-flash-lite-latest",
+        "gemini-pro-latest",
+    ],
+    "gemini-flash-lite-latest": [
+        "gemini-flash-latest",
+    ],
+}
+
+
+def _model_candidates(model: str) -> list[str]:
+    """O modelo pedido seguido dos seus fallbacks (cota independente).
+    Modelo desconhecido roda sem cascata (só ele)."""
+
+    return [model, *_FALLBACK_MODELS.get(model, [])]
+
+
+# retryDelay que a própria API sugere no corpo do 429 (RetryInfo). Honrar
+# isso é mais preciso que o backoff cego.
+_RETRY_DELAY_RE = re.compile(
+    r"retryDelay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s",
+)
+
+
+def _suggested_retry_delay(exc: Exception) -> float:
+    """Segundos que o Gemini pediu pra esperar (0 se não informou)."""
+
+    match = _RETRY_DELAY_RE.search(str(exc))
+
+    return float(match.group(1)) if match else 0.0
+
+
+def _backoff_delay(exc: Exception | None, attempt: int) -> float:
+    """Backoff exponencial, respeitando o retryDelay da API quando vier,
+    com jitter (±25%) pra entregas concorrentes não ressincronizarem — e
+    com teto pra não travar a tarefa de background."""
+
+    base = BASE_DELAY_SECONDS * (2 ** attempt)
+
+    suggested = _suggested_retry_delay(exc) if exc else 0.0
+
+    # jitter (±25%) antes do teto, pra o cap ser um limite de verdade
+    delay = max(base, suggested) * (0.75 + random.random() * 0.5)
+
+    return min(delay, MAX_BACKOFF_SECONDS)
 
 
 class EmptyGeminiResponse(RuntimeError):
@@ -68,44 +131,69 @@ async def generate_text(
     cair no fallback — nunca envia mensagem em branco.
     """
 
+    candidates = _model_candidates(model)
+
     last_exc: Exception | None = None
 
     for attempt in range(MAX_ATTEMPTS):
 
-        try:
+        # em cada rodada, tenta o primário e, se ele estiver indisponível,
+        # cada fallback SEM esperar (cota independente resgata na hora).
+        for candidate in candidates:
 
-            response = await _client().aio.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config,
-            )
+            try:
 
-            text = response.text or ""
+                response = await _client().aio.models.generate_content(
+                    model=candidate,
+                    contents=contents,
+                    config=config,
+                )
 
-            if require_text and not text.strip():
+                text = response.text or ""
 
-                raise EmptyGeminiResponse()
+                if require_text and not text.strip():
 
-            return text
+                    raise EmptyGeminiResponse()
 
-        except Exception as exc:  # noqa: BLE001 — decide retry vs. propaga
+                if candidate != model:
 
-            last_exc = exc
+                    print(
+                        f"Gemini respondeu no fallback '{candidate}' "
+                        f"(primário '{model}' indisponível)"
+                    )
 
-            is_last = attempt == MAX_ATTEMPTS - 1
+                return text
 
-            if is_last or not _is_retryable(exc):
+            except Exception as exc:  # noqa: BLE001 — decide retry vs. propaga
 
-                raise
+                last_exc = exc
 
-            print(
-                f"Gemini falhou (tentativa {attempt + 1}/{MAX_ATTEMPTS}, "
-                f"{type(exc).__name__}): retry em backoff"
-            )
+                # erro que não melhora com retry (400/401/403 — pedido
+                # inválido, credencial) é igual em qualquer modelo: sobe já
+                if not _is_retryable(exc):
 
-            await asyncio.sleep(BASE_DELAY_SECONDS * (2 ** attempt))
+                    raise
 
-    # inalcançável (o loop sempre retorna ou levanta), mas mantém o type-checker
+                # indisponível neste modelo: tenta o próximo candidato
+                continue
+
+        # todos os modelos falharam nesta rodada; só então espera e repete
+        is_last = attempt == MAX_ATTEMPTS - 1
+
+        if is_last:
+
+            break
+
+        delay = _backoff_delay(last_exc, attempt)
+
+        print(
+            f"Todos os modelos Gemini indisponíveis "
+            f"(rodada {attempt + 1}/{MAX_ATTEMPTS}, "
+            f"{type(last_exc).__name__}): backoff {delay:.1f}s"
+        )
+
+        await asyncio.sleep(delay)
+
     raise last_exc  # type: ignore[misc]
 
 

@@ -82,6 +82,71 @@ def _run_conversation(tmp_path, exchanges, today=FIM_DE_SEMANA):
     return replies, onboarding_repo, profile_repo
 
 
+def test_parser_failure_raises_when_deferring_but_no_state_change(tmp_path):
+    """Gemini fora no meio do cadastro: com fôlego de retry
+    (send_fallback=False), sinaliza AssistantUnavailable SEM mexer no
+    estado (reprocessar depois é idempotente); com send_fallback=True cai
+    no fallback."""
+
+    from app.application.events.assistant_errors import AssistantUnavailable
+
+    onboarding_repo, profile_repo = _repos(tmp_path)
+
+    # cadastro já em andamento, esperando a idade
+    state = {
+        "step": "ASK_AGE",
+        "answers": {"name": "Fulano"},
+        "slug": "fulano",
+        "channel": "whatsapp",
+        "address": PHONE,
+        "created_at": "2026-07-16T10:00:00+00:00",
+    }
+    onboarding_repo.save(PHONE, state)
+
+    with (
+        patch(
+            f"{MODULE}.OnboardingStateRepository",
+            return_value=onboarding_repo,
+        ),
+        patch(
+            f"{MODULE}.RunnerProfileRepository",
+            return_value=profile_repo,
+        ),
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+    ):
+
+        mock_parser.parse = AsyncMock(
+            side_effect=RuntimeError("429 RESOURCE_EXHAUSTED"),
+        )
+
+        # com fôlego de retry: levanta o sinal, não manda nada
+        try:
+
+            asyncio.run(
+                OnboardingFlow.handle(
+                    "whatsapp", PHONE, "33", send_fallback=False,
+                )
+            )
+
+            raise AssertionError("deveria ter levantado AssistantUnavailable")
+
+        except AssistantUnavailable:
+
+            pass
+
+        # estado intacto — mensagem será reprocessada do mesmo ponto
+        assert onboarding_repo.load(PHONE)["step"] == "ASK_AGE"
+
+        # último fôlego: cai no "me embananei"
+        reply = asyncio.run(
+            OnboardingFlow.handle(
+                "whatsapp", PHONE, "33", send_fallback=True,
+            )
+        )
+
+        assert "me embananei" in reply.lower() or "de novo" in reply
+
+
 FULL_CONVERSATION = [
     # primeira mensagem não é parseada (parser nem é chamado),
     # mas mantemos o par para alinhar o side_effect

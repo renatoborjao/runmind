@@ -1,8 +1,11 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.application.events.coach_conversation import (
     CoachConversationEvent,
+    CoachUnavailable,
 )
 from tests.coach.factories import make_runner
 
@@ -290,6 +293,48 @@ def test_gemini_failure_sends_busy_reply_instead_of_silence():
         assert "me embananei" in reply.lower() or "de novo" in reply
 
         mock_notification.send.assert_awaited_once()
+
+
+def test_send_fallback_false_raises_instead_of_sending_busy_reply():
+    """Com retry adiado disponível (send_fallback=False), a falha do
+    Gemini vira sinal (CoachUnavailable) SEM mandar nada — o webhook tenta
+    de novo depois em vez de queimar um "me embananei"."""
+
+    runner = make_runner(name="Renato", phone="+5511975658679")
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
+        patch(f"{MODULE}.ConversationContextBuilder") as mock_context,
+        patch(f"{MODULE}.ConversationRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as mock_engine,
+        patch(f"{MODULE}.NotificationService") as mock_notification,
+    ):
+
+        mock_load_runner.execute.return_value = runner
+        mock_context.build = AsyncMock(return_value="fatos")
+
+        mock_repo = MagicMock()
+        mock_repo.recent_turns.return_value = []
+        mock_repo_cls.return_value = mock_repo
+
+        mock_engine.reply = AsyncMock(
+            side_effect=RuntimeError("429 RESOURCE_EXHAUSTED"),
+        )
+        mock_notification.send = AsyncMock()
+
+        with pytest.raises(CoachUnavailable):
+
+            asyncio.run(
+                CoachConversationEvent.execute(
+                    profile="renato",
+                    incoming_text="e aí coach?",
+                    send_fallback=False,
+                )
+            )
+
+        # nada foi enviado nem gravado — a mensagem será reprocessada
+        mock_notification.send.assert_not_awaited()
+        mock_repo.append_turn.assert_not_called()
 
 
 def test_extraction_failure_does_not_break_reply():

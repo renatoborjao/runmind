@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
+from app.application.events.coach_conversation import CoachUnavailable
 from app.main import app
 from tests.coach.factories import make_runner
 
@@ -72,6 +73,7 @@ def test_unknown_chat_starts_onboarding_on_telegram():
         incoming_text="oi",
         sender_name="Novo",
         media=None,
+        send_fallback=False,
     )
     mock_coach.execute.assert_not_called()
 
@@ -118,6 +120,96 @@ def test_known_chat_goes_to_coach():
 
         assert response.json()["queued"] is True
         mock_coach.execute.assert_awaited_once()
+
+
+def test_coach_unavailable_triggers_deferred_retry():
+    """Gemini indisponível não vira "me embananei" na hora: o webhook
+    espera e tenta de novo; a resposta real chega na tentativa seguinte."""
+
+    with (
+        patch(f"{MODULE}.get_settings") as mock_settings,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CoachConversationEvent") as mock_coach,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
+        patch(f"{MODULE}.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+
+        mock_settings.return_value.telegram_webhook_secret = "s3cr3t"
+        mock_repo_cls.return_value.find_by_telegram_id.return_value = "renato"
+        mock_guard_cls.return_value.check_and_mark.return_value = True
+
+        # indisponível 2x, acerta na 3ª (a real chega, sem fallback)
+        mock_coach.execute = AsyncMock(
+            side_effect=[
+                CoachUnavailable("429"),
+                CoachUnavailable("429"),
+                "resposta real",
+            ],
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/webhooks/telegram",
+            json=_update("como diminuir a FC?"),
+            headers={"X-Telegram-Bot-Api-Secret-Token": "s3cr3t"},
+        )
+
+        assert response.json()["queued"] is True
+
+        # tentou 3 vezes e esperou entre as tentativas
+        assert mock_coach.execute.await_count == 3
+        assert mock_sleep.await_count == 2
+
+        # tentativas intermediárias sem fallback; a última libera o fallback
+        assert (
+            mock_coach.execute.await_args_list[0].kwargs["send_fallback"]
+            is False
+        )
+        assert (
+            mock_coach.execute.await_args_list[-1].kwargs["send_fallback"]
+            is True
+        )
+
+
+def test_onboarding_unavailable_triggers_deferred_retry():
+    """Mesma blindagem vale pro cadastro: Gemini fora no onboarding é
+    adiado, não vira "me embananei" de imediato."""
+
+    from app.application.events.assistant_errors import AssistantUnavailable
+
+    with (
+        patch(f"{MODULE}.get_settings") as mock_settings,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.OnboardingEvent") as mock_onboarding,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
+        patch(f"{MODULE}.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+
+        mock_settings.return_value.telegram_webhook_secret = "s3cr3t"
+        mock_repo_cls.return_value.find_by_telegram_id.return_value = None
+        mock_guard_cls.return_value.check_and_mark.return_value = True
+
+        mock_onboarding.execute = AsyncMock(
+            side_effect=[
+                AssistantUnavailable("429"),
+                "Oi! Como você se chama?",
+            ],
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/webhooks/telegram",
+            json=_update("oi"),
+            headers={"X-Telegram-Bot-Api-Secret-Token": "s3cr3t"},
+        )
+
+        assert response.json()["queued"] is True
+        assert mock_onboarding.execute.await_count == 2
+        assert mock_sleep.await_count == 1
+        assert (
+            mock_onboarding.execute.await_args_list[0].kwargs["send_fallback"]
+            is False
+        )
 
 
 def test_wrong_secret_is_rejected():

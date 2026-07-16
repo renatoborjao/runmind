@@ -1,3 +1,6 @@
+from app.application.events.assistant_errors import (
+    AssistantUnavailable,
+)
 from app.application.coach.conversation.coach_conversation_engine import (
     CoachConversationEngine,
 )
@@ -62,6 +65,12 @@ BUSY_REPLY = (
 )
 
 
+class CoachUnavailable(AssistantUnavailable):
+    """Especialização de [[AssistantUnavailable]] pra conversa do coach.
+    Mesmo contrato: sinaliza pro webhook adiar e tentar de novo; só o
+    último fôlego (send_fallback=True) manda o fallback."""
+
+
 class CoachConversationEvent:
 
     @staticmethod
@@ -69,6 +78,7 @@ class CoachConversationEvent:
         profile: str,
         incoming_text: str,
         sender_name: str = "",
+        send_fallback: bool = True,
     ) -> str:
 
         runner = LoadRunnerProfile.execute(profile)
@@ -259,6 +269,12 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha na conversa com '{profile}': {e}")
+
+                # ainda há fôlego pra retry adiado: sinaliza pro webhook
+                # tentar de novo em vez de mandar o fallback agora
+                if not send_fallback:
+
+                    raise CoachUnavailable(str(e)) from e
 
                 reply_text = BUSY_REPLY
 

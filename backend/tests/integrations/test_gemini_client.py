@@ -89,6 +89,84 @@ def test_gives_up_after_max_attempts():
     assert generate_content.await_count == gemini_client.MAX_ATTEMPTS
 
 
+def _rate_limit() -> genai_errors.ClientError:
+
+    return genai_errors.ClientError(429, {"error": {"message": "rate limit"}})
+
+
+def test_cascades_to_fallback_model_without_waiting():
+
+    # primário (flash) estourou a cota: tenta o fallback (flash-lite) na
+    # MESMA rodada, sem esperar, e responde por ele
+    generate_content = AsyncMock(
+        side_effect=[_rate_limit(), SimpleNamespace(text="via lite")],
+    )
+
+    sleep = AsyncMock()
+
+    with (
+        patch(f"{MODULE}._client", return_value=_mock_client(generate_content)),
+        patch(f"{MODULE}.asyncio.sleep", new=sleep),
+    ):
+
+        result = asyncio.run(
+            generate_text(
+                model="gemini-flash-latest",
+                contents="prompt",
+                config=SimpleNamespace(),
+            )
+        )
+
+    assert result == "via lite"
+    assert generate_content.await_count == 2
+    # trocar de modelo é imediato — não gastou backoff
+    sleep.assert_not_awaited()
+    # o 2º disparo foi no fallback certo
+    assert (
+        generate_content.await_args_list[1].kwargs["model"]
+        == "gemini-flash-lite-latest"
+    )
+
+
+def test_all_models_down_raises_after_full_cascade():
+
+    # 429 em todos os modelos, em todas as rodadas: só então desiste
+    generate_content = AsyncMock(side_effect=_rate_limit())
+
+    with (
+        patch(f"{MODULE}._client", return_value=_mock_client(generate_content)),
+        patch(f"{MODULE}.asyncio.sleep", new=AsyncMock()),
+    ):
+
+        with pytest.raises(genai_errors.ClientError):
+
+            asyncio.run(
+                generate_text(
+                    model="gemini-flash-latest",
+                    contents="prompt",
+                    config=SimpleNamespace(),
+                )
+            )
+
+    # flash tem 2 fallbacks -> 3 modelos x MAX_ATTEMPTS rodadas
+    assert generate_content.await_count == 3 * gemini_client.MAX_ATTEMPTS
+
+
+def test_suggested_retry_delay_parsed_and_backoff_capped():
+
+    exc = Exception("RESOURCE_EXHAUSTED ... 'retryDelay': '7s' ...")
+
+    assert gemini_client._suggested_retry_delay(exc) == 7.0
+
+    # mesmo com a API pedindo 600s, o backoff inline tem teto
+    huge = Exception("retryDelay: '600s'")
+
+    assert (
+        gemini_client._backoff_delay(huge, 0)
+        <= gemini_client.MAX_BACKOFF_SECONDS
+    )
+
+
 def test_timeout_is_retryable():
 
     generate_content = AsyncMock(

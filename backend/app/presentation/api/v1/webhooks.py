@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 
@@ -11,6 +12,9 @@ from fastapi.responses import PlainTextResponse
 
 from app.core.config import get_settings
 
+from app.application.events.assistant_errors import (
+    AssistantUnavailable,
+)
 from app.application.events.coach_conversation import (
     CoachConversationEvent,
 )
@@ -482,10 +486,15 @@ async def route_inbound(
     text: str | None,
     media: dict | None,
     sender_name: str,
+    send_fallback: bool = True,
 ) -> dict:
     """Roteamento agnóstico ao canal (WhatsApp/Telegram): resolve o
     atleta pelo endereço e despacha onboarding, plano externo ou
-    conversa."""
+    conversa.
+
+    send_fallback=False (tentativa não-final do retry adiado): se o coach
+    estiver indisponível, levanta CoachUnavailable em vez de mandar o
+    "me embananei" — deixa o _run_inbound tentar de novo mais tarde."""
 
     repo = RunnerProfileRepository()
 
@@ -506,6 +515,7 @@ async def route_inbound(
             incoming_text=text or "",
             sender_name=sender_name,
             media=media,
+            send_fallback=send_fallback,
         )
 
         return {
@@ -537,6 +547,7 @@ async def route_inbound(
         profile=profile,
         incoming_text=text,
         sender_name=sender_name,
+        send_fallback=send_fallback,
     )
 
     return {
@@ -550,6 +561,13 @@ async def route_inbound(
     }
 
 
+# Retry ADIADO quando o coach fica indisponível: segundos de espera ANTES
+# de cada tentativa. Cobre ~2min / duas janelas de RPM do nível gratuito do
+# Gemini, pra a resposta de verdade chegar (só um tico atrasada) em vez do
+# "me embananei". A ÚLTIMA tentativa manda o fallback se ainda assim falhar.
+INBOUND_RETRY_DELAYS = [0, 30, 90]
+
+
 async def _run_inbound(
     channel: str,
     address: str,
@@ -558,25 +576,56 @@ async def _run_inbound(
     sender_name: str,
 ) -> None:
     """Processa a mensagem FORA do caminho do ack. O webhook já respondeu
-    200 (o canal não vai reentregar), então uma falha aqui nunca pode
-    derrubar nada nem virar retry: o próprio fluxo do coach já manda um
-    fallback ao atleta em caso de indisponibilidade. Só logamos."""
+    200 (o canal não vai reentregar), então uma falha aqui nunca derruba
+    nada.
 
-    try:
+    Se o assistente (coach OU onboarding) estiver indisponível (Gemini fora
+    mesmo após a cascata de modelos), NÃO manda o fallback de cara: espera e
+    tenta de novo algumas vezes (a janela de rate limit reseta), e só no
+    último fôlego cai no "me embananei". Assim uma instabilidade passageira
+    quase nunca chega ao atleta."""
 
-        await route_inbound(
-            channel=channel,
-            address=address,
-            text=text,
-            media=media,
-            sender_name=sender_name,
-        )
+    for attempt, delay in enumerate(INBOUND_RETRY_DELAYS):
 
-    except Exception as e:
+        if delay:
 
-        print(
-            f"Falha ao processar mensagem de {channel} {address}: {e}"
-        )
+            await asyncio.sleep(delay)
+
+        is_last = attempt == len(INBOUND_RETRY_DELAYS) - 1
+
+        try:
+
+            await route_inbound(
+                channel=channel,
+                address=address,
+                text=text,
+                media=media,
+                sender_name=sender_name,
+                send_fallback=is_last,
+            )
+
+            return
+
+        except AssistantUnavailable:
+
+            # ainda há tentativa: espera a próxima janela e tenta de novo
+            print(
+                f"Assistente indisponível p/ {channel} {address} "
+                f"(tentativa {attempt + 1}/{len(INBOUND_RETRY_DELAYS)}): "
+                f"retry adiado"
+            )
+
+            continue
+
+        except Exception as e:
+
+            # falha de infra (não é indisponibilidade do coach): não
+            # adianta repetir — loga e para
+            print(
+                f"Falha ao processar mensagem de {channel} {address}: {e}"
+            )
+
+            return
 
 
 async def _handle_profile_media(

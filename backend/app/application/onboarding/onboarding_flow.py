@@ -5,6 +5,7 @@ from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
 from app.application.coach.planning.ai_plan_service import AIPlanService
+from app.application.events.assistant_errors import AssistantUnavailable
 from app.application.external_plan.external_plan_extraction_engine import (
     ExternalPlanExtractionEngine,
 )
@@ -127,6 +128,7 @@ class OnboardingFlow:
         incoming_text: str,
         sender_name: str = "",
         media: dict | None = None,
+        send_fallback: bool = True,
     ) -> str:
 
         repo = OnboardingStateRepository()
@@ -173,8 +175,11 @@ class OnboardingFlow:
                 + OnboardingFlow._question(state)
             )
 
-        # indisponibilidade do Gemini (ex: rate limit do nível
-        # gratuito) não pode virar 500: pede pra reenviar
+        # indisponibilidade do Gemini (ex: rate limit do nível gratuito) não
+        # pode virar 500. A `parse` roda ANTES de qualquer mutação de estado
+        # (os handlers _on_* é que salvam), então reprocessar é idempotente:
+        # com fôlego de retry (send_fallback=False) a gente sinaliza pro
+        # webhook tentar de novo; só o último fôlego cai no "me embananei".
         try:
 
             parsed = await OnboardingAnswerParser.parse(
@@ -186,6 +191,10 @@ class OnboardingFlow:
         except Exception as e:
 
             print(f"Falha no parser do onboarding ({step}): {e}")
+
+            if not send_fallback:
+
+                raise AssistantUnavailable(str(e)) from e
 
             return BUSY_REPLY
 
