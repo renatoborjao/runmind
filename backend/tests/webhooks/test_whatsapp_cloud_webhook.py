@@ -81,12 +81,14 @@ def test_post_routes_inbound_message():
     with (
         patch(f"{MODULE}.get_settings") as mock_settings,
         patch(f"{MODULE}.route_inbound", new_callable=AsyncMock) as mock_route,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
 
         # sem app secret: assinatura não bloqueia (teste local)
         mock_settings.return_value.whatsapp_app_secret = ""
 
         mock_route.return_value = {"success": True, "reply_sent": True}
+        mock_guard_cls.return_value.check_and_mark.return_value = True
 
         r = client.post(
             "/api/v1/webhooks/whatsapp-cloud",
@@ -95,12 +97,35 @@ def test_post_routes_inbound_message():
 
         assert r.status_code == 200
 
+        # roteamento roda em background (executado pelo TestClient)
         mock_route.assert_awaited_once()
         kwargs = mock_route.await_args.kwargs
         assert kwargs["channel"] == "whatsapp"
         assert kwargs["address"] == "5511976483800"
         assert kwargs["text"] == "bom dia"
         assert kwargs["sender_name"] == "Renato"
+
+
+def test_post_ignores_duplicate_message():
+    """Reentrega do mesmo wamid pela Meta não pode reprocessar."""
+
+    with (
+        patch(f"{MODULE}.get_settings") as mock_settings,
+        patch(f"{MODULE}.route_inbound", new_callable=AsyncMock) as mock_route,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
+    ):
+
+        mock_settings.return_value.whatsapp_app_secret = ""
+        mock_guard_cls.return_value.check_and_mark.return_value = False
+
+        r = client.post(
+            "/api/v1/webhooks/whatsapp-cloud",
+            json=_inbound_payload("bom dia"),
+        )
+
+        assert r.status_code == 200
+        assert r.json()["ignored"] is True
+        mock_route.assert_not_awaited()
 
 
 def test_post_rejects_bad_signature():
@@ -129,10 +154,12 @@ def test_post_accepts_valid_signature():
     with (
         patch(f"{MODULE}.get_settings") as mock_settings,
         patch(f"{MODULE}.route_inbound", new_callable=AsyncMock) as mock_route,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
 
         mock_settings.return_value.whatsapp_app_secret = "APPSECRET"
         mock_route.return_value = {"success": True}
+        mock_guard_cls.return_value.check_and_mark.return_value = True
 
         r = client.post(
             "/api/v1/webhooks/whatsapp-cloud",

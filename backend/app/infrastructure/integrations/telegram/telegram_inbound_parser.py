@@ -18,6 +18,16 @@ class TelegramInboundParser:
         return update.get("message")
 
     @staticmethod
+    def update_id(update: dict) -> str | None:
+        """Id sequencial do update — chave de idempotência: o Telegram
+        reentrega o MESMO update_id quando o ack demora, e sem dedup cada
+        reentrega vira um "me embananei" novo pro atleta."""
+
+        raw = update.get("update_id")
+
+        return str(raw) if raw is not None else None
+
+    @staticmethod
     def is_from_bot(message: dict) -> bool:
 
         return bool(

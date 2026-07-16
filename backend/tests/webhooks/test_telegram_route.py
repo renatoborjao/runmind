@@ -21,13 +21,14 @@ def _update(text: str = "oi") -> dict:
     }
 
 
-def _post(update, secret_header=None):
+def _post(update, secret_header=None, is_new=True):
 
     with (
         patch(f"{MODULE}.get_settings") as mock_settings,
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.OnboardingEvent") as mock_onboarding,
         patch(f"{MODULE}.CoachConversationEvent") as mock_coach,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
 
         mock_settings.return_value.telegram_webhook_secret = "s3cr3t"
@@ -37,6 +38,9 @@ def _post(update, secret_header=None):
 
         mock_onboarding.execute = AsyncMock(return_value="oi!")
         mock_coach.execute = AsyncMock(return_value="resposta")
+
+        # is_new=False simula uma reentrega do mesmo update pelo Telegram
+        mock_guard_cls.return_value.check_and_mark.return_value = is_new
 
         headers = {}
         if secret_header is not None:
@@ -58,8 +62,10 @@ def test_unknown_chat_starts_onboarding_on_telegram():
         _update(), secret_header="s3cr3t",
     )
 
-    assert response.json()["onboarding"] is True
+    assert response.json()["queued"] is True
 
+    # o processamento roda em background (o TestClient o executa antes de
+    # devolver a resposta), então o roteamento é observável
     mock_onboarding.execute.assert_awaited_once_with(
         channel="telegram",
         address="42",
@@ -70,12 +76,28 @@ def test_unknown_chat_starts_onboarding_on_telegram():
     mock_coach.execute.assert_not_called()
 
 
+def test_duplicate_update_is_ignored():
+    """Reentrega do mesmo update_id não pode rodar o pipeline de novo —
+    é o que multiplicava o "me embananei" na cara do atleta."""
+
+    response, mock_onboarding, mock_coach, _ = _post(
+        _update(), secret_header="s3cr3t", is_new=False,
+    )
+
+    assert response.json()["ignored"] is True
+    assert response.json()["reason"] == "duplicate update"
+
+    mock_onboarding.execute.assert_not_called()
+    mock_coach.execute.assert_not_called()
+
+
 def test_known_chat_goes_to_coach():
 
     with (
         patch(f"{MODULE}.get_settings") as mock_settings,
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CoachConversationEvent") as mock_coach,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
 
         mock_settings.return_value.telegram_webhook_secret = "s3cr3t"
@@ -85,6 +107,8 @@ def test_known_chat_goes_to_coach():
 
         mock_coach.execute = AsyncMock(return_value="resposta")
 
+        mock_guard_cls.return_value.check_and_mark.return_value = True
+
         client = TestClient(app)
         response = client.post(
             "/api/v1/webhooks/telegram",
@@ -92,7 +116,7 @@ def test_known_chat_goes_to_coach():
             headers={"X-Telegram-Bot-Api-Secret-Token": "s3cr3t"},
         )
 
-        assert response.json()["profile"] == "renato"
+        assert response.json()["queued"] is True
         mock_coach.execute.assert_awaited_once()
 
 

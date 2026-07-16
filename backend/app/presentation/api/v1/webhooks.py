@@ -59,6 +59,9 @@ from app.infrastructure.persistence.activity_archive_repository import (
 from app.infrastructure.persistence.processed_activity_guard import (
     ProcessedActivityGuard,
 )
+from app.infrastructure.persistence.processed_inbound_guard import (
+    ProcessedInboundGuard,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -386,6 +389,7 @@ async def test_pipeline(
 @router.post("/whatsapp")
 async def receive_whatsapp_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
 ):
 
     payload = await request.json()
@@ -447,30 +451,29 @@ async def receive_whatsapp_webhook(
 
     phone = PhoneNormalizer.normalize(raw_phone)
 
-    # Falha aqui dentro NUNCA pode virar 500: a Evolution reenvia o
-    # webhook em erro, reprocessando a mesma mensagem várias vezes
-    # (tempestade de retry + chamadas duplicadas ao Gemini).
-    try:
+    # Idempotência + ack rápido: a Evolution reenvia o webhook em erro (ou
+    # quando o ack demora), reprocessando a mesma mensagem — tempestade de
+    # retry + chamadas duplicadas ao Gemini. Descarta a reentrega e tira o
+    # trabalho pesado do caminho da resposta.
+    message_id = (data.get("key") or {}).get("id")
 
-        return await route_inbound(
-            channel="whatsapp",
-            address=phone,
-            text=text,
-            media=media,
-            sender_name=data.get("pushName", ""),
-        )
+    if (
+        message_id
+        and not ProcessedInboundGuard().check_and_mark(f"wa:{message_id}")
+    ):
 
-    except Exception as e:
+        return {"ignored": True, "reason": "duplicate message"}
 
-        print(f"Falha ao processar mensagem de {phone}: {e}")
+    background_tasks.add_task(
+        _run_inbound,
+        channel="whatsapp",
+        address=phone,
+        text=text,
+        media=media,
+        sender_name=data.get("pushName", ""),
+    )
 
-        return {
-
-            "success": False,
-
-            "error": str(e),
-
-        }
+    return {"queued": True, "message_id": message_id}
 
 
 async def route_inbound(
@@ -547,6 +550,35 @@ async def route_inbound(
     }
 
 
+async def _run_inbound(
+    channel: str,
+    address: str,
+    text: str | None,
+    media: dict | None,
+    sender_name: str,
+) -> None:
+    """Processa a mensagem FORA do caminho do ack. O webhook já respondeu
+    200 (o canal não vai reentregar), então uma falha aqui nunca pode
+    derrubar nada nem virar retry: o próprio fluxo do coach já manda um
+    fallback ao atleta em caso de indisponibilidade. Só logamos."""
+
+    try:
+
+        await route_inbound(
+            channel=channel,
+            address=address,
+            text=text,
+            media=media,
+            sender_name=sender_name,
+        )
+
+    except Exception as e:
+
+        print(
+            f"Falha ao processar mensagem de {channel} {address}: {e}"
+        )
+
+
 async def _handle_profile_media(
     profile: str,
     media: dict,
@@ -583,6 +615,7 @@ async def _handle_profile_media(
 @router.post("/telegram")
 async def receive_telegram_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_telegram_bot_api_secret_token: str = Header(default=""),
 ):
 
@@ -626,21 +659,34 @@ async def receive_telegram_webhook(
 
         return {"ignored": True, "reason": "no supported content found"}
 
-    try:
+    # Idempotência: o Telegram reentrega o MESMO update quando o ack
+    # demora. check_and_mark é síncrono e barato — descarta a reentrega
+    # antes de agendar qualquer trabalho, pra a mesma mensagem nunca
+    # gerar duas respostas (a enxurrada de "me embananei").
+    update_id = TelegramInboundParser.update_id(update)
 
-        return await route_inbound(
-            channel="telegram",
-            address=chat_id,
-            text=text,
-            media=media,
-            sender_name=TelegramInboundParser.sender_name(message),
-        )
+    if (
+        update_id is not None
+        and not ProcessedInboundGuard().check_and_mark(f"tg:{update_id}")
+    ):
 
-    except Exception as e:
+        return {"ignored": True, "reason": "duplicate update"}
 
-        print(f"Falha ao processar mensagem Telegram de {chat_id}: {e}")
+    # ACK RÁPIDO: responde 200 já e processa em background. Buscar
+    # contexto + IA (com retry/backoff) + envio passa do prazo do
+    # Telegram, que senão considera falha e REENTREGA o update — era o
+    # que multiplicava a resposta. Tirar isso do caminho do ack corta a
+    # reentrega na raiz; a idempotência acima cobre o resto.
+    background_tasks.add_task(
+        _run_inbound,
+        channel="telegram",
+        address=chat_id,
+        text=text,
+        media=media,
+        sender_name=TelegramInboundParser.sender_name(message),
+    )
 
-        return {"success": False, "error": str(e)}
+    return {"queued": True, "update_id": update_id}
 
 
 # ==========================================================
@@ -702,6 +748,7 @@ def _valid_cloud_signature(
 @router.post("/whatsapp-cloud")
 async def receive_whatsapp_cloud_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_hub_signature_256: str = Header(default=""),
 ):
 
@@ -747,21 +794,26 @@ async def receive_whatsapp_cloud_webhook(
 
     phone = PhoneNormalizer.normalize(raw_phone)
 
-    # Falha aqui NUNCA pode virar 5xx: a Meta reentrega o webhook em erro,
-    # reprocessando a mesma mensagem (retry + chamadas duplicadas ao
-    # Gemini). Sempre 200 com o erro no corpo.
-    try:
+    # Idempotência + ack rápido: a Meta reentrega o webhook em erro (ou
+    # quando o ack demora), reprocessando a mesma mensagem — retry +
+    # chamadas duplicadas ao Gemini. Descarta a reentrega pelo wamid e
+    # tira o trabalho pesado do caminho da resposta (sempre 200 rápido).
+    message_id = message.get("id")
 
-        return await route_inbound(
-            channel="whatsapp",
-            address=phone,
-            text=text,
-            media=media,
-            sender_name=WhatsAppCloudInboundParser.sender_name(value),
-        )
+    if (
+        message_id
+        and not ProcessedInboundGuard().check_and_mark(f"wac:{message_id}")
+    ):
 
-    except Exception as e:
+        return {"ignored": True, "reason": "duplicate message"}
 
-        print(f"Falha ao processar mensagem Cloud de {phone}: {e}")
+    background_tasks.add_task(
+        _run_inbound,
+        channel="whatsapp",
+        address=phone,
+        text=text,
+        media=media,
+        sender_name=WhatsAppCloudInboundParser.sender_name(value),
+    )
 
-        return {"success": False, "error": str(e)}
+    return {"queued": True, "message_id": message_id}

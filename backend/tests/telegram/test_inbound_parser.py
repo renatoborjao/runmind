@@ -97,3 +97,9 @@ def test_plain_text_has_no_media():
 def test_non_message_update_returns_none():
 
     assert TelegramInboundParser.message({"edited_message": {}}) is None
+
+
+def test_update_id_is_extracted_as_string():
+
+    assert TelegramInboundParser.update_id({"update_id": 987}) == "987"
+    assert TelegramInboundParser.update_id({}) is None

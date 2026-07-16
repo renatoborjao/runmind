@@ -67,6 +67,7 @@ def test_media_from_external_coach_athlete_triggers_plan_event():
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.ExternalPlanEvent") as mock_event,
         patch(f"{MODULE}.CoachConversationEvent") as mock_coach,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
 
         mock_repo = mock_repo_cls.return_value
@@ -75,6 +76,8 @@ def test_media_from_external_coach_athlete_triggers_plan_event():
 
         mock_event.execute = AsyncMock(return_value="registrado")
 
+        mock_guard_cls.return_value.check_and_mark.return_value = True
+
         client = TestClient(app)
 
         response = client.post(
@@ -82,7 +85,7 @@ def test_media_from_external_coach_athlete_triggers_plan_event():
             json=_media_payload(),
         )
 
-        assert response.json()["success"] is True
+        assert response.json()["queued"] is True
 
         mock_event.execute.assert_awaited_once_with(
             profile="fulano",
@@ -102,6 +105,7 @@ def test_media_from_regular_athlete_gets_polite_reply():
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.ExternalPlanEvent") as mock_event,
         patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
 
         mock_repo = mock_repo_cls.return_value
@@ -110,6 +114,8 @@ def test_media_from_regular_athlete_gets_polite_reply():
 
         mock_notification.send = AsyncMock()
 
+        mock_guard_cls.return_value.check_and_mark.return_value = True
+
         client = TestClient(app)
 
         response = client.post(
@@ -117,7 +123,7 @@ def test_media_from_regular_athlete_gets_polite_reply():
             json=_media_payload(),
         )
 
-        assert response.json()["success"] is True
+        assert response.json()["queued"] is True
 
         mock_event.execute.assert_not_called()
 
