@@ -115,53 +115,71 @@ def test_labeled_interval_with_hr_response_is_kept():
     assert interval.rep_count == 2
 
 
-def _mauricio_16_07_splits() -> dict:
-    """Treino real do Mauricio (16/07): aquecimento + 4×2' + 4×1' + CAM10'.
-    A CAM10' final (1328 m a ~7:37) veio rotulada INTERVAL_ACTIVE pelo
-    Garmin (treinador externo, voltas auto/manuais) -> virava o "Tiro 9"
-    fantasma. Esforços e caminhadas alternados."""
-
-    def effort(dist, speed, max_hr):
-        return {
-            "type": "INTERVAL_ACTIVE", "distance": dist,
-            "averageSpeed": speed, "averageHR": max_hr - 5, "maxHR": max_hr,
-        }
-
-    def walk():
-        return {
-            "type": "INTERVAL_RECOVERY", "distance": 250,
-            "averageSpeed": 1.9, "averageHR": 160,
-        }
-
-    reps = [
-        effort(378, 3.155, 148),  # 5:17
-        effort(402, 3.344, 162),  # 4:59
-        effort(407, 3.390, 165),  # 4:55
-        effort(393, 3.279, 161),  # 5:05
-        effort(213, 3.546, 172),  # 4:42
-        effort(213, 3.546, 170),  # 4:42
-        effort(201, 3.356, 160),  # 4:58
-        effort(204, 3.401, 165),  # 4:54
+# typed_splits REAIS do treino do Mauricio (activity 23618474965, 16/07:
+# aquecimento + 4×2' + 4×1' + CAM10'), conferidos via garmin_dump.py. Tem
+# DUAS segmentações sobrepostas (as voltas INTERVAL_* do treino + as RWD_*
+# de run-walk-detection do Garmin, cada uma somando os 5.38 km) — as RWD_*
+# têm que ser ignoradas. A CAM10' final (lap 21) veio rotulada
+# INTERVAL_ACTIVE (7:37, ritmo de caminhada) -> era o "Tiro 9" fantasma.
+_MAURICIO_16_07_TYPED = {
+    "splits": [
+        {"type": "RWD_WALK", "distance": 12.61, "averageSpeed": 1.576,
+         "averageHR": 87, "maxHR": 87},
+        {"type": "INTERVAL_ACTIVE", "distance": 378.32, "averageSpeed": 3.153,
+         "averageHR": 129, "maxHR": 148},
+        {"type": "RWD_RUN", "distance": 3298.47, "averageSpeed": 2.844,
+         "averageHR": 155, "maxHR": 173},
+        {"type": "INTERVAL_REST", "distance": 284.76, "averageSpeed": 2.373,
+         "averageHR": 145, "maxHR": 148},
+        {"type": "INTERVAL_ACTIVE", "distance": 401.87, "averageSpeed": 3.349,
+         "averageHR": 155, "maxHR": 162},
+        {"type": "INTERVAL_REST", "distance": 274.69, "averageSpeed": 2.289,
+         "averageHR": 156, "maxHR": 163},
+        {"type": "INTERVAL_ACTIVE", "distance": 407.1, "averageSpeed": 3.392,
+         "averageHR": 154, "maxHR": 165},
+        {"type": "INTERVAL_REST", "distance": 281.22, "averageSpeed": 2.343,
+         "averageHR": 160, "maxHR": 165},
+        {"type": "INTERVAL_ACTIVE", "distance": 393.26, "averageSpeed": 3.277,
+         "averageHR": 157, "maxHR": 161},
+        {"type": "INTERVAL_REST", "distance": 280.09, "averageSpeed": 2.334,
+         "averageHR": 161, "maxHR": 164},
+        {"type": "INTERVAL_ACTIVE", "distance": 212.68, "averageSpeed": 3.545,
+         "averageHR": 163, "maxHR": 172},
+        {"type": "INTERVAL_REST", "distance": 133.22, "averageSpeed": 2.220,
+         "averageHR": 167, "maxHR": 173},
+        {"type": "INTERVAL_ACTIVE", "distance": 212.69, "averageSpeed": 3.545,
+         "averageHR": 166, "maxHR": 170},
+        {"type": "INTERVAL_REST", "distance": 102.6, "averageSpeed": 1.710,
+         "averageHR": 165, "maxHR": 170},
+        {"type": "RWD_WALK", "distance": 68.91, "averageSpeed": 1.813,
+         "averageHR": 160, "maxHR": 168},
+        {"type": "INTERVAL_ACTIVE", "distance": 201.19, "averageSpeed": 3.353,
+         "averageHR": 153, "maxHR": 160},
+        {"type": "RWD_RUN", "distance": 1647.58, "averageSpeed": 2.802,
+         "averageHR": 164, "maxHR": 173},
+        {"type": "INTERVAL_REST", "distance": 132.22, "averageSpeed": 2.204,
+         "averageHR": 161, "maxHR": 162},
+        {"type": "INTERVAL_ACTIVE", "distance": 204.32, "averageSpeed": 3.405,
+         "averageHR": 162, "maxHR": 165},
+        {"type": "INTERVAL_REST", "distance": 155.87, "averageSpeed": 2.598,
+         "averageHR": 166, "maxHR": 168},
+        # a CAM10' de desaquecimento MAL ROTULADA como esforço
+        {"type": "INTERVAL_ACTIVE", "distance": 1328.43, "averageSpeed": 2.190,
+         "averageHR": 154, "maxHR": 173},
+        {"type": "RWD_WALK", "distance": 356.91, "averageSpeed": 1.412,
+         "averageHR": 137, "maxHR": 167},
     ]
-
-    splits = []
-    for rep in reps:
-        splits.append(rep)
-        splits.append(walk())
-
-    # a CAM10' final mal rotulada: ~1328 m a 7:37 (2.188 m/s)
-    splits.append(effort(1328, 2.188, 173))
-
-    return {"splits": splits}
+}
 
 
 def test_external_coach_drops_walk_paced_phantom_shot():
     """Treinador externo: a CAM10' (7:37, ritmo de caminhada) NÃO conta como
-    tiro — some o "Tiro 9" fantasma e o pace médio para de ser poluído."""
+    tiro — some o "Tiro 9" fantasma e o pace médio para de ser poluído.
+    Números batem com o dump real (rep_count 8, pace ~4:56)."""
 
-    typed = _mauricio_16_07_splits()
-
-    interval = GarminActivitySource._exact_interval(typed, external_coach=True)
+    interval = GarminActivitySource._exact_interval(
+        _MAURICIO_16_07_TYPED, external_coach=True
+    )
 
     assert interval is not None
     assert interval.rep_count == 8  # os 4×2' + 4×1', sem a caminhada
@@ -170,6 +188,9 @@ def test_external_coach_drops_walk_paced_phantom_shot():
     assert all(rep["distance_m"] <= 700 for rep in interval.reps)
     assert max(rep["pace"] for rep in interval.reps) < 6.0  # nada de 7:37
 
+    # pace médio limpo (~4:56), não os 5:14 poluídos pela caminhada
+    assert 4.9 <= interval.avg_rep_pace <= 5.0
+
 
 def test_non_external_path_is_untouched():
     """Sem treinador externo (treino que NÓS empurramos): comportamento
@@ -177,9 +198,9 @@ def test_non_external_path_is_untouched():
     ainda entraria; na prática o nosso push manda COOLDOWN, que já é
     excluído — por isso o filtro é exclusivo do externo."""
 
-    typed = _mauricio_16_07_splits()
-
-    interval = GarminActivitySource._exact_interval(typed, external_coach=False)
+    interval = GarminActivitySource._exact_interval(
+        _MAURICIO_16_07_TYPED, external_coach=False
+    )
 
     assert interval is not None
     assert interval.rep_count == 9  # sem filtro, a caminhada entra
