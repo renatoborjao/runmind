@@ -7,6 +7,7 @@ IntervalAnalysis EXATA, sem o detector fuzzy que erra.
 NOTA: os nomes de campo do Garmin são lidos de forma defensiva (vários
 fallbacks). Confirmar com uma atividade real via garmin_dump.py."""
 
+import statistics
 from datetime import datetime, timezone
 
 from app.domain.entities.activity import Activity
@@ -36,6 +37,32 @@ def _is_effort_type(sp_type: str) -> bool:
 # CONTRASTE esforço x recuperação -- resposta de FC ou esforço bem mais rápido.
 _MIN_HR_SWING = 12          # bpm de queda da FC na recuperação
 _MIN_SPEED_RATIO = 1.15     # esforço >=15% mais rápido que a recuperação
+
+# Quão mais lento que a MEDIANA dos tiros um "esforço" pode ser antes de ser
+# tratado como CAMINHADA (aquecimento/desaquecimento/pausa que o Garmin
+# rotulou como ACTIVE). Só se aplica ao TREINADOR EXTERNO: aí as voltas são
+# auto/manuais (não empurramos o treino), então o rótulo não é confiável. Nos
+# NOSSOS treinos empurrados o desaquecimento vem como COOLDOWN e já é excluído
+# — não mexemos nesse caminho.
+_WALK_PACE_RATIO = 1.4
+
+
+def _drop_walk_paced_efforts(efforts: list[dict]) -> list[dict]:
+    """Tira os 'tiros' em ritmo de caminhada — bem mais lentos que a mediana
+    dos esforços (era o "Tiro 9" fantasma do Mauricio: a CAM10' final que o
+    Garmin rotulou INTERVAL_ACTIVE). Preserva se filtraria demais (< 2)."""
+
+    paces = [e["pace"] for e in efforts if e["pace"]]
+
+    if len(paces) < 2:
+
+        return efforts
+
+    limit = statistics.median(paces) * _WALK_PACE_RATIO
+
+    kept = [e for e in efforts if not e["pace"] or e["pace"] <= limit]
+
+    return kept if len(kept) >= 2 else efforts
 
 
 def _real_interval(
@@ -89,9 +116,17 @@ def _speed_to_pace(speed_ms: float | None) -> float | None:
 class GarminActivitySource:
 
     @staticmethod
-    def fetch(profile: str, activity_id: int) -> Activity:
+    def fetch(
+        profile: str,
+        activity_id: int,
+        external_coach: bool = False,
+    ) -> Activity:
         """Monta o Activity a partir dos dados do Garmin. Pipeline de
-        análise roda igual — só a FONTE muda."""
+        análise roda igual — só a FONTE muda.
+
+        external_coach: as voltas do Garmin vêm de auto/manual (não
+        empurramos o treino), então rótulos não confiáveis — aciona o
+        filtro de tiros em ritmo de caminhada no `_exact_interval`."""
 
         garmin = GarminClient.connect(profile)
 
@@ -157,7 +192,9 @@ class GarminActivitySource:
 
             typed = garmin.get_activity_typed_splits(activity_id)
 
-            interval = GarminActivitySource._exact_interval(typed)
+            interval = GarminActivitySource._exact_interval(
+                typed, external_coach=external_coach
+            )
 
             if interval is not None:
 
@@ -473,10 +510,17 @@ class GarminActivitySource:
         return result
 
     @staticmethod
-    def _exact_interval(typed: dict) -> IntervalAnalysis | None:
+    def _exact_interval(
+        typed: dict,
+        external_coach: bool = False,
+    ) -> IntervalAnalysis | None:
         """O PULO DO GATO: monta a IntervalAnalysis a partir das voltas já
         ROTULADAS pelo Garmin (esforço vs recuperação) — reps exatos,
-        alinhados ao treino proposto, sem inferência."""
+        alinhados ao treino proposto, sem inferência.
+
+        external_coach: aciona o filtro de tiros em ritmo de caminhada
+        (voltas do treinador externo não são confiáveis — ver
+        [[_drop_walk_paced_efforts]])."""
 
         splits = (
             typed.get("splits")
@@ -485,8 +529,6 @@ class GarminActivitySource:
         )
 
         efforts = []
-
-        effort_speeds = []
 
         recovery_hrs = []
 
@@ -513,12 +555,10 @@ class GarminActivitySource:
                         ),
                         "pace": _speed_to_pace(avg_speed),
                         "peak_hr": int(max_hr) if max_hr else None,
+                        # guardado só pro contraste/filtro; sai dos reps finais
+                        "_speed": avg_speed or None,
                     }
                 )
-
-                if avg_speed:
-
-                    effort_speeds.append(avg_speed)
 
             elif _is_recovery_type(sp_type):
 
@@ -530,9 +570,23 @@ class GarminActivitySource:
 
                     recovery_speeds.append(avg_speed)
 
+        # treinador externo: descarta os "tiros" que na verdade são caminhada
+        # (aquecimento/desaquecimento/pausa que o Garmin rotulou como ACTIVE)
+        if external_coach:
+
+            efforts = _drop_walk_paced_efforts(efforts)
+
         if len(efforts) < 2:
 
             return None
+
+        effort_speeds = [e["_speed"] for e in efforts if e["_speed"]]
+
+        # reps finais sem o campo interno de velocidade
+        efforts = [
+            {k: v for k, v in e.items() if k != "_speed"}
+            for e in efforts
+        ]
 
         paces = [e["pace"] for e in efforts if e["pace"]]
 

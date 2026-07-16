@@ -115,6 +115,76 @@ def test_labeled_interval_with_hr_response_is_kept():
     assert interval.rep_count == 2
 
 
+def _mauricio_16_07_splits() -> dict:
+    """Treino real do Mauricio (16/07): aquecimento + 4×2' + 4×1' + CAM10'.
+    A CAM10' final (1328 m a ~7:37) veio rotulada INTERVAL_ACTIVE pelo
+    Garmin (treinador externo, voltas auto/manuais) -> virava o "Tiro 9"
+    fantasma. Esforços e caminhadas alternados."""
+
+    def effort(dist, speed, max_hr):
+        return {
+            "type": "INTERVAL_ACTIVE", "distance": dist,
+            "averageSpeed": speed, "averageHR": max_hr - 5, "maxHR": max_hr,
+        }
+
+    def walk():
+        return {
+            "type": "INTERVAL_RECOVERY", "distance": 250,
+            "averageSpeed": 1.9, "averageHR": 160,
+        }
+
+    reps = [
+        effort(378, 3.155, 148),  # 5:17
+        effort(402, 3.344, 162),  # 4:59
+        effort(407, 3.390, 165),  # 4:55
+        effort(393, 3.279, 161),  # 5:05
+        effort(213, 3.546, 172),  # 4:42
+        effort(213, 3.546, 170),  # 4:42
+        effort(201, 3.356, 160),  # 4:58
+        effort(204, 3.401, 165),  # 4:54
+    ]
+
+    splits = []
+    for rep in reps:
+        splits.append(rep)
+        splits.append(walk())
+
+    # a CAM10' final mal rotulada: ~1328 m a 7:37 (2.188 m/s)
+    splits.append(effort(1328, 2.188, 173))
+
+    return {"splits": splits}
+
+
+def test_external_coach_drops_walk_paced_phantom_shot():
+    """Treinador externo: a CAM10' (7:37, ritmo de caminhada) NÃO conta como
+    tiro — some o "Tiro 9" fantasma e o pace médio para de ser poluído."""
+
+    typed = _mauricio_16_07_splits()
+
+    interval = GarminActivitySource._exact_interval(typed, external_coach=True)
+
+    assert interval is not None
+    assert interval.rep_count == 8  # os 4×2' + 4×1', sem a caminhada
+
+    # nenhum "tiro" com distância/pace de caminhada sobrou
+    assert all(rep["distance_m"] <= 700 for rep in interval.reps)
+    assert max(rep["pace"] for rep in interval.reps) < 6.0  # nada de 7:37
+
+
+def test_non_external_path_is_untouched():
+    """Sem treinador externo (treino que NÓS empurramos): comportamento
+    intacto — o filtro não roda. Aqui a mesma volta caminhada mal rotulada
+    ainda entraria; na prática o nosso push manda COOLDOWN, que já é
+    excluído — por isso o filtro é exclusivo do externo."""
+
+    typed = _mauricio_16_07_splits()
+
+    interval = GarminActivitySource._exact_interval(typed, external_coach=False)
+
+    assert interval is not None
+    assert interval.rep_count == 9  # sem filtro, a caminhada entra
+
+
 def test_longao_typed_splits_do_not_become_interval():
     """Longão real (typed_splits do renato2 hoje): 1 bloco INTERVAL_ACTIVE +
     voltas RWD_* de run-walk-detection -> NÃO é intervalado."""

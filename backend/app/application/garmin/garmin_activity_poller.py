@@ -126,7 +126,15 @@ class GarminActivityPoller:
 
         try:
 
-            activity = GarminActivitySource.fetch(profile, activity_id)
+            # treinador externo: as voltas do Garmin não vêm do nosso push,
+            # então o _exact_interval aplica o filtro de tiros-caminhada
+            runner = RunnerProfileRepository().load(profile)
+
+            activity = GarminActivitySource.fetch(
+                profile,
+                activity_id,
+                external_coach=bool(getattr(runner, "external_coach", False)),
+            )
 
             if not is_foot_sport(activity.sport):
 
