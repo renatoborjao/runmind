@@ -21,6 +21,12 @@ from app.infrastructure.integrations.evolution.connection_watchdog import (
 
 _scheduler: AsyncIOScheduler | None = None
 
+# tolerância dos jobs de INTERVALO (poll/catch-up/watchdog): o event loop fica
+# ocupado por 1-2s processando webhook/análise/Telegram, e a graça padrão do
+# APScheduler é 1s -> o tick era PULADO e logava "missed by 0:00:02". 5 min de
+# folga faz o job rodar mesmo com o loop ocupado, sem ruído no log.
+_INTERVAL_GRACE = 300
+
 
 async def _watchdog_tick() -> None:
 
@@ -121,6 +127,7 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
             _watchdog_tick,
             trigger="interval",
             minutes=5,
+            misfire_grace_time=_INTERVAL_GRACE,
             id="whatsapp_connection_watchdog",
         )
 
@@ -130,6 +137,7 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         _garmin_poll_tick,
         trigger="interval",
         minutes=10,
+        misfire_grace_time=_INTERVAL_GRACE,
         id="garmin_activity_poll",
     )
 
@@ -141,6 +149,7 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         _strava_catchup_tick,
         trigger="interval",
         minutes=15,
+        misfire_grace_time=_INTERVAL_GRACE,
         id="strava_activity_catchup",
         next_run_time=datetime.now(DEFAULT_TIMEZONE),
     )
