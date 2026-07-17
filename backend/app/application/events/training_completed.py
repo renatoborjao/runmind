@@ -58,15 +58,15 @@ class TrainingCompletedEvent:
 
         # Celebração de PR/marcos: reconhece recorde batido (corrida mais
         # longa, treino mais rápido na faixa, km acumulado, semana de maior
-        # volume). Vale pra TODOS os atletas, inclusive treinador externo —
+        # volume). Fonte = Strava (obrigatório no onboarding), nunca Garmin —
+        # mantém o "livro de recordes" único mesmo pra quem é analisado via
+        # Garmin. Vale pra TODOS os atletas, inclusive treinador externo —
         # não mexe no plano, só comemora. Falha aqui jamais derruba o
         # feedback já enviado.
         try:
 
-            celebration = PersonalRecordDetector.after_feedback(
+            celebration = await PersonalRecordDetector.after_feedback(
                 runner,
-                result["history"],
-                result["activity"],
             )
 
             if celebration:

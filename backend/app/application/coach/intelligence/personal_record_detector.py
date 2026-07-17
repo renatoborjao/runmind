@@ -4,7 +4,14 @@ faixa de distância, marco de km acumulado, semana de maior volume) e devolve
 UMA mensagem comemorativa (ou None). NUNCA muda o plano — é puro
 reconhecimento, igual pra atleta RunMind ou de treinador externo.
 
-Cold start: no primeiro treino processado de um atleta (ou logo após esta
+Fonte dos dados = SEMPRE Strava, nunca Garmin — mesmo pra quem tem Garmin
+conectado (a análise detalhada do treino em si — splits, tiros — continua via
+Garmin, isso não muda). Hoje Strava é obrigatório no onboarding pra todo
+atleta, então é o único "livro de recordes" único e consistente entre todos;
+quem por algum motivo não tem Strava conectado simplesmente não recebe
+celebração (silêncio, não erro).
+
+Cold start: na primeira vez que rodamos pra um atleta (ou logo após esta
 feature subir), TUDO seria "recorde" — por isso a primeira chamada apenas
 semeia as melhores marcas conhecidas e não comemora nada. Só a partir da
 segunda chamada os recordes passam a valer."""
@@ -15,14 +22,22 @@ from app.application.history.runner_metrics import (
 )
 from app.application.history.weekly_buckets import group_by_week
 from app.application.planner.pace_formatter import PaceFormatter
-from app.domain.entities.enriched_activity import EnrichedActivity
+from app.domain.entities.activity import Activity
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
+from app.domain.value_objects.sports import is_foot_sport
+from app.infrastructure.integrations.strava.client import StravaClient
 from app.infrastructure.persistence.personal_record_repository import (
     PersonalRecordRepository,
 )
+from app.infrastructure.storage.token_store import TokenStore
 
 _LONGEST_MIN_KM = 3.0
+
+# esportes que contam como CORRIDA de verdade pra corrida-mais-longa e
+# pace-PR — caminhada/trilha caminhada (Walk/Hike) entram no volume total,
+# mas não competem por recorde de corrida.
+_RUN_SPORTS = {"Run", "TrailRun", "VirtualRun"}
 
 _BANDS = [
     (3.0, 5.0, "3-5"),
@@ -38,15 +53,36 @@ _PACE_MARGIN_MIN_KM = 0.05
 
 _KM_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 5000]
 
+# quantas atividades recentes buscar no Strava (o máximo por página da API);
+# cobre "vida" na prática pro público atual do produto sem paginar.
+_STRAVA_HISTORY_LIMIT = 200
+
 
 class PersonalRecordDetector:
 
     @staticmethod
-    def after_feedback(
+    async def after_feedback(
         runner: RunnerProfile,
-        history: TrainingHistory,
-        enriched: EnrichedActivity,
     ) -> str | None:
+
+        if TokenStore(runner.id).load() is None:
+
+            return None
+
+        activities = await StravaClient(runner.id).get_last_activities(
+            limit=_STRAVA_HISTORY_LIMIT,
+        )
+
+        activities = [a for a in activities if is_foot_sport(a.sport)]
+
+        if not activities:
+
+            return None
+
+        # a API do Strava devolve mais recente primeiro
+        current = activities[0]
+
+        history = TrainingHistory(activities=activities)
 
         repo = PersonalRecordRepository()
 
@@ -63,15 +99,13 @@ class PersonalRecordDetector:
 
         wins: list[str] = []
 
-        activity = enriched.activity
-
-        dist_km = activity.distance / 1000
+        dist_km = current.distance / 1000
 
         # -- corrida mais longa ------------------------------------------
         longest_km = records.get("longest_km", 0.0)
 
         if (
-            activity.sport == "Run"
+            current.sport in _RUN_SPORTS
             and dist_km >= _LONGEST_MIN_KM
             and dist_km > longest_km
         ):
@@ -83,12 +117,13 @@ class PersonalRecordDetector:
             records["longest_km"] = round(dist_km, 2)
 
         # -- treino mais rápido na faixa -----------------------------------
-        pace = PersonalRecordDetector._pace(activity)
+        pace = PersonalRecordDetector._pace(current)
 
         band = PersonalRecordDetector._band(dist_km)
 
         if (
-            band is not None
+            current.sport in _RUN_SPORTS
+            and band is not None
             and pace is not None
             and dist_km >= RUN_MIN_DISTANCE_KM
             and pace <= WALK_PACE_CUTOFF
@@ -150,7 +185,7 @@ class PersonalRecordDetector:
 
         runs = [
             a for a in history.activities
-            if a.sport == "Run" and a.distance / 1000 >= _LONGEST_MIN_KM
+            if a.sport in _RUN_SPORTS and a.distance / 1000 >= _LONGEST_MIN_KM
         ]
 
         if runs:
@@ -171,7 +206,8 @@ class PersonalRecordDetector:
             band = PersonalRecordDetector._band(dist_km)
 
             if (
-                band is None
+                activity.sport not in _RUN_SPORTS
+                or band is None
                 or pace is None
                 or dist_km < RUN_MIN_DISTANCE_KM
                 or pace > WALK_PACE_CUTOFF
@@ -255,7 +291,7 @@ class PersonalRecordDetector:
         return f"📈 sua semana de maior volume: {current_km:.1f} km!"
 
     @staticmethod
-    def _pace(activity) -> float | None:
+    def _pace(activity: Activity) -> float | None:
 
         if activity.average_speed <= 0:
 

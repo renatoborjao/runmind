@@ -1,19 +1,18 @@
+import asyncio
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.application.coach.intelligence.personal_record_detector import (
     PersonalRecordDetector,
 )
-from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.persistence import (
     personal_record_repository as repo_module,
 )
-from tests.coach.factories import (
-    make_activity,
-    make_enriched_activity,
-    make_runner,
-)
+from tests.coach.factories import make_activity, make_runner
+
+MODULE = "app.application.coach.intelligence.personal_record_detector"
 
 
 @pytest.fixture(autouse=True)
@@ -22,23 +21,44 @@ def _tmp_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(repo_module, "_STORAGE", tmp_path / "records")
 
 
-def _run(day, month, distance_m, speed, id_):
+def _run(day, month, distance_m, speed, id_, sport="Run"):
 
     return make_activity(
         id=id_,
+        sport=sport,
         distance=distance_m,
         average_speed=speed,
         start_date=datetime(2026, month, day, 7, 0, 0),
     )
 
 
-def _feed(runner, activities, current):
+def _feed(runner, activities, has_token=True):
+    """Roda o detector com o Strava dublado: `activities` já vem
+    newest-first, como a API do Strava devolve de verdade."""
 
-    history = TrainingHistory(activities=activities)
+    with (
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.StravaClient") as mock_client_cls,
+    ):
 
-    enriched = make_enriched_activity(activity=current)
+        mock_token_store.return_value.load.return_value = (
+            {"access_token": "x"} if has_token else None
+        )
 
-    return PersonalRecordDetector.after_feedback(runner, history, enriched)
+        mock_client_cls.return_value.get_last_activities = AsyncMock(
+            return_value=activities,
+        )
+
+        return asyncio.run(
+            PersonalRecordDetector.after_feedback(runner),
+        )
+
+
+def test_athlete_without_strava_gets_no_celebration():
+
+    runner = make_runner()
+
+    assert _feed(runner, [], has_token=False) is None
 
 
 def test_cold_start_seeds_and_stays_silent():
@@ -47,7 +67,7 @@ def test_cold_start_seeds_and_stays_silent():
 
     current = _run(1, 7, 10_000, 3.33, 1)
 
-    assert _feed(runner, [current], current) is None
+    assert _feed(runner, [current]) is None
 
 
 def test_longest_run_triggers_after_seed():
@@ -56,14 +76,45 @@ def test_longest_run_triggers_after_seed():
 
     first = _run(1, 7, 10_000, 3.33, 1)
 
-    _feed(runner, [first], first)  # semeia (10km)
+    _feed(runner, [first])  # semeia (10km)
 
     second = _run(2, 7, 15_000, 3.33, 2)
 
-    message = _feed(runner, [first, second], second)
+    message = _feed(runner, [second, first])  # newest-first
 
     assert message is not None
     assert "15.0 km" in message
+
+
+def test_trail_run_counts_toward_longest():
+    """Corrida em trilha (TrailRun) também compete por recorde de corrida
+    — só caminhada/hike (Walk/Hike) ficam de fora."""
+
+    runner = make_runner()
+
+    first = _run(1, 7, 10_000, 3.33, 1, sport="Run")
+
+    _feed(runner, [first])
+
+    trail = _run(2, 7, 15_000, 3.33, 2, sport="TrailRun")
+
+    message = _feed(runner, [trail, first])
+
+    assert message is not None
+    assert "15.0 km" in message
+
+
+def test_hike_does_not_count_as_longest_run():
+
+    runner = make_runner()
+
+    first = _run(1, 7, 10_000, 3.33, 1, sport="Run")
+
+    _feed(runner, [first])
+
+    hike = _run(2, 7, 20_000, 3.33, 2, sport="Hike")
+
+    assert _feed(runner, [hike, first]) is None
 
 
 def test_shorter_run_after_seed_does_not_trigger():
@@ -72,11 +123,11 @@ def test_shorter_run_after_seed_does_not_trigger():
 
     first = _run(1, 7, 10_000, 3.33, 1)
 
-    _feed(runner, [first], first)
+    _feed(runner, [first])
 
     second = _run(2, 7, 8_000, 3.33, 2)
 
-    assert _feed(runner, [first, second], second) is None
+    assert _feed(runner, [second, first]) is None
 
 
 def test_pace_band_triggers_with_margin_and_ignores_micro_improvement():
@@ -86,12 +137,12 @@ def test_pace_band_triggers_with_margin_and_ignores_micro_improvement():
     # 6km @ pace 5:00/km (speed = 1000/(5*60) = 3.333...)
     first = _run(1, 7, 6_000, 1000 / (5 * 60), 1)
 
-    _feed(runner, [first], first)  # semeia banda 5-8 com pace 5:00
+    _feed(runner, [first])  # semeia banda 5-8 com pace 5:00
 
     # melhora de 10s/km (bem acima da margem de 3s) -> dispara
     faster = _run(2, 7, 6_000, 1000 / (4.83 * 60), 2)
 
-    message = _feed(runner, [first, faster], faster)
+    message = _feed(runner, [faster, first])
 
     assert message is not None
     assert "mais rápido na faixa de 5-8" in message
@@ -100,7 +151,7 @@ def test_pace_band_triggers_with_margin_and_ignores_micro_improvement():
     tiny_improvement = _run(3, 7, 6_000, 1000 / (4.81 * 60), 3)
 
     assert _feed(
-        runner, [first, faster, tiny_improvement], tiny_improvement,
+        runner, [tiny_improvement, faster, first],
     ) is None
 
 
@@ -113,11 +164,11 @@ def test_km_milestone_crossed_triggers_once():
         _run(d, 6, 9_000, 3.0, d) for d in range(1, 11)
     ]
 
-    _feed(runner, base, base[-1])  # semeia com 90km (nenhum marco cruzado)
+    _feed(runner, list(reversed(base)))  # semeia com 90km (nenhum marco)
 
     today = _run(1, 7, 15_000, 3.0, 100)  # empurra pra 105km -> cruza 100
 
-    message = _feed(runner, base + [today], today)
+    message = _feed(runner, [today] + list(reversed(base)))
 
     assert message is not None
     assert "100 km" in message
@@ -125,7 +176,9 @@ def test_km_milestone_crossed_triggers_once():
     # próximo treino comum não recruza o mesmo marco
     tomorrow = _run(2, 7, 5_000, 3.0, 101)
 
-    again = _feed(runner, base + [today, tomorrow], tomorrow)
+    again = _feed(
+        runner, [tomorrow, today] + list(reversed(base)),
+    )
 
     assert again is None or "100 km" not in again
 
@@ -135,17 +188,15 @@ def test_weekly_record_fires_once_per_week():
     runner = make_runner()
 
     # semana anterior: 20km (semente)
-    seed_week = [_run(1, 6, 10_000, 3.0, 1), _run(2, 6, 10_000, 3.0, 2)]
+    seed_week = [_run(2, 6, 10_000, 3.0, 2), _run(1, 6, 10_000, 3.0, 1)]
 
-    _feed(runner, seed_week, seed_week[-1])
+    _feed(runner, seed_week)
 
     # nova semana (ISO diferente), primeiro treino já supera os 20km da
     # semana semeada
     week2_run1 = _run(6, 7, 25_000, 3.0, 3)  # segunda-feira
 
-    first_message = _feed(
-        runner, seed_week + [week2_run1], week2_run1,
-    )
+    first_message = _feed(runner, [week2_run1] + seed_week)
 
     assert first_message is not None
     assert "maior volume" in first_message
@@ -155,9 +206,7 @@ def test_weekly_record_fires_once_per_week():
     week2_run2 = _run(8, 7, 10_000, 3.0, 4)  # quarta-feira
 
     second_message = _feed(
-        runner,
-        seed_week + [week2_run1, week2_run2],
-        week2_run2,
+        runner, [week2_run2, week2_run1] + seed_week,
     )
 
     assert second_message is None
@@ -169,19 +218,20 @@ def test_reprocessing_same_activity_does_not_repeat_celebration():
 
     first = _run(1, 7, 10_000, 3.33, 1)
 
-    _feed(runner, [first], first)
+    _feed(runner, [first])
 
     second = _run(2, 7, 15_000, 3.33, 2)
 
-    activities = [first, second]
+    activities = [second, first]
 
-    first_result = _feed(runner, activities, second)
+    first_result = _feed(runner, activities)
 
     assert first_result is not None
 
-    # reprocessar exatamente o mesmo treino (ex.: webhook duplicado) não
+    # reprocessar exatamente o mesmo treino (ex.: webhook duplicado, ou o
+    # poller do Garmin rodando antes do Strava sincronizar de novo) não
     # dispara a mesma comemoração de novo
-    second_result = _feed(runner, activities, second)
+    second_result = _feed(runner, activities)
 
     assert second_result is None
 
@@ -192,13 +242,13 @@ def test_multiple_records_in_one_run_combine_into_one_message():
 
     first = _run(1, 7, 10_000, 3.33, 1)
 
-    _feed(runner, [first], first)  # semeia longest=10km, semana ~10km
+    _feed(runner, [first])  # semeia longest=10km, semana ~10km
 
     # semana seguinte, mesmo pace (sem PR de faixa) mas mais longa e com
     # mais km na semana -> bate corrida mais longa E semana de maior volume
     big = _run(8, 7, 11_500, 3.33, 2)
 
-    message = _feed(runner, [first, big], big)
+    message = _feed(runner, [big, first])
 
     assert message is not None
     assert "recordes" in message
@@ -212,10 +262,10 @@ def test_external_coach_athlete_still_gets_celebrated():
 
     first = _run(1, 7, 10_000, 3.33, 1)
 
-    _feed(runner, [first], first)
+    _feed(runner, [first])
 
     second = _run(2, 7, 15_000, 3.33, 2)
 
-    message = _feed(runner, [first, second], second)
+    message = _feed(runner, [second, first])
 
     assert message is not None

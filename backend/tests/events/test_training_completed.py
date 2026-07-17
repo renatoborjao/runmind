@@ -32,7 +32,7 @@ def _run_event(record_message=None, nudge_message=None):
 
         mock_aversion.after_feedback.return_value = nudge_message
 
-        mock_records.after_feedback.return_value = record_message
+        mock_records.after_feedback = AsyncMock(return_value=record_message)
 
         asyncio.run(
             TrainingCompletedEvent.execute(profile="renato"),
@@ -47,11 +47,9 @@ def test_celebration_message_is_sent_after_analysis():
         record_message="🏆 Renato, sua corrida mais longa!",
     )
 
-    mock_records.after_feedback.assert_called_once_with(
-        runner,
-        result["history"],
-        result["activity"],
-    )
+    # a fonte dos marcos é o Strava, buscado dentro do próprio detector —
+    # não recebe mais history/activity da pipeline (que pode ser Garmin)
+    mock_records.after_feedback.assert_awaited_once_with(runner)
 
     assert mock_outbox.send.await_count == 2
 
@@ -64,7 +62,7 @@ def test_no_celebration_sends_only_the_analysis():
 
     runner, _, mock_outbox, mock_records = _run_event(record_message=None)
 
-    mock_records.after_feedback.assert_called_once()
+    mock_records.after_feedback.assert_awaited_once()
 
     assert mock_outbox.send.await_count == 1
 
@@ -91,7 +89,9 @@ def test_celebration_failure_does_not_break_the_analysis_send():
         mock_pipeline.execute = AsyncMock(return_value=result)
         mock_outbox.send = AsyncMock()
         mock_aversion.after_feedback.return_value = None
-        mock_records.after_feedback.side_effect = RuntimeError("boom")
+        mock_records.after_feedback = AsyncMock(
+            side_effect=RuntimeError("boom"),
+        )
 
         asyncio.run(TrainingCompletedEvent.execute(profile="renato"))
 
