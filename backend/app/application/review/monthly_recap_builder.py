@@ -71,6 +71,7 @@ class MonthlyRecapBuilder:
             "predicted_time": MonthlyRecapBuilder._predicted_time(
                 goal,
                 history,
+                month_start,
             ),
         }
 
@@ -78,20 +79,34 @@ class MonthlyRecapBuilder:
     def _predicted_time(
         goal,
         history: TrainingHistory,
+        month_start: date,
     ) -> dict | None:
         """Previsão de tempo de prova — usa o histórico COMPLETO recebido
         (não só as atividades do mês: a forma atual não deve ficar presa à
-        borda do mês-calendário). Só precisa de uma distância de prova REAL
-        declarada (independe de ter DATA marcada) — não o default de 10km
-        de quem só quer saúde."""
+        borda do mês-calendário). Só pra quem TEM prova de verdade (data
+        marcada e ainda por vir) — não pra quem só tem uma distância de
+        treino sem competição nenhuma no horizonte."""
 
-        if not goal.has_declared_distance:
+        reference = MonthlyRecapBuilder._next_month_start(month_start)
+
+        has_race = goal.race_date is not None and goal.race_date > reference
+
+        if not has_race:
 
             return None
 
         return RaceTimePredictor.predict_formatted(
             history, goal.distance_km, goal.target_time,
         )
+
+    @staticmethod
+    def _next_month_start(month_start: date) -> date:
+
+        if month_start.month == 12:
+
+            return date(month_start.year + 1, 1, 1)
+
+        return date(month_start.year, month_start.month + 1, 1)
 
     @staticmethod
     def _in_month(activity, month_start: date) -> bool:

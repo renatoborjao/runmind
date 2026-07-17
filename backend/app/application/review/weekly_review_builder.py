@@ -97,14 +97,14 @@ class WeeklyReviewBuilder:
             (goal.race_date - reference_date).days // 7 if has_race else None
         )
 
-        # previsão de tempo independe de ter DATA marcada (has_race) — só
-        # precisa de uma distância de prova REAL declarada, não o default
-        # de 10km de quem só quer saúde
+        # previsão de tempo de prova só faz sentido pra quem TEM prova de
+        # verdade (data marcada) — não pra quem só tem uma distância de
+        # treino sem competição nenhuma no horizonte
         predicted_time = (
             RaceTimePredictor.predict_formatted(
                 history, goal.distance_km, goal.target_time,
             )
-            if goal.has_declared_distance
+            if has_race
             else None
         )
 

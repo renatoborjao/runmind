@@ -91,11 +91,10 @@ def test_build_goal_no_predicted_time_without_real_run():
     assert review["goal"]["predicted_time"] is None
 
 
-def test_build_goal_predicted_time_does_not_need_a_race_date():
-    """Correção importante: a maioria dos atletas reais tem target_race
-    declarado mas SEM race_date marcado (só escolheram a distância, não uma
-    prova com data). A previsão não pode depender de race_date — só da
-    distância REAL declarada."""
+def test_build_goal_no_predicted_time_without_a_scheduled_race():
+    """Decisão do Renato: a previsão só vale pra quem TEM prova de verdade
+    (data marcada) — uma distância de treino sem competição no horizonte
+    não é "prova", então não recebe "se a prova fosse hoje"."""
 
     runner = make_runner(
         goal="10 km sub-50", target_race="10 km",
@@ -106,9 +105,8 @@ def test_build_goal_predicted_time_does_not_need_a_race_date():
 
     review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
 
-    assert review["goal"]["has_race"] is False  # sem contagem regressiva
-    assert review["goal"]["predicted_time"] is not None  # mas com previsão
-    assert review["goal"]["predicted_time"]["formatted"] == "50:00"
+    assert review["goal"]["has_race"] is False
+    assert review["goal"]["predicted_time"] is None
 
 
 def test_build_goal_health_when_no_race():

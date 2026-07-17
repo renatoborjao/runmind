@@ -164,16 +164,30 @@ def test_predicted_time_absent_without_a_real_race_goal():
     assert recap["predicted_time"] is None
 
 
-def test_predicted_time_does_not_need_a_race_date():
-    """Correção importante: a maioria dos atletas reais tem target_race
-    declarado mas SEM race_date marcado. A previsão não pode depender de
-    race_date (só usado pra contagem regressiva) — só da distância REAL
-    declarada. Também não importa se uma eventual data já passou."""
+def test_predicted_time_absent_without_a_scheduled_race_date():
+    """Decisão do Renato: a previsão só vale pra quem TEM prova de verdade
+    (data marcada) — declarar só a distância (target_race), sem data, não
+    é suficiente."""
 
     runner = make_runner(
         weekly_training_days=3,
         target_race="10 km",
-        race_date="2026-07-15",  # data no passado (ou nem precisaria existir)
+        target_time="00:50:00",
+    )  # sem race_date
+
+    history = TrainingHistory(activities=[_run(2, 7, 10_000, 10_000 / 3000)])
+
+    recap = MonthlyRecapBuilder.build(runner, history, JULY)
+
+    assert recap["predicted_time"] is None
+
+
+def test_predicted_time_absent_when_race_already_passed():
+
+    runner = make_runner(
+        weekly_training_days=3,
+        target_race="10 km",
+        race_date="2026-07-15",  # já passou em relação ao mês seguinte (ago/2026)
         target_time="00:50:00",
     )
 
@@ -181,8 +195,7 @@ def test_predicted_time_does_not_need_a_race_date():
 
     recap = MonthlyRecapBuilder.build(runner, history, JULY)
 
-    assert recap["predicted_time"] is not None
-    assert recap["predicted_time"]["formatted"] == "50:00"
+    assert recap["predicted_time"] is None
 
 
 def test_predicted_time_uses_full_history_not_just_month_activities():

@@ -26,7 +26,6 @@ class BuildTrainingGoal:
             race_date=BuildTrainingGoal._race_date(
                 runner.race_date,
             ),
-            has_declared_distance=bool(runner.target_race),
         )
 
     @staticmethod
