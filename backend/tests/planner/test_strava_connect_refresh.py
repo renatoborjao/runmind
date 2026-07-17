@@ -31,7 +31,7 @@ def _plan() -> TrainingPlan:
     )
 
 
-def _run(runner, *, is_done=False, should_offer=False):
+def _run(runner, *, is_done=False, should_offer=False, seed_error=None):
 
     plan = _plan()
 
@@ -43,6 +43,7 @@ def _run(runner, *, is_done=False, should_offer=False):
         patch(f"{MODULE}.GarminSync") as garmin_sync,
         patch(f"{MODULE}.GarminOfferStore") as offer_store,
         patch(f"{MODULE}.StravaRefreshStore") as refresh_store,
+        patch(f"{MODULE}.PersonalRecordDetector") as records,
     ):
 
         load_runner.execute.return_value = runner
@@ -52,6 +53,7 @@ def _run(runner, *, is_done=False, should_offer=False):
         garmin_sync.should_offer.return_value = should_offer
         garmin_sync.offer_text.return_value = "\n\n⌚ OFERTA"
         refresh_store.is_done.return_value = is_done
+        records.seed = AsyncMock(side_effect=seed_error)
 
         asyncio.run(StravaConnectRefresh.refresh("fulano"))
 
@@ -61,6 +63,7 @@ def _run(runner, *, is_done=False, should_offer=False):
             "notifier": notifier,
             "offer_store": offer_store,
             "refresh_store": refresh_store,
+            "records": records,
         }
 
 
@@ -113,3 +116,32 @@ def test_appends_garmin_offer_when_connected():
     assert "OFERTA" in message
 
     m["offer_store"].set_pending.assert_called_once_with("fulano")
+
+
+def test_seeds_personal_records_from_real_strava_history():
+    """A base de recordes é semeada AGORA (histórico real já disponível),
+    em vez de esperar o primeiro treino processado pelo RunMind."""
+
+    m = _run(make_runner(external_coach=False))
+
+    m["records"].seed.assert_awaited_once_with("fulano")
+
+
+def test_seeds_personal_records_even_for_external_coach():
+
+    m = _run(make_runner(external_coach=True))
+
+    m["records"].seed.assert_awaited_once_with("fulano")
+
+
+def test_seed_failure_does_not_block_plan_regeneration():
+    """Falha ao semear recordes é isolada — nunca pode impedir o atleta de
+    receber o plano regenerado com o histórico real."""
+
+    m = _run(
+        make_runner(external_coach=False),
+        seed_error=RuntimeError("Strava fora do ar"),
+    )
+
+    m["provider"].for_profile.assert_awaited_once()
+    m["notifier"].send.assert_awaited_once()

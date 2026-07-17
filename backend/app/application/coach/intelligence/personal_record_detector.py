@@ -11,10 +11,13 @@ atleta, então é o único "livro de recordes" único e consistente entre todos;
 quem por algum motivo não tem Strava conectado simplesmente não recebe
 celebração (silêncio, não erro).
 
-Cold start: na primeira vez que rodamos pra um atleta (ou logo após esta
-feature subir), TUDO seria "recorde" — por isso a primeira chamada apenas
-semeia as melhores marcas conhecidas e não comemora nada. Só a partir da
-segunda chamada os recordes passam a valer."""
+Cold start: sem uma base prévia, TUDO seria "recorde" na primeira comparação.
+`seed()` resolve isso na hora da conexão do Strava (onboarding ou late
+connector) — carrega o histórico real e estabelece a base ANTES do primeiro
+treino de verdade, pra ele já poder comparar (e comemorar) direito. Sem essa
+chamada explícita, `after_feedback` também semeia sozinho na primeira vez
+que rodar — mas aí o primeiro treino processado é sempre "gasto" só
+semeando, nunca comemorando."""
 
 from app.application.history.runner_metrics import (
     RUN_MIN_DISTANCE_KM,
@@ -61,28 +64,42 @@ _STRAVA_HISTORY_LIMIT = 200
 class PersonalRecordDetector:
 
     @staticmethod
+    async def seed(profile: str) -> None:
+        """Estabelece a base de recordes a partir do histórico REAL do
+        Strava, sem esperar um treino ser processado pelo RunMind. Chamado
+        na conexão do Strava (onboarding e late connector). Não sobrescreve
+        quem já tem base (reconexão não reseta o que já foi conquistado)."""
+
+        if PersonalRecordRepository().load(profile).get("seeded"):
+
+            return
+
+        history = await PersonalRecordDetector._load_strava_history(profile)
+
+        if history is None:
+
+            return
+
+        PersonalRecordRepository().save(
+            profile,
+            PersonalRecordDetector._seed(history),
+        )
+
+    @staticmethod
     async def after_feedback(
         runner: RunnerProfile,
     ) -> str | None:
 
-        if TokenStore(runner.id).load() is None:
-
-            return None
-
-        activities = await StravaClient(runner.id).get_last_activities(
-            limit=_STRAVA_HISTORY_LIMIT,
+        history = await PersonalRecordDetector._load_strava_history(
+            runner.id,
         )
 
-        activities = [a for a in activities if is_foot_sport(a.sport)]
-
-        if not activities:
+        if history is None:
 
             return None
 
         # a API do Strava devolve mais recente primeiro
-        current = activities[0]
-
-        history = TrainingHistory(activities=activities)
+        current = history.activities[0]
 
         repo = PersonalRecordRepository()
 
@@ -177,6 +194,25 @@ class PersonalRecordDetector:
             return None
 
         return PersonalRecordDetector._message(runner.name, wins)
+
+    @staticmethod
+    async def _load_strava_history(profile: str) -> TrainingHistory | None:
+
+        if TokenStore(profile).load() is None:
+
+            return None
+
+        activities = await StravaClient(profile).get_last_activities(
+            limit=_STRAVA_HISTORY_LIMIT,
+        )
+
+        activities = [a for a in activities if is_foot_sport(a.sport)]
+
+        if not activities:
+
+            return None
+
+        return TrainingHistory(activities=activities)
 
     @staticmethod
     def _seed(history: TrainingHistory) -> dict:

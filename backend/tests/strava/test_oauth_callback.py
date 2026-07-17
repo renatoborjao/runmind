@@ -138,10 +138,12 @@ def test_callback_during_onboarding_stashes_athlete_id_in_state(
         patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
         patch(f"{MODULE}.StravaConnectRefresh") as mock_refresh,
+        patch(f"{MODULE}.PersonalRecordDetector") as mock_records,
     ):
 
         mock_history.execute = AsyncMock()
         mock_refresh.refresh = AsyncMock()
+        mock_records.seed = AsyncMock()
 
         client = TestClient(app)
 
@@ -159,6 +161,9 @@ def test_callback_during_onboarding_stashes_athlete_id_in_state(
         # montado na conclusão do cadastro, então NÃO agenda refresh
         mock_history.execute.assert_awaited_once_with(profile="ciclano")
         mock_refresh.refresh.assert_not_awaited()
+
+        # semeia os recordes já aqui (o slug é o profile.id final)
+        mock_records.seed.assert_awaited_once_with("ciclano")
 
         # athlete_id guardado no estado (vai pro perfil na conclusão)
         state = onboarding_repo.load("5511900000000")

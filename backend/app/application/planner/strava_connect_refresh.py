@@ -7,6 +7,9 @@ Uma vez só (marcador anti-spam) — reconexões não re-disparam. Vale só pra
 plano do RunMind: quem treina com treinador externo recebe o plano do
 treinador, então aqui o Strava entra só como histórico/contexto."""
 
+from app.application.coach.intelligence.personal_record_detector import (
+    PersonalRecordDetector,
+)
 from app.application.garmin.garmin_sync import GarminSync
 from app.application.notifications.notification_service import (
     NotificationService,
@@ -53,6 +56,18 @@ class StravaConnectRefresh:
     async def _refresh(profile: str) -> None:
 
         runner = LoadRunnerProfile.execute(profile)
+
+        # Semeia os recordes com o histórico real AGORA — assim o primeiro
+        # treino de verdade do atleta já compara (e comemora) direito, em
+        # vez de "gastar" o primeiro ciclo só estabelecendo a base. Isolado:
+        # falha aqui nunca pode bloquear a regeneração do plano abaixo.
+        try:
+
+            await PersonalRecordDetector.seed(profile)
+
+        except Exception as e:
+
+            print(f"Falha ao semear recordes de '{profile}': {e}")
 
         # Treinador externo: o plano é do treinador; o Strava entra só como
         # histórico/contexto. Arquiva e sai — não gera nem envia plano.

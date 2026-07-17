@@ -4,6 +4,9 @@ from fastapi import HTTPException
 from fastapi.responses import RedirectResponse
 import httpx
 
+from app.application.coach.intelligence.personal_record_detector import (
+    PersonalRecordDetector,
+)
 from app.application.planner.strava_connect_refresh import (
     StravaConnectRefresh,
 )
@@ -153,6 +156,20 @@ async def callback(
 
             print(
                 f"Falha ao pré-carregar histórico de '{profile}' "
+                f"na conexão do Strava: {e}"
+            )
+
+        # Semeia os recordes já aqui (mesmo ainda em onboarding): o slug é
+        # estável e vira o profile.id final, então o primeiro treino de
+        # verdade do atleta já vai comparar contra a base certa.
+        try:
+
+            await PersonalRecordDetector.seed(profile)
+
+        except Exception as e:
+
+            print(
+                f"Falha ao semear recordes de '{profile}' "
                 f"na conexão do Strava: {e}"
             )
 

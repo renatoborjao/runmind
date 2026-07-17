@@ -269,3 +269,94 @@ def test_external_coach_athlete_still_gets_celebrated():
     message = _feed(runner, [second, first])
 
     assert message is not None
+
+
+def _seed(profile, activities, has_token=True):
+
+    with (
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.StravaClient") as mock_client_cls,
+    ):
+
+        mock_token_store.return_value.load.return_value = (
+            {"access_token": "x"} if has_token else None
+        )
+
+        mock_client_cls.return_value.get_last_activities = AsyncMock(
+            return_value=activities,
+        )
+
+        asyncio.run(PersonalRecordDetector.seed(profile))
+
+
+def test_seed_establishes_baseline_from_real_strava_history_immediately():
+    """Conectar o Strava (onboarding/late connector) já estabelece a base —
+    sem precisar esperar o primeiro treino processado pelo RunMind."""
+
+    past = [_run(1, 7, 10_000, 3.33, 1)]
+
+    _seed("novo_atleta", past)
+
+    from app.infrastructure.persistence.personal_record_repository import (
+        PersonalRecordRepository,
+    )
+
+    records = PersonalRecordRepository().load("novo_atleta")
+
+    assert records["seeded"] is True
+    assert records["longest_km"] == 10.0
+
+
+def test_seed_without_strava_connected_does_nothing():
+
+    _seed("sem_strava", [], has_token=False)
+
+    from app.infrastructure.persistence.personal_record_repository import (
+        PersonalRecordRepository,
+    )
+
+    assert PersonalRecordRepository().load("sem_strava") == {}
+
+
+def test_seed_does_not_overwrite_an_already_seeded_athlete():
+    """Reconexão do Strava não pode resetar uma base que já evoluiu além
+    da semente inicial (senão perderia recordes já conquistados)."""
+
+    first = _run(1, 7, 10_000, 3.33, 1)
+
+    _seed("atleta", [first])
+
+    # evolui a base (bate um recorde de verdade)
+    second = _run(2, 7, 15_000, 3.33, 2)
+
+    runner = make_runner(id="atleta")
+
+    _feed(runner, [second, first])
+
+    # reconectar o Strava não pode sobrescrever com uma semente mais curta
+    _seed("atleta", [first])
+
+    from app.infrastructure.persistence.personal_record_repository import (
+        PersonalRecordRepository,
+    )
+
+    assert PersonalRecordRepository().load("atleta")["longest_km"] == 15.0
+
+
+def test_seeding_first_means_first_real_run_can_already_celebrate():
+    """O ponto principal: semeando na conexão (não no primeiro treino), o
+    PRIMEIRO treino de verdade do atleta já pode comemorar, em vez de ser
+    sempre 'gasto' só estabelecendo a base."""
+
+    past = [_run(1, 7, 10_000, 3.33, 1)]
+
+    _seed("atleta_novo", past)
+
+    runner = make_runner(id="atleta_novo")
+
+    first_real_run = _run(2, 7, 15_000, 3.33, 2)
+
+    message = _feed(runner, [first_real_run, *past])
+
+    assert message is not None
+    assert "15.0 km" in message
