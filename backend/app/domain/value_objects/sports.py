@@ -15,3 +15,17 @@ FOOT_SPORTS = {
 def is_foot_sport(sport: str) -> bool:
 
     return sport in FOOT_SPORTS
+
+
+# Subconjunto de FOOT_SPORTS que conta como CORRIDA de verdade — usado onde
+# caminhada/hike não deve competir (recorde de corrida, previsão de prova).
+RUN_SPORTS = {
+    "Run",
+    "TrailRun",
+    "VirtualRun",
+}
+
+
+def is_run_sport(sport: str) -> bool:
+
+    return sport in RUN_SPORTS

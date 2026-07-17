@@ -6,6 +6,7 @@ from app.application.history.consistency_calculator import (
     ConsistencyCalculator,
 )
 from app.application.history.evolution_analyzer import EvolutionAnalyzer
+from app.application.history.race_time_predictor import RaceTimePredictor
 from app.application.history.week_comparator import WeekComparator
 from app.application.history.weekly_buckets import activity_date
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
@@ -62,7 +63,9 @@ class WeeklyReviewBuilder:
             "comparison": comparison,
             "trends": evolution["trends"],
             "consistency": consistency,
-            "goal": WeeklyReviewBuilder._goal_data(runner, reference_date),
+            "goal": WeeklyReviewBuilder._goal_data(
+                runner, history, reference_date,
+            ),
             "adherence": WeeklyReviewBuilder._adherence(
                 runner.id,
                 history,
@@ -77,6 +80,7 @@ class WeeklyReviewBuilder:
     @staticmethod
     def _goal_data(
         runner: RunnerProfile,
+        history: TrainingHistory,
         reference_date: date,
     ) -> dict:
         """Objetivo do atleta, pra a mensagem se adaptar: prova/marca com data
@@ -93,12 +97,24 @@ class WeeklyReviewBuilder:
             (goal.race_date - reference_date).days // 7 if has_race else None
         )
 
+        # previsão de tempo independe de ter DATA marcada (has_race) — só
+        # precisa de uma distância de prova REAL declarada, não o default
+        # de 10km de quem só quer saúde
+        predicted_time = (
+            RaceTimePredictor.predict_formatted(
+                history, goal.distance_km, goal.target_time,
+            )
+            if goal.has_declared_distance
+            else None
+        )
+
         return {
             "name": goal.name,
             "target_time": goal.target_time,
             "race_date": goal.race_date.isoformat() if goal.race_date else None,
             "weeks_to_race": weeks_to_race,
             "has_race": has_race,
+            "predicted_time": predicted_time,
         }
 
     @staticmethod

@@ -109,6 +109,58 @@ def test_format_shows_race_goal_countdown():
     assert "• 10 km sub-50 — faltam 5 semanas, alvo 00:50:00" in message
 
 
+def test_format_shows_predicted_race_time_faster_than_target():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(goal={
+            "name": "10 km sub-50", "has_race": True,
+            "weeks_to_race": 5, "target_time": "00:50:00",
+            "predicted_time": {
+                "formatted": "48:30",
+                "delta_seconds": -90,
+                "delta_formatted": "1:30",
+            },
+        }),
+    )
+
+    assert "🔮 Se a prova fosse hoje: ~48:30" in message
+    assert "já bateria a meta de 00:50:00 com ~1:30 de sobra" in message
+
+
+def test_format_shows_predicted_race_time_slower_than_target():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(goal={
+            "name": "10 km sub-50", "has_race": True,
+            "weeks_to_race": 5, "target_time": "00:50:00",
+            "predicted_time": {
+                "formatted": "52:00",
+                "delta_seconds": 120,
+                "delta_formatted": "2:00",
+            },
+        }),
+    )
+
+    assert "🔮 Se a prova fosse hoje: ~52:00" in message
+    assert "faltam ~2:00 pra bater a meta de 00:50:00" in message
+
+
+def test_format_omits_predicted_line_when_no_anchor():
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(goal={
+            "name": "10 km sub-50", "has_race": True,
+            "weeks_to_race": 5, "target_time": "00:50:00",
+            "predicted_time": None,
+        }),
+    )
+
+    assert "🔮" not in message
+
+
 def test_format_shows_health_goal_without_countdown():
 
     message = WeeklyReviewMessageFormatter.format(

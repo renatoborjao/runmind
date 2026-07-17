@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import date
 
 from app.application.planner.pace_formatter import PaceFormatter
+from app.application.review.predicted_time_line_formatter import (
+    PredictedTimeLineFormatter,
+)
 
 VOLUME_DIRECTIONS = {
     "up": "subindo",
@@ -227,7 +230,18 @@ class WeeklyReviewMessageFormatter:
                 else ""
             )
 
-            return ["🎯 Rumo à meta", f"• {name}{faltam}{target}"]
+            lines = ["🎯 Rumo à meta", f"• {name}{faltam}{target}"]
+
+            predicted_line = PredictedTimeLineFormatter.line(
+                goal.get("predicted_time"),
+                goal.get("target_time"),
+            )
+
+            if predicted_line:
+
+                lines.append(predicted_line)
+
+            return lines
 
         return ["🎯 Seu objetivo", f"• {name}"]
 

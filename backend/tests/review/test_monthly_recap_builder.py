@@ -30,6 +30,17 @@ def _activity(day, month, distance_m, id_=1):
     )
 
 
+def _run(day, month, distance_m, speed, id_=1):
+
+    return make_activity(
+        id=id_,
+        distance=distance_m,
+        average_speed=speed,
+        moving_time=int(distance_m / speed),
+        start_date=datetime(2026, month, day, 7, 0, 0),
+    )
+
+
 def test_month_with_no_activity_returns_none():
 
     runner = make_runner(weekly_training_days=3)
@@ -122,3 +133,76 @@ def test_no_records_file_means_empty_records_list():
     recap = MonthlyRecapBuilder.build(runner, history, JULY)
 
     assert recap["records"] == []
+
+
+def test_predicted_time_present_for_athlete_with_upcoming_race():
+
+    runner = make_runner(
+        weekly_training_days=3,
+        target_race="10 km",
+        race_date="2026-08-15",
+        target_time="00:50:00",
+    )
+
+    # 10km em 3000s (5:00/km) -> prevê exatamente 10km -> 3000s = 50:00
+    history = TrainingHistory(activities=[_run(2, 7, 10_000, 10_000 / 3000)])
+
+    recap = MonthlyRecapBuilder.build(runner, history, JULY)
+
+    assert recap["target_time"] == "00:50:00"
+    assert recap["predicted_time"]["formatted"] == "50:00"
+
+
+def test_predicted_time_absent_without_a_real_race_goal():
+
+    runner = make_runner(weekly_training_days=3)  # sem target_race/race_date
+
+    history = TrainingHistory(activities=[_run(2, 7, 10_000, 10_000 / 3000)])
+
+    recap = MonthlyRecapBuilder.build(runner, history, JULY)
+
+    assert recap["predicted_time"] is None
+
+
+def test_predicted_time_does_not_need_a_race_date():
+    """Correção importante: a maioria dos atletas reais tem target_race
+    declarado mas SEM race_date marcado. A previsão não pode depender de
+    race_date (só usado pra contagem regressiva) — só da distância REAL
+    declarada. Também não importa se uma eventual data já passou."""
+
+    runner = make_runner(
+        weekly_training_days=3,
+        target_race="10 km",
+        race_date="2026-07-15",  # data no passado (ou nem precisaria existir)
+        target_time="00:50:00",
+    )
+
+    history = TrainingHistory(activities=[_run(2, 7, 10_000, 10_000 / 3000)])
+
+    recap = MonthlyRecapBuilder.build(runner, history, JULY)
+
+    assert recap["predicted_time"] is not None
+    assert recap["predicted_time"]["formatted"] == "50:00"
+
+
+def test_predicted_time_uses_full_history_not_just_month_activities():
+    """A previsão usa o histórico COMPLETO recebido, não só os treinos do
+    mês recapitulado — a forma atual não deve ficar presa à borda do mês."""
+
+    runner = make_runner(
+        weekly_training_days=3,
+        target_race="10 km",
+        race_date="2026-08-15",
+        target_time="00:50:00",
+    )
+
+    history = TrainingHistory(activities=[
+        _run(2, 7, 10_000, 10_000 / 3000, id_=1),  # treino do mês, 5:00/km
+        _run(20, 6, 10_000, 10_000 / 2400, id_=2),  # mês anterior, mais rápido (4:00/km)
+    ])
+
+    recap = MonthlyRecapBuilder.build(runner, history, JULY)
+
+    # usa o esforço mais rápido (4:00/km, de JUNHO) como âncora -> 40:00,
+    # não os 50:00 que sairiam se só o treino de julho fosse considerado
+    assert recap["predicted_time"]["formatted"] == "40:00"

@@ -29,6 +29,10 @@ def test_message_carries_the_numbers_and_signature():
     assert "Mês forte, parabéns!" in message
     assert "Feito com 🏃 RunMind" in message
 
+    # nudge de indicação (crescimento orgânico) — sem link/contato fixo,
+    # o próprio texto sendo encaminhado já é o mecanismo
+    assert "Passa esse recap" in message
+
 
 def test_message_includes_records_section_when_present():
 
@@ -40,6 +44,37 @@ def test_message_includes_records_section_when_present():
 
     assert "Recordes batidos neste mês:" in message
     assert "🏆 Corrida mais longa: 15.0 km" in message
+
+
+def test_message_includes_predicted_time_line_when_present():
+
+    message = MonthlyRecapMessageFormatter.format(
+        "Renato",
+        {
+            **_recap(),
+            "target_time": "00:50:00",
+            "predicted_time": {
+                "formatted": "48:30",
+                "delta_seconds": -90,
+                "delta_formatted": "1:30",
+            },
+        },
+        narrative=["Boa!"],
+    )
+
+    assert "🔮 Se a prova fosse hoje: ~48:30" in message
+    assert "já bateria a meta de 00:50:00 com ~1:30 de sobra" in message
+
+
+def test_message_omits_predicted_time_line_when_absent():
+
+    message = MonthlyRecapMessageFormatter.format(
+        "Renato",
+        {**_recap(), "predicted_time": None},
+        narrative=["Boa!"],
+    )
+
+    assert "🔮" not in message
 
 
 def test_message_omits_records_section_when_empty():

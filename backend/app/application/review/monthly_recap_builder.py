@@ -10,8 +10,10 @@ from __future__ import annotations
 import calendar
 from datetime import date
 
+from app.application.history.race_time_predictor import RaceTimePredictor
 from app.application.history.weekly_buckets import activity_date, week_start
 from app.application.planner.pace_formatter import PaceFormatter
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.persistence.personal_record_repository import (
@@ -49,6 +51,8 @@ class MonthlyRecapBuilder:
 
         longest_km = max(a.distance for a in month_activities) / 1000
 
+        goal = BuildTrainingGoal.execute(runner)
+
         return {
             "month_label": MonthlyRecapBuilder._month_label(month_start),
             "total_km": round(total_km, 1),
@@ -63,7 +67,31 @@ class MonthlyRecapBuilder:
                 runner.id,
                 month_start,
             ),
+            "target_time": goal.target_time,
+            "predicted_time": MonthlyRecapBuilder._predicted_time(
+                goal,
+                history,
+            ),
         }
+
+    @staticmethod
+    def _predicted_time(
+        goal,
+        history: TrainingHistory,
+    ) -> dict | None:
+        """Previsão de tempo de prova — usa o histórico COMPLETO recebido
+        (não só as atividades do mês: a forma atual não deve ficar presa à
+        borda do mês-calendário). Só precisa de uma distância de prova REAL
+        declarada (independe de ter DATA marcada) — não o default de 10km
+        de quem só quer saúde."""
+
+        if not goal.has_declared_distance:
+
+            return None
+
+        return RaceTimePredictor.predict_formatted(
+            history, goal.distance_km, goal.target_time,
+        )
 
     @staticmethod
     def _in_month(activity, month_start: date) -> bool:

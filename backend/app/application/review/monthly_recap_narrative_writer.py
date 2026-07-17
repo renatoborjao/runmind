@@ -120,4 +120,12 @@ class MonthlyRecapNarrativeWriter:
 
             lines.append("Nenhum recorde novo neste mês.")
 
+        predicted = recap.get("predicted_time")
+
+        if predicted:
+
+            lines.append(
+                f"Previsão de prova no ritmo atual: {predicted['formatted']}."
+            )
+
         return "\n".join(lines)

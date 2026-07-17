@@ -182,7 +182,15 @@ class WeeklyReviewNarrativeWriter:
 
             faltam = f" — faltam {weeks} semanas pra prova" if weeks is not None else ""
 
-            return f"Objetivo (PROVA/MARCA): {name}{target}{faltam}"
+            predicted = goal.get("predicted_time")
+
+            previsao = (
+                f" Previsão no ritmo atual: {predicted['formatted']}."
+                if predicted
+                else ""
+            )
+
+            return f"Objetivo (PROVA/MARCA): {name}{target}{faltam}.{previsao}"
 
         return (
             f"Objetivo (SEM prova — saúde/evolução): {name}. "

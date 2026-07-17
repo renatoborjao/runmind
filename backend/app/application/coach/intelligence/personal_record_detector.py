@@ -31,7 +31,7 @@ from app.application.planner.pace_formatter import PaceFormatter
 from app.domain.entities.activity import Activity
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
-from app.domain.value_objects.sports import is_foot_sport
+from app.domain.value_objects.sports import RUN_SPORTS, is_foot_sport
 from app.infrastructure.integrations.strava.client import StravaClient
 from app.infrastructure.persistence.personal_record_repository import (
     PersonalRecordRepository,
@@ -39,11 +39,6 @@ from app.infrastructure.persistence.personal_record_repository import (
 from app.infrastructure.storage.token_store import TokenStore
 
 _LONGEST_MIN_KM = 3.0
-
-# esportes que contam como CORRIDA de verdade pra corrida-mais-longa e
-# pace-PR — caminhada/trilha caminhada (Walk/Hike) entram no volume total,
-# mas não competem por recorde de corrida.
-_RUN_SPORTS = {"Run", "TrailRun", "VirtualRun"}
 
 _BANDS = [
     (3.0, 5.0, "3-5"),
@@ -127,7 +122,7 @@ class PersonalRecordDetector:
         longest_km = records.get("longest_km", 0.0)
 
         if (
-            current.sport in _RUN_SPORTS
+            current.sport in RUN_SPORTS
             and dist_km >= _LONGEST_MIN_KM
             and dist_km > longest_km
         ):
@@ -146,7 +141,7 @@ class PersonalRecordDetector:
         band = PersonalRecordDetector._band(dist_km)
 
         if (
-            current.sport in _RUN_SPORTS
+            current.sport in RUN_SPORTS
             and band is not None
             and pace is not None
             and dist_km >= RUN_MIN_DISTANCE_KM
@@ -241,7 +236,7 @@ class PersonalRecordDetector:
 
         runs = [
             a for a in history.activities
-            if a.sport in _RUN_SPORTS and a.distance / 1000 >= _LONGEST_MIN_KM
+            if a.sport in RUN_SPORTS and a.distance / 1000 >= _LONGEST_MIN_KM
         ]
 
         if runs:
@@ -265,7 +260,7 @@ class PersonalRecordDetector:
             band = PersonalRecordDetector._band(dist_km)
 
             if (
-                activity.sport not in _RUN_SPORTS
+                activity.sport not in RUN_SPORTS
                 or band is None
                 or pace is None
                 or dist_km < RUN_MIN_DISTANCE_KM

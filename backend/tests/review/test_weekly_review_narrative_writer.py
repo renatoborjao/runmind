@@ -43,6 +43,33 @@ def test_facts_frame_a_race_goal():
     assert "alvo 00:50:00" in facts
 
 
+def test_facts_include_predicted_time_when_present():
+
+    facts = WeeklyReviewNarrativeWriter._facts(
+        "Renato",
+        _review({
+            "name": "10 km sub-50", "has_race": True,
+            "weeks_to_race": 5, "target_time": "00:50:00",
+            "predicted_time": {"formatted": "52:00"},
+        }),
+    )
+
+    assert "Previsão no ritmo atual: 52:00." in facts
+
+
+def test_facts_omit_predicted_time_when_absent():
+
+    facts = WeeklyReviewNarrativeWriter._facts(
+        "Renato",
+        _review({
+            "name": "10 km sub-50", "has_race": True,
+            "weeks_to_race": 5, "target_time": "00:50:00",
+        }),
+    )
+
+    assert "Previsão no ritmo atual" not in facts
+
+
 def test_facts_frame_a_health_goal():
     """Objetivo sem prova: os fatos mandam NÃO cobrar pace de prova."""
 

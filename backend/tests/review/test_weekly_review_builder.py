@@ -51,7 +51,7 @@ def test_build_goal_race_countdown():
     """Atleta com prova futura: contagem regressiva de semanas."""
 
     runner = make_runner(
-        goal="10 km sub-50", race_date="2026-08-15",
+        goal="10 km sub-50", target_race="10 km", race_date="2026-08-15",
         target_time="00:50:00",
     )
 
@@ -62,6 +62,53 @@ def test_build_goal_race_countdown():
     assert review["goal"]["has_race"] is True
     assert review["goal"]["weeks_to_race"] == 5  # 05/07 -> 15/08
     assert review["goal"]["name"] == "10 km sub-50"
+
+    # previsão de prova (Riegel): 10km em 3000s (5:00/km) -> meta é 10km, o
+    # esforço-âncora já É a distância da meta -> previsão = 3000s = "50:00",
+    # exatamente batendo a meta declarada (delta 0)
+    predicted = review["goal"]["predicted_time"]
+    assert predicted["formatted"] == "50:00"
+    assert predicted["delta_seconds"] == 0
+
+
+def test_build_goal_no_predicted_time_without_real_run():
+    """Sem esforço-âncora real (só caminhada, por exemplo) -> sem previsão,
+    silêncio em vez de número inventado."""
+
+    runner = make_runner(
+        goal="10 km sub-50", target_race="10 km", race_date="2026-08-15",
+        target_time="00:50:00",
+    )
+
+    walk = make_activity(
+        start_date=MONDAY, distance=2000.0, moving_time=1200, sport="Walk",
+    )
+
+    history = TrainingHistory(activities=[walk])
+
+    review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["goal"]["predicted_time"] is None
+
+
+def test_build_goal_predicted_time_does_not_need_a_race_date():
+    """Correção importante: a maioria dos atletas reais tem target_race
+    declarado mas SEM race_date marcado (só escolheram a distância, não uma
+    prova com data). A previsão não pode depender de race_date — só da
+    distância REAL declarada."""
+
+    runner = make_runner(
+        goal="10 km sub-50", target_race="10 km",
+        target_time="00:50:00",
+    )  # sem race_date
+
+    history = TrainingHistory(activities=[_run(0, 10000.0, 3000)])
+
+    review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["goal"]["has_race"] is False  # sem contagem regressiva
+    assert review["goal"]["predicted_time"] is not None  # mas com previsão
+    assert review["goal"]["predicted_time"]["formatted"] == "50:00"
 
 
 def test_build_goal_health_when_no_race():
@@ -74,6 +121,7 @@ def test_build_goal_health_when_no_race():
 
     assert review["goal"]["has_race"] is False
     assert review["goal"]["weeks_to_race"] is None
+    assert review["goal"]["predicted_time"] is None
 
 
 def test_build_longest_km_of_the_closing_week():

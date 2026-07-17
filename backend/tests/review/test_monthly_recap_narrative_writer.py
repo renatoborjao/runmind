@@ -36,6 +36,26 @@ def test_facts_list_records_when_present():
     assert "Recordes batidos neste mês: 🏆 Corrida mais longa: 15.0 km" in facts
 
 
+def test_facts_include_predicted_time_when_present():
+
+    facts = MonthlyRecapNarrativeWriter._facts(
+        "Renato",
+        {**_recap(), "predicted_time": {"formatted": "48:30"}},
+    )
+
+    assert "Previsão de prova no ritmo atual: 48:30." in facts
+
+
+def test_facts_omit_predicted_time_when_absent():
+
+    facts = MonthlyRecapNarrativeWriter._facts(
+        "Renato",
+        {**_recap(), "predicted_time": None},
+    )
+
+    assert "Previsão de prova" not in facts
+
+
 def test_parse_valid_and_invalid():
 
     assert MonthlyRecapNarrativeWriter._parse(

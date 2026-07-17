@@ -4,6 +4,10 @@ recebe encaminhado) e fecha com uma assinatura leve da marca."""
 
 from __future__ import annotations
 
+from app.application.review.predicted_time_line_formatter import (
+    PredictedTimeLineFormatter,
+)
+
 
 class MonthlyRecapMessageFormatter:
 
@@ -23,6 +27,15 @@ class MonthlyRecapMessageFormatter:
             f"• Consistência: {recap['consistency']:.0f}%",
         ]
 
+        predicted_line = PredictedTimeLineFormatter.line(
+            recap.get("predicted_time"),
+            recap.get("target_time"),
+        )
+
+        if predicted_line:
+
+            lines.append(f"• {predicted_line}")
+
         records = recap.get("records") or []
 
         if records:
@@ -38,6 +51,13 @@ class MonthlyRecapMessageFormatter:
         lines.extend(
             narrative
             or MonthlyRecapMessageFormatter._fallback_narrative(recap)
+        )
+
+        lines.append("")
+
+        lines.append(
+            "💬 Curtiu? Passa esse recap pra quem também merece um "
+            "empurrãozinho pra correr."
         )
 
         lines.append("")
