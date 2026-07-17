@@ -1,3 +1,6 @@
+from app.application.coach.intelligence.personal_record_detector import (
+    PersonalRecordDetector,
+)
 from app.application.coach.intelligence.proactive_aversion_detector import (
     ProactiveAversionDetector,
 )
@@ -52,5 +55,26 @@ class TrainingCompletedEvent:
         except Exception as e:
 
             print(f"Falha no detector proativo de aversão: {e}")
+
+        # Celebração de PR/marcos: reconhece recorde batido (corrida mais
+        # longa, treino mais rápido na faixa, km acumulado, semana de maior
+        # volume). Vale pra TODOS os atletas, inclusive treinador externo —
+        # não mexe no plano, só comemora. Falha aqui jamais derruba o
+        # feedback já enviado.
+        try:
+
+            celebration = PersonalRecordDetector.after_feedback(
+                runner,
+                result["history"],
+                result["activity"],
+            )
+
+            if celebration:
+
+                await CoachOutbox.send(runner, celebration)
+
+        except Exception as e:
+
+            print(f"Falha na celebração de recorde: {e}")
 
         return result
