@@ -110,6 +110,18 @@ class Settings(BaseSettings):
     # com folga pra caber thinking + resposta (senão volta vazio).
     gemini_coach_model: str = "gemini-pro-latest"
 
+    # ==========================
+    # BACKUP DO STORAGE
+    # ==========================
+
+    # snapshot .zip periódico do storage/ (dados dos atletas). backup_dir
+    # vazio = backend/backups (mesmo disco: protege contra corrupção/
+    # exclusão). Aponte pra uma pasta do OneDrive/Google Drive pra ter
+    # cópia FORA da máquina de graça. keep = quantos snapshots manter.
+    backup_enabled: bool = True
+    backup_dir: str = ""
+    backup_keep: int = 28
+
     @property
     def cors_origin_list(self) -> list[str]:
 

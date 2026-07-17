@@ -15,6 +15,7 @@ from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
 from app.core.clock import DEFAULT_TIMEZONE
 from app.core.config import get_settings
+from app.infrastructure.backup.storage_backup import StorageBackup
 from app.infrastructure.integrations.evolution.connection_watchdog import (
     ConnectionWatchdog,
 )
@@ -62,6 +63,27 @@ async def _strava_catchup_tick() -> None:
 
         # Strava fora do ar / rate limit — só loga, tenta na próxima passada
         print(f"Strava catch-up falhou: {e}")
+
+
+def _backup_tick() -> None:
+
+    try:
+
+        settings = get_settings()
+
+        path = StorageBackup(
+            backup_dir=settings.backup_dir or None,
+            keep=settings.backup_keep,
+        ).run()
+
+        if path is not None:
+
+            print(f"Backup do storage: {path.name}")
+
+    except Exception as e:
+
+        # backup nunca pode derrubar o app — só loga, tenta na próxima
+        print(f"Backup do storage falhou: {e}")
 
 
 def start_weekly_plan_scheduler() -> AsyncIOScheduler:
@@ -153,6 +175,20 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         id="strava_activity_catchup",
         next_run_time=datetime.now(DEFAULT_TIMEZONE),
     )
+
+    # Backup do storage — snapshot .zip dos dados dos atletas. A cada 6h e
+    # UM logo no startup (next_run_time), pra sempre haver cópia recente
+    # mesmo numa máquina que dorme (interval roda quando ela está ligada).
+    if get_settings().backup_enabled:
+
+        _scheduler.add_job(
+            _backup_tick,
+            trigger="interval",
+            hours=6,
+            misfire_grace_time=_INTERVAL_GRACE,
+            id="storage_backup",
+            next_run_time=datetime.now(DEFAULT_TIMEZONE),
+        )
 
     _scheduler.start()
 

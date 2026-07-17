@@ -155,6 +155,10 @@ activemq-data/
 # RunMind runtime data (tokens OAuth, perfis com telefone, planos/conversas)
 backend/storage/
 
+# Snapshots de backup do storage/ — contêm os MESMOS dados sensíveis
+# (tokens, perfis, conversas). NUNCA versionar.
+backend/backups/
+
 # Node / Next.js
 node_modules/
 .next/
