@@ -12,6 +12,9 @@ from app.application.planner.morning_briefing_notifier import (
     MorningBriefingNotifier,
 )
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
+from app.application.review.monthly_recap_notifier import (
+    MonthlyRecapNotifier,
+)
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
 from app.core.clock import DEFAULT_TIMEZONE
 from app.core.config import get_settings
@@ -119,6 +122,16 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="weekly_review_notification",
+    )
+
+    # Recap mensal — dia 1 do mês, 9h local: balanço do mês que fechou,
+    # pensado pra ser encaminhado (compartilhável).
+    _scheduler.add_job(
+        MonthlyRecapNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="monthly_recap_notification",
     )
 
     # Reforço do treinador externo — segunda 8h local.

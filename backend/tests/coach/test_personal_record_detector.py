@@ -10,6 +10,9 @@ from app.application.coach.intelligence.personal_record_detector import (
 from app.infrastructure.persistence import (
     personal_record_repository as repo_module,
 )
+from app.infrastructure.persistence.personal_record_repository import (
+    PersonalRecordRepository,
+)
 from tests.coach.factories import make_activity, make_runner
 
 MODULE = "app.application.coach.intelligence.personal_record_detector"
@@ -360,3 +363,55 @@ def test_seeding_first_means_first_real_run_can_already_celebrate():
 
     assert message is not None
     assert "15.0 km" in message
+
+
+def test_seed_dates_each_best_with_the_real_activity_date():
+    """A semente usa a data REAL da atividade que detém o recorde — não a
+    data de hoje — pra o recap mensal saber corretamente de qual mês é."""
+
+    old_longest = _run(3, 5, 10_000, 3.33, 1)  # 3 de maio
+
+    _seed("atleta_datado", [old_longest])
+
+    records = PersonalRecordRepository().load("atleta_datado")
+
+    assert records["longest_km_date"] == "2026-05-03"
+    assert records["pace_by_band_dates"]["8-12"] == "2026-05-03"
+
+    # marco de km acumulado é cumulativo, sem "dono" de uma atividade só —
+    # o seed não data (evita atribuir errado a um mês)
+    assert "total_km_milestone_date" not in records
+
+
+def test_after_feedback_dates_wins_with_the_current_run_date():
+
+    runner = make_runner()
+
+    first = _run(1, 7, 10_000, 3.33, 1)
+
+    _feed(runner, [first])  # semeia
+
+    second = _run(15, 7, 15_000, 3.33, 2)  # 15 de julho
+
+    _feed(runner, [second, first])
+
+    records = PersonalRecordRepository().load(runner.id)
+
+    assert records["longest_km_date"] == "2026-07-15"
+
+
+def test_km_milestone_is_dated_only_on_the_live_path():
+
+    runner = make_runner()
+
+    base = [_run(d, 6, 9_000, 3.0, d) for d in range(1, 11)]  # 90km, sem cruzar marco
+
+    _feed(runner, list(reversed(base)))  # semeia
+
+    today = _run(1, 7, 15_000, 3.0, 100)  # cruza 100km AO VIVO
+
+    _feed(runner, [today] + list(reversed(base)))
+
+    records = PersonalRecordRepository().load(runner.id)
+
+    assert records["total_km_milestone_date"] == "2026-07-01"

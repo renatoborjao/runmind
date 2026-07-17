@@ -23,7 +23,10 @@ from app.application.history.runner_metrics import (
     RUN_MIN_DISTANCE_KM,
     WALK_PACE_CUTOFF,
 )
-from app.application.history.weekly_buckets import group_by_week
+from app.application.history.weekly_buckets import (
+    activity_date,
+    group_by_week,
+)
 from app.application.planner.pace_formatter import PaceFormatter
 from app.domain.entities.activity import Activity
 from app.domain.entities.runner_profile import RunnerProfile
@@ -82,7 +85,7 @@ class PersonalRecordDetector:
 
         PersonalRecordRepository().save(
             profile,
-            PersonalRecordDetector._seed(history),
+            PersonalRecordDetector.compute_bests(history),
         )
 
     @staticmethod
@@ -109,7 +112,7 @@ class PersonalRecordDetector:
 
             repo.save(
                 runner.id,
-                PersonalRecordDetector._seed(history),
+                PersonalRecordDetector.compute_bests(history),
             )
 
             return None
@@ -117,6 +120,8 @@ class PersonalRecordDetector:
         wins: list[str] = []
 
         dist_km = current.distance / 1000
+
+        current_date = activity_date(current).isoformat()
 
         # -- corrida mais longa ------------------------------------------
         longest_km = records.get("longest_km", 0.0)
@@ -133,6 +138,8 @@ class PersonalRecordDetector:
 
             records["longest_km"] = round(dist_km, 2)
 
+            records["longest_km_date"] = current_date
+
         # -- treino mais rápido na faixa -----------------------------------
         pace = PersonalRecordDetector._pace(current)
 
@@ -148,6 +155,8 @@ class PersonalRecordDetector:
 
             pace_by_band = records.setdefault("pace_by_band", {})
 
+            pace_by_band_dates = records.setdefault("pace_by_band_dates", {})
+
             best = pace_by_band.get(band)
 
             if best is None or best - pace >= _PACE_MARGIN_MIN_KM:
@@ -158,6 +167,8 @@ class PersonalRecordDetector:
                 )
 
                 pace_by_band[band] = round(pace, 2)
+
+                pace_by_band_dates[band] = current_date
 
         # -- marco de km acumulado ------------------------------------------
         total_km = history.total_distance / 1000
@@ -176,6 +187,11 @@ class PersonalRecordDetector:
             wins.append(f"🎉 você passou de {milestone} km com o RunMind!")
 
             records["total_km_milestone"] = milestone
+
+            # só datado no caminho AO VIVO — cruzar um marco acumulado não
+            # tem "dono" de uma atividade só; no seed não dá pra atribuir
+            # direito, então melhor não datar do que datar errado.
+            records["total_km_milestone_date"] = current_date
 
         # -- semana de maior volume ------------------------------------------
         week_result = PersonalRecordDetector._week_record(
@@ -215,7 +231,11 @@ class PersonalRecordDetector:
         return TrainingHistory(activities=activities)
 
     @staticmethod
-    def _seed(history: TrainingHistory) -> dict:
+    def compute_bests(history: TrainingHistory) -> dict:
+        """Calcula as melhores marcas a partir de um histórico — usado tanto
+        pro cold-start (`seed`/primeira chamada de `after_feedback`) quanto
+        pelo recap mensal, que compara os bests até o fim de um mês vs até o
+        fim do anterior pra saber o que foi batido NAQUELE mês."""
 
         records: dict = {"seeded": True}
 
@@ -226,12 +246,15 @@ class PersonalRecordDetector:
 
         if runs:
 
-            records["longest_km"] = round(
-                max(a.distance for a in runs) / 1000,
-                2,
-            )
+            longest = max(runs, key=lambda a: a.distance)
+
+            records["longest_km"] = round(longest.distance / 1000, 2)
+
+            records["longest_km_date"] = activity_date(longest).isoformat()
 
         pace_by_band: dict[str, float] = {}
+
+        pace_by_band_dates: dict[str, str] = {}
 
         for activity in history.activities:
 
@@ -255,9 +278,13 @@ class PersonalRecordDetector:
 
                 pace_by_band[band] = round(pace, 2)
 
+                pace_by_band_dates[band] = activity_date(activity).isoformat()
+
         if pace_by_band:
 
             records["pace_by_band"] = pace_by_band
+
+            records["pace_by_band_dates"] = pace_by_band_dates
 
         total_km = history.total_distance / 1000
 
