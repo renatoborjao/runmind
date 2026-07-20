@@ -19,6 +19,9 @@ from app.application.coach.conversation.plan_preference_applier import (
 from app.application.coach.conversation.plan_preference_detector import (
     PlanPreferenceDetector,
 )
+from app.application.coach.conversation.goal_change_applier import (
+    GoalChangeApplier,
+)
 from app.application.coach.conversation.proposal_flow import ProposalFlow
 from app.application.coach.conversation.aversion_flow import AversionFlow
 from app.application.coach.conversation.negotiation_flow import NegotiationFlow
@@ -157,6 +160,27 @@ class CoachConversationEvent:
                     f"Falha ao aplicar preferência de plano de "
                     f"'{profile}': {e}"
                 )
+
+                reply_text = None
+
+        # Pedido de trocar o OBJETIVO/meta ("quero mudar minha meta pra
+        # sub-45", "meu objetivo agora é saúde"): aplicado de verdade e na
+        # hora, igual preferência de plano — sem passar pelo Gemini de chat.
+        if reply_text is None:
+
+            try:
+
+                reply_text = await GoalChangeApplier.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha ao trocar objetivo de '{profile}': {e}")
 
                 reply_text = None
 
