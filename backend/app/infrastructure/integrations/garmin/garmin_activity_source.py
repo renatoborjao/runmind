@@ -192,6 +192,13 @@ class GarminActivitySource:
 
             typed = garmin.get_activity_typed_splits(activity_id)
 
+            # TODAS as voltas classificadas (esforço/recuperação), não só os
+            # tiros -- fonte pro pareamento bloco-a-bloco geral com o plano
+            # (PlannedExecutionMatcher), pra QUALQUER tipo de treino.
+            raw["_garmin_typed_blocks"] = GarminActivitySource._classify_splits(
+                typed
+            )
+
             interval = GarminActivitySource._exact_interval(
                 typed, external_coach=external_coach
             )
@@ -510,6 +517,78 @@ class GarminActivitySource:
         return result
 
     @staticmethod
+    def _classify_splits(typed: dict) -> list[dict]:
+        """Classifica CADA volta do typed_splits (esforço/recuperação/outra),
+        na ordem cronológica -- usada tanto pro IntervalAnalysis exato
+        (_exact_interval, só os "effort") quanto pro pareamento
+        bloco-a-bloco geral com o plano (_garmin_typed_blocks, guarda TODAS
+        as voltas classificadas, inclusive aquecimento/desaquecimento/
+        corrida contínua sob "other").
+
+        RWD_* (run-walk-detection do Garmin) fica de fora sempre: é uma
+        segmentação PARALELA que soma a distância TOTAL do treino de novo
+        (achado real do dump do Mauricio, ver testes) -- incluir duplicaria
+        distância/tempo no pareamento."""
+
+        splits = (
+            typed.get("splits")
+            or typed.get("lapDTOs")
+            or (typed if isinstance(typed, list) else [])
+        )
+
+        classified = []
+
+        for sp in splits:
+
+            sp_type = str(
+                _first(sp, "type", "splitType", default="")
+            ).upper()
+
+            if sp_type.startswith("RWD_"):
+
+                continue
+
+            avg_speed = _first(sp, "averageSpeed", default=0)
+
+            hr = _num(_first(sp, "averageHR", "averageHeartRate"))
+
+            max_hr = _num(_first(sp, "maxHR", "maxHeartRate")) or hr
+
+            if _is_effort_type(sp_type):
+
+                kind = "effort"
+
+            elif _is_recovery_type(sp_type):
+
+                kind = "recovery"
+
+            else:
+
+                kind = "other"
+
+            classified.append(
+                {
+                    "kind": kind,
+                    "distance_m": round(
+                        float(_first(sp, "distance", default=0) or 0)
+                    ),
+                    "duration_s": round(
+                        float(
+                            _first(sp, "duration", "movingDuration", default=0)
+                            or 0
+                        )
+                    ),
+                    "pace": _speed_to_pace(avg_speed),
+                    "avg_hr": int(hr) if hr else None,
+                    "peak_hr": int(max_hr) if max_hr else None,
+                    # guardado só pro contraste/filtro; sai dos reps finais
+                    "_speed": avg_speed or None,
+                }
+            )
+
+        return classified
+
+    @staticmethod
     def _exact_interval(
         typed: dict,
         external_coach: bool = False,
@@ -522,53 +601,30 @@ class GarminActivitySource:
         (voltas do treinador externo não são confiáveis — ver
         [[_drop_walk_paced_efforts]])."""
 
-        splits = (
-            typed.get("splits")
-            or typed.get("lapDTOs")
-            or (typed if isinstance(typed, list) else [])
-        )
+        classified = GarminActivitySource._classify_splits(typed)
 
-        efforts = []
+        efforts = [
+            {
+                "distance_m": c["distance_m"],
+                "pace": c["pace"],
+                "peak_hr": c["peak_hr"],
+                "_speed": c["_speed"],
+            }
+            for c in classified
+            if c["kind"] == "effort"
+        ]
 
-        recovery_hrs = []
+        recovery_hrs = [
+            c["avg_hr"]
+            for c in classified
+            if c["kind"] == "recovery" and c["avg_hr"]
+        ]
 
-        recovery_speeds = []
-
-        for sp in splits:
-
-            sp_type = str(
-                _first(sp, "type", "splitType", default="")
-            ).upper()
-
-            avg_speed = _first(sp, "averageSpeed", default=0)
-
-            hr = _num(_first(sp, "averageHR", "averageHeartRate"))
-
-            max_hr = _num(_first(sp, "maxHR", "maxHeartRate")) or hr
-
-            if _is_effort_type(sp_type):
-
-                efforts.append(
-                    {
-                        "distance_m": round(
-                            float(_first(sp, "distance", default=0) or 0)
-                        ),
-                        "pace": _speed_to_pace(avg_speed),
-                        "peak_hr": int(max_hr) if max_hr else None,
-                        # guardado só pro contraste/filtro; sai dos reps finais
-                        "_speed": avg_speed or None,
-                    }
-                )
-
-            elif _is_recovery_type(sp_type):
-
-                if hr:
-
-                    recovery_hrs.append(hr)
-
-                if avg_speed:
-
-                    recovery_speeds.append(avg_speed)
+        recovery_speeds = [
+            c["_speed"]
+            for c in classified
+            if c["kind"] == "recovery" and c["_speed"]
+        ]
 
         # treinador externo: descarta os "tiros" que na verdade são caminhada
         # (aquecimento/desaquecimento/pausa que o Garmin rotulou como ACTIVE)

@@ -225,6 +225,52 @@ def test_longao_typed_splits_do_not_become_interval():
     assert GarminActivitySource._exact_interval(typed) is None
 
 
+def test_classify_splits_keeps_all_kinds_in_order():
+    """_garmin_typed_blocks: TODAS as voltas classificadas (não só os
+    esforços do _exact_interval) -- aquecimento/desaquecimento caem em
+    "other" (não batem o padrão ACTIVE/INTERVAL nem RECOVERY/REST), na
+    ordem cronológica."""
+
+    typed = {"splits": [
+        {"type": "WARMUP", "distance": 2000, "duration": 720,
+         "averageSpeed": 2.6, "averageHR": 130},
+        {"type": "INTERVAL_ACTIVE", "distance": 800, "duration": 228,
+         "averageSpeed": 3.5, "averageHR": 165, "maxHR": 170},
+        {"type": "INTERVAL_RECOVERY", "distance": 400, "duration": 166,
+         "averageSpeed": 2.4, "averageHR": 140},
+        {"type": "COOLDOWN", "distance": 1500, "duration": 577,
+         "averageSpeed": 2.6, "averageHR": 128},
+    ]}
+
+    classified = GarminActivitySource._classify_splits(typed)
+
+    assert [c["kind"] for c in classified] == [
+        "other", "effort", "recovery", "other",
+    ]
+    assert classified[0]["distance_m"] == 2000
+    assert classified[0]["duration_s"] == 720
+    assert classified[1]["distance_m"] == 800
+    assert classified[2]["kind"] == "recovery"
+
+
+def test_classify_splits_drops_rwd_segmentation():
+    """RWD_* (run-walk-detection) é uma segmentação PARALELA que soma a
+    mesma distância de novo (achado real do dump do Mauricio) -- nunca
+    entra em _garmin_typed_blocks, senão duplicaria distância/tempo."""
+
+    classified = GarminActivitySource._classify_splits(_MAURICIO_16_07_TYPED)
+
+    rwd_count = sum(
+        1 for sp in _MAURICIO_16_07_TYPED["splits"]
+        if str(sp["type"]).startswith("RWD_")
+    )
+
+    assert rwd_count > 0
+    # nenhuma volta RWD_* sobrevive na lista classificada
+    assert len(classified) == len(_MAURICIO_16_07_TYPED["splits"]) - rwd_count
+    assert all(c["kind"] in ("effort", "recovery") for c in classified)
+
+
 def test_to_activity_reads_nested_dtos():
     """get_activity devolve DTOs aninhados (summaryDTO/activityTypeDTO/
     timeZoneUnitDTO) — regressão do bug que lia campos planos e zerava tudo."""

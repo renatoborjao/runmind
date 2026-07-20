@@ -4,6 +4,9 @@ from app.application.coach.context.coach_context import (
 from app.application.history.consistency_calculator import (
     ConsistencyCalculator,
 )
+from app.application.history.planned_execution_matcher import (
+    PlannedExecutionMatcher,
+)
 from app.application.history.weekly_buckets import activity_date
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
@@ -50,6 +53,12 @@ class CoachContextBuilder:
             next_planned=next_planned,
 
             next_planned_date=next_planned_date,
+
+            block_comparison=(
+                PlannedExecutionMatcher.match(planned, executed.activity)
+                if planned is not None
+                else None
+            ),
 
             fatigue=executed.fatigue_score,
 

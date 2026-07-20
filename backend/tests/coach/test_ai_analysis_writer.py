@@ -132,6 +132,48 @@ def test_executed_laps_fact_drops_phantom_laps():
     assert "; " not in fact  # só um bloco real (os 2 fantasmas caíram)
 
 
+def test_facts_use_exact_block_comparison_when_present():
+    """Quando o PlannedExecutionMatcher conseguiu casar com confiança, o
+    fato já vem com o veredito CALCULADO -- não cai no texto cru de voltas
+    (a IA não precisa mais fazer a conta sozinha)."""
+
+    from app.domain.entities.block_comparison import (
+        BlockComparison,
+        ExecutedBlock,
+    )
+
+    comparison = BlockComparison(
+        blocks=[
+            ExecutedBlock(
+                kind="interval", label="Tiro 1",
+                planned_distance_m=600, planned_duration_sec=None,
+                pace_min="5:15", pace_max="5:30",
+                executed_distance_m=600, executed_duration_sec=190,
+                executed_pace=5.27, executed_hr=157,
+                within_target=True,
+            ),
+        ],
+        missing=["Recuperação 1"],
+    )
+
+    executed = make_enriched_activity(
+        activity=make_activity(raw={"_garmin_laps": [
+            {"distance_m": 999, "duration_s": 1, "pace": 1, "avg_hr": 1},
+        ]}),
+    )
+
+    facts = AIAnalysisWriter._facts(
+        make_context(executed=executed, block_comparison=comparison)
+    )
+
+    assert "comparação EXATA, já calculada" in facts
+    assert "Tiro 1" in facts
+    assert "[dentro do alvo]" in facts
+    assert "Não completou: Recuperação 1" in facts
+    # não cai no texto cru de voltas (999m não devia aparecer)
+    assert "999m" not in facts
+
+
 def test_facts_include_executed_blocks_for_internal_plan():
     """A execução por bloco (voltas do Garmin) agora vai pra IA em QUALQUER
     plano, não só treinador externo — pra comparar bloco a bloco (tempo,

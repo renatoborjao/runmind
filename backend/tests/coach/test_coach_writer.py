@@ -262,6 +262,58 @@ def test_treadmill_marks_distance_and_hides_rep_meters():
     assert "Tiro 1: 5:30 min/km · pico 172 bpm" in interval_text
 
 
+def test_block_lines_render_verdict_and_missing():
+    """Execução por bloco: ✅/⚠️ já calculados, aparece MESMO sem IA (é a
+    mensagem determinística) -- cobre qualquer tipo estruturado."""
+
+    from app.domain.entities.block_comparison import (
+        BlockComparison,
+        ExecutedBlock,
+    )
+
+    comparison = BlockComparison(
+        blocks=[
+            ExecutedBlock(
+                kind="warmup", label="Aquecimento",
+                planned_distance_m=2000, planned_duration_sec=None,
+                pace_min=None, pace_max=None,
+                executed_distance_m=2010, executed_duration_sec=750,
+                executed_pace=6.2, executed_hr=130,
+                within_target=True,
+            ),
+            ExecutedBlock(
+                kind="run", label="Corrida contínua",
+                planned_distance_m=6000, planned_duration_sec=None,
+                pace_min="4:45", pace_max="4:55",
+                executed_distance_m=6080, executed_duration_sec=1720,
+                executed_pace=5.4, executed_hr=165,
+                within_target=False,
+            ),
+        ],
+        missing=["Desaquecimento"],
+    )
+
+    context = make_context(block_comparison=comparison)
+
+    message = CoachWriter.write(context, CoachSummary(runner_name="Renato"))
+
+    assert message.block_lines[0].startswith("✅ Aquecimento:")
+    assert message.block_lines[1].startswith("⚠️ Corrida contínua:")
+    assert "alvo 4:45-4:55/km" in message.block_lines[1]
+    assert message.block_lines[-1] == "Não completou: Desaquecimento"
+
+
+def test_block_lines_empty_without_comparison():
+    """Sem comparação confiável (None): a seção nova simplesmente some --
+    não quebra o caminho de hoje."""
+
+    context = make_context()
+
+    message = CoachWriter.write(context, CoachSummary(runner_name="Renato"))
+
+    assert message.block_lines == []
+
+
 def test_no_structure_means_no_splits_section():
 
     executed = make_enriched_activity(structure=None)

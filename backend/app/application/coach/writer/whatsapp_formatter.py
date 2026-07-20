@@ -33,6 +33,11 @@ class WhatsAppFormatter:
         )
 
         blocks += WhatsAppFormatter._section(
+            messages.BLOCKS_TITLE,
+            message.block_lines,
+        )
+
+        blocks += WhatsAppFormatter._section(
             messages.SPLITS_TITLE,
             message.splits_lines,
         )

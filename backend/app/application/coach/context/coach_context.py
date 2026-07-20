@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from app.domain.entities.block_comparison import (
+    BlockComparison,
+)
 from app.domain.entities.enriched_activity import (
     EnrichedActivity,
 )
@@ -34,6 +37,11 @@ class CoachContext:
 
     # próxima sessão futura do plano (para o "🎯 Próximo treino")
     next_planned: PlannedSession | None = None
+
+    # comparação exata bloco-a-bloco (prescrito×executado) via Garmin --
+    # None quando não há `planned.steps`, não há dado de Garmin ou o
+    # pareamento ficou ambíguo demais pra confiar (PlannedExecutionMatcher)
+    block_comparison: BlockComparison | None = None
 
     # data (calendário) da próxima sessão — "quinta-feira (09/07)" em vez
     # de só "quinta-feira" (planos de treinador externo têm data no doc)

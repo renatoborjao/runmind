@@ -64,6 +64,7 @@ class CoachWriter:
                 context.runner.external_coach,
             ),
             interval_lines=CoachWriter._interval_lines(context.executed),
+            block_lines=CoachWriter._block_lines(context.block_comparison),
             splits_lines=CoachWriter._splits_lines(context.executed),
             positives=CoachWriter._render_all(summary.positives),
             improvements=CoachWriter._render_all(summary.improvements),
@@ -252,6 +253,74 @@ class CoachWriter:
                 line += f" · pico {rep['peak_hr']} bpm"
 
             lines.append(line)
+
+        return lines
+
+    @staticmethod
+    def _block_lines(
+        comparison,
+    ) -> list[str]:
+        """Execução por bloco: comparação EXATA prescrito×executado
+        (PlannedExecutionMatcher) — ✅/⚠️ já calculados por código. Aparece
+        MESMO SE a IA cair (fallback determinístico), pra QUALQUER tipo
+        estruturado, não só intervalado puro. Sem comparação confiável
+        (None), a seção simplesmente some — _interval_lines/_splits_lines
+        seguem cobrindo o caso genérico, sem mudança."""
+
+        if comparison is None:
+
+            return []
+
+        lines = []
+
+        for block in comparison.blocks:
+
+            if block.within_target is True:
+
+                prefix = "✅ "
+
+            elif block.within_target is False:
+
+                prefix = "⚠️ "
+
+            else:
+
+                prefix = ""
+
+            seg = f"{prefix}{block.label}: "
+
+            if block.executed_distance_m:
+
+                seg += f"{block.executed_distance_m:.0f} m · "
+
+            if block.executed_pace:
+
+                seg += f"{PaceFormatter.format(block.executed_pace)} min/km"
+
+            else:
+
+                seg += CoachWriter._duration(block.executed_duration_sec)
+
+            if block.pace_min and block.pace_max:
+
+                seg += f" (alvo {block.pace_min}-{block.pace_max}/km)"
+
+            elif block.planned_distance_m:
+
+                seg += f" (alvo {block.planned_distance_m:.0f} m)"
+
+            elif block.planned_duration_sec:
+
+                seg += (
+                    f" (alvo "
+                    f"{CoachWriter._duration(block.planned_duration_sec)})"
+                )
+
+            lines.append(seg)
+
+        if comparison.missing:
+
+            lines.append(f"Não completou: {', '.join(comparison.missing)}")
 
         return lines
 

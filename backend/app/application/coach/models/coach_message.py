@@ -20,6 +20,10 @@ class CoachMessage:
         default_factory=list,
     )
 
+    block_lines: list[str] = field(
+        default_factory=list,
+    )
+
     splits_lines: list[str] = field(
         default_factory=list,
     )

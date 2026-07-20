@@ -8,6 +8,8 @@ EXECUTED_TITLE = "✅ Executado"
 
 INTERVALS_TITLE = "🔁 Tiros (intervalado)"
 
+BLOCKS_TITLE = "🧩 Execução por bloco"
+
 SPLITS_TITLE = "⏱️ Parciais por km"
 
 ANALYSIS_TITLE = "📊 Análise"

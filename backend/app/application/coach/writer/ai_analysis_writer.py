@@ -88,6 +88,11 @@ As voltas executadas podem estar em ordem diferente ou faltar um bloco \
 prescrito (ex.: aquecimento que o relógio não registrou por ter reiniciado) — \
 ALINHE por bom senso e NÃO acuse o atleta de ter pulado um bloco que só não \
 foi gravado.
+- Se a "Execução por bloco" vier marcada "(comparação EXATA, já calculada)", \
+os vereditos "[dentro do alvo]"/"[fora do alvo]" e "Não completou" JÁ FORAM \
+CALCULADOS por código — use-os como estão, NÃO recalcule nem questione a \
+conta. Bloco sem veredito (sem "[...]") não tinha alvo definido (ex.: \
+aquecimento livre) — não é erro nem acerto, é neutro.
 - AMBIENTE: descubra onde o treino foi SÓ pela linha "Ambiente" dos fatos — \
 NUNCA deduza da prescrição nem de preferências (a prescrição pode SUGERIR \
 esteira como opção sem que o atleta a tenha usado). Se "Ambiente: ESTEIRA", a \
@@ -235,19 +240,29 @@ class AIAnalysisWriter:
                         + legend_for_prompt()
                     )
 
-            # execução POR BLOCO (voltas do Garmin) pra IA comparar com a
-            # prescrição — vale pra QUALQUER tipo (tempo/progressivo/fartlek/
-            # tiro), não só treinador externo. O Garmin devolve ~uma volta por
-            # bloco quando o atleta segue o treino guiado; a IA ALINHA com a
-            # prescrição acima (robusto a desvio: relógio que reinicia e perde
-            # o aquecimento, volta acidental etc. — pareamento rígido erraria).
-            laps_fact = AIAnalysisWriter._executed_laps_fact(
-                (activity.raw or {}).get("_garmin_laps") or []
-            )
+            # execução POR BLOCO: quando o pareamento determinístico
+            # (PlannedExecutionMatcher) conseguiu casar com confiança, o
+            # veredito por bloco já vem CALCULADO — a IA narra, não faz
+            # conta. Só cai no texto cru de voltas (pra IA alinhar "por bom
+            # senso") quando o pareamento ficou ambíguo demais (ou não há
+            # Garmin) — comportamento de hoje, intacto.
+            if context.block_comparison is not None:
 
-            if laps_fact:
+                lines.append(
+                    AIAnalysisWriter._block_comparison_fact(
+                        context.block_comparison
+                    )
+                )
 
-                lines.append(laps_fact)
+            else:
+
+                laps_fact = AIAnalysisWriter._executed_laps_fact(
+                    (activity.raw or {}).get("_garmin_laps") or []
+                )
+
+                if laps_fact:
+
+                    lines.append(laps_fact)
 
         else:
 
@@ -311,6 +326,64 @@ class AIAnalysisWriter:
         0: "muito cansado", 25: "cansado", 50: "normal",
         75: "bem", 100: "forte",
     }
+
+    @staticmethod
+    def _block_comparison_fact(comparison) -> str:
+        """Comparação EXATA bloco-a-bloco (PlannedExecutionMatcher) — cada
+        bloco já traz o veredito calculado por código; a IA só narra."""
+
+        parts = []
+
+        for block in comparison.blocks:
+
+            seg = f"{block.label}: "
+
+            if block.executed_distance_m:
+
+                seg += f"{block.executed_distance_m:.0f}m "
+
+            minutes, seconds = divmod(int(block.executed_duration_sec), 60)
+
+            seg += f"em {minutes}'{seconds:02d}"
+
+            if block.executed_pace:
+
+                seg += f" ({PaceFormatter.format(block.executed_pace)}/km)"
+
+            if block.pace_min and block.pace_max:
+
+                seg += f" — alvo {block.pace_min}-{block.pace_max}/km"
+
+            elif block.planned_distance_m:
+
+                seg += f" — alvo {block.planned_distance_m:.0f}m"
+
+            elif block.planned_duration_sec:
+
+                p_min, p_sec = divmod(int(block.planned_duration_sec), 60)
+
+                seg += f" — alvo {p_min}'{p_sec:02d}"
+
+            if block.within_target is True:
+
+                seg += " [dentro do alvo]"
+
+            elif block.within_target is False:
+
+                seg += " [fora do alvo]"
+
+            parts.append(seg)
+
+        text = (
+            "Execução por bloco (comparação EXATA, já calculada): "
+            + "; ".join(parts)
+        )
+
+        if comparison.missing:
+
+            text += f". Não completou: {', '.join(comparison.missing)}"
+
+        return text
 
     @staticmethod
     def _executed_laps_fact(laps: list[dict]) -> str:
