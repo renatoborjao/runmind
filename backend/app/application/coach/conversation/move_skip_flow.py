@@ -18,6 +18,7 @@ _MOVE_CUES = [
     "no lugar de", "em vez de", "adia", "adiar", "remarca", "remarcar",
     "antecipa", "antecipar", "troca o dia", "troca pra", "trocar de dia",
     "empurra o treino", "empurrar o treino", "faco quarta", "corro quarta",
+    "reprograma", "reprogramar", "reprogramo",
 ]
 
 _SKIP_CUES = [
@@ -108,6 +109,10 @@ class MoveSkipFlow:
 
         session.pop("garmin", None)   # sessão movida nasce sem registro Garmin
 
+        session["structure"] = MoveSkipFlow._strip_stale_tip(
+            session.get("structure") or ""
+        )
+
         return [
             {"action": "drop", "day": request.day},
             {
@@ -116,6 +121,22 @@ class MoveSkipFlow:
                 "session": session,
             },
         ]
+
+    @staticmethod
+    def _strip_stale_tip(structure: str) -> str:
+        """A "Dica:" é comentário da IA preso ao dia/contexto originais do
+        plano (ex.: "fique à vontade pra mover pro domingo") — depois de um
+        move de verdade ela pode virar contradição ("hoje já é domingo").
+        Sem forma segura de saber se ainda vale, então some com ela; o resto
+        da estrutura (aquecimento, série, foco) continua válido."""
+
+        lines = [
+            line
+            for line in structure.split("\n")
+            if not line.strip().startswith("Dica:")
+        ]
+
+        return "\n".join(lines)
 
     @staticmethod
     def _looks_like_move_or_skip(text: str) -> bool:

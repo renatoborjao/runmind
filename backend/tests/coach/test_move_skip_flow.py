@@ -19,6 +19,7 @@ MODULE = "app.application.coach.conversation.move_skip_flow"
         ("não vou treinar hoje", True),
         ("joga o treino de terça pra quarta", True),
         ("posso pular o treino de amanhã?", True),
+        ("vou precisar reprogramar meu longao para amanhã, domingo", True),
         ("como foi meu último treino?", False),
         ("bom dia!", False),
     ],
@@ -34,6 +35,10 @@ def _session(day) -> PlannedSession:
         day=day, workout_type="Velocidade", objective="",
         planned_distance_km=9.0, planned_duration_minutes=None,
         target_pace_min="4:45", target_pace_max="4:50",
+        structure=(
+            "Corrida contínua: 9 km em ritmo leve.\n"
+            "Dica: você gosta de rodagem leve nesse dia, fique à vontade."
+        ),
     )
 
 
@@ -102,6 +107,10 @@ def test_move_stores_drop_plus_replace_on_target():
     assert ops[1]["session"]["day"] == "Wednesday"
     assert ops[1]["session"]["workout_type"] == "Velocidade"
     assert "garmin" not in ops[1]["session"]     # sessão movida nasce limpa
+
+    # Dica presa ao dia original some — pode ter virado contradição
+    assert "Dica:" not in ops[1]["session"]["structure"]
+    assert "Corrida contínua: 9 km" in ops[1]["session"]["structure"]
 
 
 def test_external_coach_is_left_alone():
