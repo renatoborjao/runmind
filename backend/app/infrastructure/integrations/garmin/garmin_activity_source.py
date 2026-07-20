@@ -330,7 +330,12 @@ class GarminActivitySource:
 
     @staticmethod
     def _sport(type_key: str) -> str:
-        """Mapeia o tipo Garmin pro vocabulário do sistema (FOOT_SPORTS)."""
+        """Mapeia o tipo Garmin pro vocabulário do sistema (FOOT_SPORTS).
+        Só reconhece variantes de CORRIDA como "Run" — natação/bike/força/
+        etc. caem em "Other" e são filtradas por is_foot_sport() rio abaixo,
+        nunca viram treino de corrida por engano (bug real: natação da
+        Fernanda entrando como "Run" pelo fallback antigo, que tratava
+        QUALQUER tipo não reconhecido como corrida)."""
 
         key = type_key.lower()
 
@@ -346,8 +351,16 @@ class GarminActivitySource:
 
             return "TrailRun"
 
+        if "swim" in key:
+
+            return "Swim"
+
         # running, treadmill_running, indoor_running, track_running...
-        return "Run"
+        if "run" in key:
+
+            return "Run"
+
+        return "Other"
 
     @staticmethod
     def _parse_date(value) -> datetime:

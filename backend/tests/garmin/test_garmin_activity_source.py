@@ -463,6 +463,18 @@ def test_sport_mapping():
     assert GarminActivitySource._sport("walking") == "Walk"
 
 
+def test_sport_mapping_never_defaults_unknown_types_to_run():
+    """Bug real: natação da Fernanda (typeKey 'lap_swimming') virava "Run"
+    pelo fallback antigo (QUALQUER tipo não reconhecido caía em corrida) —
+    poluía análise, volume e consistência. Só variantes de corrida viram
+    "Run"; o resto (natação, bike, força...) fica fora de FOOT_SPORTS."""
+
+    assert GarminActivitySource._sport("lap_swimming") == "Swim"
+    assert GarminActivitySource._sport("open_water_swimming") == "Swim"
+    assert GarminActivitySource._sport("cycling") == "Other"
+    assert GarminActivitySource._sport("strength_training") == "Other"
+
+
 def test_structure_builder_prefers_exact_garmin_interval():
     """Quando o raw traz _garmin_interval (voltas rotuladas), o builder usa
     ele em vez do detector fuzzy por stream."""
