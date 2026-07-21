@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from app.core.config import get_settings
@@ -9,6 +11,10 @@ from app.infrastructure.integrations.strava.mapper import (
 from app.infrastructure.storage.token_store import (
     TokenStore,
 )
+
+# o access token do Strava dura ~6h; renova um pouco ANTES de vencer (evita
+# corrida com uma chamada que começa faltando 1s pro vencimento)
+_TOKEN_EXPIRY_BUFFER_SECONDS = 300
 
 
 class StravaClient:
@@ -22,6 +28,8 @@ class StravaClient:
         profile: str = "renato",
     ):
 
+        self.profile = profile
+
         self.settings = get_settings()
 
         self.token_store = TokenStore(
@@ -29,9 +37,6 @@ class StravaClient:
         )
 
     async def _get_access_token(self) -> str:
-
-        print("========================================")
-        print("1 - Iniciando obtenção do Access Token")
 
         tokens = self.token_store.load()
 
@@ -41,8 +46,16 @@ class StravaClient:
                 "Nenhum token encontrado."
             )
 
-        print("2 - Token encontrado")
-        print("3 - Solicitando novo token ao Strava")
+        expires_at = tokens.get("expires_at")
+
+        # token ainda válido (com folga): reusa, sem bater no Strava —
+        # antes disso, todo poll/catch-up renovava o token à toa
+        if (
+            expires_at
+            and expires_at - _TOKEN_EXPIRY_BUFFER_SECONDS > time.time()
+        ):
+
+            return tokens["access_token"]
 
         async with httpx.AsyncClient(
             timeout=10,
@@ -66,8 +79,6 @@ class StravaClient:
 
             )
 
-        print("4 - Resposta recebida do Strava")
-
         response.raise_for_status()
 
         data = response.json()
@@ -86,7 +97,7 @@ class StravaClient:
 
         )
 
-        print("5 - Token salvo")
+        print(f"Strava [{self.profile}]: access token renovado")
 
         return data["access_token"]
 
@@ -107,11 +118,7 @@ class StravaClient:
         limit: int = 30,
     ):
 
-        print(f"7 - Buscando {limit} atividades")
-
         access_token = await self._get_access_token()
-
-        print("8 - Access Token obtido")
 
         async with httpx.AsyncClient(
             timeout=10,
@@ -135,13 +142,9 @@ class StravaClient:
 
             )
 
-        print("9 - Resposta da API de atividades")
-
         response.raise_for_status()
 
         data = response.json()
-
-        print(f"10 - {len(data)} atividades recebidas")
 
         return [
 
@@ -158,11 +161,7 @@ class StravaClient:
         activity_id: int,
     ):
 
-        print(f"11 - Buscando atividade {activity_id}")
-
         access_token = await self._get_access_token()
-
-        print("12 - Access Token obtido")
 
         async with httpx.AsyncClient(
             timeout=10,
@@ -180,13 +179,9 @@ class StravaClient:
 
             )
 
-        print("13 - Resposta da API da atividade")
-
         response.raise_for_status()
 
         data = response.json()
-
-        print("14 - Atividade carregada")
 
         return StravaMapper.to_activity(
             data
