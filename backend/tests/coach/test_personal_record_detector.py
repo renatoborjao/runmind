@@ -37,7 +37,9 @@ def _run(day, month, distance_m, speed, id_, sport="Run"):
 
 def _feed(runner, activities, has_token=True):
     """Roda o detector com o Strava dublado: `activities` já vem
-    newest-first, como a API do Strava devolve de verdade."""
+    newest-first, como a API do Strava devolve de verdade. O caminho ao
+    vivo busca só um punhado (não as 200 do cold-start) — mesmo mock
+    serve pros dois, já que ambos chamam `get_last_activities`."""
 
     with (
         patch(f"{MODULE}.TokenStore") as mock_token_store,
@@ -158,61 +160,71 @@ def test_pace_band_triggers_with_margin_and_ignores_micro_improvement():
     ) is None
 
 
-def test_km_milestone_crossed_triggers_once():
+def test_km_milestone_crossed_updates_silently_without_celebrating():
+    """Decisão do Renato: 'km acumulado' não é recorde de corredor de
+    verdade — segue sendo rastreado (o recap mensal usa), mas não gera mais
+    mensagem de comemoração depois de cada treino."""
 
     runner = make_runner()
 
-    # histórico com 90km acumulados antes do treino de hoje
+    # 96km acumulados antes de hoje; corrida mais longa já semeada em
+    # 15km, pra hoje (10km) não disparar OUTRO recorde e confundir o teste
     base = [
-        _run(d, 6, 9_000, 3.0, d) for d in range(1, 11)
+        _run(1, 6, 15_000, 3.0, 1),
+        *[_run(d, 6, 9_000, 3.0, d) for d in range(2, 11)],
     ]
 
-    _feed(runner, list(reversed(base)))  # semeia com 90km (nenhum marco)
+    _feed(runner, list(reversed(base)))  # semeia: 96km, longest=15km
 
-    today = _run(1, 7, 15_000, 3.0, 100)  # empurra pra 105km -> cruza 100
+    today = _run(1, 7, 10_000, 3.0, 100)  # empurra pra 106km -> cruza 100
 
     message = _feed(runner, [today] + list(reversed(base)))
 
-    assert message is not None
-    assert "100 km" in message
+    assert message is None  # sem comemoração — só atualiza por baixo
 
-    # próximo treino comum não recruza o mesmo marco
-    tomorrow = _run(2, 7, 5_000, 3.0, 101)
+    records = PersonalRecordRepository().load(runner.id)
 
-    again = _feed(
-        runner, [tomorrow, today] + list(reversed(base)),
-    )
-
-    assert again is None or "100 km" not in again
+    assert records["total_km_accumulated"] == 106.0
+    assert records["total_km_milestone"] == 100
+    assert records["total_km_milestone_date"] == "2026-07-01"
 
 
-def test_weekly_record_fires_once_per_week():
+def test_current_week_volume_updates_silently_without_celebrating():
+    """Decisão do Renato: 'semana de maior volume' não é recorde de
+    corredor de verdade — segue sendo rastreada (o recap mensal usa), mas
+    não gera mais mensagem de comemoração."""
 
     runner = make_runner()
 
-    # semana anterior: 20km (semente)
+    # semana anterior: 20km (semente); corrida mais longa = 10km
     seed_week = [_run(2, 6, 10_000, 3.0, 2), _run(1, 6, 10_000, 3.0, 1)]
 
     _feed(runner, seed_week)
 
-    # nova semana (ISO diferente), primeiro treino já supera os 20km da
-    # semana semeada
-    week2_run1 = _run(6, 7, 25_000, 3.0, 3)  # segunda-feira
+    # 3 corridas de 9km NA MESMA semana ISO nova somam 27km > 20km da
+    # semente, mas nenhuma bate a corrida mais longa (10km) nem o pace
+    # da faixa 8-12 (mesma velocidade da semente) -> sempre silêncio
+    week2 = [
+        _run(6, 7, 9_000, 3.0, 3),
+        _run(8, 7, 9_000, 3.0, 4),
+        _run(10, 7, 9_000, 3.0, 5),
+    ]
 
-    first_message = _feed(runner, [week2_run1] + seed_week)
+    history_so_far = list(seed_week)
 
-    assert first_message is not None
-    assert "maior volume" in first_message
+    for run in week2:
 
-    # segundo treino NA MESMA semana (mesmo que aumente ainda mais o volume)
-    # não repete a comemoração
-    week2_run2 = _run(8, 7, 10_000, 3.0, 4)  # quarta-feira
+        message = _feed(runner, [run] + history_so_far)
 
-    second_message = _feed(
-        runner, [week2_run2, week2_run1] + seed_week,
-    )
+        assert message is None
 
-    assert second_message is None
+        history_so_far = [run] + history_so_far
+
+    records = PersonalRecordRepository().load(runner.id)
+
+    assert records["best_week_km"] == 27.0
+    assert records["best_week_key"] == "2026-W28"
+    assert records["current_week_km"] == 27.0
 
 
 def test_reprocessing_same_activity_does_not_repeat_celebration():
@@ -243,20 +255,20 @@ def test_multiple_records_in_one_run_combine_into_one_message():
 
     runner = make_runner()
 
-    first = _run(1, 7, 10_000, 3.33, 1)
+    # 6km @ pace 5:00/km
+    first = _run(1, 7, 6_000, 1000 / (5 * 60), 1)
 
-    _feed(runner, [first])  # semeia longest=10km, semana ~10km
+    _feed(runner, [first])  # semeia longest=6km, banda 5-8 @ 5:00/km
 
-    # semana seguinte, mesmo pace (sem PR de faixa) mas mais longa e com
-    # mais km na semana -> bate corrida mais longa E semana de maior volume
-    big = _run(8, 7, 11_500, 3.33, 2)
+    # 7km @ pace 4:30/km: bate corrida mais longa E pace da mesma faixa
+    better = _run(8, 7, 7_000, 1000 / (4.5 * 60), 2)
 
-    message = _feed(runner, [big, first])
+    message = _feed(runner, [better, first])
 
     assert message is not None
     assert "recordes" in message
-    assert "11.5 km" in message
-    assert "maior volume" in message
+    assert "7.0 km" in message
+    assert "mais rápido na faixa de 5-8" in message
 
 
 def test_external_coach_athlete_still_gets_celebrated():

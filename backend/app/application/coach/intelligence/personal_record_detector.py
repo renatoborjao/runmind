@@ -1,8 +1,13 @@
 """Celebração de PR/marcos: depois de cada treino concluído, verifica se o
-atleta bateu um recorde real (corrida mais longa, treino mais rápido numa
-faixa de distância, marco de km acumulado, semana de maior volume) e devolve
-UMA mensagem comemorativa (ou None). NUNCA muda o plano — é puro
-reconhecimento, igual pra atleta RunMind ou de treinador externo.
+atleta bateu um recorde REAL de corredor (corrida mais longa, treino mais
+rápido numa faixa de distância) e devolve UMA mensagem comemorativa (ou
+None). NUNCA muda o plano — é puro reconhecimento, igual pra atleta RunMind
+ou de treinador externo.
+
+Decisão do Renato: "km acumulado" e "semana de maior volume" NÃO são
+recordes de corredor de verdade (ninguém comemora "passei de 500km" como
+comemora um PR de tempo) — continuam sendo RASTREADOS (o recap mensal usa
+essas duas métricas), mas não geram mais mensagem depois de cada treino.
 
 Fonte dos dados = SEMPRE Strava, nunca Garmin — mesmo pra quem tem Garmin
 conectado (a análise detalhada do treino em si — splits, tiros — continua via
@@ -10,6 +15,12 @@ Garmin, isso não muda). Hoje Strava é obrigatório no onboarding pra todo
 atleta, então é o único "livro de recordes" único e consistente entre todos;
 quem por algum motivo não tem Strava conectado simplesmente não recebe
 celebração (silêncio, não erro).
+
+Verificação ao vivo busca só um punhado de atividades recentes (não as 200
+inteiras) — os dois recordes de verdade (corrida mais longa, pace por faixa)
+só precisam da atividade mais nova comparada com o que já está gravado; os
+dois contadores agregados (km acumulado, semana atual) são incrementados em
+cima do valor já persistido, nunca resomados do zero.
 
 Cold start: sem uma base prévia, TUDO seria "recorde" na primeira comparação.
 `seed()` resolve isso na hora da conexão do Strava (onboarding ou late
@@ -54,9 +65,16 @@ _PACE_MARGIN_MIN_KM = 0.05
 
 _KM_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 5000]
 
-# quantas atividades recentes buscar no Strava (o máximo por página da API);
-# cobre "vida" na prática pro público atual do produto sem paginar.
+# quantas atividades recentes buscar no Strava pro COLD-START (seed): o
+# máximo por página da API, cobre "vida" na prática pro público atual do
+# produto sem paginar.
 _STRAVA_HISTORY_LIMIT = 200
+
+# quantas atividades recentes buscar no caminho AO VIVO (after_feedback):
+# só precisa achar a atividade mais nova que seja de pé (corrida/caminhada);
+# folga pequena cobre o caso raro de outro esporte ter sido sincronizado
+# entre o treino e o processamento, sem pagar o custo de buscar 200.
+_RECENT_ACTIVITY_LOOKBACK = 5
 
 
 class PersonalRecordDetector:
@@ -88,22 +106,27 @@ class PersonalRecordDetector:
         runner: RunnerProfile,
     ) -> str | None:
 
-        history = await PersonalRecordDetector._load_strava_history(
+        current = await PersonalRecordDetector._load_current_activity(
             runner.id,
         )
 
-        if history is None:
+        if current is None:
 
             return None
-
-        # a API do Strava devolve mais recente primeiro
-        current = history.activities[0]
 
         repo = PersonalRecordRepository()
 
         records = repo.load(runner.id)
 
         if not records.get("seeded"):
+
+            history = await PersonalRecordDetector._load_strava_history(
+                runner.id,
+            )
+
+            if history is None:
+
+                return None
 
             repo.save(
                 runner.id,
@@ -165,38 +188,20 @@ class PersonalRecordDetector:
 
                 pace_by_band_dates[band] = current_date
 
-        # -- marco de km acumulado ------------------------------------------
-        total_km = history.total_distance / 1000
+        # -- km acumulado + semana atual (NUNCA celebrados aqui — só
+        # alimentam o recap mensal; guard por id evita contar a mesma
+        # atividade 2x se o webhook/poller reprocessar) -------------------
+        if records.get("last_accumulated_activity_id") != current.id:
 
-        milestone_before = records.get("total_km_milestone", 0)
+            PersonalRecordDetector._accumulate_total_km(
+                records, dist_km, current_date,
+            )
 
-        crossed = [
-            m for m in _KM_MILESTONES
-            if milestone_before < m <= total_km
-        ]
+            PersonalRecordDetector._accumulate_current_week(
+                records, current, dist_km,
+            )
 
-        if crossed:
-
-            milestone = max(crossed)
-
-            wins.append(f"🎉 você passou de {milestone} km com o RunMind!")
-
-            records["total_km_milestone"] = milestone
-
-            # só datado no caminho AO VIVO — cruzar um marco acumulado não
-            # tem "dono" de uma atividade só; no seed não dá pra atribuir
-            # direito, então melhor não datar do que datar errado.
-            records["total_km_milestone_date"] = current_date
-
-        # -- semana de maior volume ------------------------------------------
-        week_result = PersonalRecordDetector._week_record(
-            history,
-            records,
-        )
-
-        if week_result:
-
-            wins.append(week_result)
+            records["last_accumulated_activity_id"] = current.id
 
         repo.save(runner.id, records)
 
@@ -205,6 +210,26 @@ class PersonalRecordDetector:
             return None
 
         return PersonalRecordDetector._message(runner.name, wins)
+
+    @staticmethod
+    async def _load_current_activity(profile: str) -> Activity | None:
+        """Busca só um punhado de atividades recentes (não as 200 do
+        cold-start) e devolve a mais nova que seja de pé — o suficiente pro
+        caminho ao vivo, que só compara/incrementa contra o que já está
+        gravado, nunca resoma o histórico inteiro."""
+
+        if TokenStore(profile).load() is None:
+
+            return None
+
+        activities = await StravaClient(profile).get_last_activities(
+            limit=_RECENT_ACTIVITY_LOOKBACK,
+        )
+
+        return next(
+            (a for a in activities if is_foot_sport(a.sport)),
+            None,
+        )
 
     @staticmethod
     async def _load_strava_history(profile: str) -> TrainingHistory | None:
@@ -224,6 +249,67 @@ class PersonalRecordDetector:
             return None
 
         return TrainingHistory(activities=activities)
+
+    @staticmethod
+    def _accumulate_total_km(
+        records: dict,
+        dist_km: float,
+        current_date: str,
+    ) -> None:
+        """Km acumulado: soma incremental (nunca resoma do Strava). Fica
+        gravado só pro recap mensal usar — não é celebrado aqui."""
+
+        total = records.get("total_km_accumulated", 0.0) + dist_km
+
+        records["total_km_accumulated"] = round(total, 2)
+
+        milestone_before = records.get("total_km_milestone", 0)
+
+        crossed = [
+            m for m in _KM_MILESTONES
+            if milestone_before < m <= total
+        ]
+
+        if crossed:
+
+            records["total_km_milestone"] = max(crossed)
+
+            # só datado no caminho AO VIVO — cruzar um marco acumulado não
+            # tem "dono" de uma atividade só; no seed não dá pra atribuir
+            # direito, então melhor não datar do que datar errado.
+            records["total_km_milestone_date"] = current_date
+
+    @staticmethod
+    def _accumulate_current_week(
+        records: dict,
+        current: Activity,
+        dist_km: float,
+    ) -> None:
+        """Semana atual: soma incremental por semana ISO (nunca resoma do
+        Strava); atualiza o recorde de sempre em silêncio quando bate. Fica
+        gravado só pro recap mensal usar — não é celebrado aqui."""
+
+        week_key = activity_date(current).isocalendar()[:2]
+
+        week_key_str = f"{week_key[0]}-W{week_key[1]:02d}"
+
+        if records.get("current_week_key") == week_key_str:
+
+            records["current_week_km"] = round(
+                records.get("current_week_km", 0.0) + dist_km, 2,
+            )
+
+        else:
+
+            records["current_week_key"] = week_key_str
+
+            records["current_week_km"] = round(dist_km, 2)
+
+        if records["current_week_km"] > records.get("best_week_km", 0.0):
+
+            records["best_week_km"] = records["current_week_km"]
+
+            records["best_week_key"] = week_key_str
 
     @staticmethod
     def compute_bests(history: TrainingHistory) -> dict:
@@ -283,6 +369,10 @@ class PersonalRecordDetector:
 
         total_km = history.total_distance / 1000
 
+        # contador incremental (pro caminho ao vivo nunca mais precisar
+        # resomar do Strava) — a base é literalmente o total já conhecido
+        records["total_km_accumulated"] = round(total_km, 2)
+
         crossed = [m for m in _KM_MILESTONES if m <= total_km]
 
         if crossed:
@@ -293,7 +383,26 @@ class PersonalRecordDetector:
 
         if buckets:
 
-            best_key = max(buckets)
+            # semana mais recente = ponto de partida do contador "em
+            # andamento" (current_week_km), que o caminho ao vivo só
+            # incrementa a partir daqui, nunca resoma do zero
+            latest_key = max(buckets)
+
+            latest_km = sum(
+                a.distance for a in buckets[latest_key]
+            ) / 1000
+
+            records["current_week_km"] = round(latest_km, 2)
+
+            records["current_week_key"] = (
+                f"{latest_key[0]}-W{latest_key[1]:02d}"
+            )
+
+            # recorde de sempre = a semana de MAIOR volume no histórico
+            # todo, não necessariamente a mais recente
+            best_key = max(
+                buckets, key=lambda k: sum(a.distance for a in buckets[k]),
+            )
 
             best_km = sum(
                 a.distance for a in buckets[best_key]
@@ -304,49 +413,6 @@ class PersonalRecordDetector:
             records["best_week_key"] = f"{best_key[0]}-W{best_key[1]:02d}"
 
         return records
-
-    @staticmethod
-    def _week_record(
-        history: TrainingHistory,
-        records: dict,
-    ) -> str | None:
-
-        buckets = group_by_week(history.activities)
-
-        if not buckets:
-
-            return None
-
-        current_key = max(buckets)
-
-        current_km = sum(
-            a.distance for a in buckets[current_key]
-        ) / 1000
-
-        current_key_str = f"{current_key[0]}-W{current_key[1]:02d}"
-
-        best_km = records.get("best_week_km", 0.0)
-
-        best_key = records.get("best_week_key")
-
-        if current_km <= best_km:
-
-            return None
-
-        # bate o recorde de sempre; a mensagem só sai UMA vez por semana —
-        # runs seguintes na MESMA semana continuam atualizando o valor por
-        # baixo dos panos, sem repetir a comemoração.
-        already_this_week = current_key_str == best_key
-
-        records["best_week_km"] = round(current_km, 2)
-
-        records["best_week_key"] = current_key_str
-
-        if already_this_week:
-
-            return None
-
-        return f"📈 sua semana de maior volume: {current_km:.1f} km!"
 
     @staticmethod
     def _pace(activity: Activity) -> float | None:
