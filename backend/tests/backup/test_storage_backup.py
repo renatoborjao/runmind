@@ -1,4 +1,5 @@
 import zipfile
+from datetime import timedelta
 
 from app.infrastructure.backup.storage_backup import StorageBackup
 
@@ -81,3 +82,32 @@ def test_keep_is_at_least_one(tmp_path):
     remaining = list(backup_dir.glob("runmind-storage-*.zip"))
 
     assert len(remaining) == 1
+
+
+def test_has_recent_snapshot_false_without_any_backup(tmp_path):
+
+    backup = StorageBackup(tmp_path / "storage", tmp_path / "backups")
+
+    assert backup.has_recent_snapshot(timedelta(minutes=5)) is False
+
+
+def test_has_recent_snapshot_true_right_after_run(tmp_path):
+
+    storage = _make_storage(tmp_path)
+    backup = StorageBackup(storage, tmp_path / "backups")
+
+    backup.run()
+
+    assert backup.has_recent_snapshot(timedelta(minutes=5)) is True
+
+
+def test_has_recent_snapshot_false_when_window_already_elapsed(tmp_path):
+
+    storage = _make_storage(tmp_path)
+    backup = StorageBackup(storage, tmp_path / "backups")
+
+    backup.run()
+
+    # janela negativa == "nada é recente o bastante" (equivalente a ter
+    # passado o intervalo todo)
+    assert backup.has_recent_snapshot(timedelta(seconds=-1)) is False

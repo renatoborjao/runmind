@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -68,16 +68,27 @@ async def _strava_catchup_tick() -> None:
         print(f"Strava catch-up falhou: {e}")
 
 
+#  em dev, --reload reinicia o processo (e o scheduler) a cada arquivo
+# salvo — sem essa janela, cada hot-reload disparava um snapshot novo
+_MIN_BACKUP_INTERVAL = timedelta(minutes=5)
+
+
 def _backup_tick() -> None:
 
     try:
 
         settings = get_settings()
 
-        path = StorageBackup(
+        backup = StorageBackup(
             backup_dir=settings.backup_dir or None,
             keep=settings.backup_keep,
-        ).run()
+        )
+
+        if backup.has_recent_snapshot(_MIN_BACKUP_INTERVAL):
+
+            return
+
+        path = backup.run()
 
         if path is not None:
 

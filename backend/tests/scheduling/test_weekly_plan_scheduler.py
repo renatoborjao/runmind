@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import app.infrastructure.scheduling.weekly_plan_scheduler as scheduler_module
@@ -85,3 +86,41 @@ def test_stop_shuts_down_and_clears_state():
         mock_instance.shutdown.assert_called_once()
 
         assert scheduler_module._scheduler is None
+
+
+def test_backup_tick_skips_when_a_recent_snapshot_already_exists():
+    """Restart rápido (hot-reload do uvicorn em dev) não deve duplicar o
+    snapshot — só o backup_now.py manual força incondicionalmente."""
+
+    fake_settings = SimpleNamespace(backup_dir="", backup_keep=28)
+
+    with patch(f"{MODULE}.get_settings", return_value=fake_settings), \
+         patch(f"{MODULE}.StorageBackup") as mock_cls:
+
+        mock_backup = MagicMock()
+        mock_backup.has_recent_snapshot.return_value = True
+        mock_cls.return_value = mock_backup
+
+        scheduler_module._backup_tick()
+
+        mock_backup.has_recent_snapshot.assert_called_once_with(
+            scheduler_module._MIN_BACKUP_INTERVAL
+        )
+        mock_backup.run.assert_not_called()
+
+
+def test_backup_tick_runs_when_no_recent_snapshot():
+
+    fake_settings = SimpleNamespace(backup_dir="", backup_keep=28)
+
+    with patch(f"{MODULE}.get_settings", return_value=fake_settings), \
+         patch(f"{MODULE}.StorageBackup") as mock_cls:
+
+        mock_backup = MagicMock()
+        mock_backup.has_recent_snapshot.return_value = False
+        mock_backup.run.return_value = None
+        mock_cls.return_value = mock_backup
+
+        scheduler_module._backup_tick()
+
+        mock_backup.run.assert_called_once()

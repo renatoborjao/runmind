@@ -11,7 +11,7 @@ disco e só protege contra corrupção/exclusão, não contra o disco morrer.
 """
 
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -69,6 +69,27 @@ class StorageBackup:
         self._rotate()
 
         return Path(archive)
+
+    def has_recent_snapshot(self, within: timedelta) -> bool:
+        """True se já existe um snapshot mais novo que `within`. Usado pelo
+        tick do scheduler pra não duplicar backup em restarts rápidos (ex.:
+        hot-reload do uvicorn em dev reinicia o processo a cada arquivo
+        salvo) — não afeta `run()`, que o backup manual (backup_now.py)
+        continua chamando direto pra sempre forçar um snapshot."""
+
+        snapshots = sorted(self.backup_dir.glob(f"{self.PREFIX}*.zip"))
+
+        if not snapshots:
+
+            return False
+
+        newest = snapshots[-1]
+
+        age = datetime.now() - datetime.fromtimestamp(
+            newest.stat().st_mtime
+        )
+
+        return age < within
 
     def _rotate(self) -> None:
         """Mantém só os últimos `keep` snapshots; apaga os mais antigos.
