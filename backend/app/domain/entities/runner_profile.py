@@ -91,3 +91,8 @@ class RunnerProfile:
     # coach (hoje/amanhã, semana) e o horário dos disparos. Default Brasil;
     # ajustável por atleta (ex.: amigo em Portugal).
     timezone: str = "America/Sao_Paulo"
+
+    # Sexo biológico ("M"/"F") — usado no cálculo de carga por FC (TRIMP de
+    # Banister tem fator diferente por sexo). None = desconhecido (a carga cai
+    # no %FCR linear). Coletado no onboarding.
+    sex: str | None = None

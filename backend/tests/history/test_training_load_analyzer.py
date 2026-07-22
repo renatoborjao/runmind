@@ -151,6 +151,41 @@ def test_session_without_hr_uses_median_factor():
     assert load.acute_load == 110.0
 
 
+def test_banister_weights_hard_effort_more_than_linear():
+
+    # com sexo, a exponencial de Banister pesa o esforço forte muito mais que
+    # o %FCR linear (sem sexo)
+    linear = TrainingLoadAnalyzer._intensity_factor(0.85, None)
+
+    banister = TrainingLoadAnalyzer._intensity_factor(0.85, "M")
+
+    assert linear == 0.85
+    assert banister > linear
+
+
+def test_banister_differs_by_sex():
+
+    male = TrainingLoadAnalyzer._intensity_factor(0.8, "M")
+
+    female = TrainingLoadAnalyzer._intensity_factor(0.8, "F")
+
+    assert male != female
+
+
+def test_sex_word_is_normalized():
+
+    # onboarding pode gravar "masculino"/"feminino" — normaliza pela inicial
+    assert (
+        TrainingLoadAnalyzer._intensity_factor(0.7, "masculino")
+        == TrainingLoadAnalyzer._intensity_factor(0.7, "M")
+    )
+
+    assert (
+        TrainingLoadAnalyzer._intensity_factor(0.7, "feminino")
+        == TrainingLoadAnalyzer._intensity_factor(0.7, "F")
+    )
+
+
 def test_invalid_max_hr_falls_back_to_duration():
 
     # FC máx <= repouso (dado torto): não pondera, cai na duração

@@ -70,6 +70,7 @@ class BodyReadingBuilder:
             reference_date=reference_date,
             resting_hr=resting_hr,
             max_hr=max_hr,
+            sex=getattr(runner, "sex", None),
         )
 
         recovery = RecoveryTrendAnalyzer.analyze(series)

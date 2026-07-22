@@ -6,6 +6,7 @@ Carga = minutos de treino (duração). Puro/testável, sem IO. Não decide nada
 sozinho nem fala com o atleta — entrega o retrato pra a camada 3 (síntese)
 consumir. Ver [[project_analise_corpo_garmin]]."""
 
+import math
 import statistics
 from collections import defaultdict
 from datetime import date, timedelta
@@ -36,6 +37,13 @@ _CHRONIC_DAYS = 28
 # atleta; sem nenhuma sessão com FC, cai neste moderado
 _DEFAULT_INTENSITY = 0.65
 
+# TRIMP de Banister: fator = %FCR × k × e^(c·%FCR) — a exponencial dá muito
+# mais peso ao esforço forte que o linear. Coeficientes por sexo (Banister).
+_BANISTER = {
+    "M": (0.64, 1.92),
+    "F": (0.86, 1.67),
+}
+
 
 class TrainingLoadAnalyzer:
 
@@ -45,16 +53,20 @@ class TrainingLoadAnalyzer:
         reference_date: date | None = None,
         resting_hr: int | None = None,
         max_hr: int | None = None,
+        sex: str | None = None,
     ) -> TrainingLoad:
         """Carga aguda vs crônica + ACWR. Com `resting_hr` E `max_hr`, cada
-        sessão é ponderada por INTENSIDADE (duração × %FCR — v2); sem eles,
-        cai na duração pura (v1). O ACWR é razão, então a unidade não muda o
+        sessão é ponderada por INTENSIDADE (TRIMP de Banister quando o `sex` é
+        conhecido — exponencial por sexo; senão %FCR linear). Sem FC repouso/
+        máx, cai na duração pura. O ACWR é razão, então a unidade não muda o
         veredito — o que muda é o peso relativo de treino forte vs leve."""
 
         ref = reference_date or today_local()
 
         # carga por dia — ponderada por intensidade quando dá, senão duração
-        per_day = TrainingLoadAnalyzer._load_per_day(history, resting_hr, max_hr)
+        per_day = TrainingLoadAnalyzer._load_per_day(
+            history, resting_hr, max_hr, sex
+        )
 
         acute = TrainingLoadAnalyzer._window_sum(per_day, ref, _ACUTE_DAYS)
 
@@ -90,13 +102,30 @@ class TrainingLoadAnalyzer:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _intensity_factor(hrr: float, sex: str | None) -> float:
+        """Peso de intensidade da sessão a partir do %FCR. Com sexo conhecido,
+        TRIMP de Banister (exponencial); senão, %FCR linear."""
+
+        coeffs = _BANISTER.get((sex or "").upper()[:1])
+
+        if coeffs is None:
+
+            return hrr
+
+        k, c = coeffs
+
+        return hrr * k * math.exp(c * hrr)
+
+    @staticmethod
     def _load_per_day(
         history: TrainingHistory,
         resting_hr: int | None,
         max_hr: int | None,
+        sex: str | None,
     ) -> dict[date, float]:
-        """Carga somada por dia. Com FC repouso + máx válidas, cada sessão =
-        duração × %FCR (intensidade); senão, duração pura (v1)."""
+        """Carga somada por dia. Com FC repouso + máx válidas, cada sessão é
+        ponderada por intensidade (Banister se souber o sexo, senão %FCR
+        linear); sem FC repouso/máx, duração pura (v1)."""
 
         intensity_mode = (
             resting_hr is not None
@@ -123,7 +152,9 @@ class TrainingLoadAnalyzer:
                     max_hr - resting_hr
                 )
 
-                factor = min(1.0, max(0.0, hrr))
+                hrr = min(1.0, max(0.0, hrr))
+
+                factor = TrainingLoadAnalyzer._intensity_factor(hrr, sex)
 
             sessions.append((activity.start_date.date(), minutes, factor))
 
