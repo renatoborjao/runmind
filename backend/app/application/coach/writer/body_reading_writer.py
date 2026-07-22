@@ -99,8 +99,8 @@ class BodyReadingWriter:
             lines.append(f"Limitador principal: {reading.limiter}")
 
         lines.append(
-            f"Carga: aguda {load.acute_load}min/sem vs crônica "
-            f"{load.chronic_load}min/sem, ACWR {load.acwr} ({load.status}); "
+            f"Carga (ponderada por intensidade): aguda {load.acute_load} vs "
+            f"crônica {load.chronic_load}, ACWR {load.acwr} ({load.status}); "
             f"semanas {load.weekly_loads}"
         )
 

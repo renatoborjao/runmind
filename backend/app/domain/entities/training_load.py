@@ -19,18 +19,18 @@ LOAD_HIGH = "HIGH"
 @dataclass(slots=True)
 class TrainingLoad:
     """Retrato da CARGA de treino do atleta num momento — a base do radar de
-    sobrecarga (camada 2). Carga = minutos de treino (duração); janela aguda
-    (7 dias) vs crônica (média semanal dos últimos 28 dias); o ACWR é a razão
-    entre as duas.
+    sobrecarga (camada 2). Janela aguda (7 dias) vs crônica (média semanal dos
+    últimos 28 dias); o ACWR é a razão entre as duas.
 
-    v1 é por DURAÇÃO (não pondera intensidade) — honesto e funciona em
-    qualquer fonte, mas um tiro curto e forte pesa igual a um trote longo.
-    Ponderar por FC (TRIMP) é o refinamento previsto pra v2 (já temos FC média
-    por treino e FC de repouso). Não é diagnóstico médico — é sinal de coach.
+    Carga = duração × %FCR (intensidade) quando há FC repouso + máx (v2 —
+    treino forte pesa mais que trote longo de mesma duração); cai na duração
+    pura quando faltam esses dados (v1). Como o ACWR é razão, a unidade não
+    muda o veredito, só o peso relativo forte/leve. Não é diagnóstico médico —
+    é sinal de coach.
     """
 
-    acute_load: float          # carga dos últimos 7 dias (min)
-    chronic_load: float        # carga média SEMANAL dos últimos 28 dias (min)
+    acute_load: float          # carga dos últimos 7 dias
+    chronic_load: float        # carga média SEMANAL dos últimos 28 dias
     acwr: float | None         # aguda/crônica; None quando não dá pra calcular
     status: str                # LOAD_* acima
     days_of_history: int       # dias entre o treino mais antigo e a referência

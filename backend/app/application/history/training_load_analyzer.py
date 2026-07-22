@@ -6,6 +6,7 @@ Carga = minutos de treino (duração). Puro/testável, sem IO. Não decide nada
 sozinho nem fala com o atleta — entrega o retrato pra a camada 3 (síntese)
 consumir. Ver [[project_analise_corpo_garmin]]."""
 
+import statistics
 from collections import defaultdict
 from datetime import date, timedelta
 
@@ -31,6 +32,10 @@ _MIN_HISTORY_DAYS = 21
 _ACUTE_DAYS = 7
 _CHRONIC_DAYS = 28
 
+# fator de intensidade da sessão SEM FC (raro): usa a mediana do próprio
+# atleta; sem nenhuma sessão com FC, cai neste moderado
+_DEFAULT_INTENSITY = 0.65
+
 
 class TrainingLoadAnalyzer:
 
@@ -38,12 +43,18 @@ class TrainingLoadAnalyzer:
     def analyze(
         history: TrainingHistory,
         reference_date: date | None = None,
+        resting_hr: int | None = None,
+        max_hr: int | None = None,
     ) -> TrainingLoad:
+        """Carga aguda vs crônica + ACWR. Com `resting_hr` E `max_hr`, cada
+        sessão é ponderada por INTENSIDADE (duração × %FCR — v2); sem eles,
+        cai na duração pura (v1). O ACWR é razão, então a unidade não muda o
+        veredito — o que muda é o peso relativo de treino forte vs leve."""
 
         ref = reference_date or today_local()
 
-        # carga por dia (minutos), só do que caiu na janela crônica
-        per_day = TrainingLoadAnalyzer._load_per_day(history)
+        # carga por dia — ponderada por intensidade quando dá, senão duração
+        per_day = TrainingLoadAnalyzer._load_per_day(history, resting_hr, max_hr)
 
         acute = TrainingLoadAnalyzer._window_sum(per_day, ref, _ACUTE_DAYS)
 
@@ -79,18 +90,61 @@ class TrainingLoadAnalyzer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _load_per_day(history: TrainingHistory) -> dict[date, float]:
-        """Minutos de treino somados por dia (duração = carga na v1)."""
+    def _load_per_day(
+        history: TrainingHistory,
+        resting_hr: int | None,
+        max_hr: int | None,
+    ) -> dict[date, float]:
+        """Carga somada por dia. Com FC repouso + máx válidas, cada sessão =
+        duração × %FCR (intensidade); senão, duração pura (v1)."""
 
-        per_day: dict[date, float] = defaultdict(float)
+        intensity_mode = (
+            resting_hr is not None
+            and max_hr is not None
+            and max_hr > resting_hr
+        )
+
+        # (dia, minutos, fator) — fator None quando a sessão não tem FC
+        sessions: list[tuple[date, float, float | None]] = []
 
         for activity in history.activities:
 
             minutes = (activity.moving_time or 0) / 60
 
-            if minutes > 0:
+            if minutes <= 0:
 
-                per_day[activity.start_date.date()] += minutes
+                continue
+
+            factor = None
+
+            if intensity_mode and activity.average_heartrate:
+
+                hrr = (activity.average_heartrate - resting_hr) / (
+                    max_hr - resting_hr
+                )
+
+                factor = min(1.0, max(0.0, hrr))
+
+            sessions.append((activity.start_date.date(), minutes, factor))
+
+        per_day: dict[date, float] = defaultdict(float)
+
+        if not intensity_mode:
+
+            for day, minutes, _ in sessions:
+
+                per_day[day] += minutes
+
+            return per_day
+
+        # sessão sem FC (rara) herda a mediana de intensidade do próprio atleta
+        known = [f for _, _, f in sessions if f is not None]
+
+        fallback = statistics.median(known) if known else _DEFAULT_INTENSITY
+
+        for day, minutes, factor in sessions:
+
+            per_day[day] += minutes * (factor if factor is not None else fallback)
 
         return per_day
 

@@ -6,6 +6,7 @@ sobrecarga); rampa COM recuperação caindo = alerta de verdade.
 Puro/determinístico: entrega o veredito PRONTO pra a IA narrar (a IA não
 recalcula, igual à comparação bloco-a-bloco). Ver [[project_analise_corpo_garmin]]."""
 
+import statistics
 from datetime import date
 
 from app.application.history.recovery_trend_analyzer import (
@@ -39,6 +40,9 @@ from app.infrastructure.persistence.activity_archive_repository import (
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
+from app.infrastructure.persistence.runner_profile_repository import (
+    RunnerProfileRepository,
+)
 
 
 class BodyReadingBuilder:
@@ -49,14 +53,24 @@ class BodyReadingBuilder:
         reference_date: date | None = None,
     ) -> BodyReading:
 
+        series = GarminHealthRepository().load(profile)
+
+        runner = RunnerProfileRepository().load(profile)
+
+        # intensidade da carga (v2) precisa de FC repouso (mediana da série de
+        # saúde) + FC máx (idade via Tanaka); sem eles, o analisador cai no v1
+        resting_hr = BodyReadingBuilder._resting_hr(series)
+
+        max_hr = BodyReadingBuilder._max_hr(getattr(runner, "age", None))
+
         activities = ActivityArchiveRepository().load_activities(profile)
 
         load = TrainingLoadAnalyzer.analyze(
             TrainingHistory(activities=activities),
             reference_date=reference_date,
+            resting_hr=resting_hr,
+            max_hr=max_hr,
         )
-
-        series = GarminHealthRepository().load(profile)
 
         recovery = RecoveryTrendAnalyzer.analyze(series)
 
@@ -72,6 +86,26 @@ class BodyReadingBuilder:
         )
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resting_hr(series) -> int | None:
+        """FC de repouso do atleta = mediana dos valores da série de saúde
+        (robusta a um dia atípico). None se não houver dado."""
+
+        values = [h.resting_hr for h in series if h.resting_hr is not None]
+
+        return round(statistics.median(values)) if values else None
+
+    @staticmethod
+    def _max_hr(age) -> int | None:
+        """FC máxima estimada por Tanaka (208 − 0,7·idade), mais precisa que
+        220−idade. Sem idade → None (carga cai no v1 por duração)."""
+
+        if not age or age <= 0:
+
+            return None
+
+        return round(208 - 0.7 * age)
 
     @staticmethod
     def _verdict(load_status: str, recovery) -> str:

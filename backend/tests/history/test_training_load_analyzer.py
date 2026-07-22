@@ -84,6 +84,86 @@ def test_weekly_loads_ordered_old_to_new():
     assert load.weekly_loads == [40.0, 30.0, 20.0, 10.0]
 
 
+def _hr_act(days_ago: int, minutes: int, hr):
+
+    day = REF - timedelta(days=days_ago)
+
+    return SimpleNamespace(
+        start_date=datetime(day.year, day.month, day.day, 10, 0),
+        moving_time=minutes * 60,
+        average_heartrate=hr,
+    )
+
+
+# ---------------- v2: intensidade (duração × %FCR) ----------------
+
+
+def test_intensity_weights_hard_sessions_more_than_easy():
+
+    hard = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=[_hr_act(0, 60, 160)]),
+        reference_date=REF,
+        resting_hr=60,
+        max_hr=180,
+    )
+
+    easy = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=[_hr_act(0, 60, 100)]),
+        reference_date=REF,
+        resting_hr=60,
+        max_hr=180,
+    )
+
+    # mesma duração, FC maior -> mais carga
+    assert hard.acute_load > easy.acute_load
+    # hrr 160: (160-60)/(180-60)=0.833 -> 60*0.833 ~= 50
+    assert hard.acute_load == 50.0
+
+
+def test_without_hr_params_stays_duration_only():
+
+    # sem FC repouso/máx: v1 (duração), ignora a FC da atividade
+    load = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=[_hr_act(0, 60, 160)]),
+        reference_date=REF,
+    )
+
+    assert load.acute_load == 60.0
+
+
+def test_session_without_hr_uses_median_factor():
+
+    # 2 sessões com FC (fatores 1.0 e 0.0 -> mediana 0.5) + 1 sem FC de 100min
+    acts = [
+        _hr_act(0, 60, 180),   # hrr 1.0
+        _hr_act(1, 60, 60),    # hrr 0.0
+        _hr_act(2, 100, None),  # sem FC -> mediana 0.5 -> 50
+    ]
+
+    load = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts),
+        reference_date=REF,
+        resting_hr=60,
+        max_hr=180,
+    )
+
+    # 60*1.0 + 60*0.0 + 100*0.5 = 110
+    assert load.acute_load == 110.0
+
+
+def test_invalid_max_hr_falls_back_to_duration():
+
+    # FC máx <= repouso (dado torto): não pondera, cai na duração
+    load = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=[_hr_act(0, 60, 160)]),
+        reference_date=REF,
+        resting_hr=180,
+        max_hr=170,
+    )
+
+    assert load.acute_load == 60.0
+
+
 def test_empty_history_is_insufficient():
 
     load = _analyze([])
