@@ -5,6 +5,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.application.garmin.garmin_activity_poller import (
     GarminActivityPoller,
 )
+from app.application.garmin.garmin_health_poller import (
+    GarminHealthPoller,
+)
 from app.application.strava.strava_activity_catchup import (
     StravaActivityCatchup,
 )
@@ -54,6 +57,18 @@ async def _garmin_poll_tick() -> None:
 
         # Garmin fora do ar / token expirado — só loga, tenta em 10 min
         print(f"Garmin poll falhou: {e}")
+
+
+async def _garmin_health_tick() -> None:
+
+    try:
+
+        await GarminHealthPoller.poll_all()
+
+    except Exception as e:
+
+        # Garmin fora do ar / token expirado — só loga, tenta na próxima hora
+        print(f"Garmin health poll falhou: {e}")
 
 
 async def _strava_catchup_tick() -> None:
@@ -185,6 +200,18 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minutes=10,
         misfire_grace_time=_INTERVAL_GRACE,
         id="garmin_activity_poll",
+    )
+
+    # Saúde do Garmin (sono/HRV/stress/prontidão): ingere o dia anterior, de
+    # graça (sem IA). De hora em hora, mas o dedup por data faz virar UM pull/
+    # atleta/dia — e resiliente a máquina que dorme. Barato quando ninguém tem
+    # Garmin (só checa arquivo de token).
+    _scheduler.add_job(
+        _garmin_health_tick,
+        trigger="cron",
+        minute=7,
+        misfire_grace_time=_INTERVAL_GRACE,
+        id="garmin_health_poll",
     )
 
     # Rede de segurança do webhook Strava (atleta só-Strava): roda LOGO no
