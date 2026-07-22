@@ -14,6 +14,8 @@ class ChatIntent(str, Enum):
 
     WEEKLY_PLAN = "WEEKLY_PLAN"
 
+    BODY_READING = "BODY_READING"
+
 
 # Pedido claro sobre o treino JÁ FEITO (quer a análise completa).
 _LAST_PATTERNS = [
@@ -42,11 +44,23 @@ _WEEKLY_PLAN_PATTERNS = [
     r"\bagenda (da|de) (semana|treino)\b",
 ]
 
+# Pedido sobre o CORPO/recuperação (quer a leitura carga+recuperação).
+_BODY_PATTERNS = [
+    r"\bcomo (esta|ta|to|estou|tou)\b.*\b(meu corpo|minha recuperacao|recuperado|descansado|de recuperacao|minha fadiga|meu descanso)\b",
+    r"\b(minha|meu) (recuperacao|prontidao|sobrecarga|fadiga)\b",
+    r"\b(estou|to|tou|ando)\b.*\b(sobrecarregado|cansado|recuperado|descansado|detonado|zerado)\b",
+    r"\bposso (treinar|puxar|forcar|correr)\b.*\b(forte|pesado|firme)\b",
+    r"\bcomo (esta|ta)\b.*\b(meu sono|meu hrv|minha vfc|minha carga)\b",
+    r"\bleitura do (meu )?corpo\b",
+]
+
 _LAST_REGEXES = [re.compile(p) for p in _LAST_PATTERNS]
 
 _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
 
 _WEEKLY_PLAN_REGEXES = [re.compile(p) for p in _WEEKLY_PLAN_PATTERNS]
+
+_BODY_REGEXES = [re.compile(p) for p in _BODY_PATTERNS]
 
 
 class IntentRouter:
@@ -72,6 +86,10 @@ class IntentRouter:
         if any(regex.search(normalized) for regex in _WEEKLY_PLAN_REGEXES):
 
             matched.append(ChatIntent.WEEKLY_PLAN)
+
+        if any(regex.search(normalized) for regex in _BODY_REGEXES):
+
+            matched.append(ChatIntent.BODY_READING)
 
         if len(matched) == 1:
 

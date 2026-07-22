@@ -1,6 +1,13 @@
 from app.application.coach.conversation.intent_router import (
     ChatIntent,
 )
+from app.application.coach.intelligence.body_reading_builder import (
+    BodyReadingBuilder,
+)
+from app.application.coach.writer.body_reading_writer import (
+    BodyReadingWriter,
+)
+from app.domain.entities.training_load import LOAD_INSUFFICIENT
 from app.application.orchestrators.last_training_report import (
     LastTrainingReport,
 )
@@ -73,5 +80,20 @@ class OnDemandAnswers:
                 plan,
                 done_days=done_days,
             )
+
+        if intent == ChatIntent.BODY_READING:
+
+            reading = BodyReadingBuilder.build(profile)
+
+            # sem recuperação (não tem Garmin) E sem carga suficiente: não há
+            # leitura útil — cai no Gemini, que responde com naturalidade
+            if (
+                not reading.recovery.has_data
+                and reading.load.status == LOAD_INSUFFICIENT
+            ):
+
+                return None
+
+            return await BodyReadingWriter.write(reading, runner.name)
 
         return None

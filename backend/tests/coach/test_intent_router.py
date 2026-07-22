@@ -126,3 +126,40 @@ def test_ambiguous_last_and_next_returns_none():
     text = "como foi meu último treino e qual o próximo treino?"
 
     assert IntentRouter.detect(text) is None
+
+
+# ==========================================================
+# BODY_READING
+# ==========================================================
+
+def test_como_ta_meu_corpo():
+
+    assert (
+        IntentRouter.detect("como tá meu corpo hoje?")
+        == ChatIntent.BODY_READING
+    )
+
+
+def test_estou_sobrecarregado():
+
+    assert (
+        IntentRouter.detect("acho que estou sobrecarregado")
+        == ChatIntent.BODY_READING
+    )
+
+
+def test_minha_recuperacao():
+
+    assert (
+        IntentRouter.detect("como está minha recuperação?")
+        == ChatIntent.BODY_READING
+    )
+
+
+def test_body_reading_does_not_collide_with_training_intents():
+    """'como foi meu treino' segue LAST, não vira leitura do corpo."""
+
+    assert (
+        IntentRouter.detect("como foi meu último treino?")
+        == ChatIntent.LAST_TRAINING
+    )
