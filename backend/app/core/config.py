@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
 
+    # Telegram chat_id do DONO (Renato) pra alertas operacionais — quando o
+    # coach falha várias vezes seguidas, o backend avisa aqui em vez de a
+    # falha morrer no log até alguém testar por acaso. Vazio = alertas OFF
+    # (nada é enviado, nunca quebra). Setar ADMIN_TELEGRAM_ID no .env.
+    admin_telegram_id: str = ""
+
     # ==========================
     # GOOGLE GEMINI
     # ==========================

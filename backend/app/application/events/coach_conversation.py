@@ -27,6 +27,7 @@ from app.application.coach.conversation.aversion_flow import AversionFlow
 from app.application.coach.conversation.negotiation_flow import NegotiationFlow
 from app.application.coach.conversation.move_skip_flow import MoveSkipFlow
 from app.application.garmin.garmin_sync import GarminSync
+from app.application.monitoring.ai_health_monitor import AIHealthMonitor
 from app.application.coach.conversation.conversation_summary_engine import (
     ConversationSummaryEngine,
 )
@@ -290,6 +291,10 @@ class CoachConversationEvent:
                     incoming_text=incoming_text,
                 )
 
+                # coach respondeu de verdade (via Gemini): saúde OK, zera o
+                # contador de falhas e, se estava alertado, avisa recuperação
+                await AIHealthMonitor.record_success()
+
             except Exception as e:
 
                 print(f"Falha na conversa com '{profile}': {e}")
@@ -299,6 +304,10 @@ class CoachConversationEvent:
                 if not send_fallback:
 
                     raise CoachUnavailable(str(e)) from e
+
+                # último fôlego: vai mandar o fallback. Conta a falha (1x por
+                # mensagem, não por tentativa) e alerta o dono se virou padrão.
+                await AIHealthMonitor.record_failure(str(e))
 
                 reply_text = BUSY_REPLY
 
