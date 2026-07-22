@@ -218,6 +218,59 @@ def test_require_text_retries_on_empty_then_raises():
     assert generate_content.await_count == gemini_client.MAX_ATTEMPTS
 
 
+def test_thinking_budget_zero_is_raised_to_floor():
+
+    # os modelos -latest rejeitam thinking_budget=0 (400); o cliente eleva
+    # pro piso válido ANTES de disparar, pra o request não virar inválido
+    thinking = SimpleNamespace(thinking_budget=0)
+
+    config = SimpleNamespace(thinking_config=thinking)
+
+    generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
+
+    with patch(f"{MODULE}._client", return_value=_mock_client(generate_content)):
+
+        result = asyncio.run(
+            generate_text(model="modelo", contents="p", config=config),
+        )
+
+    assert result == "ok"
+    # 0 virou o mínimo válido (nunca chega 0 na API)
+    assert thinking.thinking_budget == gemini_client.MINIMAL_THINKING_BUDGET
+
+
+def test_thinking_budget_above_floor_is_left_untouched():
+
+    # budget explícito dos chamadores pesados (plano/análise) não é mexido
+    thinking = SimpleNamespace(thinking_budget=512)
+
+    config = SimpleNamespace(thinking_config=thinking)
+
+    generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
+
+    with patch(f"{MODULE}._client", return_value=_mock_client(generate_content)):
+
+        asyncio.run(
+            generate_text(model="modelo", contents="p", config=config),
+        )
+
+    assert thinking.thinking_budget == 512
+
+
+def test_config_without_thinking_config_passes_intact():
+
+    # config de JSON puro (sem thinking_config) não pode quebrar o floor
+    config = SimpleNamespace()
+
+    generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
+
+    with patch(f"{MODULE}._client", return_value=_mock_client(generate_content)):
+
+        assert asyncio.run(
+            generate_text(model="modelo", contents="p", config=config),
+        ) == "ok"
+
+
 def test_empty_text_allowed_when_not_required():
 
     generate_content = AsyncMock(

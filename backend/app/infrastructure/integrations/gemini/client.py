@@ -28,6 +28,17 @@ MAX_BACKOFF_SECONDS = 8.0
 # não adiantam repetir — sobem direto pro fallback do chamador.
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
+# Piso de thinking_budget. Os aliases "-latest" do Gemini passaram a apontar
+# (2026-07) pra modelos que REJEITAM thinking_budget=0 com 400
+# INVALID_ARGUMENT — não dá mais pra desligar o thinking por completo. Vários
+# chamadores pediam 0 ("o mínimo possível, sem raciocínio") e de um dia pro
+# outro TODO request deles virou inválido (nenhuma mudança nossa; o Google
+# moveu o alias). Aqui, no único ponto por onde toda chamada passa, qualquer
+# budget abaixo do piso é elevado pro mínimo válido — mantém a intenção
+# (custo/latência mínimos) sem o request quebrar. 400 não é retryável, então
+# sem isso a falha ia direto pro "me embananei" na cara do atleta.
+MINIMAL_THINKING_BUDGET = 1
+
 # CASCATA DE MODELOS: se o primário está com a cota estourada (429) ou
 # sobrecarregado (503), a gente NÃO desiste — tenta outro modelo cuja cota é
 # independente ANTES do fallback "me embananei". No nível gratuito cada
@@ -99,6 +110,25 @@ def _client() -> genai.Client:
     return genai.Client(api_key=get_settings().google_api_key)
 
 
+def _apply_thinking_floor(config) -> None:
+    """Eleva thinking_budget pro piso válido quando o chamador pediu menos
+    (na prática, 0 — que os modelos atuais rejeitam). Mutação in-place: os
+    chamadores montam o config fresco a cada chamada. Config sem
+    thinking_config (ex.: JSON puro) passa intacto."""
+
+    thinking = getattr(config, "thinking_config", None)
+
+    if thinking is None:
+
+        return
+
+    budget = getattr(thinking, "thinking_budget", None)
+
+    if budget is not None and budget < MINIMAL_THINKING_BUDGET:
+
+        thinking.thinking_budget = MINIMAL_THINKING_BUDGET
+
+
 def _is_retryable(exc: Exception) -> bool:
 
     if isinstance(exc, EmptyGeminiResponse):
@@ -130,6 +160,8 @@ async def generate_text(
     reenviado; se persistir, levanta EmptyGeminiResponse para o chamador
     cair no fallback — nunca envia mensagem em branco.
     """
+
+    _apply_thinking_floor(config)
 
     candidates = _model_candidates(model)
 
