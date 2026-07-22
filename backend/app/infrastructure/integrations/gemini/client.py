@@ -45,17 +45,22 @@ MINIMAL_THINKING_BUDGET = 1
 # modelo tem seu próprio balde de RPM/RPD, então trocar de modelo resgata a
 # esmagadora maioria dos 429. flash-lite quase nunca satura; é a rede final.
 # Ordem = qualidade decrescente a partir do primário.
+# Chaveado pelas versões PINADas do config (não mais pelos aliases -latest,
+# ver [[project_gemini_alias_thinking_bug]]). Cada modelo cai nos outros da
+# família 3.x flash (cota independente); mantidos em sincronia com os três
+# papéis de app/core/config.py — ao trocar um modelo lá, atualizar aqui.
 _FALLBACK_MODELS = {
-    "gemini-pro-latest": [
-        "gemini-flash-latest",
-        "gemini-flash-lite-latest",
+    "gemini-3.5-flash": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
     ],
-    "gemini-flash-latest": [
-        "gemini-flash-lite-latest",
-        "gemini-pro-latest",
+    "gemini-3.5-flash-lite": [
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash",
     ],
-    "gemini-flash-lite-latest": [
-        "gemini-flash-latest",
+    "gemini-3.1-flash-lite": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
     ],
 }
 

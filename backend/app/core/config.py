@@ -95,20 +95,31 @@ class Settings(BaseSettings):
 
     google_api_key: str = ""
 
-    # A cota gratuita é POR MODELO: conversa num modelo, extrações
-    # estruturadas (parser/memória/resumo/plano) noutro mais leve —
-    # separa os orçamentos e as extrações não roubam cota do chat.
-    # Aliases flutuantes ("-latest"): o Google aposentou o
-    # gemini-2.5-flash e TODA análise caiu no fallback silenciosamente;
-    # o alias acompanha o flash estável e não some debaixo de nós.
-    gemini_chat_model: str = "gemini-flash-latest"
-    gemini_extract_model: str = "gemini-flash-lite-latest"
-    # Cérebro do coach (plano + análise): modelo mais forte, pro raciocínio
-    # que define a qualidade. Alias flutuante do Pro (mesma lógica do flash).
-    # ATENÇÃO: o Pro NÃO desliga thinking (min 128, cobrado como output) —
-    # quem usa este modelo tem que passar thinking_budget>0 E max_output_tokens
-    # com folga pra caber thinking + resposta (senão volta vazio).
-    gemini_coach_model: str = "gemini-pro-latest"
+    # A cota é POR MODELO: conversa num modelo, extrações estruturadas
+    # (parser/memória/resumo/plano) noutro mais leve — separa os
+    # orçamentos e as extrações não roubam cota do chat.
+    #
+    # VERSÕES PINADAS (não os aliases "-latest"). Fomos pinado→flutuante→
+    # pinado: pinar na 2.5 pegou a aposentadoria dela; migrar pro "-latest"
+    # trocou por um risco pior — o alias mudou de versão SOZINHO (2026-07) e
+    # começou a rejeitar thinking_budget=0 com 400, derrubando o bot inteiro
+    # da noite pro dia, sem aviso ([[project_gemini_alias_thinking_bug]]).
+    # Versão pinada some só quando o Google APOSENTA, o que é ANUNCIADO com
+    # meses de antecedência — falha agendada e avisada, não silenciosa às 23h.
+    # Escolha (2026-07): família 3.5-flash — único tier GA + não-preview +
+    # que sobrevive a out/2026 (toda a linha 2.5 se aposenta em 16/out/2026;
+    # todo Pro 3.x ainda é preview). Ao promover, conferir o catálogo vivo
+    # (client.models.list) e o retirement schedule; o piso de thinking do
+    # gemini/client.py protege budget=0 mesmo se um modelo novo o rejeitar.
+    gemini_chat_model: str = "gemini-3.5-flash-lite"
+    gemini_extract_model: str = "gemini-3.1-flash-lite"
+    # Cérebro do coach (plano + análise): melhor modelo ESTÁVEL disponível.
+    # Era um Pro (gemini-pro-latest), mas não há Pro 3.x GA (só preview) e o
+    # 2.5-pro se aposenta em out; 3.5-flash com thinking raciocina bem e é o
+    # tier estável mais forte hoje. Promover a um Pro quando existir um GA.
+    # ATENÇÃO: passar thinking_budget>0 E max_output_tokens com folga pra
+    # caber thinking + resposta (senão volta vazio).
+    gemini_coach_model: str = "gemini-3.5-flash"
 
     # ==========================
     # BACKUP DO STORAGE

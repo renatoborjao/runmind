@@ -111,7 +111,7 @@ def test_cascades_to_fallback_model_without_waiting():
 
         result = asyncio.run(
             generate_text(
-                model="gemini-flash-latest",
+                model="gemini-3.5-flash",
                 contents="prompt",
                 config=SimpleNamespace(),
             )
@@ -124,7 +124,7 @@ def test_cascades_to_fallback_model_without_waiting():
     # o 2º disparo foi no fallback certo
     assert (
         generate_content.await_args_list[1].kwargs["model"]
-        == "gemini-flash-lite-latest"
+        == "gemini-3.5-flash-lite"
     )
 
 
@@ -142,7 +142,7 @@ def test_all_models_down_raises_after_full_cascade():
 
             asyncio.run(
                 generate_text(
-                    model="gemini-flash-latest",
+                    model="gemini-3.5-flash",
                     contents="prompt",
                     config=SimpleNamespace(),
                 )
