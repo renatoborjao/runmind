@@ -7,6 +7,7 @@ Gentileza com a API não-oficial (risco de rate-limit): puxa só o dia ANTERIOR
 hora em hora, mas o dedup por data faz virar UM pull/atleta/dia de verdade —
 e resiliente a máquina que dorme (pega assim que ela estiver ligada)."""
 
+import time
 from datetime import timedelta
 
 from app.core.clock import now_in
@@ -22,7 +23,72 @@ from app.infrastructure.persistence.runner_profile_repository import (
 )
 
 
+# backfill: teto de segurança de dias pra trás, e quantos dias VAZIOS
+# seguidos (antes de o atleta ter o relógio) fazem parar. Pausa entre pulls
+# pra ser gentil com a API não-oficial (evita rate-limit/flag no lote inicial).
+_SEED_MAX_DAYS = 60
+_SEED_STOP_AFTER_EMPTY = 3
+_SEED_PACE_SECONDS = 1.2
+
+
 class GarminHealthPoller:
+
+    @staticmethod
+    def seed_history(
+        profile: str,
+        repo: GarminHealthRepository | None = None,
+    ) -> int:
+        """Backfill único: puxa os retratos diários pra trás até bater no
+        começo do histórico do relógio (para depois de alguns dias vazios
+        seguidos — não adianta puxar de antes de o atleta ter o Garmin).
+        Pula dias já guardados. Devolve quantos dias novos gravou.
+
+        Roda como AÇÃO ÚNICA (script), não no tick recorrente: o pacing usa
+        sleep bloqueante de propósito, pra não martelar a API."""
+
+        repo = repo or GarminHealthRepository()
+
+        runner = RunnerProfileRepository().load(profile)
+
+        today = now_in(getattr(runner, "timezone", None)).date()
+
+        pulled = 0
+
+        empty_streak = 0
+
+        for n in range(1, _SEED_MAX_DAYS + 1):
+
+            day = (today - timedelta(days=n)).isoformat()
+
+            if repo.has_date(profile, day):
+
+                empty_streak = 0
+
+                continue
+
+            health = GarminHealthSource.fetch(profile, day)
+
+            if not health.has_data:
+
+                empty_streak += 1
+
+                if empty_streak >= _SEED_STOP_AFTER_EMPTY:
+
+                    break
+
+                time.sleep(_SEED_PACE_SECONDS)
+
+                continue
+
+            repo.upsert(profile, health)
+
+            pulled += 1
+
+            empty_streak = 0
+
+            time.sleep(_SEED_PACE_SECONDS)
+
+        return pulled
 
     @staticmethod
     async def poll_all() -> None:

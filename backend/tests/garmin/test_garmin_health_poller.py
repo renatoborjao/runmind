@@ -101,6 +101,89 @@ def test_poll_all_gates_on_connected_and_analysis_enabled():
     assert seen == ["conectado"]
 
 
+def test_seed_stops_at_start_of_watch_history():
+
+    # 4 dias mais recentes com dado; antes disso o relógio nem existia (vazio)
+    with_data = {"2026-07-20", "2026-07-19", "2026-07-18", "2026-07-17"}
+
+    def fetch(profile, day):
+
+        h = DailyHealth(date=day)
+
+        if day in with_data:
+
+            h.sleep_score = 70
+
+        return h
+
+    repo = MagicMock()
+
+    repo.has_date.return_value = False
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminHealthSource.fetch", side_effect=fetch),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        pulled = GarminHealthPoller.seed_history("renato2", repo)
+
+    # gravou só os 4 dias com dado, parou depois de 3 vazios seguidos
+    assert pulled == 4
+    assert repo.upsert.call_count == 4
+
+
+def test_seed_skips_already_stored_days():
+
+    def fetch(profile, day):
+
+        return DailyHealth(date=day, sleep_score=70)
+
+    repo = MagicMock()
+
+    # 2026-07-20 já guardado; 07-19 e 07-18 novos; resto (vazio) fetch cobre
+    stored = {"2026-07-20"}
+
+    repo.has_date.side_effect = lambda p, d: d in stored
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    calls = []
+
+    def tracked_fetch(profile, day):
+
+        calls.append(day)
+
+        # só 07-19 e 07-18 tem dado; antes, vazio (para o loop)
+        h = DailyHealth(date=day)
+
+        if day in ("2026-07-19", "2026-07-18"):
+
+            h.sleep_score = 70
+
+        return h
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminHealthSource.fetch", side_effect=tracked_fetch),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        GarminHealthPoller.seed_history("renato2", repo)
+
+    # não buscou o dia já guardado (07-20 não entrou em calls)
+    assert "2026-07-20" not in calls
+    assert "2026-07-19" in calls
+
+
 def test_poll_all_isolates_failure_per_athlete():
 
     def fake_poll_one(profile, repo):

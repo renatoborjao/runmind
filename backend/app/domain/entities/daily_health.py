@@ -48,6 +48,25 @@ class DailyHealth:
     resting_hr: int | None = None
     vo2max: float | None = None
 
+    @property
+    def has_data(self) -> bool:
+        """True se o dia trouxe QUALQUER métrica de verdade. Um dia todo None
+        (relógio não usado, ou antes de o atleta ter o Garmin) não vale a pena
+        guardar — o backfill usa isso pra parar ao chegar antes do relógio."""
+
+        return any(
+            v is not None
+            for v in (
+                self.sleep_hours,
+                self.sleep_score,
+                self.hrv_last_night,
+                self.stress_avg,
+                self.resting_hr,
+                self.vo2max,
+                self.readiness_score,
+            )
+        )
+
     def to_dict(self) -> dict:
 
         return asdict(self)
