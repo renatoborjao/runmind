@@ -63,6 +63,10 @@ THINKING_HEADROOM = 2048
 # família 3.x flash (cota independente); mantidos em sincronia com os três
 # papéis de app/core/config.py — ao trocar um modelo lá, atualizar aqui.
 _FALLBACK_MODELS = {
+    "gemini-3.6-flash": [
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+    ],
     "gemini-3.5-flash": [
         "gemini-3.5-flash-lite",
         "gemini-3.1-flash-lite",

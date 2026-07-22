@@ -112,20 +112,25 @@ class Settings(BaseSettings):
     # da noite pro dia, sem aviso ([[project_gemini_alias_thinking_bug]]).
     # Versão pinada some só quando o Google APOSENTA, o que é ANUNCIADO com
     # meses de antecedência — falha agendada e avisada, não silenciosa às 23h.
-    # Escolha (2026-07): família 3.5-flash — único tier GA + não-preview +
-    # que sobrevive a out/2026 (toda a linha 2.5 se aposenta em 16/out/2026;
-    # todo Pro 3.x ainda é preview). Ao promover, conferir o catálogo vivo
+    # Escolha (2026-07-22): melhor flash GA disponível — teste cego com o
+    # retrato real do Renato mostrou o 3.6-flash claramente acima do 3.5
+    # (estrutura completa em toda sessão, personalização, coerência com a
+    # meta), e o 3.5-flash vinha INDISPONÍVEL (respostas caindo no lite).
+    # Todo Pro segue preview (cota free apertada + aposentadoria sem aviso);
+    # promover quando existir Pro GA. Ao promover, conferir o catálogo vivo
     # (client.models.list) e o retirement schedule; o piso de thinking do
     # gemini/client.py protege budget=0 mesmo se um modelo novo o rejeitar.
-    gemini_chat_model: str = "gemini-3.5-flash-lite"
-    gemini_extract_model: str = "gemini-3.1-flash-lite"
+    #
+    # Chat = coach de propósito: a conversa É o produto ("conversa viva"),
+    # merece o melhor modelo; cota free do flash comporta o volume atual e o
+    # fallback pro lite segura estouro. Extração fica num lite (tarefa de
+    # parsing, não precisa do topo) SEPARADO, pra não roubar cota do chat.
+    gemini_chat_model: str = "gemini-3.6-flash"
+    gemini_extract_model: str = "gemini-3.5-flash-lite"
     # Cérebro do coach (plano + análise): melhor modelo ESTÁVEL disponível.
-    # Era um Pro (gemini-pro-latest), mas não há Pro 3.x GA (só preview) e o
-    # 2.5-pro se aposenta em out; 3.5-flash com thinking raciocina bem e é o
-    # tier estável mais forte hoje. Promover a um Pro quando existir um GA.
     # (O gemini/client.py já cuida da folga de thinking no max_output_tokens
     # e do piso do budget — os chamadores dimensionam só a SAÍDA.)
-    gemini_coach_model: str = "gemini-3.5-flash"
+    gemini_coach_model: str = "gemini-3.6-flash"
 
     # ==========================
     # BACKUP DO STORAGE

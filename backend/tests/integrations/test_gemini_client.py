@@ -152,6 +152,26 @@ def test_all_models_down_raises_after_full_cascade():
     assert generate_content.await_count == 3 * gemini_client.MAX_ATTEMPTS
 
 
+def test_config_role_models_have_fallback_chains():
+
+    # os três papéis do config precisam de cascata no client — sem entrada,
+    # o modelo roda sem fallback e uma indisponibilidade vira falha direta
+    from app.core.config import Settings
+
+    settings = Settings(telegram_bot_token="x", google_api_key="x")
+
+    for role_model in (
+        settings.gemini_chat_model,
+        settings.gemini_extract_model,
+        settings.gemini_coach_model,
+    ):
+
+        assert role_model in gemini_client._FALLBACK_MODELS, role_model
+
+        # e a cadeia nunca aponta pra si mesma
+        assert role_model not in gemini_client._FALLBACK_MODELS[role_model]
+
+
 def test_suggested_retry_delay_parsed_and_backoff_capped():
 
     exc = Exception("RESOURCE_EXHAUSTED ... 'retryDelay': '7s' ...")
