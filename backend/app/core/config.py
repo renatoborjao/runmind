@@ -117,8 +117,8 @@ class Settings(BaseSettings):
     # Era um Pro (gemini-pro-latest), mas não há Pro 3.x GA (só preview) e o
     # 2.5-pro se aposenta em out; 3.5-flash com thinking raciocina bem e é o
     # tier estável mais forte hoje. Promover a um Pro quando existir um GA.
-    # ATENÇÃO: passar thinking_budget>0 E max_output_tokens com folga pra
-    # caber thinking + resposta (senão volta vazio).
+    # (O gemini/client.py já cuida da folga de thinking no max_output_tokens
+    # e do piso do budget — os chamadores dimensionam só a SAÍDA.)
     gemini_coach_model: str = "gemini-3.5-flash"
 
     # ==========================

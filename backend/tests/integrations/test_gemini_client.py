@@ -220,11 +220,11 @@ def test_require_text_retries_on_empty_then_raises():
 
 def test_thinking_budget_zero_is_raised_to_floor():
 
-    # os modelos -latest rejeitam thinking_budget=0 (400); o cliente eleva
-    # pro piso válido ANTES de disparar, pra o request não virar inválido
+    # os modelos 3.x rejeitam thinking_budget=0 (400); o cliente eleva pro
+    # piso válido ANTES de disparar, pra o request não virar inválido
     thinking = SimpleNamespace(thinking_budget=0)
 
-    config = SimpleNamespace(thinking_config=thinking)
+    config = SimpleNamespace(thinking_config=thinking, max_output_tokens=400)
 
     generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
 
@@ -244,7 +244,7 @@ def test_thinking_budget_above_floor_is_left_untouched():
     # budget explícito dos chamadores pesados (plano/análise) não é mexido
     thinking = SimpleNamespace(thinking_budget=512)
 
-    config = SimpleNamespace(thinking_config=thinking)
+    config = SimpleNamespace(thinking_config=thinking, max_output_tokens=6000)
 
     generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
 
@@ -257,10 +257,32 @@ def test_thinking_budget_above_floor_is_left_untouched():
     assert thinking.thinking_budget == 512
 
 
+def test_thinking_headroom_added_to_max_output_tokens():
+
+    # thinking é cobrado dentro do max_output_tokens e nao respeita o budget
+    # como teto -> soma folga pro thinking nao truncar a saida do chamador
+    thinking = SimpleNamespace(thinking_budget=1)
+
+    config = SimpleNamespace(thinking_config=thinking, max_output_tokens=400)
+
+    generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
+
+    with patch(f"{MODULE}._client", return_value=_mock_client(generate_content)):
+
+        asyncio.run(
+            generate_text(model="modelo", contents="p", config=config),
+        )
+
+    assert (
+        config.max_output_tokens
+        == 400 + gemini_client.THINKING_HEADROOM
+    )
+
+
 def test_config_without_thinking_config_passes_intact():
 
-    # config de JSON puro (sem thinking_config) não pode quebrar o floor
-    config = SimpleNamespace()
+    # config de JSON puro (sem thinking_config) nao mexe budget nem max
+    config = SimpleNamespace(max_output_tokens=800)
 
     generate_content = AsyncMock(return_value=SimpleNamespace(text="ok"))
 
@@ -269,6 +291,9 @@ def test_config_without_thinking_config_passes_intact():
         assert asyncio.run(
             generate_text(model="modelo", contents="p", config=config),
         ) == "ok"
+
+    # sem thinking_config, nada de folga -> max_output_tokens intacto
+    assert config.max_output_tokens == 800
 
 
 def test_empty_text_allowed_when_not_required():

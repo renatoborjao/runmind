@@ -3,6 +3,9 @@ from google.genai import types
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import generate_text
 
+# tamanho da RESPOSTA de WhatsApp (curta). O espaço extra pro thinking dos
+# modelos 3.x é somado no gemini/client.py (o thinking é cobrado dentro do
+# max_output_tokens; sem folga, cortava a resposta) — aqui é só a saída.
 MAX_OUTPUT_TOKENS = 400
 
 SYSTEM_PROMPT_TEMPLATE = """Você é o coach de corrida do RunMind, conversando \

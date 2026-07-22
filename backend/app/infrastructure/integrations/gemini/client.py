@@ -39,6 +39,19 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 # sem isso a falha ia direto pro "me embananei" na cara do atleta.
 MINIMAL_THINKING_BUDGET = 1
 
+# Folga pro thinking, SOMADA ao max_output_tokens que o chamador pediu.
+# Nos modelos 3.x o thinking (a) é obrigatório e (b) NÃO respeita o
+# thinking_budget como teto — mede-se ~700-1300 tokens de raciocínio mesmo
+# com budget=1. E ele é cobrado DENTRO do max_output_tokens. Então quando o
+# chamador dimensiona max_output_tokens só pro TEXTO que quer, o thinking
+# come esse orçamento e a resposta sai cortada no meio (bug real do chat:
+# "Amanhã, quarta-feira (22/"). Aqui damos espaço próprio pro thinking em
+# cima do pedido — max_output_tokens volta a significar "tamanho da SAÍDA".
+# É TETO (só cobra o que gera), então a folga não custa nada além dos tokens
+# de thinking que de fato acontecerem. 2048 cobre o pico observado (~1300)
+# com margem. Ver [[project_gemini_alias_thinking_bug]].
+THINKING_HEADROOM = 2048
+
 # CASCATA DE MODELOS: se o primário está com a cota estourada (429) ou
 # sobrecarregado (503), a gente NÃO desiste — tenta outro modelo cuja cota é
 # independente ANTES do fallback "me embananei". No nível gratuito cada
@@ -115,11 +128,14 @@ def _client() -> genai.Client:
     return genai.Client(api_key=get_settings().google_api_key)
 
 
-def _apply_thinking_floor(config) -> None:
-    """Eleva thinking_budget pro piso válido quando o chamador pediu menos
-    (na prática, 0 — que os modelos atuais rejeitam). Mutação in-place: os
-    chamadores montam o config fresco a cada chamada. Config sem
-    thinking_config (ex.: JSON puro) passa intacto."""
+def _normalize_thinking(config) -> None:
+    """Ajusta o config de thinking pros modelos 3.x, in-place (os chamadores
+    montam o config fresco a cada chamada; config sem thinking_config — ex.:
+    JSON puro sem raciocínio — passa intacto):
+
+    1) eleva thinking_budget=0 (rejeitado com 400) pro piso válido;
+    2) soma THINKING_HEADROOM ao max_output_tokens, pra o thinking (cobrado
+       dentro desse teto) não comer a saída e truncar a resposta."""
 
     thinking = getattr(config, "thinking_config", None)
 
@@ -132,6 +148,12 @@ def _apply_thinking_floor(config) -> None:
     if budget is not None and budget < MINIMAL_THINKING_BUDGET:
 
         thinking.thinking_budget = MINIMAL_THINKING_BUDGET
+
+    max_out = getattr(config, "max_output_tokens", None)
+
+    if max_out is not None:
+
+        config.max_output_tokens = max_out + THINKING_HEADROOM
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -166,7 +188,7 @@ async def generate_text(
     cair no fallback — nunca envia mensagem em branco.
     """
 
-    _apply_thinking_floor(config)
+    _normalize_thinking(config)
 
     candidates = _model_candidates(model)
 
