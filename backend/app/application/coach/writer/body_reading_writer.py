@@ -35,8 +35,22 @@ _LIMITER_LABEL = {
 }
 
 _SYSTEM_PROMPT = """Você é o coach de corrida do RunMind. Escreva pro atleta \
-uma leitura CURTA do corpo dele (WhatsApp, 2-4 frases, tom de treinador \
-experiente, sem markdown, pode 1 emoji).
+uma leitura CURTA do corpo dele (WhatsApp/Telegram, tom de treinador \
+experiente, sem markdown).
+
+FORMATO OBRIGATÓRIO (seções separadas por linha em branco, NUNCA um parágrafo \
+único corrido; cada seção com 1-2 frases curtas):
+
+🩺 Leitura do corpo
+
+⚖️ [o veredito: como o corpo está lidando com o treino, cruzando carga e \
+recuperação]
+
+❤️ [os sinais que sustentam o veredito, em linguagem de gente — sem jogar \
+números crus]
+
+🎯 [o ponto de atenção acionável desta semana; se não houver limitador, o que \
+manter]
 
 REGRA NÃO-NEGOCIÁVEL: a carga de treino NUNCA é apresentada sozinha nem como \
 susto. Você recebe um VEREDITO já calculado que cruza carga E recuperação — \
@@ -139,16 +153,14 @@ class BodyReadingWriter:
 
     @staticmethod
     def _fallback(reading: BodyReading, runner_name: str) -> str:
+        """Mesma estrutura visual da via IA (título + seções), pra o atleta
+        nunca notar que a IA caiu."""
 
-        limiter = _LIMITER_LABEL.get(reading.limiter or "")
-
-        tail = f" Fica de olho n{limiter[1:]}" if limiter else ""
-
-        base = {
+        verdict = {
             BODY_ABSORBING: (
                 f"{runner_name}, você subiu o volume, mas seu corpo está "
                 "absorvendo bem — recuperação em ordem. Isso é adaptação, não "
-                "sobrecarga. Segue firme. 💪"
+                "sobrecarga."
             ),
             BODY_BALANCED: (
                 "Carga e recuperação em equilíbrio — você está no ponto. "
@@ -173,4 +185,52 @@ class BodyReadingWriter:
             ),
         }.get(reading.body_state, "Seguimos acompanhando seu corpo.")
 
-        return base + tail
+        lines = ["🩺 Leitura do corpo", "", f"⚖️ {verdict}"]
+
+        signals = BodyReadingWriter._fallback_signals(reading)
+
+        if signals:
+
+            lines.extend(["", f"❤️ {signals}"])
+
+        limiter = _LIMITER_LABEL.get(reading.limiter or "")
+
+        if limiter:
+
+            # labels começam com artigo ("o sono"/"a FC...") -> "no"/"na"
+            lines.extend(["", f"🎯 Fica de olho n{limiter}."])
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _fallback_signals(reading: BodyReading) -> str | None:
+        """Sinais em linguagem simples pro bloco ❤️ (sem números crus)."""
+
+        rec = reading.recovery
+
+        if not rec.has_data:
+
+            return None
+
+        parts = []
+
+        if rec.hrv_direction:
+
+            parts.append(f"HRV {BodyReadingWriter._hrv_word(rec.hrv_direction)}")
+
+        if rec.rhr_direction:
+
+            parts.append(
+                f"FC de repouso {BodyReadingWriter._rhr_word(rec.rhr_direction)}"
+            )
+
+        if rec.sleep_avg_hours is not None:
+
+            parts.append(f"sono médio de {rec.sleep_avg_hours}h")
+
+        if not parts:
+
+            return None
+
+        # "; " porque cada parte já carrega vírgula ("subindo, bom sinal")
+        return f"{'; '.join(parts)}."
