@@ -1,3 +1,9 @@
+from app.application.coach.intelligence.body_reading_builder import (
+    BodyReadingBuilder,
+)
+from app.application.coach.writer.body_reading_writer import (
+    BodyReadingWriter,
+)
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
 )
@@ -111,3 +117,31 @@ class WeeklyReviewNotifier:
             runner,
             message,
         )
+
+        # logo depois, a "leitura do corpo" (carga à luz da recuperação) —
+        # mensagem separada pra não misturar o tom, só pra quem tem dado de
+        # saúde do Garmin. O gate semanal acima já cobre o dedup.
+        await WeeklyReviewNotifier._send_body_reading(profile, runner)
+
+    @staticmethod
+    async def _send_body_reading(profile: str, runner) -> None:
+        """Leitura do corpo pós-resumo. Best-effort: falhar aqui nunca
+        derruba o resumo (que já foi enviado)."""
+
+        try:
+
+            reading = BodyReadingBuilder.build(profile)
+
+            # sem recuperação do Garmin: não há leitura do corpo pra mandar
+            # (atleta só-Strava recebe só o resumo normal)
+            if not reading.recovery.has_data:
+
+                return
+
+            message = await BodyReadingWriter.write(reading, runner.name)
+
+            await CoachOutbox.send(runner, message)
+
+        except Exception as e:
+
+            print(f"Falha na leitura do corpo de '{profile}': {e}")
