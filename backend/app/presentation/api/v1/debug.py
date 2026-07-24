@@ -8,6 +8,9 @@ from app.application.history.enriched_history_builder import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.infrastructure.persistence.coach_learning_repository import (
+    CoachLearningRepository,
+)
 from app.infrastructure.persistence.runner_memory_repository import (
     RunnerMemoryRepository,
 )
@@ -50,6 +53,26 @@ async def runner_memory(profile: str):
         return [
             asdict(entry)
             for entry in RunnerMemoryRepository().load(profile)
+        ]
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/learnings/{profile}")
+async def coach_learnings(profile: str):
+    """O que o cérebro coach aprendeu observando o atleta — janela de
+    inspeção do modo observação (antes de ligar a injeção no prompt)."""
+
+    try:
+
+        return [
+            asdict(entry)
+            for entry in CoachLearningRepository().load(profile)
         ]
 
     except Exception as e:

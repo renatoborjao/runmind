@@ -27,6 +27,7 @@ class PlanContextBuilder:
         executed: str = "",
         run_walk: bool = False,
         adherence_report: AdherenceReport | None = None,
+        learnings: str = "",
     ) -> str:
 
         lines = [f"Atleta: {runner.name}"]
@@ -106,6 +107,13 @@ class PlanContextBuilder:
         if memory:
 
             lines.append(f"Memória do atleta:\n{memory}")
+
+        # o que o coach APRENDEU observando o comportamento/resultado dele ao
+        # longo das semanas (distinto da memória acima, que é o que ele DIZ).
+        # Só entra quando a flag de injeção está ligada (o chamador decide).
+        if learnings:
+
+            lines.append(learnings)
 
         return "\n".join(line for line in lines if line)
 

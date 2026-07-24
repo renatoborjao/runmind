@@ -1,8 +1,23 @@
 from app.application.coach.intelligence.body_reading_builder import (
     BodyReadingBuilder,
 )
+from app.application.coach.memory.coach_learning_engine import (
+    CoachLearningEngine,
+)
+from app.application.coach.memory.coach_learning_service import (
+    CoachLearningService,
+)
+from app.application.coach.memory.coaching_signal_recorder import (
+    CoachingSignalRecorder,
+)
+from app.application.coach.memory.week_evidence_builder import (
+    WeekEvidenceBuilder,
+)
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
+)
+from app.infrastructure.persistence.coach_learning_repository import (
+    CoachLearningRepository,
 )
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
@@ -122,6 +137,50 @@ class WeeklyReviewNotifier:
         # mensagem separada pra não misturar o tom, só pra quem tem dado de
         # saúde do Garmin. O gate semanal acima já cobre o dedup.
         await WeeklyReviewNotifier._send_body_reading(profile, runner)
+
+        # e, silenciosamente, o cérebro coach APRENDE com a semana que fechou
+        # (nada é enviado ao atleta — modo observação; ver [[project]]).
+        await WeeklyReviewNotifier._distill_learnings(
+            profile, runner, history,
+        )
+
+    @staticmethod
+    async def _distill_learnings(profile, runner, history) -> None:
+        """Destila a evidência da semana (prescrito×executado + correções
+        aceitas + resposta do corpo) em aprendizados duráveis sobre o atleta.
+        Best-effort e SILENCIOSO: falhar aqui nunca afeta o que o atleta
+        recebe (o resumo já foi enviado). Não injeta nada no plano — isso é
+        decisão de flag, à parte."""
+
+        try:
+
+            evidence = WeekEvidenceBuilder.build(profile, history)
+
+            if not evidence:
+
+                return
+
+            current = CoachLearningRepository().active(profile)
+
+            ops = await CoachLearningEngine.extract(
+                runner.name,
+                current,
+                evidence,
+            )
+
+            CoachLearningService.process(
+                profile,
+                ops,
+                goal_kind="race" if runner.race_date else "health",
+            )
+
+            # os sinais crus da Fonte A já viraram aprendizado — zera pra
+            # próxima semana não recontar
+            CoachingSignalRecorder.clear(profile)
+
+        except Exception as e:
+
+            print(f"Falha ao destilar aprendizados de '{profile}': {e}")
 
     @staticmethod
     async def _send_body_reading(profile: str, runner) -> None:

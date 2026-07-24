@@ -144,6 +144,12 @@ class Settings(BaseSettings):
     backup_dir: str = ""
     backup_keep: int = 28
 
+    # Cérebro coach que aprende com o resultado: a destilação semanal e a
+    # gravação/debug rodam SEMPRE; esta flag controla só a INJEÇÃO dos
+    # aprendizados no prompt do plano. Fica DESLIGADA até validar o que o
+    # cérebro aprendeu (modo observação via GET /debug/learnings/{profile}).
+    coach_learning_inject_enabled: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
 

@@ -3,6 +3,9 @@ from datetime import datetime, timedelta
 from app.application.coach.conversation.plan_change_applier import (
     PlanChangeApplier,
 )
+from app.application.coach.memory.coaching_signal_recorder import (
+    CoachingSignalRecorder,
+)
 from app.application.coach.conversation.proposal_reply_detector import (
     ProposalReply,
     ProposalReplyDetector,
@@ -76,6 +79,21 @@ class ProposalFlow:
                 "Opa, sua semana virou e essa proposta já não vale mais. "
                 "Me diz de novo o que você quer ajustar que eu remonto. 💪"
             )
+
+        # Fonte A do cérebro coach: o atleta ACEITOU uma correção — sinal de
+        # alta qualidade pra destilação de domingo. Best-effort: registrar
+        # nunca pode derrubar a aplicação da proposta (que já aconteceu).
+        try:
+
+            CoachingSignalRecorder.record(
+                profile,
+                kind=f"aceitou_{proposal.kind}",
+                detail=proposal.preview,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao registrar sinal de aprendizado '{profile}': {e}")
 
         return (
             "Feito! Ajustei seu plano. 💪 Se você usa o relógio, já "

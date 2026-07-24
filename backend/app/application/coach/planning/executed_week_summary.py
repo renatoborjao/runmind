@@ -1,10 +1,13 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from app.application.planner.pace_formatter import PaceFormatter
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
-from app.core.weekdays import weekday_label, weekday_name
+from app.core.weekdays import WEEKDAYS, weekday_label, weekday_name
 from app.domain.entities.activity import Activity
 from app.domain.entities.training_plan import TrainingPlan
+
+# nome interno do dia ("Sunday") -> índice ISO (0=segunda ... 6=domingo)
+_DAY_INDEX = {name: idx for idx, name in WEEKDAYS.items()}
 
 
 class ExecutedWeekSummary:
@@ -17,7 +20,12 @@ class ExecutedWeekSummary:
     def build(
         last_plan: TrainingPlan | None,
         activities: list[Activity],
+        reference_date: date | None = None,
     ) -> str:
+        """`reference_date` (hoje, no fuso do atleta): uma sessão cujo DIA
+        ainda não chegou NÃO é 'não realizado' — ela simplesmente ainda não
+        venceu. Sem isso, ler o plano numa sexta mostrava o longão de domingo
+        como furado (mesma guarda que o AdherenceAnalyzer já tem)."""
 
         if last_plan is None or not last_plan.sessions:
 
@@ -56,15 +64,24 @@ class ExecutedWeekSummary:
                 ExecutedWeekSummary._activity_line(activity, session)
             )
 
-        # sessões planejadas que NÃO foram feitas
+        # sessões planejadas que NÃO foram feitas — mas só as que JÁ venceram
+        # (uma sessão futura não é furo, só ainda não chegou)
         for session in last_plan.sessions:
 
-            if session.day not in done_days:
+            if session.day in done_days:
 
-                lines.append(
-                    f"- {weekday_label(session.day)} "
-                    f"({session.workout_type}): não realizado"
-                )
+                continue
+
+            if ExecutedWeekSummary._is_future(
+                session.day, week_start, reference_date,
+            ):
+
+                continue
+
+            lines.append(
+                f"- {weekday_label(session.day)} "
+                f"({session.workout_type}): não realizado"
+            )
 
         if not lines:
 
@@ -73,6 +90,27 @@ class ExecutedWeekSummary:
         return "Treinos realizados na semana do último plano:\n" + "\n".join(
             lines
         )
+
+    @staticmethod
+    def _is_future(
+        day: str,
+        week_start: date,
+        reference_date: date | None,
+    ) -> bool:
+        """A sessão cai depois de hoje? Sem reference_date, mantém o
+        comportamento antigo (nada é considerado futuro)."""
+
+        if reference_date is None:
+
+            return False
+
+        offset = _DAY_INDEX.get(day)
+
+        if offset is None:
+
+            return False
+
+        return week_start + timedelta(days=offset) > reference_date
 
     @staticmethod
     def _activity_line(activity: Activity, session) -> str:

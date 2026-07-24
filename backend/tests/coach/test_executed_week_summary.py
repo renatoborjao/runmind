@@ -61,3 +61,38 @@ def test_extra_run_is_marked():
 def test_no_plan_returns_empty():
 
     assert ExecutedWeekSummary.build(None, []) == ""
+
+
+def test_future_session_is_not_counted_as_missed():
+    """Bug do renato2: lido numa sexta (10/07), o longão de sábado (11/07)
+    ainda não venceu — não pode virar 'não realizado'."""
+
+    acts = [
+        make_activity(id=1, start_date=datetime(2026, 7, 7, 7, 0),
+                      distance=8500.0, average_speed=3.0),   # terça, feita
+    ]
+
+    # hoje = sexta 10/07: terça já venceu (não feita a quinta), sábado é futuro
+    summary = ExecutedWeekSummary.build(
+        _plan(), acts, reference_date=date(2026, 7, 10),
+    )
+
+    assert "quinta-feira (Rodagem): não realizado" in summary
+    # o longão de sábado NÃO aparece como furado (ainda não chegou)
+    assert "Longão): não realizado" not in summary
+
+
+def test_past_missed_session_still_counted():
+    """Depois que a semana fecha, a sessão não feita continua sendo furo."""
+
+    acts = [
+        make_activity(id=1, start_date=datetime(2026, 7, 7, 7, 0),
+                      distance=8500.0, average_speed=3.0),
+    ]
+
+    # hoje = segunda seguinte (13/07): a semana toda já venceu
+    summary = ExecutedWeekSummary.build(
+        _plan(), acts, reference_date=date(2026, 7, 13),
+    )
+
+    assert "sábado (Longão): não realizado" in summary

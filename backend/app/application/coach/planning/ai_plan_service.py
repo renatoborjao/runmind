@@ -1,5 +1,8 @@
 from datetime import date, timedelta
 
+from app.application.coach.memory.coach_learning_service import (
+    CoachLearningService,
+)
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
@@ -17,6 +20,7 @@ from app.application.history.runner_baseline_builder import (
 from app.application.planner.engines.phase_engine import PhaseEngine
 from app.application.planner.weekly_plan_service import WeeklyPlanService
 from app.core.clock import today_local
+from app.core.config import get_settings
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_assessment import TrainingAssessment
@@ -150,6 +154,14 @@ class AIPlanService:
 
         memory = RunnerMemoryService.render(profile)
 
+        # aprendizados do coach (o que ele FEZ) — só injeta com a flag ligada.
+        # Desligada (padrão), passa "" e o prompt fica idêntico ao de hoje.
+        learnings = (
+            CoachLearningService.render(profile)
+            if get_settings().coach_learning_inject_enabled
+            else ""
+        )
+
         weeks_to_race = AIPlanService._weeks_to_race(goal, week_start)
 
         executed = ExecutedWeekSummary.build(
@@ -169,6 +181,7 @@ class AIPlanService:
             weeks_to_race=weeks_to_race,
             run_walk=run_walk,
             adherence_report=adherence_report,
+            learnings=learnings,
         )
 
     @staticmethod
