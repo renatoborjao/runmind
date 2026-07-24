@@ -1,5 +1,6 @@
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.weekdays import weekday_label
+from app.domain.entities.adherence_report import AdherenceReport
 from app.domain.entities.runner_baseline import RunnerBaseline
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
@@ -25,6 +26,7 @@ class PlanContextBuilder:
         weeks_to_race: int | None,
         executed: str = "",
         run_walk: bool = False,
+        adherence_report: AdherenceReport | None = None,
     ) -> str:
 
         lines = [f"Atleta: {runner.name}"]
@@ -78,6 +80,12 @@ class PlanContextBuilder:
 
         lines.append(
             PlanContextBuilder._adherence_line(recent_adherence)
+        )
+
+        # o QUE ele vive furando (dia/tipo) — dá à IA a chance de
+        # reposicionar em vez de represcrever o treino que nunca acontece
+        lines.append(
+            PlanContextBuilder._missed_pattern_line(adherence_report)
         )
 
         if last_plan is not None and last_plan.sessions:
@@ -196,6 +204,54 @@ class PlanContextBuilder:
             f"Execução das últimas semanas (cumpriu do plano): {pcts} "
             "(da mais antiga p/ a recente) — se vem cumprindo pouco, "
             "segure/recue; se cumpre bem, pode evoluir."
+        )
+
+    @staticmethod
+    def _missed_pattern_line(
+        report: AdherenceReport | None,
+    ) -> str:
+        """Padrão de furo — só sai quando REPETE (o analyzer já filtra o
+        tropeço isolado). Vazio quando não há padrão: string vazia é
+        descartada na montagem, então o prompt não ganha ruído."""
+
+        if report is None:
+
+            return ""
+
+        parts = []
+
+        if report.missed_day:
+
+            parts.append(
+                "%s (%d de %d vezes que foi prescrita)"
+                % (
+                    weekday_label(report.missed_day.label),
+                    report.missed_day.count,
+                    report.missed_day.opportunities,
+                )
+            )
+
+        if report.missed_type:
+
+            parts.append(
+                "treino de %s (%d de %d)"
+                % (
+                    report.missed_type.label,
+                    report.missed_type.count,
+                    report.missed_type.opportunities,
+                )
+            )
+
+        if not parts:
+
+            return ""
+
+        return (
+            "O que ele mais deixa pra trás: "
+            + "; ".join(parts)
+            + ". Não é preguiça — é a rotina dele. Considere mover esse "
+            "treino de dia, encurtar ou trocar o formato, em vez de "
+            "prescrever de novo igual."
         )
 
     @staticmethod

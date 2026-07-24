@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from app.application.history.adherence_analyzer import AdherenceAnalyzer
 from app.application.history.consistency_calculator import (
     ConsistencyCalculator,
 )
@@ -14,6 +15,7 @@ from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
+from app.domain.entities.training_plan import TrainingPlan
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -70,6 +72,11 @@ class WeeklyReviewBuilder:
                 runner.id,
                 history,
                 review_week,
+            ),
+            "adherence_history": AdherenceAnalyzer.analyze(
+                WeeklyReviewBuilder._all_plans(runner.id),
+                history,
+                until_week=review_week,
             ),
             "longest_km": WeeklyReviewBuilder._longest_km(
                 history,
@@ -148,24 +155,33 @@ class WeeklyReviewBuilder:
         return {"planned": len(running), "done": done}
 
     @staticmethod
+    def _all_plans(profile: str) -> list[TrainingPlan]:
+        """Todos os planos que o atleta já recebeu: o histórico mais o
+        vigente (que ainda não foi arquivado). Quem consome deduplica."""
+
+        repo = WeeklyPlanRepository()
+
+        plans = list(repo.history(profile))
+
+        current = repo.load(profile)
+
+        if current is not None:
+
+            plans.append(current)
+
+        return plans
+
+    @staticmethod
     def _plan_for_week(profile: str, week: date):
         """O plano cuja semana bate com a que fechou. No domingo 20h o plano
         da PRÓXIMA já foi entregue (15h), então o da semana que fecha está no
         histórico — procura lá primeiro, depois no atual."""
 
-        repo = WeeklyPlanRepository()
-
-        for plan in repo.history(profile):
+        for plan in WeeklyReviewBuilder._all_plans(profile):
 
             if plan.week_start == week:
 
                 return plan
-
-        current = repo.load(profile)
-
-        if current is not None and current.week_start == week:
-
-            return current
 
         return None
 

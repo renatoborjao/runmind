@@ -6,6 +6,15 @@ from app.application.planner.pace_formatter import PaceFormatter
 from app.application.review.predicted_time_line_formatter import (
     PredictedTimeLineFormatter,
 )
+from app.core.weekdays import weekday_label
+from app.domain.entities.adherence_report import (
+    ADHERENCE_FALLING,
+    ADHERENCE_RISING,
+    AdherenceReport,
+)
+
+# quantas semanas da série cabem na mensagem sem virar parede de números
+ADHERENCE_DISPLAY_WEEKS = 4
 
 VOLUME_DIRECTIONS = {
     "up": "subindo",
@@ -102,6 +111,18 @@ class WeeklyReviewMessageFormatter:
             )
 
             lines.extend(trend_lines)
+
+        adherence_lines = WeeklyReviewMessageFormatter._adherence_lines(
+            review.get("adherence_history"),
+        )
+
+        if adherence_lines:
+
+            lines.append("")
+
+            lines.append("🧭 Aderência ao plano")
+
+            lines.extend(adherence_lines)
 
         goal_lines = WeeklyReviewMessageFormatter._goal_lines(
             review.get("goal") or {},
@@ -201,6 +222,66 @@ class WeeklyReviewMessageFormatter:
             return "—"
 
         return f"{PaceFormatter.format(pace_min_km)} min/km"
+
+    @staticmethod
+    def _adherence_lines(
+        report: AdherenceReport | None,
+    ) -> list[str]:
+        """Como o cumprimento do plano vem se comportando ao longo das
+        semanas, e o que mais fica pra trás. Só aparece com 2+ semanas de
+        plano — com uma só, a linha "Treinos do plano" acima já diz tudo.
+        O padrão (dia/tipo) já vem filtrado pelo analyzer: se está aqui, é
+        porque repete, não foi um tropeço isolado."""
+
+        if report is None or not report.has_series:
+
+            return []
+
+        shown = report.weeks[-ADHERENCE_DISPLAY_WEEKS:]
+
+        series = " · ".join(f"{week.done}/{week.planned}" for week in shown)
+
+        planned = sum(week.planned for week in shown)
+
+        done = sum(week.done for week in shown)
+
+        rate = f" ({done / planned * 100:.0f}%)" if planned else ""
+
+        lines = [f"• Últimas {len(shown)} semanas: {series}{rate}"]
+
+        if report.trend == ADHERENCE_RISING:
+
+            lines.append(
+                "• Você vem cumprindo mais que nas semanas anteriores 👏"
+            )
+
+        elif report.trend == ADHERENCE_FALLING:
+
+            lines.append(
+                "• O cumprimento vem caindo — se a rotina mudou, me conta "
+                "que a gente ajusta o plano"
+            )
+
+        if report.missed_day:
+
+            day = weekday_label(report.missed_day.label).capitalize()
+
+            lines.append(
+                f"• {day} é o dia que mais escapa "
+                f"({report.missed_day.count} de "
+                f"{report.missed_day.opportunities})"
+            )
+
+        if report.missed_type:
+
+            lines.append(
+                f"• Treino que mais fica pra trás: "
+                f"{report.missed_type.label} "
+                f"({report.missed_type.count} de "
+                f"{report.missed_type.opportunities})"
+            )
+
+        return lines
 
     @staticmethod
     def _goal_lines(goal: dict) -> list[str]:

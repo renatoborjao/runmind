@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
@@ -10,6 +10,7 @@ from app.application.coach.planning.executed_week_summary import (
 from app.application.coach.planning.plan_context_builder import (
     PlanContextBuilder,
 )
+from app.application.history.adherence_analyzer import AdherenceAnalyzer
 from app.application.history.runner_baseline_builder import (
     RunnerBaselineBuilder,
 )
@@ -139,6 +140,14 @@ class AIPlanService:
             week_start,
         )
 
+        # padrão de furo das últimas semanas — a janela vai até a semana
+        # ANTERIOR à que estamos gerando (a nova ainda não aconteceu)
+        adherence_report = AdherenceAnalyzer.analyze(
+            repository.history(profile),
+            history,
+            until_week=week_start - timedelta(days=7),
+        )
+
         memory = RunnerMemoryService.render(profile)
 
         weeks_to_race = AIPlanService._weeks_to_race(goal, week_start)
@@ -159,6 +168,7 @@ class AIPlanService:
             memory=memory,
             weeks_to_race=weeks_to_race,
             run_walk=run_walk,
+            adherence_report=adherence_report,
         )
 
     @staticmethod

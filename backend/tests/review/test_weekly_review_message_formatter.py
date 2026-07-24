@@ -235,3 +235,101 @@ def test_format_translates_upward_trends():
 
     assert "• Volume: subindo (+12.0%)" in message
     assert "• Pace: mais lento (+6.1%)" in message
+
+
+def _adherence_report(weeks_data, **overrides):
+    """Report com uma tupla (done, planned) por semana, antiga -> recente."""
+
+    from datetime import date, timedelta
+
+    from app.domain.entities.adherence_report import (
+        ADHERENCE_STABLE,
+        AdherenceReport,
+        WeekAdherence,
+    )
+
+    first = date(2026, 6, 1)
+
+    weeks = [
+        WeekAdherence(
+            week_start=first + timedelta(days=7 * i),
+            planned=planned,
+            done=done,
+        )
+        for i, (done, planned) in enumerate(weeks_data)
+    ]
+
+    defaults = dict(weeks=weeks, rate=0.75, trend=ADHERENCE_STABLE)
+
+    defaults.update(overrides)
+
+    return AdherenceReport(**defaults)
+
+
+def test_adherence_section_shows_series_and_pattern():
+
+    from app.domain.entities.adherence_report import MissedPattern
+
+    report = _adherence_report(
+        [(3, 3), (2, 3), (3, 3), (1, 3)],
+        missed_day=MissedPattern("Thursday", 3, 4),
+        missed_type=MissedPattern("Intervalado", 3, 4),
+    )
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence_history=report),
+    )
+
+    assert "🧭 Aderência ao plano" in message
+    assert "• Últimas 4 semanas: 3/3 · 2/3 · 3/3 · 1/3 (75%)" in message
+    assert "• Quinta-feira é o dia que mais escapa (3 de 4)" in message
+    assert "• Treino que mais fica pra trás: Intervalado (3 de 4)" in message
+
+
+def test_adherence_section_shows_only_last_four_weeks():
+
+    report = _adherence_report([(3, 3)] * 6)
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence_history=report),
+    )
+
+    assert "• Últimas 4 semanas: 3/3 · 3/3 · 3/3 · 3/3 (100%)" in message
+
+
+def test_adherence_section_comments_falling_trend():
+
+    from app.domain.entities.adherence_report import ADHERENCE_FALLING
+
+    report = _adherence_report(
+        [(3, 3), (3, 3), (1, 3), (1, 3)],
+        trend=ADHERENCE_FALLING,
+    )
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence_history=report),
+    )
+
+    assert "O cumprimento vem caindo" in message
+
+
+def test_adherence_section_absent_with_single_week_or_no_report():
+    """Uma semana só é o que a linha 'Treinos do plano' já diz; e review
+    antigo (sem a chave) não pode quebrar."""
+
+    uma_semana = _adherence_report([(2, 3)])
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence_history=uma_semana),
+    )
+
+    assert "Aderência ao plano" not in message
+
+    assert "Aderência ao plano" not in WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(),
+    )
