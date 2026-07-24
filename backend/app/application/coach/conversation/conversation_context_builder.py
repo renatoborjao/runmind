@@ -246,12 +246,12 @@ class ConversationContextBuilder:
         today = today_local()
 
         # plano de uma semana já encerrada (ex.: treinador externo que ainda
-        # não mandou o desta semana): TODAS as sessões estão no passado.
-        # Deixa explícito, pra o coach NÃO recitar como se fosse a semana atual.
-        is_stale = all(
-            plan.session_date(session) < today
-            for session in plan.sessions
-        )
+        # não mandou o desta semana). Deixa explícito, pra o coach NÃO recitar
+        # como se fosse a semana atual. O que decide é a SEMANA ter acabado —
+        # não as sessões estarem no passado: quem treina seg/qua/qui tem, na
+        # sexta, um plano vigente com todas as sessões atrás, e ouvir "ainda
+        # não há plano desta semana" seria mentira.
+        is_stale = plan.week_start + timedelta(days=6) < today
 
         if is_stale:
 

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 from app.application.coach.conversation.conversation_context_builder import (
@@ -50,7 +50,7 @@ def _metrics(**overrides) -> RunnerMetrics:
     return RunnerMetrics(**defaults)
 
 
-def _plan(sessions=None) -> TrainingPlan:
+def _plan(sessions=None, week_start=date(2026, 7, 20)) -> TrainingPlan:
 
     return TrainingPlan(
         athlete_name="Renato",
@@ -58,9 +58,21 @@ def _plan(sessions=None) -> TrainingPlan:
         phase="base",
         weekly_volume=30.0,
         running_days=["Tuesday", "Thursday"],
-        week_start=date(2026, 7, 20),
+        week_start=week_start,
         sessions=sessions or [],
     )
+
+
+def _current_week_start() -> date:
+    """Segunda-feira da semana de HOJE. Os testes que passam por
+    `_build_with_mocks` batem contra o relógio real (o builder chama
+    today_local por dentro) — plano com data fixa vira teste que expira."""
+
+    from app.core.clock import today_local
+
+    today = today_local()
+
+    return today - timedelta(days=today.weekday())
 
 
 async def _build_with_mocks(
@@ -96,7 +108,10 @@ async def _build_with_mocks(
 
         mock_metrics_resolver.resolve.return_value = _metrics()
 
-        mock_plan_service.get_or_generate.return_value = _plan(sessions)
+        mock_plan_service.get_or_generate.return_value = _plan(
+            sessions,
+            week_start=_current_week_start(),
+        )
 
         mock_memory_service.render.return_value = memory
 
@@ -653,3 +668,33 @@ def test_race_summary_empty_without_race_or_past_race():
     assert ConversationContextBuilder._race_summary(
         past_race, reference_date=date(2026, 7, 3),
     ) == ""
+
+
+def test_week_plan_summary_keeps_current_week_when_all_sessions_are_past():
+    """Sexta-feira, atleta que treina seg/qua/qui: o plano da semana está
+    VIGENTE mesmo com todas as sessões atrás. O critério é a SEMANA ter
+    acabado — dizer "ainda não há plano desta semana" numa semana corrente
+    faria o coach negar um plano que existe."""
+
+    def _session(day):
+
+        return PlannedSession(
+            day=day, workout_type="Rodagem", objective="Base",
+            planned_distance_km=6.0, planned_duration_minutes=None,
+            target_pace_min=None, target_pace_max=None,
+        )
+
+    plan = _plan(
+        [_session("Monday"), _session("Wednesday"), _session("Thursday")],
+        week_start=date(2026, 7, 20),
+    )
+
+    with patch(f"{MODULE}.today_local", return_value=date(2026, 7, 24)):
+
+        text = ConversationContextBuilder._week_plan_summary(
+            plan,
+            TrainingHistory(activities=[]),
+        )
+
+    assert "JÁ ENCERRADA" not in text
+    assert "Plano da semana completo:" in text
