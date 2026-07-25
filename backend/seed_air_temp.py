@@ -45,7 +45,10 @@ async def main(profile: str, n: int) -> None:
 
     for a in with_temp:
 
-        print(f"{a.id} {a.start_date.date()} {a.name[:30]}: {a.air_temp_c}°C")
+        # nome pode ter emoji; o console cp1252 (Windows) quebraria no print
+        name = a.name[:30].encode("ascii", "replace").decode("ascii")
+
+        print(f"{a.id} {a.start_date.date()} {name}: {a.air_temp_c}C")
 
     print(
         f"\nOK — {len(with_temp)} de {len(activities)} treino(s) do Strava "
