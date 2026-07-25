@@ -96,16 +96,31 @@ class TrainingCompletedEvent:
 
         return result
 
+    # treinos em que o esforço PERCEBIDO informa de verdade — a rodagem leve
+    # tem RPE previsível (não vale perguntar). Casa por substring no rótulo,
+    # cobrindo tanto o rótulo do plano em PT (Velocidade/Longão/Tempo/Limiar/
+    # Tiros/Progressivo) quanto o tipo detectado em inglês (WorkoutType:
+    # TEMPO/THRESHOLD/VO2/INTERVAL/LONG_RUN/RACE).
+    _DEMANDING_CUES = (
+        "veloc", "tiro", "interval", "limiar", "threshold", "ritmo", "tempo",
+        "progress", "fartlek", "vo2", "forte", "long", "race", "prova",
+    )
+
     @staticmethod
     def _ask_rpe(profile: str, result: dict, message: str) -> str:
-        """Marca o treino como pendente de RPE e anexa a pergunta ao feedback.
-        Só quando há duração de verdade (sRPE = duração × RPE)."""
+        """Marca o treino como pendente de RPE e anexa a pergunta — SÓ em
+        treino exigente (tiro/longão/tempo/...), com duração de verdade. Numa
+        rodagem leve, o RPE é previsível e a pergunta vira ruído."""
 
         enriched = result.get("activity")
 
         activity = getattr(enriched, "activity", None)
 
         if activity is None or not activity.moving_time:
+
+            return message
+
+        if not TrainingCompletedEvent._is_demanding(result):
 
             return message
 
@@ -117,3 +132,25 @@ class TrainingCompletedEvent:
         )
 
         return f"{message}\n\n{RpeFlow.ASK_LINE}"
+
+    @staticmethod
+    def _is_demanding(result: dict) -> bool:
+        """Treino de qualidade? Olha o rótulo planejado E o tipo detectado."""
+
+        labels = []
+
+        planned = result.get("planned_session")
+
+        if planned is not None:
+
+            labels.append(getattr(planned, "workout_type", "") or "")
+
+        enriched = result.get("activity")
+
+        if enriched is not None:
+
+            labels.append(getattr(enriched, "training_type", "") or "")
+
+        text = " ".join(labels).lower()
+
+        return any(cue in text for cue in TrainingCompletedEvent._DEMANDING_CUES)
