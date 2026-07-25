@@ -2,12 +2,16 @@
 arco longo) numa mensagem athlete-facing. Determinístico — o veredito e os
 números vêm prontos do analisador, então não há custo nem risco de IA.
 
-Reaproveita as traduções tangíveis do EF ([[AerobicEfficiencyWriter]]) e mostra
-CADA sinal que teve lastro, deixando claro por que a leitura é o que é — e o que
-ainda está juntando histórico pra entrar na conta. Ver [[FitnessEvolution]]."""
+O canal envia texto puro (sem negrito), então a formatação é por HIERARQUIA
+VISUAL: título, resumo curto, um painel de sinais com emoji por linha (estilo da
+casa, igual [[HealthSnapshotFormatter]]) e um fecho de rumo. Mostra CADA sinal
+que teve lastro e o que ainda está juntando histórico. Ver [[FitnessEvolution]]."""
 
-from app.application.coach.writer.aerobic_efficiency_writer import (
-    AerobicEfficiencyWriter,
+from app.application.planner.pace_formatter import PaceFormatter
+from app.domain.entities.aerobic_efficiency import (
+    EFF_DECLINING,
+    EFF_IMPROVING,
+    AerobicEfficiency,
 )
 from app.domain.entities.fitness_evolution import (
     EVO_DECLINING,
@@ -33,21 +37,15 @@ class FitnessEvolutionWriter:
 
             return None
 
-        lines = [FitnessEvolutionWriter._headline(evo, runner_name)]
+        lines = [FitnessEvolutionWriter._headline(evo, runner_name), ""]
+
+        lines.append(FitnessEvolutionWriter._summary(evo))
 
         lines.append("")
 
-        lines.append(FitnessEvolutionWriter._explanation(evo))
+        lines.append("📊 O que dá pra medir:")
 
-        why = FitnessEvolutionWriter._signal_lines(evo)
-
-        if why:
-
-            lines.append("")
-
-            lines.append("Por que essa leitura:")
-
-            lines.extend(why)
+        lines.extend(FitnessEvolutionWriter._signal_lines(evo))
 
         lines.append("")
 
@@ -63,6 +61,10 @@ class FitnessEvolutionWriter:
         if evo.ef is None:
 
             return None
+
+        from app.application.coach.writer.aerobic_efficiency_writer import (
+            AerobicEfficiencyWriter,
+        )
 
         return AerobicEfficiencyWriter.line(evo.ef)
 
@@ -82,65 +84,72 @@ class FitnessEvolutionWriter:
         return f"➡️ Sua forma está estável, {name}."
 
     @staticmethod
-    def _explanation(evo: FitnessEvolution) -> str:
+    def _summary(evo: FitnessEvolution) -> str:
+        """Uma frase — o veredito em linguagem simples."""
 
         mixed = (
-            " Os sinais não apontam todos pro mesmo lado — por isso a leitura "
-            "vem com um pé atrás."
+            " (os sinais não apontam todos pro mesmo lado, então vem com um pé "
+            "atrás)"
             if evo.confidence == EVO_MIXED
             else ""
         )
 
         if evo.direction == EVO_IMPROVING:
 
-            return (
-                "O conjunto do que dá pra medir aponta pra cima: teu corpo está "
-                "rendendo mais pelo mesmo esforço." + mixed
-            )
+            return f"Teu corpo está rendendo mais pelo mesmo esforço.{mixed}"
 
         if evo.direction == EVO_DECLINING:
 
             return (
-                "O conjunto do que dá pra medir recuou um pouco — está custando "
-                "mais pro mesmo rendimento. Costuma ser fadiga acumulada, calor "
-                "ou fase puxada; não é motivo pra susto, é sinal pra observar."
-                + mixed
+                "Está custando mais pro mesmo rendimento — costuma ser fadiga, "
+                f"calor ou fase puxada. Não é susto, é sinal pra observar.{mixed}"
             )
 
         return (
-            "Você não perdeu forma, mas também não deu um salto no período: o "
-            "corpo está rendendo com o mesmo custo de antes. É a base se "
-            "firmando, não é um problema." + mixed
+            "Você não perdeu forma, mas também não deu um salto: o corpo rende "
+            f"com o mesmo custo de antes. É a base se firmando.{mixed}"
         )
 
     @staticmethod
     def _signal_lines(evo: FitnessEvolution) -> list[str]:
-        """Um bullet por sinal que teve lastro + o que ainda falta juntar."""
+        """Um bloco por sinal com lastro (emoji + rótulo), a economia com sua
+        tradução tangível numa sublinha indentada; fecha com o que falta."""
 
         out = []
 
         if evo.ef is not None:
 
-            out.append(f"• {FitnessEvolutionWriter._ef_line(evo.ef)}")
+            out.append(
+                f"• ⚙️ Economia aeróbica: "
+                f"{FitnessEvolutionWriter._ef_word(evo.ef)}"
+            )
+
+            tangible = FitnessEvolutionWriter._ef_tangible(evo.ef)
+
+            if tangible:
+
+                out.append(f"   ↳ {tangible}")
 
         if evo.ef_long is not None:
 
             out.append(
-                f"• No arco longo (~{evo.ef_long.span_weeks} semanas): economia "
-                f"aeróbica {FitnessEvolutionWriter._word(evo.ef_long)}"
+                f"• 📈 No arco longo (~{evo.ef_long.span_weeks} sem): "
+                f"{FitnessEvolutionWriter._word(evo.ef_long)}"
             )
 
         if evo.vo2max is not None:
 
             out.append(
-                f"• VO₂máx (Garmin): {FitnessEvolutionWriter._word(evo.vo2max)} "
+                f"• 🫁 VO₂máx (Garmin): "
+                f"{FitnessEvolutionWriter._word(evo.vo2max)} "
                 f"({FitnessEvolutionWriter._range(evo.vo2max, 1)})"
             )
 
         if evo.rhr is not None:
 
             out.append(
-                f"• FC de repouso: {FitnessEvolutionWriter._rhr_word(evo.rhr)} "
+                f"• 💓 FC de repouso: "
+                f"{FitnessEvolutionWriter._rhr_word(evo.rhr)} "
                 f"({FitnessEvolutionWriter._range(evo.rhr, 0)} bpm)"
             )
 
@@ -153,18 +162,27 @@ class FitnessEvolutionWriter:
         return out
 
     @staticmethod
-    def _ef_line(ef) -> str:
-        """A economia aeróbica curta + tradução tangível, quando há."""
+    def _ef_tangible(ef: AerobicEfficiency) -> str | None:
+        """A tradução sentível do EF numa linha curta (a mais intuitiva: no
+        mesmo esforço, quanto mais rápido); só quando o número tem tamanho."""
 
-        gain = AerobicEfficiencyWriter._gain_phrase(ef)
+        if ef.ref_hr and ef.pace_gain_sec and ef.pace_gain_sec > 0:
 
-        loss = AerobicEfficiencyWriter._loss_phrase(ef)
+            return (
+                f"na mesma FC (~{ef.ref_hr} bpm), ~{ef.pace_gain_sec} s/km mais "
+                "rápido que no começo"
+            )
 
-        detail = gain or loss
+        if ef.ref_pace and ef.hr_drop_bpm and ef.hr_drop_bpm < 0:
 
-        base = f"Eficiência aeróbica (velocidade/FC): {FitnessEvolutionWriter._ef_word(ef)}"
+            pace = PaceFormatter.format(ef.ref_pace)
 
-        return f"{base} — {detail}" if detail else base
+            return (
+                f"no mesmo pace (~{pace}/km), FC ~{abs(ef.hr_drop_bpm)} bpm mais "
+                "alta que no começo"
+            )
+
+        return None
 
     @staticmethod
     def _pending(evo: FitnessEvolution) -> str | None:
@@ -185,10 +203,7 @@ class FitnessEvolutionWriter:
 
             return None
 
-        return (
-            "• (" + " e ".join(missing) + " ainda juntando histórico pra "
-            "entrar nessa conta)"
-        )
+        return "• ⏳ " + " e ".join(missing) + ": ainda juntando histórico"
 
     @staticmethod
     def _closer(evo: FitnessEvolution) -> str:
@@ -196,55 +211,49 @@ class FitnessEvolutionWriter:
         if evo.direction == EVO_DECLINING:
 
             return (
-                "Teu próximo plano já leva isso em conta: aliviar e priorizar a "
-                "recuperação até o sinal virar. 👊"
+                "🎯 Teu próximo plano já leva isso em conta: aliviar e priorizar "
+                "a recuperação até o sinal virar. 👊"
             )
 
         if evo.direction == EVO_IMPROVING:
 
             return (
-                "Teu próximo plano já aproveita a janela: progride a dose com o "
-                "corpo respondendo — sempre gradual, ancorado no teu histórico. 👊"
+                "🎯 Teu próximo plano já aproveita a janela: progrido a dose com "
+                "o corpo respondendo — sempre gradual. 👊"
             )
 
         return (
-            "Pra sair do platô, o caminho é estímulo de qualidade bem dosado "
-            "(tiro/limiar). É pra lá que teu próximo plano já aponta — ajusto a "
-            "dose conforme a tua forma evolui. 👊"
+            "🎯 Pra sair do platô, o caminho é qualidade bem dosada (tiro/"
+            "limiar) — é pra lá que teu próximo plano já aponta. 👊"
         )
 
     # -- vocabulário por sinal ----------------------------------------
 
     @staticmethod
-    def _ef_word(ef) -> str:
-
-        from app.domain.entities.aerobic_efficiency import (
-            EFF_DECLINING,
-            EFF_IMPROVING,
-        )
+    def _ef_word(ef: AerobicEfficiency) -> str:
 
         if ef.direction == EFF_IMPROVING:
 
-            return "subindo"
+            return "subindo 📈"
 
         if ef.direction == EFF_DECLINING:
 
-            return "recuou um pouco"
+            return "recuou um pouco 📉"
 
-        return "estável"
+        return "estável ➡️"
 
     @staticmethod
     def _word(trend: SignalTrend) -> str:
 
         if trend.direction == TREND_IMPROVING:
 
-            return "subindo"
+            return "subindo 📈"
 
         if trend.direction == TREND_DECLINING:
 
-            return "caindo"
+            return "caindo 📉"
 
-        return "estável"
+        return "estável ➡️"
 
     @staticmethod
     def _rhr_word(trend: SignalTrend) -> str:
@@ -252,13 +261,13 @@ class FitnessEvolutionWriter:
 
         if trend.direction == TREND_IMPROVING:
 
-            return "caindo (bom sinal)"
+            return "caindo, bom sinal 📈"
 
         if trend.direction == TREND_DECLINING:
 
-            return "subindo (atenção)"
+            return "subindo, atenção 📉"
 
-        return "estável"
+        return "estável ➡️"
 
     @staticmethod
     def _range(trend: SignalTrend, decimals: int) -> str:

@@ -53,8 +53,8 @@ def test_stable_ef_only_is_structured_and_flags_pending():
 
     assert "estável" in msg
     assert "Renato" in msg
-    assert "Por que essa leitura" in msg
-    assert "Eficiência aeróbica" in msg
+    assert "O que dá pra medir" in msg
+    assert "Economia aeróbica" in msg
     assert "juntando histórico" in msg        # nota de pendência
     assert ("tiro" in msg or "limiar" in msg)  # fecho acionável
 
