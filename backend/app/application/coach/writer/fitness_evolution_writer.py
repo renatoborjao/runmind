@@ -137,6 +137,13 @@ class FitnessEvolutionWriter:
                 f"{FitnessEvolutionWriter._word(evo.ef_long)}"
             )
 
+        if evo.quality is not None:
+
+            out.append(
+                f"• 🔥 Em ritmo forte (limiar/tiro): "
+                f"{FitnessEvolutionWriter._word(evo.quality)}"
+            )
+
         if evo.vo2max is not None:
 
             out.append(

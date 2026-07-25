@@ -25,6 +25,8 @@ class FitnessEvolution:
       (pace_gain/hr_drop) pra mensagem;
     - `ef_long`: a MESMA economia no horizonte longo (arco de meses) — responde
       "melhorei desde que começamos a acompanhar?";
+    - `quality`: economia em ritmo FORTE (faixa de limiar/tiro) — a evolução que
+      aparece no treino de qualidade, não só na rodagem;
     - `vo2max`: o número de fitness da PRÓPRIA Garmin (quando o relógio calcula
       e há dias suficientes) — autoritativo quando presente;
     - `rhr`: FC de repouso caindo = adaptação aeróbica (sinal de apoio).
@@ -39,6 +41,7 @@ class FitnessEvolution:
 
     ef: AerobicEfficiency | None = None
     ef_long: SignalTrend | None = None
+    quality: SignalTrend | None = None   # economia em ritmo forte (limiar/tiro)
     vo2max: SignalTrend | None = None
     rhr: SignalTrend | None = None
 

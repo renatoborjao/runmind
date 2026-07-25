@@ -47,9 +47,19 @@ _RHR_NOISE = 0.02
 _RHR_MIN_POINTS = 10
 _RHR_MIN_SPAN = 28
 
-# pesos na combinação: VO₂máx (número de fitness da Garmin) manda; EF logo
-# atrás; FC-repouso é apoio. Um sinal de apoio sozinho não decreta evolução.
+# economia em ritmo FORTE (faixa limiar/tiro): a evolução que a rodagem não
+# mostra. Mesma máquina de EF, faixa de esforço mais alta. Treino de qualidade
+# é mais raro → exige menos pontos; janela longa pra juntar o suficiente.
+_QUALITY_MIN_HRR = 0.82
+_QUALITY_MAX_HRR = 0.95
+_QUALITY_NOISE = 0.02
+_QUALITY_MIN_POINTS = 5
+
+# pesos na combinação: VO₂máx (número de fitness da Garmin) manda; EF (aeróbico)
+# e economia em ritmo forte logo atrás; FC-repouso é apoio. Um sinal de apoio
+# sozinho não decreta evolução.
 _W_EF = 1.0
+_W_QUALITY = 0.9
 _W_VO2 = 1.3
 _W_RHR = 0.7
 _STABLE_BAND = 0.8
@@ -77,6 +87,10 @@ class FitnessEvolutionAnalyzer:
             activities, ref, resting_hr, max_hr
         )
 
+        quality = FitnessEvolutionAnalyzer._quality_ef_trend(
+            activities, ref, resting_hr, max_hr
+        )
+
         vo2max = FitnessEvolutionAnalyzer._health_trend(
             health_series, ref, "vo2max",
             noise=_VO2_NOISE, min_points=_VO2_MIN_POINTS,
@@ -90,7 +104,7 @@ class FitnessEvolutionAnalyzer:
         )
 
         direction, confidence = FitnessEvolutionAnalyzer._combine(
-            ef, ef_long, vo2max, rhr
+            ef, ef_long, quality, vo2max, rhr
         )
 
         return FitnessEvolution(
@@ -98,6 +112,7 @@ class FitnessEvolutionAnalyzer:
             confidence=confidence,
             ef=ef if ef.has_data else None,
             ef_long=ef_long,
+            quality=quality,
             vo2max=vo2max,
             rhr=rhr,
         )
@@ -124,6 +139,35 @@ class FitnessEvolutionAnalyzer:
             [(r["day"], r["ef"]) for r in runs],
             noise_pct=0.02,
             min_points=8,
+            min_span_days=_LONG_MIN_SPAN_DAYS,
+        )
+
+    @staticmethod
+    def _quality_ef_trend(
+        activities: list[Activity],
+        ref: date,
+        resting_hr: int | None,
+        max_hr: int | None,
+    ) -> SignalTrend | None:
+        """Economia (EF) na faixa de ritmo FORTE (limiar/tiro) — a evolução que
+        a rodagem não mostra. Só faz sentido com FC repouso+máx (pra isolar a
+        faixa); sem elas, abstém. Janela longa (treino de qualidade é raro)."""
+
+        if not (resting_hr and max_hr and max_hr > resting_hr):
+
+            return None
+
+        start = ref - timedelta(days=_LONG_WINDOW_DAYS - 1)
+
+        runs = AerobicEfficiencyAnalyzer._comparable_runs(
+            activities, start, ref, resting_hr, max_hr,
+            hrr_min=_QUALITY_MIN_HRR, hrr_max=_QUALITY_MAX_HRR,
+        )
+
+        return TrendEstimator.estimate(
+            [(r["day"], r["ef"]) for r in runs],
+            noise_pct=_QUALITY_NOISE,
+            min_points=_QUALITY_MIN_POINTS,
             min_span_days=_LONG_MIN_SPAN_DAYS,
         )
 
@@ -170,7 +214,7 @@ class FitnessEvolutionAnalyzer:
         )
 
     @staticmethod
-    def _combine(ef, ef_long, vo2max, rhr) -> tuple[str, str]:
+    def _combine(ef, ef_long, quality, vo2max, rhr) -> tuple[str, str]:
         """Funde os sinais num veredito + confiança. Ausente não vota;
         concordância → CLEAR; divergência → MIXED. O EF longo NÃO pontua na
         direção (é a mesma métrica do curto — evita dupla contagem), mas
@@ -188,7 +232,9 @@ class FitnessEvolutionAnalyzer:
                 )
             )
 
-        for trend, weight in ((vo2max, _W_VO2), (rhr, _W_RHR)):
+        for trend, weight in (
+            (quality, _W_QUALITY), (vo2max, _W_VO2), (rhr, _W_RHR)
+        ):
 
             if trend is not None:
 

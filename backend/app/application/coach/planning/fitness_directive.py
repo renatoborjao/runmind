@@ -78,10 +78,14 @@ def _period(evo: FitnessEvolution) -> str:
 
 
 def _corroboration(evo: FitnessEvolution) -> str:
-    """Cita os sinais que confirmam (VO₂máx/FC-repouso) — dá mais confiança à
-    IA sem virar ordem."""
+    """Cita os sinais que confirmam (economia em ritmo forte / VO₂máx /
+    FC-repouso) — dá mais confiança à IA sem virar ordem."""
 
     parts = []
+
+    if evo.quality is not None and evo.quality.direction != "STABLE":
+
+        parts.append("economia em ritmo forte")
 
     if evo.vo2max is not None and evo.vo2max.direction != "STABLE":
 
