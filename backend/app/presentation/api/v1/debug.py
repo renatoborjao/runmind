@@ -5,6 +5,9 @@ from fastapi import APIRouter, HTTPException
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.application.coach.intelligence.checkin_service import (
+    CheckinService,
+)
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
@@ -16,6 +19,9 @@ from app.application.use_cases.load_training_history import (
 )
 from app.infrastructure.persistence.body_reading_history_repository import (
     BodyReadingHistoryRepository,
+)
+from app.infrastructure.persistence.checkin_repository import (
+    CheckinRepository,
 )
 from app.infrastructure.persistence.coach_learning_repository import (
     CoachLearningRepository,
@@ -130,6 +136,26 @@ async def fitness(profile: str):
     try:
 
         return asdict(FitnessReadingService.read(profile))
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/checkins/{profile}")
+async def checkins(profile: str):
+    """Check-ins de sensação (estado subjetivo relatado) + o estado recente que
+    entra na dose. Janela de inspeção da captura reativa."""
+
+    try:
+
+        return {
+            "recent_rendered": CheckinService.render_recent(profile),
+            "checkins": [asdict(c) for c in CheckinRepository().load(profile)],
+        }
 
     except Exception as e:
 
