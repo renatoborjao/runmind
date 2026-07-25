@@ -4,8 +4,8 @@ recebe encaminhado) e fecha com uma assinatura leve da marca."""
 
 from __future__ import annotations
 
-from app.application.coach.writer.aerobic_efficiency_writer import (
-    AerobicEfficiencyWriter,
+from app.application.coach.writer.fitness_evolution_writer import (
+    FitnessEvolutionWriter,
 )
 from app.application.review.predicted_time_line_formatter import (
     PredictedTimeLineFormatter,
@@ -42,7 +42,7 @@ class MonthlyRecapMessageFormatter:
         fitness = recap.get("fitness")
 
         fitness_line = (
-            AerobicEfficiencyWriter.line(fitness) if fitness else None
+            FitnessEvolutionWriter.line(fitness) if fitness else None
         )
 
         if fitness_line:

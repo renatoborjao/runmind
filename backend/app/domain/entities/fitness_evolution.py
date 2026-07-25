@@ -1,0 +1,58 @@
+from dataclasses import dataclass
+
+from app.domain.entities.aerobic_efficiency import AerobicEfficiency
+from app.domain.entities.signal_trend import SignalTrend
+
+# veredito combinado do eixo "estou evoluindo?" (multi-sinal)
+EVO_IMPROVING = "IMPROVING"
+EVO_STABLE = "STABLE"
+EVO_DECLINING = "DECLINING"
+EVO_INSUFFICIENT = "INSUFFICIENT"
+
+# confiança do veredito combinado
+EVO_CLEAR = "CLEAR"
+EVO_MARGINAL = "MARGINAL"
+EVO_MIXED = "MIXED"   # sinais discordam (ex.: economia estável, VO₂máx subindo)
+
+
+@dataclass(slots=True)
+class FitnessEvolution:
+    """Veredito ATLETA-FACING do "estou evoluindo?", triangulando os sinais de
+    forma que já coletamos, cada um só quando tem lastro:
+
+    - `ef`: eficiência aeróbica (velocidade/FC) na janela curta — o sinal
+      sempre-presente (só precisa de pace+FC), com a tradução tangível
+      (pace_gain/hr_drop) pra mensagem;
+    - `ef_long`: a MESMA economia no horizonte longo (arco de meses) — responde
+      "melhorei desde que começamos a acompanhar?";
+    - `vo2max`: o número de fitness da PRÓPRIA Garmin (quando o relógio calcula
+      e há dias suficientes) — autoritativo quando presente;
+    - `rhr`: FC de repouso caindo = adaptação aeróbica (sinal de apoio).
+
+    O `direction`/`confidence` combinam o que estiver disponível: concordância
+    entre sinais → CLEAR; divergência → MIXED com nuance. Sem NENHUM sinal com
+    lastro → INSUFFICIENT (o chamador cai no fallback). Puro/determinístico —
+    o writer só narra. Ver [[TrendEstimator]] e [[project_ideias_produto]]."""
+
+    direction: str = EVO_INSUFFICIENT
+    confidence: str = EVO_MARGINAL
+
+    ef: AerobicEfficiency | None = None
+    ef_long: SignalTrend | None = None
+    vo2max: SignalTrend | None = None
+    rhr: SignalTrend | None = None
+
+    @property
+    def has_data(self) -> bool:
+
+        return self.direction != EVO_INSUFFICIENT
+
+    @property
+    def improving(self) -> bool:
+
+        return self.direction == EVO_IMPROVING
+
+    @property
+    def mixed(self) -> bool:
+
+        return self.confidence == EVO_MIXED

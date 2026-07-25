@@ -51,3 +51,8 @@ class Activity:
     # de FC estava disponível na ingestão. None = sem stream/idade -> a carga
     # cai no método por FC média. Ver [[HrZoneCalculator]].
     hr_zone_minutes: list[float] | None = None
+
+    # temperatura média do treino em °C (Strava `average_temp`, gravada pelo
+    # dispositivo). Alimenta a normalização de calor da eficiência aeróbica —
+    # calor infla a FC pro mesmo ritmo. None quando o device não gravou.
+    air_temp_c: float | None = None

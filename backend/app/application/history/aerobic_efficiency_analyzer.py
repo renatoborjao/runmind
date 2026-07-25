@@ -13,6 +13,7 @@ distância mínima, e — quando dá pra estimar %FCR — dentro da faixa aerób
 import statistics
 from datetime import date, timedelta
 
+from app.application.history.trend_estimator import TrendEstimator
 from app.core.clock import today_local
 from app.domain.entities.activity import Activity
 from app.domain.entities.aerobic_efficiency import (
@@ -22,6 +23,10 @@ from app.domain.entities.aerobic_efficiency import (
     EFF_STABLE,
     AerobicEfficiency,
 )
+from app.domain.entities.signal_trend import (
+    TREND_DECLINING,
+    TREND_IMPROVING,
+)
 from app.domain.value_objects.sports import is_run_sport
 
 # janela de análise: eficiência muda devagar, então olhamos ~8 semanas
@@ -30,8 +35,12 @@ _WINDOW_DAYS = 56
 # corrida curta demais é ruído (aquecimento, tiro isolado, teste)
 _MIN_KM = 3.0
 
-# mínimo de corridas aeróbicas pra arriscar uma direção (metade vs metade)
+# mínimo de corridas aeróbicas pra arriscar uma direção
 _MIN_RUNS = 6
+
+# span mínimo (dias) entre a 1ª e a última corrida — sem alcance temporal a
+# regressão não significa nada (6 corridas em 4 dias não é tendência)
+_MIN_SPAN_DAYS = 14
 
 # faixa aeróbica em %FCR: abaixo é caminhada/trote de recuperação, acima é
 # tempo/tiro/prova (economia não comparável). Só aplicada com FC repouso+máx.
@@ -40,6 +49,16 @@ _AEROBIC_MAX_HRR = 0.80
 
 # folga relativa do EF pra chamar de "mudou" (ruído de terreno/calor/dia)
 _EF_NOISE = 0.02  # 2%
+
+# normalização de calor: acima da temperatura de conforto a FC sobe pro mesmo
+# ritmo (deriva térmica). Corrige a FC de volta a uma referência amena pra o
+# EF de um treino quente não parecer perda de forma. Coeficiente CONSERVADOR
+# (a literatura vai de ~0,2 a >0,6 bpm/°C; ficamos no piso), teto pra não
+# exagerar, e só desconta calor (frio não infla FC). Aplicada por corrida,
+# só quando a temperatura veio do Strava. Ver [[project_ideias_produto]].
+_HEAT_REF_C = 15.0
+_HEAT_COEF_BPM_PER_C = 0.30
+_HEAT_MAX_CORRECTION_BPM = 8.0
 
 
 class AerobicEfficiencyAnalyzer:
@@ -71,22 +90,32 @@ class AerobicEfficiencyAnalyzer:
                 direction=EFF_INSUFFICIENT, runs_counted=len(runs)
             )
 
-        # metade recente vs anterior, na ordem cronológica
-        half = len(runs) // 2
+        # tendência do EF por REGRESSÃO (reta sobre TODAS as corridas) — bem
+        # menos sensível a um treino atípico que o antigo metade-vs-metade, e
+        # ainda entrega confiança (R²). Os extremos AJUSTADOS da reta viram o
+        # "antes" e o "depois" pra tradução tangível.
+        trend = TrendEstimator.estimate(
+            [(r["day"], r["ef"]) for r in runs],
+            noise_pct=_EF_NOISE,
+            min_points=_MIN_RUNS,
+            min_span_days=_MIN_SPAN_DAYS,
+        )
 
-        earlier = runs[:half]
+        if trend is None:
 
-        recent = runs[half:]
+            return AerobicEfficiency(
+                direction=EFF_INSUFFICIENT, runs_counted=len(runs)
+            )
 
-        ef_earlier = statistics.median(r["ef"] for r in earlier)
+        ef_earlier = trend.earlier_value
 
-        ef_recent = statistics.median(r["ef"] for r in recent)
+        ef_recent = trend.recent_value
 
         ref_hr = round(statistics.median(r["hr"] for r in runs))
 
         ref_pace = round(statistics.median(r["pace"] for r in runs), 2)
 
-        direction = AerobicEfficiencyAnalyzer._direction(ef_earlier, ef_recent)
+        direction = AerobicEfficiencyAnalyzer._map_direction(trend.direction)
 
         pace_gain, hr_drop = AerobicEfficiencyAnalyzer._translate(
             ef_earlier, ef_recent, ref_hr, ref_pace
@@ -95,7 +124,7 @@ class AerobicEfficiencyAnalyzer:
         return AerobicEfficiency(
             direction=direction,
             runs_counted=len(runs),
-            weeks_covered=AerobicEfficiencyAnalyzer._weeks_covered(runs),
+            weeks_covered=trend.span_weeks,
             ef_recent=round(ef_recent, 5),
             ef_earlier=round(ef_earlier, 5),
             ref_hr=ref_hr,
@@ -157,11 +186,17 @@ class AerobicEfficiencyAnalyzer:
 
                     continue
 
+            # EF = velocidade por batimento, com a FC normalizada pelo calor
+            # (treino quente não deve parecer perda de economia)
+            eff_hr = AerobicEfficiencyAnalyzer._heat_normalized_hr(
+                hr, getattr(a, "air_temp_c", None)
+            )
+
             runs.append(
                 {
                     "day": day,
-                    "ef": speed / hr,           # m/s por batimento
-                    "hr": hr,
+                    "ef": speed / eff_hr,       # m/s por batimento (normalizado)
+                    "hr": hr,                    # FC real (pra exibição/ref)
                     "pace": (1000 / speed) / 60,  # min/km
                 }
             )
@@ -171,20 +206,35 @@ class AerobicEfficiencyAnalyzer:
         return runs
 
     @staticmethod
-    def _direction(ef_earlier: float, ef_recent: float) -> str:
-        """EF subiu além do ruído = mais econômico = melhorando."""
+    def _heat_normalized_hr(hr: float, temp: float | None) -> float:
+        """Desconta da FC a deriva térmica acima da temperatura de conforto,
+        pra comparar treino quente com treino ameno na mesma régua. Só desconta
+        calor (frio não infla FC), com teto. Sem temperatura → FC crua."""
 
-        if ef_earlier <= 0:
+        if temp is None or temp <= _HEAT_REF_C:
 
-            return EFF_INSUFFICIENT
+            return hr
 
-        change = (ef_recent - ef_earlier) / ef_earlier
+        correction = min(
+            _HEAT_COEF_BPM_PER_C * (temp - _HEAT_REF_C),
+            _HEAT_MAX_CORRECTION_BPM,
+        )
 
-        if abs(change) < _EF_NOISE:
+        return hr - correction
 
-            return EFF_STABLE
+    @staticmethod
+    def _map_direction(trend_direction: str) -> str:
+        """Direção do primitivo de tendência -> vocabulário do EF."""
 
-        return EFF_IMPROVING if change > 0 else EFF_DECLINING
+        if trend_direction == TREND_IMPROVING:
+
+            return EFF_IMPROVING
+
+        if trend_direction == TREND_DECLINING:
+
+            return EFF_DECLINING
+
+        return EFF_STABLE
 
     @staticmethod
     def _translate(
@@ -218,11 +268,3 @@ class AerobicEfficiencyAnalyzer:
         hr_drop = round(hr_earlier - hr_recent)  # bpm, + = FC menor (melhor)
 
         return pace_gain, hr_drop
-
-    @staticmethod
-    def _weeks_covered(runs: list[dict]) -> int:
-        """Semanas entre a corrida mais antiga e a mais nova da janela."""
-
-        span_days = (runs[-1]["day"] - runs[0]["day"]).days
-
-        return max(1, round(span_days / 7))

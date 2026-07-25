@@ -10,11 +10,11 @@ from app.application.coach.intelligence.fitness_reading_service import (
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
-from app.application.coach.writer.aerobic_efficiency_writer import (
-    AerobicEfficiencyWriter,
-)
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
+)
+from app.application.coach.writer.fitness_evolution_writer import (
+    FitnessEvolutionWriter,
 )
 from app.application.orchestrators.last_training_report import (
     LastTrainingReport,
@@ -129,12 +129,12 @@ class OnDemandAnswers:
 
         if intent == ChatIntent.FITNESS_TREND:
 
-            # eixo "estou evoluindo?": eficiência aeróbica ao longo do tempo.
-            # None (poucas corridas comparáveis) cai no Gemini, que responde
-            # com naturalidade a partir do contexto.
-            fitness = FitnessReadingService.read(profile)
+            # eixo "estou evoluindo?": veredito COMBINADO (EF + VO₂máx +
+            # FC-repouso + arco longo). None (nenhum sinal com lastro) cai no
+            # Gemini, que responde com naturalidade a partir do contexto.
+            evolution = FitnessReadingService.read_evolution(profile)
 
-            return AerobicEfficiencyWriter.write(fitness, runner.name)
+            return FitnessEvolutionWriter.write(evolution, runner.name)
 
         return None
 

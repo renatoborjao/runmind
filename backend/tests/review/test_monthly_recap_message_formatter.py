@@ -5,6 +5,10 @@ from app.domain.entities.aerobic_efficiency import (
     EFF_IMPROVING,
     AerobicEfficiency,
 )
+from app.domain.entities.fitness_evolution import (
+    EVO_IMPROVING,
+    FitnessEvolution,
+)
 
 
 def _recap(records=None):
@@ -56,9 +60,12 @@ def test_message_includes_fitness_line_when_present():
         "Renato",
         {
             **_recap(),
-            "fitness": AerobicEfficiency(
-                direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8,
-                ref_hr=150, ref_pace=6.43, pace_gain_sec=8, hr_drop_bpm=7,
+            "fitness": FitnessEvolution(
+                direction=EVO_IMPROVING,
+                ef=AerobicEfficiency(
+                    direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8,
+                    ref_hr=150, ref_pace=6.43, pace_gain_sec=8, hr_drop_bpm=7,
+                ),
             ),
         },
         narrative=["Boa!"],

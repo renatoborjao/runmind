@@ -74,7 +74,9 @@ class ActivityArchiveRepository:
     def _dedup_runs(activities: list[Activity]) -> list[Activity]:
         """Colapsa o MESMO treino vindo de fontes diferentes (Garmin+Strava).
         Mesma tolerância apertada do LoadTrainingHistory (data + distância 0,5%
-        + tempo 2%). Entre duplicatas, mantém a que tem zonas de FC."""
+        + tempo 2%). Faz MERGE das duas cópias: mantém a com zonas de FC
+        (Garmin) mas herda o que só a outra tem — em especial a temperatura
+        (`air_temp_c`, que vem do Strava) pra normalização de calor."""
 
         kept: list[Activity] = []
 
@@ -93,12 +95,34 @@ class ActivityArchiveRepository:
 
                 kept.append(activity)
 
-            elif activity.hr_zone_minutes and not kept[dup].hr_zone_minutes:
+            else:
 
-                # a duplicata mais rica (com zonas) vence
-                kept[dup] = activity
+                kept[dup] = ActivityArchiveRepository._merge_dup(
+                    kept[dup], activity
+                )
 
         return kept
+
+    @staticmethod
+    def _merge_dup(existing: Activity, incoming: Activity) -> Activity:
+        """Funde duas cópias do mesmo treino. Primário = o que tem zonas de FC
+        (mais rico); herda do outro o que lhe falta (temperatura, zonas)."""
+
+        primary, secondary = (
+            (incoming, existing)
+            if incoming.hr_zone_minutes and not existing.hr_zone_minutes
+            else (existing, incoming)
+        )
+
+        if primary.air_temp_c is None and secondary.air_temp_c is not None:
+
+            primary.air_temp_c = secondary.air_temp_c
+
+        if primary.hr_zone_minutes is None and secondary.hr_zone_minutes:
+
+            primary.hr_zone_minutes = secondary.hr_zone_minutes
+
+        return primary
 
     @staticmethod
     def _same_run(a: Activity, b: Activity) -> bool:
@@ -258,6 +282,7 @@ class ActivityArchiveRepository:
             suffer_score=None,
             raw={},
             hr_zone_minutes=record.get("hr_zone_minutes"),
+            air_temp_c=record.get("air_temp_c"),
         )
 
     @staticmethod
@@ -282,5 +307,11 @@ class ActivityArchiveRepository:
         if activity.hr_zone_minutes is not None:
 
             record["hr_zone_minutes"] = activity.hr_zone_minutes
+
+        # temperatura do treino (Strava) — pra normalização de calor do EF; só
+        # quando o device gravou, pra não poluir registro antigo com null
+        if activity.air_temp_c is not None:
+
+            record["air_temp_c"] = activity.air_temp_c
 
         return record
