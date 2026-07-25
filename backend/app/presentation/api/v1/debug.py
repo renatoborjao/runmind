@@ -134,12 +134,13 @@ async def body_trajectory(profile: str):
 
 @router.get("/fitness/{profile}")
 async def fitness(profile: str):
-    """Tendência de eficiência aeróbica (o eixo 'estou evoluindo?'). Janela de
-    inspeção pra conferir a leitura contra a realidade antes/depois de ligar."""
+    """Veredito de evolução (EF curto+longo + VO₂máx + FC-repouso). Janela de
+    inspeção pra conferir a leitura contra a realidade — mostra cada sinal e
+    quais ainda estão sem lastro."""
 
     try:
 
-        return asdict(FitnessReadingService.read(profile))
+        return asdict(FitnessReadingService.read_evolution(profile))
 
     except Exception as e:
 

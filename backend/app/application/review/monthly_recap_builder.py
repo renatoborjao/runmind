@@ -81,9 +81,9 @@ class MonthlyRecapBuilder:
 
     @staticmethod
     def _fitness(profile: str, month_start: date):
-        """Tendência de eficiência aeróbica AO FIM do mês recapitulado (janela
-        de ~8 semanas até o último dia do mês). Best-effort: nunca derruba o
-        recap. Ver [[project_ideias_produto]]."""
+        """Veredito de evolução AO FIM do mês recapitulado (janela até o último
+        dia do mês). Best-effort: nunca derruba o recap. Ver
+        [[project_ideias_produto]]."""
 
         try:
 
@@ -95,13 +95,13 @@ class MonthlyRecapBuilder:
                 month_start.year, month_start.month, days_in_month,
             )
 
-            return FitnessReadingService.read(
+            return FitnessReadingService.read_evolution(
                 profile, reference_date=month_end,
             )
 
         except Exception as e:
 
-            print(f"Recap: eficiência aeróbica indisponível p/ '{profile}': {e}")
+            print(f"Recap: evolução indisponível p/ '{profile}': {e}")
 
             return None
 

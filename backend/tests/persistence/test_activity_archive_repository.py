@@ -153,6 +153,48 @@ def test_load_activities_dedups_garmin_strava_twins(tmp_path):
     assert activities[0].hr_zone_minutes == [0, 0, 10, 70, 10]  # a cópia rica
 
 
+def test_dedup_merges_temp_from_strava_onto_garmin_copy(tmp_path):
+    """A cópia Garmin (com zonas) é mantida, mas HERDA a temperatura que só a
+    cópia Strava trouxe — pra a normalização de calor do EF funcionar mesmo em
+    atleta analisado via Garmin."""
+
+    from datetime import datetime
+
+    repo = _isolated_repo(tmp_path)
+
+    day = datetime(2026, 7, 25, 6, 0, 0)
+
+    strava = make_activity(
+        id=19000, distance=14030.0, moving_time=5400,
+        start_date=day, hr_zone_minutes=None, air_temp_c=24.0,
+    )
+
+    garmin = make_activity(
+        id=23000, distance=14030.0, moving_time=5400,
+        start_date=day, hr_zone_minutes=[0, 0, 10, 70, 10], air_temp_c=None,
+    )
+
+    repo.upsert_many("renato", [strava, garmin])
+
+    activities = repo.load_activities("renato")
+
+    assert len(activities) == 1
+    assert activities[0].hr_zone_minutes == [0, 0, 10, 70, 10]  # a cópia rica
+    assert activities[0].air_temp_c == 24.0                      # temp herdada
+
+
+def test_temp_survives_save_and_reload(tmp_path):
+    """air_temp_c é persistido e relido (não some no round-trip do arquivo)."""
+
+    repo = _isolated_repo(tmp_path)
+
+    repo.upsert_many("renato", [make_activity(id=1, air_temp_c=27.0)])
+
+    reloaded = repo.load_activities("renato")
+
+    assert reloaded[0].air_temp_c == 27.0
+
+
 def test_load_activities_keeps_distinct_runs(tmp_path):
     """Corridas de dias diferentes não são colapsadas."""
 

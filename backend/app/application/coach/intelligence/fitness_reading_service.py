@@ -15,7 +15,11 @@ from datetime import date
 from app.application.history.aerobic_efficiency_analyzer import (
     AerobicEfficiencyAnalyzer,
 )
+from app.application.history.fitness_evolution_analyzer import (
+    FitnessEvolutionAnalyzer,
+)
 from app.domain.entities.aerobic_efficiency import AerobicEfficiency
+from app.domain.entities.fitness_evolution import FitnessEvolution
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
@@ -34,6 +38,46 @@ class FitnessReadingService:
         profile: str,
         reference_date: date | None = None,
     ) -> AerobicEfficiency:
+        """Só a eficiência aeróbica (EF) — sinal isolado. Mantido pra quem quer
+        exatamente esse eixo; o veredito completo vive em `read_evolution`."""
+
+        activities, series, resting_hr, max_hr = (
+            FitnessReadingService._load(profile)
+        )
+
+        return AerobicEfficiencyAnalyzer.analyze(
+            activities,
+            reference_date=reference_date,
+            resting_hr=resting_hr,
+            max_hr=max_hr,
+        )
+
+    @staticmethod
+    def read_evolution(
+        profile: str,
+        reference_date: date | None = None,
+    ) -> FitnessEvolution:
+        """Veredito COMPLETO do "estou evoluindo?": EF curto+longo + VO₂máx +
+        FC-repouso, cada um só quando tem lastro."""
+
+        activities, series, resting_hr, max_hr = (
+            FitnessReadingService._load(profile)
+        )
+
+        return FitnessEvolutionAnalyzer.analyze(
+            activities,
+            series,
+            reference_date=reference_date,
+            resting_hr=resting_hr,
+            max_hr=max_hr,
+        )
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load(profile: str):
+        """Matéria-prima comum: atividades arquivadas + série de saúde + FC de
+        repouso (mediana) e FC máx (Tanaka) — igual ao BodyReadingBuilder."""
 
         activities = ActivityArchiveRepository().load_activities(profile)
 
@@ -45,12 +89,7 @@ class FitnessReadingService:
 
         max_hr = FitnessReadingService._max_hr(getattr(runner, "age", None))
 
-        return AerobicEfficiencyAnalyzer.analyze(
-            activities,
-            reference_date=reference_date,
-            resting_hr=resting_hr,
-            max_hr=max_hr,
-        )
+        return activities, series, resting_hr, max_hr
 
     # ------------------------------------------------------------------
 

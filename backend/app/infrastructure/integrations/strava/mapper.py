@@ -46,5 +46,6 @@ class StravaMapper:
             kudos=data["kudos_count"],
             comments=data["comment_count"],
             suffer_score=data.get("suffer_score"),
+            air_temp_c=data.get("average_temp"),
             raw=data,
         )

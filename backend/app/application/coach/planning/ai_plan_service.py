@@ -255,9 +255,9 @@ class AIPlanService:
 
         try:
 
-            fitness = FitnessReadingService.read(profile)
+            evolution = FitnessReadingService.read_evolution(profile)
 
-            return fitness_plan_directive(fitness)
+            return fitness_plan_directive(evolution)
 
         except Exception as e:
 
