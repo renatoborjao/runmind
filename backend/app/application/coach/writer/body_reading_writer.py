@@ -10,6 +10,9 @@ acionável. Tom de coach, curto, honesto, não médico."""
 
 from google.genai import types
 
+from app.application.coach.writer.health_snapshot_formatter import (
+    HealthSnapshotFormatter,
+)
 from app.core.config import get_settings
 from app.domain.entities.body_reading import (
     BODY_ABSORBING,
@@ -105,15 +108,21 @@ class BodyReadingWriter:
                 require_text=True,
             )
 
-            return text.strip()
+            narrative = text.strip()
 
         except Exception as e:  # noqa: BLE001 — nunca vira silêncio
 
             print(f"Leitura do corpo (IA) falhou p/ '{runner_name}': {e}")
 
-            return BodyReadingWriter._fallback(
+            narrative = BodyReadingWriter._fallback(
                 reading, runner_name, trajectory
             )
+
+        # painel factual dos números de recuperação — o veredito narra, o
+        # painel MOSTRA o dado concreto por trás (camada de saúde à mostra).
+        panel = HealthSnapshotFormatter.panel(reading.recovery)
+
+        return f"{narrative}\n\n{panel}" if panel else narrative
 
     # ------------------------------------------------------------------
 
