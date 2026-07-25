@@ -61,6 +61,41 @@ def test_stable_trend_shows_stable():
     assert "48 ms → estável" in panel
 
 
+def test_garmin_computed_numbers_are_shown():
+    """Quando o relógio computa prontidão/status/nota de sono/HRV status,
+    o painel mostra o número da própria Garmin."""
+
+    rec = RecoveryTrend(
+        hrv_recent=48.0, hrv_direction=STABLE, hrv_status="BALANCED",
+        sleep_avg_hours=7.0, short_nights=0, nights_counted=7, sleep_score=82,
+        readiness_score=74, training_status="PRODUCTIVE",
+        days_covered=14,
+    )
+
+    panel = HealthSnapshotFormatter.panel(rec)
+
+    assert "Prontidão (Garmin): 74/100" in panel
+    assert "Status de treino (Garmin): produtivo" in panel
+    assert "nota Garmin 82/100" in panel        # colado no sono
+    assert "Garmin: equilibrado" in panel        # colado no HRV
+
+
+def test_no_garmin_numbers_on_basic_watch():
+    """FR165 (sem prontidão/status): painel segue só com os primitivos."""
+
+    rec = RecoveryTrend(
+        hrv_recent=50.0, hrv_direction=RISING,
+        sleep_avg_hours=6.5, nights_counted=7,
+        days_covered=14,
+    )
+
+    panel = HealthSnapshotFormatter.panel(rec)
+
+    assert "Prontidão (Garmin)" not in panel
+    assert "Status de treino" not in panel
+    assert "nota Garmin" not in panel
+
+
 def test_only_present_fields_appear():
     """Relógio que não mede body battery/VO2máx: essas linhas somem, sem None."""
 
