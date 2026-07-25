@@ -225,6 +225,24 @@ def test_longao_typed_splits_do_not_become_interval():
     assert GarminActivitySource._exact_interval(typed) is None
 
 
+def test_progressive_long_run_blocks_do_not_become_interval():
+    """Longão PROGRESSIVO real do Renato (25/07): dois blocos contínuos
+    rotulados INTERVAL_ACTIVE (11 km leve + 3 km forte), SEM recuperação
+    entre eles -> NÃO é intervalado (era o "2 tiros" sem sentido). O nosso
+    builder empurra o bloco de corrida (RUN) com o mesmo stepType "interval"
+    do tiro, então o rótulo sozinho não separa progressão de tiro; a
+    ausência de recuperação é o que decide."""
+
+    typed = {"splits": [
+        {"type": "INTERVAL_ACTIVE", "distance": 11000, "averageSpeed": 2.55,
+         "averageHR": 155, "maxHR": 166},
+        {"type": "INTERVAL_ACTIVE", "distance": 3033, "averageSpeed": 2.74,
+         "averageHR": 162, "maxHR": 168},
+    ]}
+
+    assert GarminActivitySource._exact_interval(typed) is None
+
+
 def test_classify_splits_keeps_all_kinds_in_order():
     """_garmin_typed_blocks: TODAS as voltas classificadas (não só os
     esforços do _exact_interval) -- aquecimento/desaquecimento caem em

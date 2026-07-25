@@ -649,6 +649,19 @@ class GarminActivitySource:
 
             return None
 
+        # Intervalado é esforço ALTERNADO com recuperação. Sem NENHUMA volta
+        # de recuperação, os blocos rotulados como esforço são CONTÍNUOS
+        # (longão progressivo, tempo, progressivo em blocos) — não tiros. O
+        # builder empurra tanto o bloco de corrida (RUN) quanto o tiro
+        # (INTERVAL) como stepType "interval", então o rótulo sozinho NÃO
+        # separa progressão de tiro; a recuperação entre os blocos é o que
+        # distingue. Sem ela, deixa o detector por stream decidir (que também
+        # não chama 11 km de "tiro"). Era o longão progressivo do Renato
+        # (bloco de 11 km + bloco de 3 km) virando "2 tiros".
+        if not (recovery_hrs or recovery_speeds):
+
+            return None
+
         effort_speeds = [e["_speed"] for e in efforts if e["_speed"]]
 
         # reps finais sem o campo interno de velocidade
@@ -669,11 +682,10 @@ class GarminActivitySource:
             else None
         )
 
-        # com dado de recuperação, exige contraste real (senão é run-walk /
-        # rodagem com pausas que o Garmin rotulou como intervalo). Sem
-        # recuperação nenhuma, confia no rótulo (tiro estruturado que
-        # empurramos, cujas voltas o Garmin devolve alinhadas).
-        if (recovery_hrs or recovery_speeds) and not _real_interval(
+        # já garantido que há recuperação: exige contraste real esforço x
+        # recuperação (senão é run-walk / rodagem com pausas que o Garmin
+        # rotulou porcamente como intervalo — o bug do Mauricio).
+        if not _real_interval(
             avg_peak_hr, avg_recovery_hr, effort_speeds, recovery_speeds
         ):
 
