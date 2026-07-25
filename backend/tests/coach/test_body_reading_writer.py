@@ -156,3 +156,39 @@ def test_no_trajectory_keeps_message_identical():
     )
 
     assert "Trajetória" not in BodyReadingWriter._facts(reading, "Fernanda")
+
+
+def _reading_with_acwr(acwr, status, state):
+
+    r = _reading(body_state=state)
+    r.load.acwr = acwr
+    r.load.status = status
+    return r
+
+
+def test_borderline_acwr_is_flagged_as_frontier_in_facts():
+
+    # 1.31 encostado no corte de 1.30 -> a IA recebe "fronteira", não susto
+    facts = BodyReadingWriter._facts(
+        _reading_with_acwr(1.31, "CAUTION", BODY_STRAINED), "Fernanda"
+    )
+
+    assert "fronteira" in facts
+
+
+def test_borderline_acwr_softens_fallback_verdict():
+
+    text = BodyReadingWriter._fallback(
+        _reading_with_acwr(1.31, "CAUTION", BODY_STRAINED), "Fernanda"
+    )
+
+    assert "no limite da faixa" in text
+
+
+def test_non_borderline_acwr_has_no_frontier_note():
+
+    facts = BodyReadingWriter._facts(
+        _reading_with_acwr(1.74, "HIGH", BODY_STRAINED), "Fernanda"
+    )
+
+    assert "fronteira" not in facts

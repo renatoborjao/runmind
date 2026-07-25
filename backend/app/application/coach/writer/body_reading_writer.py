@@ -23,6 +23,7 @@ from app.domain.entities.body_reading import (
     BodyReading,
 )
 from app.domain.entities.body_reading_snapshot import BodyTrajectory
+from app.domain.entities.training_load import acwr_border_label
 from app.infrastructure.integrations.gemini.client import generate_text
 
 THINKING_BUDGET = 256
@@ -66,6 +67,11 @@ TRAJETÓRIA: se os FATOS trouxerem uma linha "Trajetória", incorpore-a no bloco
 ⚖️ com naturalidade (ex.: se repetindo há várias leituras, ou melhorou/piorou \
 desde a última) — é o que diferencia um dia isolado de um padrão. Se não vier, \
 não invente trajetória alguma.
+
+FRONTEIRA: se os FATOS disserem que a carga está "no limite" de uma faixa, NÃO \
+a apresente como salto, estouro ou susto — o ACWR é ruidoso e meio ponto \
+decimal não muda a vida do atleta. Diga que a carga está na fronteira e deixe \
+claro que quem decide o tom é a recuperação, não o número exato.
 
 FATOS (calculados pelo sistema; não invente além disso):
 {facts}"""
@@ -128,9 +134,19 @@ class BodyReadingWriter:
 
             lines.append(f"Limitador principal: {reading.limiter}")
 
+        border = acwr_border_label(load.acwr)
+
+        acwr_desc = f"{load.acwr} ({load.status}"
+
+        if border:
+
+            acwr_desc += f"; {border} — fronteira, não um salto"
+
+        acwr_desc += ")"
+
         lines.append(
             f"Carga (ponderada por intensidade): aguda {load.acute_load} vs "
-            f"crônica {load.chronic_load}, ACWR {load.acwr} ({load.status}); "
+            f"crônica {load.chronic_load}, ACWR {acwr_desc}; "
             f"semanas {load.weekly_loads}"
         )
 
@@ -210,6 +226,17 @@ class BodyReadingWriter:
                 "mas seguimos acompanhando seu corpo de perto."
             ),
         }.get(reading.body_state, "Seguimos acompanhando seu corpo.")
+
+        # carga na fronteira de uma faixa: de-dramatiza o número (meio ponto
+        # de ACWR não é salto), só nos estados em que a carga está elevada
+        border = acwr_border_label(reading.load.acwr)
+
+        if border and reading.body_state in (BODY_STRAINED, BODY_ABSORBING):
+
+            verdict = (
+                f"{verdict} A carga está no limite da faixa, não deu salto — "
+                "o que pesa aqui é a recuperação."
+            )
 
         # a trajetória entra colada no veredito (mesmo bloco ⚖️)
         if trajectory is not None and trajectory.has_note:

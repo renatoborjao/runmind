@@ -8,6 +8,34 @@ ACWR_DETRAINING = 0.8
 ACWR_OPTIMAL_MAX = 1.3
 ACWR_CAUTION_MAX = 1.5
 
+# margem de FRONTEIRA em volta de cada corte: dentro dela o ACWR está "no
+# limite" de uma faixa pra outra. O ACWR é ruidoso — meio ponto decimal (1.29
+# vs 1.31) não deve virar susto nem piscar a leitura de uma semana pra outra.
+# Não muda o veredito (isso vem do cruzamento com a recuperação), só o TOM.
+ACWR_BORDER_MARGIN = 0.05
+
+
+def acwr_border_label(acwr: float | None) -> str | None:
+    """Se o ACWR está encostado num corte de faixa, devolve como descrevê-lo
+    ('no limite entre X e Y'); senão None. Puro, pra a narração de-dramatizar
+    a fronteira sem recalcular nada."""
+
+    if acwr is None:
+
+        return None
+
+    for edge, label in (
+        (ACWR_DETRAINING, "no limite entre carga leve e a faixa ótima"),
+        (ACWR_OPTIMAL_MAX, "no limite entre a faixa ótima e a de atenção"),
+        (ACWR_CAUTION_MAX, "no limite entre atenção e carga alta"),
+    ):
+
+        if abs(acwr - edge) <= ACWR_BORDER_MARGIN:
+
+            return label
+
+    return None
+
 # status possíveis (string, não enum, pra casar com o estilo do projeto)
 LOAD_INSUFFICIENT = "INSUFFICIENT_DATA"
 LOAD_DETRAINING = "DETRAINING"
