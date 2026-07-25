@@ -1,15 +1,21 @@
-from app.application.events.assistant_errors import (
-    AssistantUnavailable,
-)
+from app.application.coach.conversation.aversion_flow import AversionFlow
 from app.application.coach.conversation.coach_conversation_engine import (
     CoachConversationEngine,
 )
 from app.application.coach.conversation.conversation_context_builder import (
     ConversationContextBuilder,
 )
+from app.application.coach.conversation.conversation_summary_engine import (
+    ConversationSummaryEngine,
+)
+from app.application.coach.conversation.goal_change_applier import (
+    GoalChangeApplier,
+)
 from app.application.coach.conversation.intent_router import (
     IntentRouter,
 )
+from app.application.coach.conversation.move_skip_flow import MoveSkipFlow
+from app.application.coach.conversation.negotiation_flow import NegotiationFlow
 from app.application.coach.conversation.on_demand_answers import (
     OnDemandAnswers,
 )
@@ -19,17 +25,9 @@ from app.application.coach.conversation.plan_preference_applier import (
 from app.application.coach.conversation.plan_preference_detector import (
     PlanPreferenceDetector,
 )
-from app.application.coach.conversation.goal_change_applier import (
-    GoalChangeApplier,
-)
 from app.application.coach.conversation.proposal_flow import ProposalFlow
-from app.application.coach.conversation.aversion_flow import AversionFlow
-from app.application.coach.conversation.negotiation_flow import NegotiationFlow
-from app.application.coach.conversation.move_skip_flow import MoveSkipFlow
-from app.application.garmin.garmin_sync import GarminSync
-from app.application.monitoring.ai_health_monitor import AIHealthMonitor
-from app.application.coach.conversation.conversation_summary_engine import (
-    ConversationSummaryEngine,
+from app.application.coach.intelligence.checkin_service import (
+    CheckinService,
 )
 from app.application.coach.memory.memory_extraction_engine import (
     MemoryExtractionEngine,
@@ -37,6 +35,11 @@ from app.application.coach.memory.memory_extraction_engine import (
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
+from app.application.events.assistant_errors import (
+    AssistantUnavailable,
+)
+from app.application.garmin.garmin_sync import GarminSync
+from app.application.monitoring.ai_health_monitor import AIHealthMonitor
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -357,6 +360,21 @@ class CoachConversationEvent:
         except Exception as e:
 
             print(f"Falha ao atualizar resumo de '{profile}': {e}")
+
+        # captura reativa do estado subjetivo ("dormi mal", "perna doendo"):
+        # portão barato por palavra-chave antes do Gemini. Best-effort — nunca
+        # chega ao atleta se falhar (a resposta já foi enviada).
+        try:
+
+            await CheckinService.capture(
+                profile=profile,
+                runner_name=runner.name,
+                incoming_text=incoming_text,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao capturar check-in de '{profile}': {e}")
 
         return reply_text
 

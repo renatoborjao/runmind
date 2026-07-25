@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.application.coach.intelligence.checkin_service import CheckinService
 from app.application.coach.memory.coach_learning_service import (
     CoachLearningService,
 )
@@ -196,6 +197,11 @@ class AIPlanService:
 
     @staticmethod
     def _body_directive(profile: str) -> str:
+        """Sinais de ESTADO pra a dose: o objetivo (carga à luz da recuperação,
+        do Garmin) + o subjetivo (o que o atleta RELATOU sentir). Os dois
+        contam — o relógio não sente o que o atleta sente. Best-effort."""
+
+        parts = []
 
         try:
 
@@ -203,13 +209,21 @@ class AIPlanService:
                 profile, persist=False
             )
 
-            return body_plan_directive(reading, trajectory)
+            parts.append(body_plan_directive(reading, trajectory))
 
         except Exception as e:
 
             print(f"Diretriz de corpo falhou p/ '{profile}': {e}")
 
-            return ""
+        try:
+
+            parts.append(CheckinService.render_recent(profile))
+
+        except Exception as e:
+
+            print(f"Estado relatado falhou p/ '{profile}': {e}")
+
+        return "\n".join(p for p in parts if p)
 
     @staticmethod
     def _previous_week_plan(repository, profile, week_start):
