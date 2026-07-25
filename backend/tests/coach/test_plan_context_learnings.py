@@ -7,7 +7,7 @@ from app.domain.entities.training_goal import TrainingGoal
 from tests.coach.factories import make_runner
 
 
-def _ctx(learnings="", body_directive=""):
+def _ctx(learnings="", body_directive="", fitness_directive=""):
 
     runner = make_runner(preferred_running_days=["Tuesday", "Thursday"])
 
@@ -47,6 +47,7 @@ def _ctx(learnings="", body_directive=""):
         weeks_to_race=None,
         learnings=learnings,
         body_directive=body_directive,
+        fitness_directive=fitness_directive,
     )
 
 
@@ -86,3 +87,24 @@ def test_no_body_directive_keeps_context_unchanged():
 
     assert _ctx(body_directive="") == _ctx()
     assert "STATUS DO CORPO" not in _ctx()
+
+
+def test_fitness_directive_is_injected_when_present():
+    """A forma (evolução) vira diretriz no plano — o loop fechado: o plano se
+    adapta à evolução do atleta sem perguntar."""
+
+    directive = (
+        "FORMA AERÓBICA (você é o COACH): a eficiência aeróbica dele ESTAGNOU "
+        "— introduza um estímulo de QUALIDADE pra furar o platô."
+    )
+
+    ctx = _ctx(fitness_directive=directive)
+
+    assert "ESTAGNOU" in ctx
+    assert "furar o platô" in ctx
+
+
+def test_no_fitness_directive_keeps_context_unchanged():
+
+    assert _ctx(fitness_directive="") == _ctx()
+    assert "FORMA AERÓBICA" not in _ctx()

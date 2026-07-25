@@ -5,6 +5,9 @@ from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
 from app.application.coach.intelligence.checkin_service import CheckinService
+from app.application.coach.intelligence.fitness_reading_service import (
+    FitnessReadingService,
+)
 from app.application.coach.memory.coach_learning_service import (
     CoachLearningService,
 )
@@ -15,6 +18,9 @@ from app.application.coach.planning.body_directive import body_plan_directive
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
 from app.application.coach.planning.executed_week_summary import (
     ExecutedWeekSummary,
+)
+from app.application.coach.planning.fitness_directive import (
+    fitness_plan_directive,
 )
 from app.application.coach.planning.plan_context_builder import (
     PlanContextBuilder,
@@ -180,6 +186,11 @@ class AIPlanService:
         # nunca deixa o atleta sem plano.
         body_directive = AIPlanService._body_directive(profile)
 
+        # a FORMA (o atleta está evoluindo?): eficiência aeróbica subindo ->
+        # progride; estagnada -> já traz o estímulo que fura o platô; caindo ->
+        # alivia. O plano é dinâmico, a IA já propõe — não pergunta ao atleta.
+        fitness_directive = AIPlanService._fitness_directive(profile)
+
         return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
@@ -194,6 +205,7 @@ class AIPlanService:
             adherence_report=adherence_report,
             learnings=learnings,
             body_directive=body_directive,
+            fitness_directive=fitness_directive,
         )
 
     @staticmethod
@@ -233,6 +245,25 @@ class AIPlanService:
             print(f"Nota de sRPE falhou p/ '{profile}': {e}")
 
         return "\n".join(p for p in parts if p)
+
+    @staticmethod
+    def _fitness_directive(profile: str) -> str:
+        """Diretriz de FORMA pra dose: a eficiência aeróbica (velocidade/FC)
+        ao longo das semanas vira instrução pra IA progredir/furar platô/
+        aliviar — o plano se adapta à evolução do atleta sem perguntar.
+        Best-effort — falhar aqui nunca deixa o atleta sem plano."""
+
+        try:
+
+            fitness = FitnessReadingService.read(profile)
+
+            return fitness_plan_directive(fitness)
+
+        except Exception as e:
+
+            print(f"Diretriz de forma falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _previous_week_plan(repository, profile, week_start):
