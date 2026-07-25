@@ -10,6 +10,9 @@ from __future__ import annotations
 import calendar
 from datetime import date
 
+from app.application.coach.intelligence.fitness_reading_service import (
+    FitnessReadingService,
+)
 from app.application.history.race_time_predictor import RaceTimePredictor
 from app.application.history.weekly_buckets import activity_date, week_start
 from app.application.planner.pace_formatter import PaceFormatter
@@ -73,7 +76,34 @@ class MonthlyRecapBuilder:
                 history,
                 month_start,
             ),
+            "fitness": MonthlyRecapBuilder._fitness(runner.id, month_start),
         }
+
+    @staticmethod
+    def _fitness(profile: str, month_start: date):
+        """Tendência de eficiência aeróbica AO FIM do mês recapitulado (janela
+        de ~8 semanas até o último dia do mês). Best-effort: nunca derruba o
+        recap. Ver [[project_ideias_produto]]."""
+
+        try:
+
+            days_in_month = calendar.monthrange(
+                month_start.year, month_start.month,
+            )[1]
+
+            month_end = date(
+                month_start.year, month_start.month, days_in_month,
+            )
+
+            return FitnessReadingService.read(
+                profile, reference_date=month_end,
+            )
+
+        except Exception as e:
+
+            print(f"Recap: eficiência aeróbica indisponível p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def _predicted_time(

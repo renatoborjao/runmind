@@ -163,3 +163,48 @@ def test_body_reading_does_not_collide_with_training_intents():
         IntentRouter.detect("como foi meu último treino?")
         == ChatIntent.LAST_TRAINING
     )
+
+
+# ==========================================================
+# FITNESS_TREND (estou evoluindo?)
+# ==========================================================
+
+def test_estou_evoluindo():
+
+    assert (
+        IntentRouter.detect("será que estou evoluindo?")
+        == ChatIntent.FITNESS_TREND
+    )
+
+
+def test_minha_evolucao():
+
+    assert (
+        IntentRouter.detect("como está minha evolução?")
+        == ChatIntent.FITNESS_TREND
+    )
+
+
+def test_estou_ficando_mais_rapido():
+
+    assert (
+        IntentRouter.detect("to ficando mais rápido?")
+        == ChatIntent.FITNESS_TREND
+    )
+
+
+def test_meu_condicionamento():
+
+    assert (
+        IntentRouter.detect("como anda meu condicionamento?")
+        == ChatIntent.FITNESS_TREND
+    )
+
+
+def test_fitness_does_not_collide_with_body_reading():
+    """'como tá meu corpo' segue leitura do corpo, não vira evolução."""
+
+    assert (
+        IntentRouter.detect("como tá meu corpo hoje?")
+        == ChatIntent.BODY_READING
+    )

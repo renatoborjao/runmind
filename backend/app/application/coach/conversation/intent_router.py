@@ -16,6 +16,8 @@ class ChatIntent(str, Enum):
 
     BODY_READING = "BODY_READING"
 
+    FITNESS_TREND = "FITNESS_TREND"
+
 
 # Pedido claro sobre o treino JÁ FEITO (quer a análise completa).
 _LAST_PATTERNS = [
@@ -54,6 +56,18 @@ _BODY_PATTERNS = [
     r"\bleitura do (meu )?corpo\b",
 ]
 
+# Pergunta sobre EVOLUÇÃO/forma ("estou melhorando?") — quer a leitura de
+# eficiência aeróbica ao longo do tempo, eixo diferente da recuperação/corpo.
+_FITNESS_PATTERNS = [
+    r"\b(estou|to|tou|ando)\b.*\b(evoluindo|melhorando|progredindo|mais rapido|mais veloz|mais em forma|mais forte)\b",
+    r"\b(minha|meu)\b.*\b(evolucao|progresso|forma fisica|eficiencia|condicionamento|fitness)\b",
+    r"\b(estou|to|tou)\b.*\bem forma\b",
+    r"\b(melhorei|evolui|progredi)\b",
+    r"\bficando (mais )?em forma\b",
+    r"\b(estou|to) ficando (melhor|mais rapido|mais veloz)\b",
+    r"\bmeu (fitness|condicionamento|fisico)\b",
+]
+
 _LAST_REGEXES = [re.compile(p) for p in _LAST_PATTERNS]
 
 _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
@@ -61,6 +75,8 @@ _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
 _WEEKLY_PLAN_REGEXES = [re.compile(p) for p in _WEEKLY_PLAN_PATTERNS]
 
 _BODY_REGEXES = [re.compile(p) for p in _BODY_PATTERNS]
+
+_FITNESS_REGEXES = [re.compile(p) for p in _FITNESS_PATTERNS]
 
 
 class IntentRouter:
@@ -90,6 +106,10 @@ class IntentRouter:
         if any(regex.search(normalized) for regex in _BODY_REGEXES):
 
             matched.append(ChatIntent.BODY_READING)
+
+        if any(regex.search(normalized) for regex in _FITNESS_REGEXES):
+
+            matched.append(ChatIntent.FITNESS_TREND)
 
         if len(matched) == 1:
 
