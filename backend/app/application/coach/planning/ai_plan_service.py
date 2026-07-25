@@ -1,11 +1,15 @@
 from datetime import date, timedelta
 
+from app.application.coach.intelligence.body_reading_service import (
+    BodyReadingService,
+)
 from app.application.coach.memory.coach_learning_service import (
     CoachLearningService,
 )
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
+from app.application.coach.planning.body_directive import body_plan_directive
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
 from app.application.coach.planning.executed_week_summary import (
     ExecutedWeekSummary,
@@ -169,6 +173,11 @@ class AIPlanService:
             history.activities,
         )
 
+        # o corpo AGORA (carga à luz da recuperação): se pede freio, vira
+        # diretriz de dose pra IA decidir a semana. Best-effort — falhar aqui
+        # nunca deixa o atleta sem plano.
+        body_directive = AIPlanService._body_directive(profile)
+
         return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
@@ -182,7 +191,25 @@ class AIPlanService:
             run_walk=run_walk,
             adherence_report=adherence_report,
             learnings=learnings,
+            body_directive=body_directive,
         )
+
+    @staticmethod
+    def _body_directive(profile: str) -> str:
+
+        try:
+
+            reading, trajectory = BodyReadingService.read(
+                profile, persist=False
+            )
+
+            return body_plan_directive(reading, trajectory)
+
+        except Exception as e:
+
+            print(f"Diretriz de corpo falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _previous_week_plan(repository, profile, week_start):

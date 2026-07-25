@@ -28,6 +28,7 @@ class PlanContextBuilder:
         run_walk: bool = False,
         adherence_report: AdherenceReport | None = None,
         learnings: str = "",
+        body_directive: str = "",
     ) -> str:
 
         lines = [f"Atleta: {runner.name}"]
@@ -114,6 +115,12 @@ class PlanContextBuilder:
         if learnings:
 
             lines.append(learnings)
+
+        # o CORPO agora (carga à luz da recuperação): quando pede freio, entra
+        # como diretriz pra a IA decidir a dose — o coach decide, não o atleta.
+        if body_directive:
+
+            lines.append(body_directive)
 
         return "\n".join(line for line in lines if line)
 

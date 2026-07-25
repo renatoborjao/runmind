@@ -7,7 +7,7 @@ from app.domain.entities.training_goal import TrainingGoal
 from tests.coach.factories import make_runner
 
 
-def _ctx(learnings=""):
+def _ctx(learnings="", body_directive=""):
 
     runner = make_runner(preferred_running_days=["Tuesday", "Thursday"])
 
@@ -46,6 +46,7 @@ def _ctx(learnings=""):
         memory="",
         weeks_to_race=None,
         learnings=learnings,
+        body_directive=body_directive,
     )
 
 
@@ -67,3 +68,21 @@ def test_learnings_section_is_injected_when_present():
 
     assert "Fura o longão de domingo" in ctx
     assert "observando ELE" in ctx
+
+
+def test_body_directive_is_injected_when_present():
+
+    directive = (
+        "STATUS DO CORPO (você é o COACH): o corpo dele está pedindo "
+        "RECUPERAÇÃO."
+    )
+
+    ctx = _ctx(body_directive=directive)
+
+    assert "pedindo RECUPERAÇÃO" in ctx
+
+
+def test_no_body_directive_keeps_context_unchanged():
+
+    assert _ctx(body_directive="") == _ctx()
+    assert "STATUS DO CORPO" not in _ctx()

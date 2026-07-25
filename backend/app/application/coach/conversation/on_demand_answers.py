@@ -4,6 +4,9 @@ from app.application.coach.conversation.intent_router import (
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.application.coach.planning.body_conduct_proposer import (
+    BodyConductProposer,
+)
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
 )
@@ -22,6 +25,7 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.core.clock import today_local
 from app.core.config import get_settings
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_load import LOAD_INSUFFICIENT
@@ -104,8 +108,39 @@ class OnDemandAnswers:
                 else None
             )
 
-            return await BodyReadingWriter.write(
+            text = await BodyReadingWriter.write(
                 reading, runner.name, trajectory=note
             )
 
+            # se o corpo pede freio e AMANHÃ tem treino exigente, o coach já
+            # emenda a proposta de aliviar/remanejar (o 'sim' aplica). Best-
+            # effort: nunca derruba a leitura do corpo.
+            offer = await OnDemandAnswers._body_conduct_offer(
+                profile, runner, reading, trajectory,
+            )
+
+            return f"{text}\n\n{offer}" if offer else text
+
         return None
+
+    @staticmethod
+    async def _body_conduct_offer(
+        profile, runner, reading, trajectory,
+    ) -> str | None:
+
+        try:
+
+            _, plan = await CurrentPlanProvider.for_profile(profile)
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            return await BodyConductProposer.propose(
+                profile, runner, plan, reading, trajectory,
+                history, today_local(),
+            )
+
+        except Exception as e:
+
+            print(f"Proposta de conduta (on-demand) falhou p/ '{profile}': {e}")
+
+            return None

@@ -8,17 +8,20 @@ from app.application.garmin.garmin_activity_poller import (
 from app.application.garmin.garmin_health_poller import (
     GarminHealthPoller,
 )
-from app.application.strava.strava_activity_catchup import (
-    StravaActivityCatchup,
-)
 from app.application.planner.morning_briefing_notifier import (
     MorningBriefingNotifier,
 )
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
+from app.application.review.body_conduct_notifier import (
+    BodyConductNotifier,
+)
 from app.application.review.monthly_recap_notifier import (
     MonthlyRecapNotifier,
 )
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
+from app.application.strava.strava_activity_catchup import (
+    StravaActivityCatchup,
+)
 from app.core.clock import DEFAULT_TIMEZONE
 from app.core.config import get_settings
 from app.infrastructure.backup.storage_backup import StorageBackup
@@ -177,6 +180,17 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="morning_briefing",
+    )
+
+    # Ajuste de corpo — 09h local: se o corpo pede freio (STRAINED), o coach
+    # alivia/remaneja a próxima sessão exigente e informa. Dedup por semana
+    # (no máximo um ajuste/semana). Barato quando ninguém está sobrecarregado.
+    _scheduler.add_job(
+        BodyConductNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="body_conduct_adjustment",
     )
 
     # autocura da sessão do WhatsApp (quedas transitórias) — só quando
