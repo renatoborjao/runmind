@@ -211,7 +211,42 @@ class GarminActivitySource:
 
             print(f"Garmin: typed_splits indisponíveis p/ {activity_id}: {e}")
 
-        return GarminActivitySource._to_activity(activity_id, summary, raw)
+        activity = GarminActivitySource._to_activity(activity_id, summary, raw)
+
+        # distribuição nas zonas de FC (pra a carga de Edwards) — do stream +
+        # FCmáx (idade). Best-effort: sem stream/idade fica None e a carga cai
+        # no método por FC média. Ver [[HrZoneCalculator]].
+        try:
+
+            activity.hr_zone_minutes = GarminActivitySource._zone_minutes(
+                profile, raw, activity.moving_time
+            )
+
+        except Exception as e:
+
+            print(f"Garmin: zonas de FC indisponíveis p/ {activity_id}: {e}")
+
+        return activity
+
+    @staticmethod
+    def _zone_minutes(profile: str, raw: dict, moving_time: int):
+
+        from app.application.history.hr_zone_calculator import (
+            HrZoneCalculator,
+        )
+        from app.infrastructure.persistence.runner_profile_repository import (
+            RunnerProfileRepository,
+        )
+
+        runner = RunnerProfileRepository().load(profile)
+
+        age = getattr(runner, "age", None)
+
+        max_hr = round(208 - 0.7 * age) if age and age > 0 else None
+
+        heartrate = (raw.get("_streams") or {}).get("heartrate") or []
+
+        return HrZoneCalculator.zone_minutes(heartrate, moving_time, max_hr)
 
     # ------------------------------------------------------------------
 

@@ -15,14 +15,16 @@ from app.domain.entities.training_load import (
 REF = date(2026, 7, 22)
 
 
-def _act(days_ago: int, minutes: int):
-    """Atividade mínima: só o que o analisador usa (start_date + moving_time)."""
+def _act(days_ago: int, minutes: int, zones=None):
+    """Atividade mínima: só o que o analisador usa (start_date + moving_time).
+    `zones` = minutos por zona [Z1..Z5] pro caminho Edwards."""
 
     day = REF - timedelta(days=days_ago)
 
     return SimpleNamespace(
         start_date=datetime(day.year, day.month, day.day, 10, 0),
         moving_time=minutes * 60,
+        hr_zone_minutes=zones,
     )
 
 
@@ -209,3 +211,47 @@ def test_empty_history_is_insufficient():
     assert load.status == LOAD_INSUFFICIENT
     assert load.days_of_history == 0
     assert load.weekly_loads == [0.0, 0.0, 0.0, 0.0]
+
+
+# ------------------- carga de Edwards (por zonas) -------------------
+
+
+def test_edwards_used_when_whole_window_has_zones():
+    """Toda atividade dos 28d tem zonas -> carga = Edwards (Σ min×peso).
+    60 min em Z3 (×3) = 180 de carga por dia."""
+
+    z3 = [0, 0, 60, 0, 0]
+
+    load = _analyze([_act(d, 60, zones=z3) for d in range(28)])
+
+    assert load.acute_load == 1260.0     # 7 dias × 180
+    assert load.chronic_load == 1260.0
+    assert load.acwr == 1.0
+    assert load.status == LOAD_OPTIMAL
+
+
+def test_edwards_weights_hard_sessions_more():
+    """Mesma duração/FC média não distinguiria; Edwards sim: uma semana em Z5
+    pesa muito mais que a base em Z2 -> ACWR alto."""
+
+    base = [_act(d, 60, zones=[0, 60, 0, 0, 0]) for d in range(8, 28)]  # Z2
+    peak = [_act(d, 60, zones=[0, 0, 0, 0, 60]) for d in range(7)]       # Z5
+
+    load = _analyze(base + peak)
+
+    assert load.acwr > 1.5
+    assert load.status == LOAD_HIGH
+
+
+def test_falls_back_when_window_missing_zones():
+    """Uma atividade da janela SEM zonas -> não usa Edwards (não mistura
+    unidade); cai no método por duração (aqui, sem FC = duração pura)."""
+
+    acts = [_act(d, 60, zones=[0, 0, 60, 0, 0]) for d in range(7)]
+    # buraco de zona na janela dos 28d, mas fora da janela aguda (7d)
+    acts.append(_act(20, 60, zones=None))
+
+    load = _analyze(acts)
+
+    # duração pura: 7 dias × 60 min na aguda -> 420 (não os valores de Edwards)
+    assert load.acute_load == 420.0

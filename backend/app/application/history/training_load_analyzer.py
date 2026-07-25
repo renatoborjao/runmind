@@ -11,6 +11,7 @@ import statistics
 from collections import defaultdict
 from datetime import date, timedelta
 
+from app.application.history.hr_zone_calculator import HrZoneCalculator
 from app.core.clock import today_local
 from app.domain.entities.training_history import TrainingHistory
 from app.domain.entities.training_load import (
@@ -63,9 +64,10 @@ class TrainingLoadAnalyzer:
 
         ref = reference_date or today_local()
 
-        # carga por dia — ponderada por intensidade quando dá, senão duração
+        # carga por dia — Edwards (por zonas) quando toda a janela tem zonas,
+        # senão intensidade por FC média, senão duração
         per_day = TrainingLoadAnalyzer._load_per_day(
-            history, resting_hr, max_hr, sex
+            history, resting_hr, max_hr, sex, ref
         )
 
         acute = TrainingLoadAnalyzer._window_sum(per_day, ref, _ACUTE_DAYS)
@@ -122,10 +124,21 @@ class TrainingLoadAnalyzer:
         resting_hr: int | None,
         max_hr: int | None,
         sex: str | None,
+        ref: date,
     ) -> dict[date, float]:
-        """Carga somada por dia. Com FC repouso + máx válidas, cada sessão é
-        ponderada por intensidade (Banister se souber o sexo, senão %FCR
-        linear); sem FC repouso/máx, duração pura (v1)."""
+        """Carga somada por dia, em 3 tiers (do mais pro menos preciso):
+        (1) EDWARDS por zonas — só quando TODA a janela de 28d tem zonas de FC
+        (senão misturaria unidades no ACWR, que é razão); (2) intensidade por
+        FC média (Banister/%FCR) com FC repouso+máx; (3) duração pura."""
+
+        # tier 1: Edwards, quando toda a janela relevante tem distribuição de
+        # zonas (as zonas só existem daqui pra frente, então liga sozinho
+        # quando os ~28 dias já acumularam via Garmin)
+        edwards = TrainingLoadAnalyzer._edwards_per_day(history, ref)
+
+        if edwards is not None:
+
+            return edwards
 
         intensity_mode = (
             resting_hr is not None
@@ -176,6 +189,46 @@ class TrainingLoadAnalyzer:
         for day, minutes, factor in sessions:
 
             per_day[day] += minutes * (factor if factor is not None else fallback)
+
+        return per_day
+
+    @staticmethod
+    def _edwards_per_day(
+        history: TrainingHistory,
+        ref: date,
+    ) -> dict[date, float] | None:
+        """Carga de Edwards por dia — SÓ quando toda atividade dos últimos 28d
+        tem zonas (unidade consistente no ACWR). None senão (cai nos outros
+        tiers). Atividade fora da janela sem zonas não conta (não afeta o
+        ACWR/semanas, que olham só os 28d)."""
+
+        counting = [
+            a for a in history.activities if (a.moving_time or 0) > 0
+        ]
+
+        window = [
+            a for a in counting
+            if ref - timedelta(days=_CHRONIC_DAYS - 1) <= a.start_date.date() <= ref
+        ]
+
+        # sem janela, ou alguma atividade da janela sem zonas: ainda não dá
+        if not window or any(
+            getattr(a, "hr_zone_minutes", None) is None for a in window
+        ):
+
+            return None
+
+        per_day: dict[date, float] = defaultdict(float)
+
+        for activity in counting:
+
+            load = HrZoneCalculator.edwards_load(
+                getattr(activity, "hr_zone_minutes", None)
+            )
+
+            if load is not None:
+
+                per_day[activity.start_date.date()] += load
 
         return per_day
 
