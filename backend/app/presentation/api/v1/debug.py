@@ -5,6 +5,9 @@ from fastapi import APIRouter, HTTPException
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.application.coach.intelligence.fitness_reading_service import (
+    FitnessReadingService,
+)
 from app.application.history.enriched_history_builder import (
     EnrichedHistoryBuilder,
 )
@@ -110,6 +113,23 @@ async def body_trajectory(profile: str):
             "trajectory": asdict(trajectory),
             "snapshots": snapshots,
         }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/fitness/{profile}")
+async def fitness(profile: str):
+    """Tendência de eficiência aeróbica (o eixo 'estou evoluindo?'). Janela de
+    inspeção pra conferir a leitura contra a realidade antes/depois de ligar."""
+
+    try:
+
+        return asdict(FitnessReadingService.read(profile))
 
     except Exception as e:
 

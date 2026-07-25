@@ -4,8 +4,14 @@ from app.application.coach.conversation.intent_router import (
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.application.coach.intelligence.fitness_reading_service import (
+    FitnessReadingService,
+)
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
+)
+from app.application.coach.writer.aerobic_efficiency_writer import (
+    AerobicEfficiencyWriter,
 )
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
@@ -120,6 +126,15 @@ class OnDemandAnswers:
             )
 
             return f"{text}\n\n{offer}" if offer else text
+
+        if intent == ChatIntent.FITNESS_TREND:
+
+            # eixo "estou evoluindo?": eficiência aeróbica ao longo do tempo.
+            # None (poucas corridas comparáveis) cai no Gemini, que responde
+            # com naturalidade a partir do contexto.
+            fitness = FitnessReadingService.read(profile)
+
+            return AerobicEfficiencyWriter.write(fitness, runner.name)
 
         return None
 

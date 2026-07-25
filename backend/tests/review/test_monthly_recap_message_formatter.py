@@ -1,6 +1,10 @@
 from app.application.review.monthly_recap_message_formatter import (
     MonthlyRecapMessageFormatter,
 )
+from app.domain.entities.aerobic_efficiency import (
+    EFF_IMPROVING,
+    AerobicEfficiency,
+)
 
 
 def _recap(records=None):
@@ -44,6 +48,33 @@ def test_message_includes_records_section_when_present():
 
     assert "Recordes batidos neste mês:" in message
     assert "🏆 Corrida mais longa: 15.0 km" in message
+
+
+def test_message_includes_fitness_line_when_present():
+
+    message = MonthlyRecapMessageFormatter.format(
+        "Renato",
+        {
+            **_recap(),
+            "fitness": AerobicEfficiency(
+                direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8,
+                ref_hr=150, ref_pace=6.43, pace_gain_sec=8, hr_drop_bpm=7,
+            ),
+        },
+        narrative=["Boa!"],
+    )
+
+    assert "Forma em alta" in message
+    assert "8 s/km" in message
+
+
+def test_message_omits_fitness_line_when_absent():
+
+    message = MonthlyRecapMessageFormatter.format(
+        "Renato", _recap(), narrative=["Boa!"],
+    )
+
+    assert "Forma em alta" not in message
 
 
 def test_message_includes_predicted_time_line_when_present():
