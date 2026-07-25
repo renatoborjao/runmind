@@ -20,7 +20,7 @@ def _run_notify_all(profiles, runners, messages):
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
         patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
-        patch(f"{MODULE}.BodyReadingBuilder") as mock_body_builder,
+        patch(f"{MODULE}.BodyReadingService") as mock_body_service,
         patch(f"{MODULE}.BodyReadingWriter"),
     ):
 
@@ -28,8 +28,9 @@ def _run_notify_all(profiles, runners, messages):
 
         # por padrão, sem dado de saúde -> a leitura do corpo não é enviada,
         # então os testes do RESUMO isolam só o resumo
-        mock_body_builder.build.return_value = MagicMock(
-            recovery=MagicMock(has_data=False),
+        mock_body_service.read.return_value = (
+            MagicMock(recovery=MagicMock(has_data=False)),
+            MagicMock(),
         )
 
         mock_narrative.write = AsyncMock(return_value=None)
@@ -106,13 +107,14 @@ def _run_send_body_reading(has_data):
     runner = make_runner(name="Renato", phone="+5511900000001")
 
     with (
-        patch(f"{MODULE}.BodyReadingBuilder") as mock_builder,
+        patch(f"{MODULE}.BodyReadingService") as mock_service,
         patch(f"{MODULE}.BodyReadingWriter") as mock_writer,
         patch(f"{MODULE}.CoachOutbox") as mock_outbox,
     ):
 
-        mock_builder.build.return_value = MagicMock(
-            recovery=MagicMock(has_data=has_data),
+        mock_service.read.return_value = (
+            MagicMock(recovery=MagicMock(has_data=has_data)),
+            MagicMock(),
         )
 
         mock_writer.write = AsyncMock(return_value="Seu corpo está absorvendo.")

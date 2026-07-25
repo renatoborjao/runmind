@@ -150,6 +150,12 @@ class Settings(BaseSettings):
     # cérebro aprendeu (modo observação via GET /debug/learnings/{profile}).
     coach_learning_inject_enabled: bool = False
 
+    # Trajetória do corpo (foto -> filme): a gravação do histórico, a
+    # trajetória e o fato pro cérebro rodam SEMPRE. Esta flag controla só se a
+    # frase de trajetória entra na MENSAGEM que o atleta recebe. Fica DESLIGADA
+    # até validar no /debug/body-trajectory/{profile} (modo observação).
+    body_trajectory_in_message_enabled: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
 

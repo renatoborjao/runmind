@@ -35,6 +35,24 @@ def test_rising_hrv_is_detected():
     assert trend.hrv_recent == 51
 
 
+def test_reference_date_ignores_days_after_it():
+    """Leitura de uma semana PASSADA (backfill/trajetória): dias posteriores à
+    referência não entram — o corpo de hoje não contamina o retrato de então."""
+
+    from datetime import date
+
+    # HRV sobe forte só nos últimos dias (07 e 08); cortando em 06/07, a
+    # série vista é plana e o recente disponível é o do dia 06.
+    series = _series(hrv=[40, 40, 40, 40, 40, 41, 60, 61])
+
+    trend = RecoveryTrendAnalyzer.analyze(
+        series, reference_date=date(2026, 7, 6)
+    )
+
+    assert trend.hrv_recent == 41         # dia 06, não o 61 do dia 08
+    assert trend.days_covered == 6        # só os 6 primeiros dias
+
+
 def test_falling_resting_hr_reads_as_recovery_improving():
 
     # FC de repouso caindo (66->60) = recuperação MELHORANDO -> RISING (POV rec)

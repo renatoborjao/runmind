@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.coach.conversation.intent_router import ChatIntent
 from app.application.coach.conversation.on_demand_answers import OnDemandAnswers
@@ -39,7 +39,10 @@ def _answer(reading):
     runner = SimpleNamespace(name="Renato")
 
     with (
-        patch(f"{MODULE}.BodyReadingBuilder.build", return_value=reading),
+        patch(
+            f"{MODULE}.BodyReadingService.read",
+            return_value=(reading, MagicMock()),
+        ),
         patch(
             f"{MODULE}.BodyReadingWriter.write",
             new=AsyncMock(return_value="Seu corpo está absorvendo bem."),

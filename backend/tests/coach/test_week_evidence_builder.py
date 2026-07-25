@@ -78,8 +78,8 @@ def _build(executed="", report=None, body=None, signals=None, life=""):
     with patch(f"{MOD}.WeeklyPlanRepository") as repo_cls, patch(
         f"{MOD}.ExecutedWeekSummary"
     ) as execs, patch(f"{MOD}.AdherenceAnalyzer") as adh, patch(
-        f"{MOD}.BodyReadingBuilder"
-    ) as brb, patch(
+        f"{MOD}.BodyReadingService"
+    ) as brs, patch(
         f"{MOD}.CoachingSignalRecorder"
     ) as rec, patch(
         f"{MOD}.RunnerMemoryService"
@@ -93,7 +93,9 @@ def _build(executed="", report=None, body=None, signals=None, life=""):
         repo_cls.return_value.history.return_value = [plan]
         execs.build.return_value = executed
         adh.analyze.return_value = report
-        brb.build.return_value = body
+        # o service devolve (leitura, trajetória); a trajetória sem fato não
+        # muda o texto (a recorrência é testada à parte no analisador)
+        brs.read.return_value = (body, MagicMock(fact=""))
         rec.load.return_value = signals
         mem.render.return_value = life
 

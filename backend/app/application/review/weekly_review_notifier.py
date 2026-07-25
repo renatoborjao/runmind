@@ -1,5 +1,5 @@
-from app.application.coach.intelligence.body_reading_builder import (
-    BodyReadingBuilder,
+from app.application.coach.intelligence.body_reading_service import (
+    BodyReadingService,
 )
 from app.application.coach.memory.coach_learning_engine import (
     CoachLearningEngine,
@@ -16,9 +16,6 @@ from app.application.coach.memory.week_evidence_builder import (
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
 )
-from app.infrastructure.persistence.coach_learning_repository import (
-    CoachLearningRepository,
-)
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
 )
@@ -32,9 +29,13 @@ from app.application.review.weekly_review_narrative_writer import (
     WeeklyReviewNarrativeWriter,
 )
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
-from app.core.clock import now_in, use_athlete_timezone
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
+)
+from app.core.clock import now_in, use_athlete_timezone
+from app.core.config import get_settings
+from app.infrastructure.persistence.coach_learning_repository import (
+    CoachLearningRepository,
 )
 from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 from app.infrastructure.persistence.runner_profile_repository import (
@@ -189,7 +190,9 @@ class WeeklyReviewNotifier:
 
         try:
 
-            reading = BodyReadingBuilder.build(profile)
+            # grava o snapshot de domingo (a série canônica da trajetória) e
+            # compara com as leituras anteriores
+            reading, trajectory = BodyReadingService.read(profile)
 
             # sem recuperação do Garmin: não há leitura do corpo pra mandar
             # (atleta só-Strava recebe só o resumo normal)
@@ -197,7 +200,16 @@ class WeeklyReviewNotifier:
 
                 return
 
-            message = await BodyReadingWriter.write(reading, runner.name)
+            # trajetória na mensagem só atrás da flag (modo observação)
+            note = (
+                trajectory
+                if get_settings().body_trajectory_in_message_enabled
+                else None
+            )
+
+            message = await BodyReadingWriter.write(
+                reading, runner.name, trajectory=note
+            )
 
             await CoachOutbox.send(runner, message)
 

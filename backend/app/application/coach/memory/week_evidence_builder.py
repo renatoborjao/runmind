@@ -1,16 +1,16 @@
 from datetime import timedelta
 
-from app.application.coach.intelligence.body_reading_builder import (
-    BodyReadingBuilder,
+from app.application.coach.intelligence.body_reading_service import (
+    BodyReadingService,
 )
 from app.application.coach.memory.coaching_signal_recorder import (
     CoachingSignalRecorder,
 )
-from app.application.coach.planning.executed_week_summary import (
-    ExecutedWeekSummary,
-)
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
+)
+from app.application.coach.planning.executed_week_summary import (
+    ExecutedWeekSummary,
 )
 from app.application.history.adherence_analyzer import AdherenceAnalyzer
 from app.core.clock import today_local
@@ -19,7 +19,6 @@ from app.domain.entities.adherence_report import (
     ADHERENCE_INSUFFICIENT,
     AdherenceReport,
 )
-from app.domain.entities.body_reading import BodyReading
 from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
@@ -192,7 +191,9 @@ class WeekEvidenceBuilder:
     @staticmethod
     def _body(profile) -> str:
 
-        reading: BodyReading = BodyReadingBuilder.build(profile)
+        # persist=False: quem grava o snapshot de domingo é o _send_body_reading
+        # (roda antes); aqui só lemos a leitura + a trajetória pro cérebro
+        reading, trajectory = BodyReadingService.read(profile, persist=False)
 
         if not reading.recovery.has_data:
 
@@ -220,4 +221,12 @@ class WeekEvidenceBuilder:
 
             parts.append(f"ACWR {reading.load.acwr:.2f}")
 
-        return "; ".join(parts) + "."
+        line = "; ".join(parts) + "."
+
+        # a recorrência é o que vira aprendizado durável ("entra em STRAINED
+        # quando rampa 2 semanas") — por isso o fato de trajetória entra sempre
+        if trajectory.fact:
+
+            line += "\n" + trajectory.fact
+
+        return line

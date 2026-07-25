@@ -5,6 +5,8 @@ Direção = compara a metade RECENTE com a ANTERIOR da janela (com folga pra
 'estável'). HRV subindo e FC de repouso caindo são os dois marcadores de ouro
 de recuperação/adaptação. Ver [[project_analise_corpo_garmin]]."""
 
+from datetime import date
+
 from app.domain.entities.body_reading import (
     FALLING,
     RISING,
@@ -30,7 +32,21 @@ _SHORT_NIGHT_HOURS = 6.0
 class RecoveryTrendAnalyzer:
 
     @staticmethod
-    def analyze(series: list[DailyHealth]) -> RecoveryTrend:
+    def analyze(
+        series: list[DailyHealth],
+        reference_date: date | None = None,
+    ) -> RecoveryTrend:
+        """Tendência dos últimos _WINDOW_DAYS dias. Com `reference_date`, olha
+        só até aquela data (dias posteriores ficam de fora) — é o que permite
+        reconstruir a leitura de uma semana PASSADA de forma honesta (backfill/
+        trajetória), sem contaminar com o corpo de hoje. Sem ela, usa a série
+        inteira (comportamento atual)."""
+
+        if reference_date is not None:
+
+            ref = reference_date.isoformat()
+
+            series = [h for h in series if h.date <= ref]
 
         window = series[-_WINDOW_DAYS:]
 

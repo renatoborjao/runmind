@@ -4,10 +4,15 @@ from app.application.coach.writer.body_reading_writer import (
 from app.domain.entities.body_reading import (
     BODY_ABSORBING,
     BODY_BUILDING,
+    BODY_STRAINED,
     FALLING,
     RISING,
     BodyReading,
     RecoveryTrend,
+)
+from app.domain.entities.body_reading_snapshot import (
+    TRAJ_PERSISTING,
+    BodyTrajectory,
 )
 from app.domain.entities.training_load import TrainingLoad
 
@@ -106,3 +111,48 @@ def test_fallback_building_state_has_honest_text():
     )
 
     assert "juntando seu histórico" in text
+
+
+def _traj(note="É a 2ª leitura seguida assim, vale levar a sério."):
+
+    return BodyTrajectory(
+        movement=TRAJ_PERSISTING,
+        alert_streak=2,
+        previous_state=BODY_STRAINED,
+        athlete_note=note,
+        fact="Trajetória do corpo: agora STRAINED...",
+    )
+
+
+def test_trajectory_note_enters_the_facts_for_the_ai():
+
+    facts = BodyReadingWriter._facts(
+        _reading(body_state=BODY_STRAINED), "Fernanda", _traj()
+    )
+
+    assert "Trajetória: É a 2ª leitura seguida" in facts
+
+
+def test_trajectory_folds_into_verdict_block_on_fallback():
+
+    text = BodyReadingWriter._fallback(
+        _reading(body_state=BODY_STRAINED), "Fernanda", _traj()
+    )
+
+    # a frase de trajetória vem colada no bloco do veredito (⚖️)
+    verdict_block = text.split("❤️")[0]
+
+    assert "2ª leitura seguida" in verdict_block
+
+
+def test_no_trajectory_keeps_message_identical():
+    """Flag off => trajectory=None => mensagem idêntica à de hoje."""
+
+    reading = _reading(body_state=BODY_STRAINED)
+
+    assert (
+        BodyReadingWriter._fallback(reading, "Fernanda", None)
+        == BodyReadingWriter._fallback(reading, "Fernanda")
+    )
+
+    assert "Trajetória" not in BodyReadingWriter._facts(reading, "Fernanda")

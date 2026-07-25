@@ -1,13 +1,12 @@
 from app.application.coach.conversation.intent_router import (
     ChatIntent,
 )
-from app.application.coach.intelligence.body_reading_builder import (
-    BodyReadingBuilder,
+from app.application.coach.intelligence.body_reading_service import (
+    BodyReadingService,
 )
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
 )
-from app.domain.entities.training_load import LOAD_INSUFFICIENT
 from app.application.orchestrators.last_training_report import (
     LastTrainingReport,
 )
@@ -23,7 +22,9 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.core.config import get_settings
 from app.domain.entities.runner_profile import RunnerProfile
+from app.domain.entities.training_load import LOAD_INSUFFICIENT
 
 
 class OnDemandAnswers:
@@ -83,7 +84,8 @@ class OnDemandAnswers:
 
         if intent == ChatIntent.BODY_READING:
 
-            reading = BodyReadingBuilder.build(profile)
+            # o service lê o corpo E grava/compara com o histórico (trajetória)
+            reading, trajectory = BodyReadingService.read(profile)
 
             # sem recuperação (não tem Garmin) E sem carga suficiente: não há
             # leitura útil — cai no Gemini, que responde com naturalidade
@@ -94,6 +96,16 @@ class OnDemandAnswers:
 
                 return None
 
-            return await BodyReadingWriter.write(reading, runner.name)
+            # a trajetória só entra na MENSAGEM atrás da flag (modo observação);
+            # a gravação já aconteceu independente disso
+            note = (
+                trajectory
+                if get_settings().body_trajectory_in_message_enabled
+                else None
+            )
+
+            return await BodyReadingWriter.write(
+                reading, runner.name, trajectory=note
+            )
 
         return None

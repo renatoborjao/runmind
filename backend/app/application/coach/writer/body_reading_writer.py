@@ -22,6 +22,7 @@ from app.domain.entities.body_reading import (
     RISING,
     BodyReading,
 )
+from app.domain.entities.body_reading_snapshot import BodyTrajectory
 from app.infrastructure.integrations.gemini.client import generate_text
 
 THINKING_BUDGET = 256
@@ -61,6 +62,11 @@ caindo. Se houver um limitador (ex.: sono), aponte-o como o ponto de atenção \
 real. Nunca dê conselho médico; fale como coach. Não repita números crus como \
 se fossem o diagnóstico — traduza pro que importa pro atleta.
 
+TRAJETÓRIA: se os FATOS trouxerem uma linha "Trajetória", incorpore-a no bloco \
+⚖️ com naturalidade (ex.: se repetindo há várias leituras, ou melhorou/piorou \
+desde a última) — é o que diferencia um dia isolado de um padrão. Se não vier, \
+não invente trajetória alguma.
+
 FATOS (calculados pelo sistema; não invente além disso):
 {facts}"""
 
@@ -68,10 +74,14 @@ FATOS (calculados pelo sistema; não invente além disso):
 class BodyReadingWriter:
 
     @staticmethod
-    async def write(reading: BodyReading, runner_name: str) -> str:
+    async def write(
+        reading: BodyReading,
+        runner_name: str,
+        trajectory: BodyTrajectory | None = None,
+    ) -> str:
 
         prompt = _SYSTEM_PROMPT.format(
-            facts=BodyReadingWriter._facts(reading, runner_name)
+            facts=BodyReadingWriter._facts(reading, runner_name, trajectory)
         )
 
         try:
@@ -95,12 +105,18 @@ class BodyReadingWriter:
 
             print(f"Leitura do corpo (IA) falhou p/ '{runner_name}': {e}")
 
-            return BodyReadingWriter._fallback(reading, runner_name)
+            return BodyReadingWriter._fallback(
+                reading, runner_name, trajectory
+            )
 
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _facts(reading: BodyReading, runner_name: str) -> str:
+    def _facts(
+        reading: BodyReading,
+        runner_name: str,
+        trajectory: BodyTrajectory | None = None,
+    ) -> str:
 
         load = reading.load
 
@@ -133,6 +149,12 @@ class BodyReadingWriter:
 
             lines.append("Recuperação: sem dados do Garmin ainda")
 
+        # trajetória só entra quando há notícia de verdade (o analisador já
+        # decidiu isso: entrou/saiu de alerta ou segue em alerta)
+        if trajectory is not None and trajectory.has_note:
+
+            lines.append(f"Trajetória: {trajectory.athlete_note}")
+
         return "\n".join(lines)
 
     @staticmethod
@@ -152,7 +174,11 @@ class BodyReadingWriter:
         }.get(direction, "estável")
 
     @staticmethod
-    def _fallback(reading: BodyReading, runner_name: str) -> str:
+    def _fallback(
+        reading: BodyReading,
+        runner_name: str,
+        trajectory: BodyTrajectory | None = None,
+    ) -> str:
         """Mesma estrutura visual da via IA (título + seções), pra o atleta
         nunca notar que a IA caiu."""
 
@@ -184,6 +210,11 @@ class BodyReadingWriter:
                 "mas seguimos acompanhando seu corpo de perto."
             ),
         }.get(reading.body_state, "Seguimos acompanhando seu corpo.")
+
+        # a trajetória entra colada no veredito (mesmo bloco ⚖️)
+        if trajectory is not None and trajectory.has_note:
+
+            verdict = f"{verdict} {trajectory.athlete_note}"
 
         lines = ["🩺 Leitura do corpo", "", f"⚖️ {verdict}"]
 

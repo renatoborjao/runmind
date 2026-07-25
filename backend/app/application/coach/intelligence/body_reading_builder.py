@@ -23,13 +23,11 @@ from app.domain.entities.body_reading import (
     BODY_RECOVERY_FLAG,
     BODY_STRAINED,
     FALLING,
-    RISING,
     BodyReading,
 )
 from app.domain.entities.training_history import TrainingHistory
 from app.domain.entities.training_load import (
     LOAD_CAUTION,
-    LOAD_DETRAINING,
     LOAD_HIGH,
     LOAD_INSUFFICIENT,
     LOAD_OPTIMAL,
@@ -73,7 +71,9 @@ class BodyReadingBuilder:
             sex=getattr(runner, "sex", None),
         )
 
-        recovery = RecoveryTrendAnalyzer.analyze(series)
+        recovery = RecoveryTrendAnalyzer.analyze(
+            series, reference_date=reference_date
+        )
 
         body_state = BodyReadingBuilder._verdict(load.status, recovery)
 
