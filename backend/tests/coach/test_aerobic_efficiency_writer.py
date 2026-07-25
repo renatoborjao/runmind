@@ -47,7 +47,9 @@ def test_declining_message_is_not_alarmist():
     assert "susto" in msg           # tom tranquilizador, não alarmista
 
 
-def test_stable_message():
+def test_stable_message_is_structured_and_anchored():
+    """Estável não pode soar 'jogado': tem respiro, ancora num número real
+    (pace × FC de referência + nº de corridas) e fecha com ação."""
 
     fitness = AerobicEfficiency(
         direction=EFF_STABLE, runs_counted=8, weeks_covered=8,
@@ -57,6 +59,29 @@ def test_stable_message():
     msg = AerobicEfficiencyWriter.write(fitness, "Renato")
 
     assert "estável" in msg
+    assert "Renato" in msg
+    assert "\n" in msg                    # tem respiro, não é um parágrafo só
+    assert "Em números" in msg
+    assert "6:26/km" in msg               # pace de referência formatado
+    assert "150" in msg                   # FC de referência
+    assert "8 corridas" in msg            # amostra comparada
+    assert "não é um problema" in msg     # tranquiliza: estável não é ruim
+    assert ("tiro" in msg or "limiar" in msg)   # fechamento acionável
+
+
+def test_stable_without_anchor_still_closes_with_action():
+    """Sem pace/FC de referência, some o bloco 'Em números' mas a mensagem
+    segue estruturada e acionável (não vira o parágrafo seco antigo)."""
+
+    fitness = AerobicEfficiency(
+        direction=EFF_STABLE, runs_counted=6, weeks_covered=7,
+    )
+
+    msg = AerobicEfficiencyWriter.write(fitness, "Renato")
+
+    assert "estável" in msg
+    assert "Em números" not in msg
+    assert ("tiro" in msg or "limiar" in msg)
 
 
 def test_line_compact_improving_has_number():

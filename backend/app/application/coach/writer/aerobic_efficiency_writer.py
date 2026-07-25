@@ -163,11 +163,57 @@ class AerobicEfficiencyWriter:
         return "\n".join(lines)
 
     @staticmethod
-    def _stable(fitness, name, period) -> str:
+    def _anchor_phrase(fitness: AerobicEfficiency) -> str | None:
+        """O ponto de referência tangível da janela: onde teu corpo está hoje
+        na faixa aeróbica (pace × FC). Ancora o 'estável' num número sentível
+        em vez de deixar só o conceito solto."""
+
+        if not (fitness.ref_pace and fitness.ref_hr):
+
+            return None
+
+        pace = PaceFormatter.format(fitness.ref_pace)
 
         return (
-            f"➡️ Forma estável, {name}. Sua eficiência aeróbica se manteve "
-            f"{period} — sem ganho nem perda claros. A consistência segura a "
-            f"base; pra destravar mais evolução, um estímulo de qualidade "
-            f"(tiro/limiar) bem dosado ajuda."
+            f"na faixa aeróbica, você tem rodado ~{pace}/km a ~{fitness.ref_hr} "
+            f"bpm — e essa relação pace × FC ficou parada no período"
         )
+
+    @staticmethod
+    def _stable(fitness, name, period) -> str:
+
+        lines = [
+            f"➡️ Sua forma está estável, {name}.",
+            "",
+            f"Sua eficiência aeróbica se manteve {period}: você não perdeu "
+            f"forma, mas também não ganhou — o corpo está rodando com o mesmo "
+            f"custo de batimento de antes. Isso é a base se firmando, não é um "
+            f"problema.",
+        ]
+
+        anchor = AerobicEfficiencyWriter._anchor_phrase(fitness)
+
+        if anchor:
+
+            runs = fitness.runs_counted
+
+            base = f"Em números: {anchor}"
+
+            if runs:
+
+                base += f" (comparei {runs} corridas aeróbicas)"
+
+            lines.append("")
+
+            lines.append(base + ".")
+
+        lines.append("")
+
+        lines.append(
+            "Pra furar o platô, o caminho é estímulo de qualidade bem dosado "
+            "— um tiro ou um limiar na semana puxam o teto sem estourar a "
+            "recuperação. É pra lá que teu próximo plano já vai apontar: eu "
+            "ajusto a dose conforme a tua forma evolui. 👊"
+        )
+
+        return "\n".join(lines)
