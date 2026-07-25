@@ -1,5 +1,7 @@
 from datetime import date, datetime, timedelta
 
+import pytest
+
 from app.application.history.aerobic_efficiency_analyzer import (
     AerobicEfficiencyAnalyzer,
 )
@@ -46,7 +48,9 @@ def _trend(direction, clear=True):
 def test_ef_alone_drives_verdict_marginal():
     ef = AerobicEfficiency(direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8)
 
-    direction, confidence = FitnessEvolutionAnalyzer._combine(ef, None, None, None)
+    direction, confidence = FitnessEvolutionAnalyzer._combine(
+        ef, None, None, None, None
+    )
 
     assert direction == EVO_IMPROVING
     assert confidence != EVO_CLEAR      # um sinal só, sem corroboração
@@ -56,7 +60,7 @@ def test_two_signals_agreeing_are_clear():
     ef = AerobicEfficiency(direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8)
 
     direction, confidence = FitnessEvolutionAnalyzer._combine(
-        ef, None, _trend(TREND_IMPROVING), None
+        ef, None, None, _trend(TREND_IMPROVING), None
     )
 
     assert direction == EVO_IMPROVING
@@ -70,9 +74,22 @@ def test_long_ef_corroborates_short_into_clear():
     ef = AerobicEfficiency(direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8)
 
     _, confidence = FitnessEvolutionAnalyzer._combine(
-        ef, _trend(TREND_IMPROVING), None, None
+        ef, _trend(TREND_IMPROVING), None, None, None
     )
 
+    assert confidence == EVO_CLEAR
+
+
+def test_quality_signal_corroborates_aerobic():
+    """Economia aeróbica + economia em ritmo forte, ambas subindo → CLEAR."""
+
+    ef = AerobicEfficiency(direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8)
+
+    direction, confidence = FitnessEvolutionAnalyzer._combine(
+        ef, None, _trend(TREND_IMPROVING), None, None
+    )
+
+    assert direction == EVO_IMPROVING
     assert confidence == EVO_CLEAR
 
 
@@ -80,7 +97,7 @@ def test_conflicting_signals_are_mixed():
     ef = AerobicEfficiency(direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8)
 
     direction, confidence = FitnessEvolutionAnalyzer._combine(
-        ef, None, _trend(TREND_DECLINING), None
+        ef, None, None, _trend(TREND_DECLINING), None
     )
 
     assert confidence == EVO_MIXED
@@ -90,7 +107,7 @@ def test_resting_hr_alone_is_too_weak_to_claim_evolution():
     """FC-repouso é sinal de APOIO — sozinho não decreta 'melhorando'."""
 
     direction, _ = FitnessEvolutionAnalyzer._combine(
-        None, None, None, _trend(TREND_IMPROVING)
+        None, None, None, None, _trend(TREND_IMPROVING)
     )
 
     assert direction == EVO_STABLE
@@ -99,7 +116,7 @@ def test_resting_hr_alone_is_too_weak_to_claim_evolution():
 def test_no_signals_is_insufficient():
 
     direction, _ = FitnessEvolutionAnalyzer._combine(
-        AerobicEfficiency(), None, None, None
+        AerobicEfficiency(), None, None, None, None
     )
 
     assert direction == EVO_INSUFFICIENT
@@ -123,6 +140,33 @@ def test_no_temp_leaves_hr_untouched():
 
     assert AerobicEfficiencyAnalyzer._heat_normalized_hr(150, None) == 150
     assert AerobicEfficiencyAnalyzer._heat_normalized_hr(150, 10) == 150  # frio
+
+
+# -- normalização de elevação (GAP) -----------------------------------
+
+def test_gap_lifts_speed_on_climb():
+    """Ladeira: a velocidade equivalente sobe (mesmo tempo, mais 'distância')
+    — treino em subida não parece perda de economia."""
+
+    flat = AerobicEfficiencyAnalyzer._grade_adjusted_speed(3.0, 10000, 0)
+    hilly = AerobicEfficiencyAnalyzer._grade_adjusted_speed(3.0, 10000, 300)
+
+    assert flat == 3.0
+    assert hilly > 3.0
+
+
+def test_gap_respects_cap():
+    """Subida absurda não infla além do teto (15% da distância)."""
+
+    huge = AerobicEfficiencyAnalyzer._grade_adjusted_speed(3.0, 10000, 100000)
+
+    assert huge == pytest.approx(3.0 * 1.15)
+
+
+def test_gap_no_elevation_is_noop():
+
+    assert AerobicEfficiencyAnalyzer._grade_adjusted_speed(3.0, 10000, None) == 3.0
+    assert AerobicEfficiencyAnalyzer._grade_adjusted_speed(3.0, 0, 100) == 3.0
 
 
 # -- degradação graciosa (integração) ---------------------------------

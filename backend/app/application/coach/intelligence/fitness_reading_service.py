@@ -20,6 +20,7 @@ from app.application.history.fitness_evolution_analyzer import (
 )
 from app.domain.entities.aerobic_efficiency import AerobicEfficiency
 from app.domain.entities.fitness_evolution import FitnessEvolution
+from app.domain.value_objects.sports import is_run_sport
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
@@ -87,7 +88,9 @@ class FitnessReadingService:
 
         resting_hr = FitnessReadingService._resting_hr(series)
 
-        max_hr = FitnessReadingService._max_hr(getattr(runner, "age", None))
+        max_hr = FitnessReadingService._max_hr(
+            getattr(runner, "age", None), activities
+        )
 
         return activities, series, resting_hr, max_hr
 
@@ -102,13 +105,39 @@ class FitnessReadingService:
 
         return round(statistics.median(values)) if values else None
 
+    # FC máx plausível de corrida (descarta sensor travado/erro de leitura)
+    _MAX_HR_FLOOR = 150
+    _MAX_HR_CEILING = 215
+
     @staticmethod
-    def _max_hr(age) -> int | None:
-        """FC máxima por Tanaka (208 − 0,7·idade). Sem idade → None (o
-        analisador não filtra por faixa, só fica mais ruidoso)."""
+    def _max_hr(age, activities) -> int | None:
+        """FC máxima: prefere a MEDIDA (maior FC máx real vista em corrida, um
+        dado do próprio atleta) à estimada por idade (Tanaka subestima muita
+        gente). Usa o MAIOR entre a observada e a de Tanaka — a observada é um
+        piso real do teto verdadeiro; Tanaka cobre quem nunca foi ao máximo.
+        Sem nenhum dos dois → None (o analisador só fica mais ruidoso)."""
 
-        if not age or age <= 0:
+        tanaka = round(208 - 0.7 * age) if age and age > 0 else None
 
-            return None
+        observed = FitnessReadingService._observed_max_hr(activities)
 
-        return round(208 - 0.7 * age)
+        candidates = [v for v in (tanaka, observed) if v is not None]
+
+        return max(candidates) if candidates else None
+
+    @staticmethod
+    def _observed_max_hr(activities) -> int | None:
+        """Maior FC máx plausível registrada em corrida — o teto REAL já visto.
+        Filtra faixa plausível pra um pico de sensor não inflar."""
+
+        peaks = [
+            a.max_heartrate
+            for a in activities
+            if is_run_sport(a.sport)
+            and a.max_heartrate
+            and FitnessReadingService._MAX_HR_FLOOR
+            <= a.max_heartrate
+            <= FitnessReadingService._MAX_HR_CEILING
+        ]
+
+        return round(max(peaks)) if peaks else None

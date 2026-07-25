@@ -2,13 +2,15 @@
 
 Fitness aeróbico = correr mais rápido para cada batimento. Medimos pelo
 Efficiency Factor (EF = velocidade ÷ FC média) das corridas EASY/aeróbicas
-comparáveis e comparamos a metade RECENTE com a ANTERIOR da janela — EF subindo
-= corpo mais econômico = mais em forma. Puro/testável, sem IO.
+comparáveis e ajustamos uma RETA (regressão) sobre a janela — inclinação pra
+cima = corpo mais econômico = mais em forma. Puro/testável, sem IO.
 
-Só corridas comparáveis entram: corrida de verdade (não caminhada), com FC, de
-distância mínima, e — quando dá pra estimar %FCR — dentro da faixa aeróbica
-(fora tiro/prova/all-out, cuja economia não se compara a rodagem leve). Ver
-[[project_analise_corpo_garmin]] e [[project_ideias_produto]]."""
+A velocidade entra ajustada por elevação (GAP) e a FC por calor, pra ladeira e
+treino quente não parecerem perda de economia. Só corridas comparáveis entram:
+corrida de verdade (não caminhada), com FC, de distância mínima, e — quando dá
+pra estimar %FCR — dentro da faixa alvo (por padrão a aeróbica; fora tiro/prova/
+all-out). Ver [[TrendEstimator]], [[project_analise_corpo_garmin]] e
+[[project_ideias_produto]]."""
 
 import statistics
 from datetime import date, timedelta
@@ -59,6 +61,15 @@ _EF_NOISE = 0.02  # 2%
 _HEAT_REF_C = 15.0
 _HEAT_COEF_BPM_PER_C = 0.30
 _HEAT_MAX_CORRECTION_BPM = 8.0
+
+# normalização de ELEVAÇÃO (GAP — grade adjusted pace): subir infla o esforço
+# pro mesmo pace, como o calor. Só temos o TOTAL de subida por treino (não o
+# perfil), então convertemos o ganho vertical em distância-equivalente plana
+# (o custo energético de subir) e recalculamos a velocidade sobre ela — assim
+# treino em ladeira não parece perda de economia. Coeficiente conservador, com
+# teto relativo pra não distorcer. Aplicada por corrida quando há elevação.
+_GAP_FLAT_EQUIV_PER_VERT_M = 6.0   # cada 1 m de subida ≈ ~6 m plano (energia)
+_GAP_MAX_UPLIFT_FRACTION = 0.15    # nunca infla a distância mais que 15%
 
 
 class AerobicEfficiencyAnalyzer:
@@ -142,9 +153,13 @@ class AerobicEfficiencyAnalyzer:
         ref: date,
         resting_hr: int | None,
         max_hr: int | None,
+        hrr_min: float = _AEROBIC_MIN_HRR,
+        hrr_max: float = _AEROBIC_MAX_HRR,
     ) -> list[dict]:
-        """Corridas aeróbicas comparáveis na janela, em ordem cronológica,
-        cada uma com seu EF (velocidade ÷ FC), FC média e pace."""
+        """Corridas comparáveis na janela, em ordem cronológica, cada uma com
+        seu EF (velocidade ÷ FC). Por padrão filtra a faixa AERÓBICA; `hrr_min`/
+        `hrr_max` permitem outra faixa (ex.: qualidade/limiar). A velocidade
+        entra ajustada por elevação (GAP) e a FC por calor."""
 
         band = (
             resting_hr is not None
@@ -182,12 +197,17 @@ class AerobicEfficiencyAnalyzer:
 
                 hrr = (hr - resting_hr) / (max_hr - resting_hr)
 
-                if not (_AEROBIC_MIN_HRR <= hrr <= _AEROBIC_MAX_HRR):
+                if not (hrr_min <= hrr <= hrr_max):
 
                     continue
 
-            # EF = velocidade por batimento, com a FC normalizada pelo calor
-            # (treino quente não deve parecer perda de economia)
+            # EF = velocidade por batimento, com a velocidade ajustada por
+            # elevação (GAP) e a FC pelo calor — ladeira e treino quente não
+            # devem parecer perda de economia
+            adj_speed = AerobicEfficiencyAnalyzer._grade_adjusted_speed(
+                speed, a.distance, a.elevation_gain
+            )
+
             eff_hr = AerobicEfficiencyAnalyzer._heat_normalized_hr(
                 hr, getattr(a, "air_temp_c", None)
             )
@@ -195,15 +215,37 @@ class AerobicEfficiencyAnalyzer:
             runs.append(
                 {
                     "day": day,
-                    "ef": speed / eff_hr,       # m/s por batimento (normalizado)
+                    "ef": adj_speed / eff_hr,   # m/s por batimento (normalizado)
                     "hr": hr,                    # FC real (pra exibição/ref)
-                    "pace": (1000 / speed) / 60,  # min/km
+                    "pace": (1000 / speed) / 60,  # min/km REAL (não ajustado)
                 }
             )
 
         runs.sort(key=lambda r: r["day"])
 
         return runs
+
+    @staticmethod
+    def _grade_adjusted_speed(
+        speed: float, distance: float | None, elevation_gain: float | None
+    ) -> float:
+        """Velocidade ajustada pela elevação (GAP). Converte o ganho vertical
+        total em distância-equivalente plana (subir custa energia extra) e
+        recalcula a velocidade sobre ela — a mesma velocidade numa ladeira vale
+        MAIS. Só temos o total de subida (não o perfil), então é conservador,
+        com teto. Sem elevação → velocidade crua."""
+
+        if not distance or distance <= 0 or not elevation_gain or elevation_gain <= 0:
+
+            return speed
+
+        uplift = min(
+            _GAP_FLAT_EQUIV_PER_VERT_M * elevation_gain,
+            _GAP_MAX_UPLIFT_FRACTION * distance,
+        )
+
+        # o tempo é o mesmo; velocidade equivalente = (distância + uplift) / tempo
+        return speed * (distance + uplift) / distance
 
     @staticmethod
     def _heat_normalized_hr(hr: float, temp: float | None) -> float:
