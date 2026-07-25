@@ -7,19 +7,53 @@ Ver [[project_analise_corpo_garmin]]."""
 
 from app.domain.entities.body_reading import FALLING, RISING, RecoveryTrend
 
+# enums que a Garmin devolve em inglês -> rótulo pro atleta
+_TRAINING_STATUS = {
+    "PRODUCTIVE": "produtivo",
+    "MAINTAINING": "mantendo a forma",
+    "RECOVERY": "recuperação",
+    "PEAKING": "no pico",
+    "OVERREACHING": "excesso de carga",
+    "UNPRODUCTIVE": "improdutivo",
+    "DETRAINING": "destreino",
+    "STRAINED": "sobrecarga",
+}
+
+_HRV_STATUS = {
+    "BALANCED": "equilibrado",
+    "UNBALANCED": "desequilibrado",
+    "LOW": "baixo",
+    "POOR": "ruim",
+}
+
 
 class HealthSnapshotFormatter:
 
     @staticmethod
     def panel(recovery: RecoveryTrend) -> str | None:
         """Painel compacto dos números de recuperação. None quando não há
-        dado do Garmin (o chamador simplesmente não anexa nada)."""
+        dado do Garmin (o chamador simplesmente não anexa nada). Quando o
+        relógio computa prontidão/status/nota de sono, MOSTRA o número dele
+        (mais autoritativo que o nosso derivado)."""
 
         if not recovery.has_data:
 
             return None
 
         lines: list[str] = []
+
+        # números que a própria Garmin calcula vêm primeiro (mandam quando há)
+        if recovery.readiness_score is not None:
+
+            lines.append(
+                f"• ✅ Prontidão (Garmin): {recovery.readiness_score}/100"
+            )
+
+        status = _TRAINING_STATUS.get(recovery.training_status or "")
+
+        if status:
+
+            lines.append(f"• 📊 Status de treino (Garmin): {status}")
 
         if recovery.sleep_avg_hours is not None:
 
@@ -34,7 +68,14 @@ class HealthSnapshotFormatter:
                     f"{recovery.nights_counted} noites curtas"
                 )
 
-            lines.append(f"• 😴 Sono: {sleep}/noite{short}")
+            # a NOTA de sono é da própria Garmin — quando vem, entra junto
+            score = (
+                f" · nota Garmin {recovery.sleep_score}/100"
+                if recovery.sleep_score is not None
+                else ""
+            )
+
+            lines.append(f"• 😴 Sono: {sleep}/noite{short}{score}")
 
         if recovery.hrv_recent is not None:
 
@@ -44,7 +85,12 @@ class HealthSnapshotFormatter:
 
             hrv = HealthSnapshotFormatter._num(recovery.hrv_recent)
 
-            lines.append(f"• 💓 HRV: {hrv} ms{arrow}")
+            # o STATUS de HRV é da própria Garmin (equilibrado/desequilibrado)
+            status = _HRV_STATUS.get(recovery.hrv_status or "")
+
+            status_txt = f" · Garmin: {status}" if status else ""
+
+            lines.append(f"• 💓 HRV: {hrv} ms{arrow}{status_txt}")
 
         if recovery.rhr_recent is not None:
 

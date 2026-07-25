@@ -32,6 +32,15 @@ class RecoveryTrend:
     vo2max: float | None = None
     days_covered: int = 0
 
+    # Números que a PRÓPRIA Garmin computa (só relógios melhores; None no FR165).
+    # Quando vêm, MANDAM — a leitura mostra/prefere o número do relógio a
+    # derivar por conta. Ver [[project_analise_corpo_garmin]].
+    sleep_score: int | None = None
+    readiness_score: int | None = None
+    readiness_level: str | None = None
+    training_status: str | None = None
+    hrv_status: str | None = None
+
     @property
     def has_data(self) -> bool:
 

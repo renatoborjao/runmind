@@ -100,6 +100,29 @@ class RecoveryTrendAnalyzer:
             [h.vo2max for h in window]
         )
 
+        # números que a PRÓPRIA Garmin computa (relógios melhores) — o mais
+        # recente da janela. Quando vêm, MANDAM: a leitura/painel mostra o
+        # número do relógio em vez de derivar por conta ([[project_analise_corpo_garmin]]).
+        trend.sleep_score = RecoveryTrendAnalyzer._last(
+            [h.sleep_score for h in window]
+        )
+
+        trend.readiness_score = RecoveryTrendAnalyzer._last(
+            [h.readiness_score for h in window]
+        )
+
+        trend.readiness_level = RecoveryTrendAnalyzer._last(
+            [h.readiness_level for h in window]
+        )
+
+        trend.training_status = RecoveryTrendAnalyzer._last(
+            [h.training_status for h in window]
+        )
+
+        trend.hrv_status = RecoveryTrendAnalyzer._last(
+            [h.hrv_status for h in window]
+        )
+
         return trend
 
     # ------------------------------------------------------------------

@@ -97,3 +97,41 @@ def test_empty_series_has_no_data():
 
     assert trend.has_data is False
     assert trend.days_covered == 0
+
+
+def test_garmin_computed_scores_are_carried():
+    """Os números que a própria Garmin calcula (relógio melhor) chegam à
+    RecoveryTrend, pegando o mais recente da janela."""
+
+    series = [
+        DailyHealth(
+            date="2026-07-01", resting_hr=55,
+            readiness_score=60, training_status="MAINTAINING",
+            hrv_status="BALANCED", sleep_score=70,
+        ),
+        DailyHealth(
+            date="2026-07-02", resting_hr=54,
+            readiness_score=74, training_status="PRODUCTIVE",
+            hrv_status="BALANCED", sleep_score=82,
+        ),
+    ]
+
+    trend = RecoveryTrendAnalyzer.analyze(series)
+
+    # o mais recente da janela manda
+    assert trend.readiness_score == 74
+    assert trend.training_status == "PRODUCTIVE"
+    assert trend.hrv_status == "BALANCED"
+    assert trend.sleep_score == 82
+
+
+def test_basic_watch_leaves_garmin_scores_none():
+    """FR165: sem prontidão/status computados -> None (cai no derivado)."""
+
+    trend = RecoveryTrendAnalyzer.analyze(
+        _series(hrv=[40, 42, 44, 46], rhr=[56, 55, 54, 53])
+    )
+
+    assert trend.readiness_score is None
+    assert trend.training_status is None
+    assert trend.sleep_score is None

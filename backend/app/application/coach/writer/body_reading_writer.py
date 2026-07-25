@@ -174,6 +174,14 @@ class BodyReadingWriter:
 
             lines.append("Recuperação: sem dados do Garmin ainda")
 
+        # números que a PRÓPRIA Garmin computou (relógio melhor) — quando vêm,
+        # são mais autoritativos que os derivados; a narração deve preferi-los
+        garmin = BodyReadingWriter._garmin_facts(rec)
+
+        if garmin:
+
+            lines.append(garmin)
+
         # trajetória só entra quando há notícia de verdade (o analisador já
         # decidiu isso: entrou/saiu de alerta ou segue em alerta)
         if trajectory is not None and trajectory.has_note:
@@ -181,6 +189,39 @@ class BodyReadingWriter:
             lines.append(f"Trajetória: {trajectory.athlete_note}")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _garmin_facts(rec) -> str | None:
+        """Números que a própria Garmin calculou (readiness/status/nota de
+        sono) — a narração deve preferi-los ao derivado. None se o relógio não
+        computa nenhum (ex.: FR165)."""
+
+        parts = []
+
+        if rec.readiness_score is not None:
+
+            parts.append(f"prontidão {rec.readiness_score}/100")
+
+        if rec.training_status:
+
+            parts.append(f"training status {rec.training_status}")
+
+        if rec.hrv_status:
+
+            parts.append(f"HRV status {rec.hrv_status}")
+
+        if rec.sleep_score is not None:
+
+            parts.append(f"nota de sono {rec.sleep_score}/100")
+
+        if not parts:
+
+            return None
+
+        return (
+            "Números da PRÓPRIA Garmin (prefira estes ao derivado): "
+            + ", ".join(parts)
+        )
 
     @staticmethod
     def _hrv_word(direction: str) -> str:
