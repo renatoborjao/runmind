@@ -46,3 +46,8 @@ class Activity:
 
     # JSON original
     raw: dict
+
+    # minutos em cada zona de FC (Z1..Z5, Edwards por %FCmáx), quando o stream
+    # de FC estava disponível na ingestão. None = sem stream/idade -> a carga
+    # cai no método por FC média. Ver [[HrZoneCalculator]].
+    hr_zone_minutes: list[float] | None = None

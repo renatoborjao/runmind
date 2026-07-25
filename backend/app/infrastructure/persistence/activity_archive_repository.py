@@ -50,16 +50,76 @@ class ActivityArchiveRepository:
         self,
         profile: str,
     ) -> list[Activity]:
-        """Reconstrói as atividades arquivadas como `Activity`. O arquivo
-        guarda campos reduzidos (o que basta pros agregados de histórico —
-        volume, consistência, casamento por distância/data); o que não é
-        persistido volta como default (raw vazio, sem GPS/streams). O treino
-        recém-concluído, esse com dados completos, entra à parte no fluxo."""
+        """Reconstrói as atividades arquivadas como `Activity`, DEDUPLICADAS.
+        O arquivo guarda campos reduzidos (o que basta pros agregados de
+        histórico — volume, consistência, casamento por distância/data); o que
+        não é persistido volta como default (raw vazio, sem GPS/streams).
 
-        return [
+        DEDUP: todo treino do Garmin sincroniza pro Strava, então a MESMA
+        corrida entra no arquivo duas vezes (ids diferentes, ~mesma data/
+        distância/tempo). Sem colapsar, a carga contava cada treino 2× (o ACWR
+        é razão, então o veredito não muda, mas os números absolutos inflam) E
+        as zonas de FC (só na cópia do Garmin) ficavam diluídas pela cópia
+        Strava sem zonas — bloqueando a carga de Edwards. Colapsa preferindo a
+        cópia com dado mais rico (zonas de FC)."""
+
+        activities = [
             ActivityArchiveRepository._from_record(record)
             for record in self.load(profile)
         ]
+
+        return ActivityArchiveRepository._dedup_runs(activities)
+
+    @staticmethod
+    def _dedup_runs(activities: list[Activity]) -> list[Activity]:
+        """Colapsa o MESMO treino vindo de fontes diferentes (Garmin+Strava).
+        Mesma tolerância apertada do LoadTrainingHistory (data + distância 0,5%
+        + tempo 2%). Entre duplicatas, mantém a que tem zonas de FC."""
+
+        kept: list[Activity] = []
+
+        for activity in activities:
+
+            dup = next(
+                (
+                    i
+                    for i, other in enumerate(kept)
+                    if ActivityArchiveRepository._same_run(activity, other)
+                ),
+                None,
+            )
+
+            if dup is None:
+
+                kept.append(activity)
+
+            elif activity.hr_zone_minutes and not kept[dup].hr_zone_minutes:
+
+                # a duplicata mais rica (com zonas) vence
+                kept[dup] = activity
+
+        return kept
+
+    @staticmethod
+    def _same_run(a: Activity, b: Activity) -> bool:
+
+        if a.id == b.id:
+
+            return True
+
+        if a.start_date.date() != b.start_date.date():
+
+            return False
+
+        biggest_dist = max(a.distance, b.distance, 1.0)
+
+        if abs(a.distance - b.distance) > 0.005 * biggest_dist:
+
+            return False
+
+        biggest_time = max(a.moving_time, b.moving_time, 1)
+
+        return abs(a.moving_time - b.moving_time) <= 0.02 * biggest_time
 
     def upsert_many(
         self,
@@ -197,6 +257,7 @@ class ActivityArchiveRepository:
             comments=0,
             suffer_score=None,
             raw={},
+            hr_zone_minutes=record.get("hr_zone_minutes"),
         )
 
     @staticmethod
@@ -204,7 +265,7 @@ class ActivityArchiveRepository:
         activity: Activity,
     ) -> dict:
 
-        return {
+        record = {
             "id": activity.id,
             "name": activity.name,
             "sport": activity.sport,
@@ -215,3 +276,11 @@ class ActivityArchiveRepository:
             "average_heartrate": activity.average_heartrate,
             "elevation_gain": activity.elevation_gain,
         }
+
+        # zonas de FC (carga de Edwards) só quando calculadas — não polui os
+        # registros antigos/sem stream com null à toa
+        if activity.hr_zone_minutes is not None:
+
+            record["hr_zone_minutes"] = activity.hr_zone_minutes
+
+        return record

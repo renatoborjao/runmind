@@ -122,3 +122,47 @@ def test_stats_none_when_empty(tmp_path):
     repo = _isolated_repo(tmp_path)
 
     assert repo.stats("renato") is None
+
+
+def test_load_activities_dedups_garmin_strava_twins(tmp_path):
+    """Mesma corrida do Garmin (com zonas) e do Strava (sem), ids diferentes,
+    mesma data/distância/tempo -> load_activities colapsa numa só, preferindo a
+    com zonas de FC."""
+
+    from datetime import datetime
+
+    repo = _isolated_repo(tmp_path)
+
+    day = datetime(2026, 7, 25, 6, 0, 0)
+
+    strava = make_activity(
+        id=19000, distance=14030.0, moving_time=5400,
+        start_date=day, hr_zone_minutes=None,
+    )
+
+    garmin = make_activity(
+        id=23000, distance=14030.0, moving_time=5400,
+        start_date=day, hr_zone_minutes=[0, 0, 10, 70, 10],
+    )
+
+    repo.upsert_many("renato", [strava, garmin])
+
+    activities = repo.load_activities("renato")
+
+    assert len(activities) == 1
+    assert activities[0].hr_zone_minutes == [0, 0, 10, 70, 10]  # a cópia rica
+
+
+def test_load_activities_keeps_distinct_runs(tmp_path):
+    """Corridas de dias diferentes não são colapsadas."""
+
+    from datetime import datetime
+
+    repo = _isolated_repo(tmp_path)
+
+    a = make_activity(id=1, distance=10000.0, start_date=datetime(2026, 7, 1, 7, 0))
+    b = make_activity(id=2, distance=10000.0, start_date=datetime(2026, 7, 3, 7, 0))
+
+    repo.upsert_many("renato", [a, b])
+
+    assert len(repo.load_activities("renato")) == 2
