@@ -26,6 +26,7 @@ from app.application.coach.conversation.plan_preference_detector import (
     PlanPreferenceDetector,
 )
 from app.application.coach.conversation.proposal_flow import ProposalFlow
+from app.application.coach.conversation.rpe_flow import RpeFlow
 from app.application.coach.intelligence.checkin_service import (
     CheckinService,
 )
@@ -104,19 +105,36 @@ class CoachConversationEvent:
 
         used_deterministic = False
 
-        # Resposta a uma proposta pendente ("sim/não" a uma troca que o coach
-        # ofereceu): resolve ANTES de tudo — o "sim" é resposta à proposta.
+        # Resposta de RPE a um treino que acabou de sair ("7", "foi 8"): quando
+        # há um treino pendente de RPE, um número solto é a resposta — grava o
+        # sRPE e agradece. Antes de tudo: número solto não é proposta nem plano.
         try:
 
-            reply_text = ProposalFlow.resolve(profile, incoming_text)
+            reply_text = RpeFlow.resolve(profile, incoming_text)
 
             used_deterministic = reply_text is not None
 
         except Exception as e:
 
-            print(f"Falha ao resolver proposta de '{profile}': {e}")
+            print(f"Falha ao capturar RPE de '{profile}': {e}")
 
             reply_text = None
+
+        # Resposta a uma proposta pendente ("sim/não" a uma troca que o coach
+        # ofereceu): resolve ANTES de tudo — o "sim" é resposta à proposta.
+        if reply_text is None:
+
+            try:
+
+                reply_text = ProposalFlow.resolve(profile, incoming_text)
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha ao resolver proposta de '{profile}': {e}")
+
+                reply_text = None
 
         # "SIM" pra oferta de mandar os treinos pro Garmin (ou pedido
         # explícito "manda pro relógio") — sincroniza na hora, sem Gemini.

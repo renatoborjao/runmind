@@ -2,6 +2,7 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException
 
+from app.application.coach.conversation.rpe_flow import RpeFlow
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
@@ -28,6 +29,9 @@ from app.infrastructure.persistence.coach_learning_repository import (
 )
 from app.infrastructure.persistence.runner_memory_repository import (
     RunnerMemoryRepository,
+)
+from app.infrastructure.persistence.session_rpe_repository import (
+    SessionRpeRepository,
 )
 
 router = APIRouter(
@@ -136,6 +140,29 @@ async def fitness(profile: str):
     try:
 
         return asdict(FitnessReadingService.read(profile))
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/session-rpe/{profile}")
+async def session_rpe(profile: str):
+    """sRPE por sessão (esforço percebido → carga subjetiva) + o pendente e a
+    nota de dose que entra no plano."""
+
+    try:
+
+        repo = SessionRpeRepository()
+
+        return {
+            "pending": repo.get_pending(profile),
+            "dose_note": RpeFlow.recent_note(profile),
+            "sessions": [asdict(s) for s in repo.load_sessions(profile)],
+        }
 
     except Exception as e:
 

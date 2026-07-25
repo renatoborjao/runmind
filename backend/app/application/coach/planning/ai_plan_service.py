@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from app.application.coach.conversation.rpe_flow import RpeFlow
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
@@ -222,6 +223,14 @@ class AIPlanService:
         except Exception as e:
 
             print(f"Estado relatado falhou p/ '{profile}': {e}")
+
+        try:
+
+            parts.append(RpeFlow.recent_note(profile))
+
+        except Exception as e:
+
+            print(f"Nota de sRPE falhou p/ '{profile}': {e}")
 
         return "\n".join(p for p in parts if p)
 
