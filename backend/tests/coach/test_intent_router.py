@@ -201,6 +201,19 @@ def test_meu_condicionamento():
     )
 
 
+def test_meu_sono_is_body_reading():
+
+    assert (
+        IntentRouter.detect("e o meu sono, como anda?")
+        == ChatIntent.BODY_READING
+    )
+
+
+def test_meu_hrv_is_body_reading():
+
+    assert IntentRouter.detect("como está meu hrv?") == ChatIntent.BODY_READING
+
+
 def test_fitness_does_not_collide_with_body_reading():
     """'como tá meu corpo' segue leitura do corpo, não vira evolução."""
 

@@ -54,6 +54,7 @@ _BODY_PATTERNS = [
     r"\bposso (treinar|puxar|forcar|correr)\b.*\b(forte|pesado|firme)\b",
     r"\bcomo (esta|ta)\b.*\b(meu sono|meu hrv|minha vfc|minha carga)\b",
     r"\bleitura do (meu )?corpo\b",
+    r"\b(meu sono|meu hrv|minha vfc|minha frequencia (cardiaca )?de repouso|meu body battery|minha bateria corporal)\b",
 ]
 
 # Pergunta sobre EVOLUÇÃO/forma ("estou melhorando?") — quer a leitura de
