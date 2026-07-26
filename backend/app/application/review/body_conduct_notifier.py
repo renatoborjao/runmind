@@ -22,6 +22,7 @@ from app.application.coach.planning.body_conduct_proposer import (
 from app.application.notifications.coach_outbox import CoachOutbox
 from app.application.planner.current_plan_provider import CurrentPlanProvider
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
+from app.application.review.readiness_notifier import ReadinessNotifier
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
@@ -67,6 +68,17 @@ class BodyConductNotifier:
         if local.hour != REVIEW_HOUR or runner.external_coach:
 
             return
+
+        # Vigia de prontidão: OBSERVA sempre (grava o diário do dia) e, só com a
+        # flag ligada, manda o alerta de CAUTION/GREEN. Best-effort e isolado —
+        # nunca derruba o ajuste de corpo (STRAINED) abaixo. Mesma voz matinal.
+        try:
+
+            await ReadinessNotifier.observe_and_maybe_alert(profile, runner)
+
+        except Exception as e:
+
+            print(f"Falha no vigia de prontidão de '{profile}': {e}")
 
         reading, trajectory = BodyReadingService.read(profile, persist=False)
 
