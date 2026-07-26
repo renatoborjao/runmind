@@ -189,6 +189,54 @@ class AIAnalysisWriter:
         return lines[:MAX_BULLETS] if lines else None
 
     @staticmethod
+    def _planned_target(planned) -> str:
+        """Alvo do treino planejado pra linha 'Planejado:': distância OU
+        duração (treino POR TEMPO) + faixa de pace, o que existir. Espelha o
+        que o plano da semana já mostra ao atleta — assim a IA compara o
+        executado com a régua certa (inclusive longão por tempo)."""
+
+        parts = []
+
+        if planned.planned_distance_km:
+
+            parts.append(f"{planned.planned_distance_km:.1f} km")
+
+        elif planned.planned_duration_minutes:
+
+            parts.append(f"{planned.planned_duration_minutes} min")
+
+        pace = AIAnalysisWriter._pace_range(planned)
+
+        if pace:
+
+            parts.append(pace)
+
+        return " · ".join(parts)
+
+    @staticmethod
+    def _pace_range(planned) -> str:
+        """Faixa de pace alvo (M:SS/km). Range quando min≠max, valor único
+        quando iguais, vazio quando não há."""
+
+        pace_min = planned.target_pace_min
+
+        pace_max = planned.target_pace_max
+
+        if pace_min and pace_max:
+
+            if pace_min == pace_max:
+
+                return f"{pace_min}/km"
+
+            return f"{pace_min}–{pace_max}/km"
+
+        if pace_min:
+
+            return f"{pace_min}/km"
+
+        return ""
+
+    @staticmethod
     def _facts(
         context: CoachContext,
     ) -> str:
@@ -213,9 +261,15 @@ class AIAnalysisWriter:
                 planned.planned_distance_km,
             )
 
-            if planned.planned_distance_km:
+            # alvo do treino: distância OU duração (treino POR TEMPO) + faixa
+            # de pace, o que houver. Sem isto, um longão "1h45 entre 4:20 e
+            # 4:40/km" chegaria à análise só como "Longão" — sem a régua certa
+            # pra comparar o executado.
+            target = AIAnalysisWriter._planned_target(planned)
 
-                planned_line += f" — {planned.planned_distance_km:.1f} km"
+            if target:
+
+                planned_line += f" — {target}"
 
             lines.append(f"Planejado: {planned_line}")
 

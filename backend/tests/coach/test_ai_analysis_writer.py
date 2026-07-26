@@ -117,6 +117,49 @@ def test_facts_flag_outdoor_when_gps_present():
     assert "ESTEIRA" not in facts
 
 
+def test_facts_include_duration_and_pace_range_for_time_based_workout():
+    """Longão POR TEMPO (sem km) com faixa de pace: a linha 'Planejado:'
+    precisa trazer a duração e o range — senão a IA compara o executado sem
+    a régua certa (o treino de treinador externo 'por 1h45 entre 4:20 e
+    4:40/km' chegava só como 'Longão')."""
+
+    planned = make_planned_session(
+        workout_type="LONG_RUN",
+        planned_distance_km=None,
+        planned_duration_minutes=105,
+        target_pace_min="4:20",
+        target_pace_max="4:40",
+    )
+
+    facts = AIAnalysisWriter._facts(make_context(planned=planned))
+
+    assert "Planejado: Longão — 105 min · 4:20–4:40/km" in facts
+
+
+def test_planned_target_prefers_distance_over_duration():
+    """Quando o plano tem km, a distância manda (comportamento de hoje
+    intacto); a duração só entra quando não há km."""
+
+    with_km = make_planned_session(
+        planned_distance_km=12.0,
+        planned_duration_minutes=70,
+        target_pace_min=None,
+        target_pace_max=None,
+    )
+
+    assert AIAnalysisWriter._planned_target(with_km) == "12.0 km"
+
+
+def test_pace_range_collapses_when_min_equals_max():
+    """Pace único (min==max) não vira range redundante '4:30–4:30'."""
+
+    single = make_planned_session(
+        target_pace_min="4:30", target_pace_max="4:30",
+    )
+
+    assert AIAnalysisWriter._pace_range(single) == "4:30/km"
+
+
 def test_executed_laps_fact_drops_phantom_laps():
     """Voltas-fantasma (relógio reiniciando: 5 m, 13 m) saem; bloco real fica."""
 
