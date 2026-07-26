@@ -21,6 +21,12 @@ STEP_INSTRUCTIONS = {
         'Extraia a idade do corredor em anos (int).\n'
         'Formato: {"age": 33}'
     ),
+    "ASK_SEX": (
+        'O corredor é homem ou mulher (sexo biológico, pra calibrar a carga '
+        'de treino). "homem/masculino/menino" -> "M"; '
+        '"mulher/feminino/menina" -> "F".\n'
+        'Formato: {"sex": "M"}'
+    ),
     "ASK_WEIGHT": (
         'Extraia o peso do corredor em kg (número).\n'
         'Formato: {"weight": 91.0}'
@@ -111,10 +117,10 @@ STEP_INSTRUCTIONS = {
         'confirmar tudo -> {"confirmed": true}; (b) desistir do cadastro '
         '("não quero", "deixa pra lá") -> {"confirmed": false}; (c) '
         'corrigir um ou mais campos -> extraia SÓ os que ele citou, em '
-        '"corrections". Campos: name (str), age (int), weight (kg, número), '
-        'height (metros — "1,90"/"190cm" viram 1.9), days (lista '
-        'Monday..Sunday), goal (str) com target_race, target_time '
-        '(HH:MM:SS) e race_date (ISO) quando houver.\n'
+        '"corrections". Campos: name (str), age (int), sex ("M"/"F"), '
+        'weight (kg, número), height (metros — "1,90"/"190cm" viram 1.9), '
+        'days (lista Monday..Sunday), goal (str) com target_race, '
+        'target_time (HH:MM:SS) e race_date (ISO) quando houver.\n'
         'Formato correção: {"corrections": {"weight": 130}} — só o que '
         'mudou. Não confunda desistir do cadastro com corrigir um campo.'
     ),
