@@ -13,6 +13,7 @@ from app.application.coach.memory.coaching_signal_recorder import (
 from app.application.coach.memory.week_evidence_builder import (
     WeekEvidenceBuilder,
 )
+from app.application.coach.writer.help_menu import HelpMenu
 from app.application.coach.writer.state_portrait_writer import (
     StatePortraitWriter,
 )
@@ -127,6 +128,12 @@ class WeeklyReviewNotifier:
         if message is None:
 
             return
+
+        # rodapé "💡 Você sabia?" rotativo — descoberta gradual do que dá pra
+        # perguntar ao bot, uma dica por semana (rotaciona pelo nº da semana)
+        message = (
+            f"{message}\n\n{HelpMenu.weekly_tip(local.isocalendar()[1])}"
+        )
 
         await CoachOutbox.send(
             runner,

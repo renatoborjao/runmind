@@ -19,6 +19,7 @@ from app.application.coach.writer.body_reading_writer import (
 from app.application.coach.writer.fitness_evolution_writer import (
     FitnessEvolutionWriter,
 )
+from app.application.coach.writer.help_menu import HelpMenu
 from app.application.coach.writer.state_portrait_writer import (
     StatePortraitWriter,
 )
@@ -150,6 +151,11 @@ class OnDemandAnswers:
             reading, evolution = StatePortraitService.read(profile)
 
             return StatePortraitWriter.write(reading, evolution, runner.name)
+
+        if intent == ChatIntent.HELP:
+
+            # cardápio de descoberta — o que dá pra perguntar ao bot
+            return HelpMenu.card(runner.name)
 
         return None
 

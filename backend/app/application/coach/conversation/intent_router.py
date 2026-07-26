@@ -20,6 +20,8 @@ class ChatIntent(str, Enum):
 
     STATE_PORTRAIT = "STATE_PORTRAIT"
 
+    HELP = "HELP"
+
 
 # Pedido claro sobre o treino JÁ FEITO (quer a análise completa).
 _LAST_PATTERNS = [
@@ -85,6 +87,20 @@ _PORTRAIT_PATTERNS = [
     r"\bme (da|de|manda|mostra) (um |o )?(raio.?x|panorama|resumo geral|quadro geral)\b",
 ]
 
+# Pedido de AJUDA/descoberta ("o que dá pra te perguntar?") — quer o cardápio
+# do que o bot responde. Cobre "/ajuda", "menu", "o que você faz".
+_HELP_PATTERNS = [
+    r"^/?ajuda\b",
+    r"^/?help\b",
+    r"^/?menu\b",
+    r"^/?comandos?\b",
+    r"\bo que (voce|vc|tu) (faz|sabe fazer|pode fazer|consegue fazer)\b",
+    r"\bo que (eu )?(posso|da pra|consigo) (perguntar|pedir|te perguntar)\b",
+    r"\bcomo (voce|vc) funciona\b",
+    r"\bquais (perguntas|comandos|opcoes)\b",
+    r"\bpra que (voce|vc) serve\b",
+]
+
 _LAST_REGEXES = [re.compile(p) for p in _LAST_PATTERNS]
 
 _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
@@ -96,6 +112,8 @@ _BODY_REGEXES = [re.compile(p) for p in _BODY_PATTERNS]
 _FITNESS_REGEXES = [re.compile(p) for p in _FITNESS_PATTERNS]
 
 _PORTRAIT_REGEXES = [re.compile(p) for p in _PORTRAIT_PATTERNS]
+
+_HELP_REGEXES = [re.compile(p) for p in _HELP_PATTERNS]
 
 
 class IntentRouter:
@@ -133,6 +151,10 @@ class IntentRouter:
         if any(regex.search(normalized) for regex in _PORTRAIT_REGEXES):
 
             matched.append(ChatIntent.STATE_PORTRAIT)
+
+        if any(regex.search(normalized) for regex in _HELP_REGEXES):
+
+            matched.append(ChatIntent.HELP)
 
         if len(matched) == 1:
 

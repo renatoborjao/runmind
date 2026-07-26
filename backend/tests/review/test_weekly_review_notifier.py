@@ -65,9 +65,12 @@ def test_notify_all_sends_review_to_every_profile():
     assert mock_notification.send.await_count == 2
 
     sent = [call.args for call in mock_notification.send.await_args_list]
-    assert ("Renato", "resumo renato") in [
-        (r.name, msg) for r, msg in sent
-    ]
+    names_msgs = [(r.name, msg) for r, msg in sent]
+    # o resumo agora leva o rodapé "💡 Você sabia?" colado (descoberta)
+    assert any(
+        name == "Renato" and msg.startswith("resumo renato") and "💡" in msg
+        for name, msg in names_msgs
+    )
 
 
 def test_does_not_send_when_formatter_returns_none():
@@ -95,7 +98,7 @@ def test_notify_all_continues_after_one_profile_fails():
     mock_notification.send.assert_awaited_once()
     runner, msg = mock_notification.send.await_args.args
     assert runner.name == "Renato"
-    assert msg == "resumo renato"
+    assert msg.startswith("resumo renato")
 
 
 # ---------------- retrato "como você está" pós-resumo ----------------
