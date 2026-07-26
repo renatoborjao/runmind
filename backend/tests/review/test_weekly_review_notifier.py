@@ -20,18 +20,17 @@ def _run_notify_all(profiles, runners, messages):
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
         patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
-        patch(f"{MODULE}.BodyReadingService") as mock_body_service,
-        patch(f"{MODULE}.BodyReadingWriter"),
+        patch(f"{MODULE}.StatePortraitService") as mock_portrait_service,
+        patch(f"{MODULE}.StatePortraitWriter") as mock_portrait_writer,
     ):
 
         mock_guard.already_sent.return_value = False
 
-        # por padrão, sem dado de saúde -> a leitura do corpo não é enviada,
-        # então os testes do RESUMO isolam só o resumo
-        mock_body_service.read.return_value = (
-            MagicMock(recovery=MagicMock(has_data=False)),
-            MagicMock(),
-        )
+        # por padrão, o retrato não tem nada a dizer -> não é enviado, então os
+        # testes do RESUMO isolam só o resumo
+        mock_portrait_service.read.return_value = (MagicMock(), MagicMock())
+
+        mock_portrait_writer.write.return_value = None
 
         mock_narrative.write = AsyncMock(return_value=None)
 
@@ -99,47 +98,44 @@ def test_notify_all_continues_after_one_profile_fails():
     assert msg == "resumo renato"
 
 
-# ---------------- leitura do corpo pós-resumo ----------------
+# ---------------- retrato "como você está" pós-resumo ----------------
 
 
-def _run_send_body_reading(has_data):
+def _run_send_state_portrait(message):
 
     runner = make_runner(name="Renato", phone="+5511900000001")
 
     with (
-        patch(f"{MODULE}.BodyReadingService") as mock_service,
-        patch(f"{MODULE}.BodyReadingWriter") as mock_writer,
+        patch(f"{MODULE}.StatePortraitService") as mock_service,
+        patch(f"{MODULE}.StatePortraitWriter") as mock_writer,
         patch(f"{MODULE}.CoachOutbox") as mock_outbox,
     ):
 
-        mock_service.read.return_value = (
-            MagicMock(recovery=MagicMock(has_data=has_data)),
-            MagicMock(),
-        )
+        mock_service.read.return_value = (MagicMock(), MagicMock())
 
-        mock_writer.write = AsyncMock(return_value="Seu corpo está absorvendo.")
+        mock_writer.write.return_value = message
 
         mock_outbox.send = AsyncMock()
 
         asyncio.run(
-            WeeklyReviewNotifier._send_body_reading("renato", runner)
+            WeeklyReviewNotifier._send_state_portrait("renato", runner)
         )
 
         return mock_outbox
 
 
-def test_body_reading_sent_when_health_data_exists():
+def test_state_portrait_sent_when_there_is_a_reading():
 
-    mock_outbox = _run_send_body_reading(has_data=True)
+    mock_outbox = _run_send_state_portrait("📷 Como você está, Renato...")
 
     mock_outbox.send.assert_awaited_once()
 
     _, msg = mock_outbox.send.await_args.args
-    assert msg == "Seu corpo está absorvendo."
+    assert msg.startswith("📷 Como você está")
 
 
-def test_body_reading_skipped_without_health_data():
+def test_state_portrait_skipped_when_nothing_to_say():
 
-    mock_outbox = _run_send_body_reading(has_data=False)
+    mock_outbox = _run_send_state_portrait(None)
 
     mock_outbox.send.assert_not_awaited()

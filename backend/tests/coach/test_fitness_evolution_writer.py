@@ -43,6 +43,49 @@ def test_insufficient_returns_none():
     assert FitnessEvolutionWriter.write(evo, "Renato") is None
 
 
+def test_stale_reading_says_no_fresh_verdict_not_the_old_one():
+    """Parou de correr: mesmo com EF antigo com lastro, a leitura honesta é
+    'sem leitura fresca' — nunca repetir o veredito velho como se fosse agora."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING, ef=_ef(EFF_IMPROVING),
+        days_since_last_run=30,
+    )
+
+    msg = FitnessEvolutionWriter.write(evo, "Renato")
+
+    assert "fresca" in msg
+    assert "30 dias" in msg
+    assert "Renato" in msg
+    # não vaza o veredito velho de "evoluindo"
+    assert "evoluindo" not in msg.lower()
+
+
+def test_stale_line_is_silent_in_recap():
+    """No recap mensal, sem corrida recente a linha de forma se cala."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING, ef=_ef(EFF_IMPROVING),
+        days_since_last_run=40,
+    )
+
+    assert FitnessEvolutionWriter.line(evo) is None
+
+
+def test_fresh_reading_still_gives_verdict():
+    """Corrida recente (dentro da janela): a leitura normal vale."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING, ef=_ef(EFF_IMPROVING),
+        days_since_last_run=5,
+    )
+
+    msg = FitnessEvolutionWriter.write(evo, "Renato")
+
+    assert "evoluindo" in msg.lower()
+    assert "fresca" not in msg
+
+
 def test_stable_ef_only_is_structured_and_flags_pending():
     """Só EF (saúde recém-conectada): mensagem estruturada, mostra o EF e
     deixa claro que VO₂máx/FC-repouso ainda estão juntando histórico."""

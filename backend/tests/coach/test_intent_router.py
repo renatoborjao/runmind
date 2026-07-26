@@ -221,3 +221,51 @@ def test_fitness_does_not_collide_with_body_reading():
         IntentRouter.detect("como tá meu corpo hoje?")
         == ChatIntent.BODY_READING
     )
+
+
+# ==========================================================
+# STATE_PORTRAIT (como você está, no geral)
+# ==========================================================
+
+def test_bare_como_estou_is_portrait():
+
+    assert IntentRouter.detect("como estou?") == ChatIntent.STATE_PORTRAIT
+
+
+def test_como_estou_no_geral_is_portrait():
+
+    assert (
+        IntentRouter.detect("como eu tô no geral?")
+        == ChatIntent.STATE_PORTRAIT
+    )
+
+
+def test_raio_x_is_portrait():
+
+    assert (
+        IntentRouter.detect("me dá um raio-x do meu momento")
+        == ChatIntent.STATE_PORTRAIT
+    )
+
+
+def test_panorama_is_portrait():
+
+    assert IntentRouter.detect("quero um panorama geral") == ChatIntent.STATE_PORTRAIT
+
+
+def test_portrait_does_not_collide_with_body():
+    """Pergunta específica do corpo NÃO vira retrato (segue no eixo do corpo)."""
+
+    assert (
+        IntentRouter.detect("como está minha recuperação?")
+        == ChatIntent.BODY_READING
+    )
+
+
+def test_portrait_does_not_collide_with_fitness():
+    """Pergunta específica de evolução NÃO vira retrato."""
+
+    assert (
+        IntentRouter.detect("como está minha evolução?")
+        == ChatIntent.FITNESS_TREND
+    )

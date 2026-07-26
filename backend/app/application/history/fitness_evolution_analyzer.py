@@ -30,6 +30,12 @@ from app.domain.entities.signal_trend import (
     TREND_IMPROVING,
     SignalTrend,
 )
+from app.domain.value_objects.sports import is_run_sport
+
+# piso de distância pra uma atividade CONTAR como corrida que mantém a leitura
+# fresca (descarta blip de GPS/fragmento). Qualquer corrida de verdade serve —
+# mais permissivo que a faixa comparável do EF, que é pra medir economia.
+_FRESH_MIN_KM = 1.0
 
 # horizonte longo: arco de meses ("evoluí desde que começamos a acompanhar?").
 # Precisa cobrir bem mais que a janela curta pra dizer algo novo.
@@ -115,7 +121,45 @@ class FitnessEvolutionAnalyzer:
             quality=quality,
             vo2max=vo2max,
             rhr=rhr,
+            days_since_last_run=(
+                FitnessEvolutionAnalyzer._days_since_last_run(activities, ref)
+            ),
         )
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _days_since_last_run(
+        activities: list[Activity],
+        ref: date,
+    ) -> int | None:
+        """Dias entre a última corrida registrada (≤ ref) e a data de
+        referência. None quando não há NENHUMA corrida no histórico. Alimenta o
+        guard de dado velho: parou de correr → a leitura não fala 'agora'."""
+
+        last: date | None = None
+
+        for a in activities:
+
+            if not is_run_sport(a.sport):
+
+                continue
+
+            if (a.distance or 0) < _FRESH_MIN_KM * 1000:
+
+                continue
+
+            day = a.start_date.date()
+
+            if day > ref:
+
+                continue
+
+            if last is None or day > last:
+
+                last = day
+
+        return (ref - last).days if last is not None else None
 
     # ------------------------------------------------------------------
 
