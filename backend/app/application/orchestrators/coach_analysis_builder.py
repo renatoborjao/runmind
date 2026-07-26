@@ -41,7 +41,7 @@ class CoachAnalysisBuilder:
 
     @staticmethod
     async def build(
-        profile: str = "renato",
+        profile: str,
         activity: Activity | None = None,
     ) -> dict:
 

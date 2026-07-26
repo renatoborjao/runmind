@@ -22,7 +22,7 @@ router = APIRouter(
 
 
 @router.get("")
-async def get_plan(profile: str = "renato"):
+async def get_plan(profile: str):
 
     try:
 

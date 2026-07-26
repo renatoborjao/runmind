@@ -10,7 +10,7 @@ class TokenStore:
 
     def __init__(
         self,
-        profile: str = "renato",
+        profile: str,
     ):
 
         self.file = (

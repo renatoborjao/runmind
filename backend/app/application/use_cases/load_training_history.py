@@ -16,7 +16,7 @@ class LoadTrainingHistory:
 
     @staticmethod
     async def execute(
-        profile: str = "renato",
+        profile: str,
         limit: int = 30,
         activity: Activity | None = None,
     ) -> TrainingHistory:

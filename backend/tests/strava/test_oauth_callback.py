@@ -170,19 +170,12 @@ def test_callback_during_onboarding_stashes_athlete_id_in_state(
         assert state["strava_athlete_id"] == 777
 
 
-def test_callback_without_state_keeps_renato_behavior(tmp_path):
+def test_callback_without_state_returns_400(tmp_path):
+    """Sem state não dá pra saber de quem é o callback. Antes caía num perfil
+    fixo ("renato"), o que num app multi-atleta gravaria tokens no dono errado;
+    agora rejeita, igual a um cadastro não encontrado."""
 
     profile_repo, onboarding_repo = _repos(tmp_path)
-
-    (profile_repo.storage / "renato.json").write_text(
-        json.dumps({
-            "id": "renato", "name": "Renato", "age": 33,
-            "weight": 91.0, "height": 1.78,
-            "phone": "5511975658679", "goal": "10k",
-            "weekly_training_days": 3,
-        }),
-        encoding="utf-8",
-    )
 
     with (
         patch(f"{MODULE}.httpx.AsyncClient",
@@ -191,13 +184,8 @@ def test_callback_without_state_keeps_renato_behavior(tmp_path):
               return_value=profile_repo),
         patch(f"{MODULE}.OnboardingStateRepository",
               return_value=onboarding_repo),
-        patch(f"{MODULE}.TokenStore") as mock_token_store_cls,
-        patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
-        patch(f"{MODULE}.StravaConnectRefresh") as mock_refresh,
+        patch(f"{MODULE}.TokenStore"),
     ):
-
-        mock_history.execute = AsyncMock()
-        mock_refresh.refresh = AsyncMock()
 
         client = TestClient(app)
 
@@ -206,12 +194,7 @@ def test_callback_without_state_keeps_renato_behavior(tmp_path):
             params={"code": "abc"},
         )
 
-        assert response.json()["profile"] == "renato"
-
-        mock_token_store_cls.assert_called_once_with("renato")
-
-        # sem state = perfil renato (source profile): agenda o refresh
-        mock_refresh.refresh.assert_awaited_once_with("renato")
+        assert response.status_code == 400
 
 
 def test_callback_with_unknown_state_returns_400(tmp_path):

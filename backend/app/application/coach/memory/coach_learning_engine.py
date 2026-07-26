@@ -18,9 +18,14 @@ EMPTY_OPS: dict = {"add": [], "archive": [], "reconfirm": []}
 
 EXTRACTION_PROMPT_TEMPLATE = """Você é o cérebro de longo prazo do coach de \
 corrida do RunMind. Sua função aqui NÃO é conversar nem montar treino — é
-APRENDER sobre o corredor {runner_name} observando o que ele FEZ nesta semana
-(não o que ele disse), pra que o coach lembre disso ao montar os próximos
-planos.
+APRENDER sobre o corredor {runner_name} observando o que ele FEZ (não o que
+disse), pra que o coach lembre disso ao montar os próximos planos e ao cuidar
+dele no dia a dia.
+
+É VIDA REAL e MUDA: a rotina muda, aparecem compromissos, tem semana que ele
+cumpre à risca, tem semana que faz treino extra, tem semana que fura. Seu
+retrato tem que ser VIVO — reconfirma o que se manteve, deixa MORRER o que a
+vida mudou, e só vira padrão o que se REPETE. Nada aqui é rótulo permanente.
 
 APRENDIZADOS ATIVOS ATUAIS (id — [categoria] conteúdo):
 {current_learnings}
@@ -29,37 +34,47 @@ EVIDÊNCIA DESTA SEMANA (o que o coach prescreveu × o que de fato aconteceu):
 {week_evidence}
 
 Categorias de aprendizado:
-- aderencia: o que ele CUMPRE de fato (um dia/tipo/formato que ele sempre
-  faz — ou sempre fura)
+- aderencia: o que ele CUMPRE ou FURA de forma consistente (um dia/tipo/formato)
 - preferencia_revelada: preferência que o COMPORTAMENTO revela (não algo que
   ele declarou — isso é outra memória)
-- limite: teto de capacidade observado (distância/volume/intensidade que ele
-  ainda não sustenta)
-- resposta: como o corpo dele responde a um estímulo (recuperação, ritmo,
-  carga à luz do sono/HRV)
+- limite: teto de capacidade observado — tanto o que ele AINDA NÃO sustenta
+  quanto o que ele JÁ SUSTENTA com folga (capacidade demonstrada informa que
+  dá pra ser mais ambicioso)
+- resposta: como o corpo dele responde ao estímulo — INCLUSIVE resposta BOA
+  (recupera bem, tolera tal carga/ACWR) e traço ESTRUTURAL que persiste mesmo
+  em semana verde (ex.: sono cronicamente curto mesmo com o corpo equilibrado)
 
 Responda APENAS com JSON:
 {{"add": [{{"category": "...", "content": "..."}}],
   "reconfirm": ["id"],
   "archive": ["id"]}}
 
-REGRAS:
-- Só lição DURÁVEL e ACIONÁVEL sobre ESTE atleta. Um tropeço isolado NÃO é
-  padrão — não vire aprendizado por uma semana atípica.
-- PADRÃO DE ADERÊNCIA (fura tal dia/treino) exige REPETIÇÃO em semanas
-  DIFERENTES. UM furo só, ou um furo com CAUSA PONTUAL conhecida (viagem,
-  lesão, prova, imprevisto que ele contou no contexto de vida) NÃO é padrão —
-  não gere aprendizado sobre isso.
-- MOVER um treino de dia e cumprir NÃO é furar. Se ele fez a distância/tipo
-  prescritos em outro dia, considere cumprido, não perdido.
-- Se a evidência CONFIRMA um aprendizado ativo que já existe, coloque o id em
-  "reconfirm" (NÃO duplique em "add").
-- Se a evidência CONTRADIZ um aprendizado ativo (ele evoluiu, mudou), coloque
-  o id em "archive".
+REGRAS (o retrato é VIVO, não engessado):
+- Aprenda tanto o POSITIVO quanto o negativo. Uma semana BOA também ensina
+  (teto que ele sustenta, resposta boa, traço estrutural). MAS não registre
+  "cumpriu o plano" nem nada que os NÚMEROS da semana já mostram sozinhos
+  (aderência e estado do corpo já vão ao coach ao vivo) — só o que agrega ALÉM
+  do óbvio.
+- PADRÃO DE ADERÊNCIA (fura tal dia/treino) só é padrão com REPETIÇÃO em 2-3
+  semanas DIFERENTES. Um furo isolado, dois furos esparsos, ou furo com CAUSA
+  PONTUAL conhecida (viagem, lesão, prova, compromisso que ele contou) NÃO é
+  padrão. Use as contagens "N de M vezes": se N é pequeno perto de M, NÃO é
+  padrão.
+- TREINO EXTRA não-prescrito NÃO é furo — é sinal de disposição/preferência.
+- MOVER um treino de dia e cumprir = cumprido, NÃO furado.
+- Prefira frasear de forma ESTRUTURAL (dura) e não episódica: "sono é
+  limitador recorrente" dura; "HRV caiu esta semana" envelhece em dias.
+- DEVAGAR PRA CRIAR, DEVAGAR PRA SOLTAR (histerese): assim como um padrão
+  precisa de 2-3 semanas pra nascer, NÃO o derrube por UMA semana contrária —
+  um aprendizado durável que teve só uma semana fora ainda vale; deixe a
+  validade natural desgastar o que parou de se confirmar. Só use "archive"
+  quando a evidência CONTRADIZ de forma clara e sustentada (ele mudou de vez).
+- Se a evidência CONFIRMA um aprendizado ativo, coloque o id em "reconfirm"
+  (NUNCA duplique em "add", nem crie um quase-igual sob outra categoria).
 - "content" em UMA linha curta, português, terceira pessoa implícita
-  (ex.: "Sempre cumpre o tiro curto, mas fura o longão de domingo").
-- Nada de novo, nada a confirmar, nada a arquivar:
-  {{"add": [], "reconfirm": [], "archive": []}}
+  (ex.: "Sustenta rampa de volume com ACWR ~1.1 sem quebrar").
+- Prefira POUCOS aprendizados de alto sinal a muitos. Nada de novo, nada a
+  confirmar, nada a arquivar: {{"add": [], "reconfirm": [], "archive": []}}
 """
 
 
