@@ -172,6 +172,13 @@ class BodyConductEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def is_demanding(session: PlannedSession) -> bool:
+        """Fonte ÚNICA de 'treino exigente' (intenso ou longo). Público pra o
+        vigia de prontidão reusar o mesmo critério do ajuste de corpo."""
+
+        return BodyConductEngine._is_demanding(session)
+
+    @staticmethod
     def _is_demanding(session: PlannedSession) -> bool:
 
         norm = BodyConductEngine._normalize(session.workout_type)
