@@ -269,3 +269,40 @@ def test_portrait_does_not_collide_with_fitness():
         IntentRouter.detect("como está minha evolução?")
         == ChatIntent.FITNESS_TREND
     )
+
+
+# ==========================================================
+# HELP (o que dá pra perguntar?)
+# ==========================================================
+
+def test_ajuda_is_help():
+
+    assert IntentRouter.detect("ajuda") == ChatIntent.HELP
+    assert IntentRouter.detect("/ajuda") == ChatIntent.HELP
+
+
+def test_menu_is_help():
+
+    assert IntentRouter.detect("menu") == ChatIntent.HELP
+
+
+def test_o_que_voce_faz_is_help():
+
+    assert IntentRouter.detect("o que você faz?") == ChatIntent.HELP
+
+
+def test_o_que_posso_perguntar_is_help():
+
+    assert (
+        IntentRouter.detect("o que eu posso te perguntar?")
+        == ChatIntent.HELP
+    )
+
+
+def test_help_does_not_collide_with_plan():
+    """'qual meu plano' segue plano da semana, não vira ajuda."""
+
+    assert (
+        IntentRouter.detect("qual meu plano da semana?")
+        == ChatIntent.WEEKLY_PLAN
+    )
