@@ -66,6 +66,32 @@ def test_detects_improving_fitness():
     assert result.improving is True
     # na mesma FC, o pace recente é mais rápido -> ganho positivo
     assert result.pace_gain_sec > 0
+    # ganho modesto (recreativo): NÃO bate no teto de credibilidade
+    assert result.pace_gain_capped is False
+
+
+def test_cap_clamps_magnitude_and_flags():
+
+    assert AerobicEfficiencyAnalyzer._cap(105, 40) == (40, True)
+    assert AerobicEfficiencyAnalyzer._cap(-105, 40) == (-40, True)
+    assert AerobicEfficiencyAnalyzer._cap(20, 40) == (20, False)
+    assert AerobicEfficiencyAnalyzer._cap(None, 40) == (None, False)
+
+
+def test_beginner_ramp_pace_gain_is_capped():
+    """Rampa dramática de iniciante (quase trote -> corrida): o ganho é REAL
+    porém incrível (>1min/km). É limitado ao teto e marcado -> o writer dirá
+    'mais de X' em vez de cuspir um número que soa como bug."""
+
+    earlier = [_run(d, speed=2.05, hr=150) for d in (55, 50, 45)]
+
+    recent = [_run(d, speed=3.15, hr=150) for d in (15, 10, 5)]
+
+    result = _analyze(earlier + recent)
+
+    assert result.direction == EFF_IMPROVING
+    assert result.pace_gain_capped is True
+    assert result.pace_gain_sec == 40    # teto
 
 
 def test_detects_declining_fitness():

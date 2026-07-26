@@ -43,6 +43,22 @@ def test_insufficient_returns_none():
     assert FitnessEvolutionWriter.write(evo, "Renato") is None
 
 
+def test_capped_tangible_says_mais_de():
+    """Rampa de iniciante: a tradução sentível diz 'mais de 40 s/km' (crível),
+    não o número cru que soaria como bug. Vale pra evolução E pro retrato (que
+    reusa FitnessEvolutionWriter.tangible)."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING,
+        ef=_ef(EFF_IMPROVING, pace_gain_sec=40, pace_gain_capped=True),
+    )
+
+    msg = FitnessEvolutionWriter.write(evo, "Fernanda")
+
+    assert "mais de 40 s/km" in msg
+    assert FitnessEvolutionWriter.tangible(evo).startswith("na mesma FC")
+
+
 def test_stale_reading_says_no_fresh_verdict_not_the_old_one():
     """Parou de correr: mesmo com EF antigo com lastro, a leitura honesta é
     'sem leitura fresca' — nunca repetir o veredito velho como se fosse agora."""

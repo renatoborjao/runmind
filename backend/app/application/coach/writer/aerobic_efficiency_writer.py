@@ -49,8 +49,12 @@ class AerobicEfficiencyWriter:
 
             if fitness.ref_hr and fitness.pace_gain_sec and fitness.pace_gain_sec > 0:
 
+                amount = AerobicEfficiencyWriter._amt(
+                    fitness.pace_gain_sec, fitness.pace_gain_capped
+                )
+
                 return (
-                    f"📈 Forma em alta: na mesma FC, ~{fitness.pace_gain_sec} "
+                    f"📈 Forma em alta: na mesma FC, {amount} "
                     f"s/km mais rápido que no início do período"
                 )
 
@@ -65,6 +69,13 @@ class AerobicEfficiencyWriter:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _amt(n: int, capped: bool) -> str:
+        """'~N' normalmente; 'mais de N' quando o valor bateu no teto de
+        credibilidade (rampa de iniciante gera número real porém incrível)."""
+
+        return f"mais de {n}" if capped else f"~{n}"
+
+    @staticmethod
     def _gain_phrase(fitness: AerobicEfficiency) -> str | None:
         """A tradução tangível do ganho, quando os números têm tamanho de
         verdade (evita '0 bpm' / '0 s/km')."""
@@ -75,16 +86,24 @@ class AerobicEfficiencyWriter:
 
             pace = PaceFormatter.format(fitness.ref_pace)
 
+            amount = AerobicEfficiencyWriter._amt(
+                fitness.hr_drop_bpm, fitness.hr_drop_capped
+            )
+
             parts.append(
-                f"no mesmo pace (~{pace}/km), sua FC está ~{fitness.hr_drop_bpm} "
+                f"no mesmo pace (~{pace}/km), sua FC está {amount} "
                 f"bpm mais baixa"
             )
 
         if fitness.ref_hr and fitness.pace_gain_sec and fitness.pace_gain_sec > 0:
 
+            amount = AerobicEfficiencyWriter._amt(
+                fitness.pace_gain_sec, fitness.pace_gain_capped
+            )
+
             parts.append(
                 f"na mesma FC (~{fitness.ref_hr} bpm), você corre "
-                f"~{fitness.pace_gain_sec} s/km mais rápido"
+                f"{amount} s/km mais rápido"
             )
 
         if not parts:
@@ -100,9 +119,12 @@ class AerobicEfficiencyWriter:
 
             pace = PaceFormatter.format(fitness.ref_pace)
 
+            amount = AerobicEfficiencyWriter._amt(
+                abs(fitness.hr_drop_bpm), fitness.hr_drop_capped
+            )
+
             return (
-                f"no mesmo pace (~{pace}/km), sua FC está ~"
-                f"{abs(fitness.hr_drop_bpm)} bpm mais alta"
+                f"no mesmo pace (~{pace}/km), sua FC está {amount} bpm mais alta"
             )
 
         return None

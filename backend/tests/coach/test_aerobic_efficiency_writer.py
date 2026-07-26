@@ -31,6 +31,36 @@ def test_improving_message_has_tangible_numbers():
     assert "7 bpm" in msg          # no mesmo pace, FC caiu 7 bpm
     assert "8 s/km" in msg          # na mesma FC, 8 s/km mais rápido
     assert "6:26/km" in msg         # pace de referência formatado
+    assert "mais de" not in msg     # ganho modesto: número exato, sem teto
+
+
+def test_capped_gain_says_mais_de_not_absurd_number():
+    """Rampa de iniciante (número real porém incrível): a mensagem diz 'mais de
+    40 s/km', não o valor cru que soaria como bug."""
+
+    fitness = AerobicEfficiency(
+        direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8,
+        ref_hr=139, ref_pace=6.43, pace_gain_sec=40, hr_drop_bpm=12,
+        pace_gain_capped=True, hr_drop_capped=True,
+    )
+
+    msg = AerobicEfficiencyWriter.write(fitness, "Fernanda")
+
+    assert "mais de 40 s/km" in msg
+    assert "mais de 12 bpm" in msg
+
+
+def test_capped_gain_in_compact_line():
+
+    fitness = AerobicEfficiency(
+        direction=EFF_IMPROVING, runs_counted=8, weeks_covered=8,
+        ref_hr=139, ref_pace=6.43, pace_gain_sec=40, hr_drop_bpm=12,
+        pace_gain_capped=True,
+    )
+
+    line = AerobicEfficiencyWriter.line(fitness)
+
+    assert "mais de 40 s/km" in line
 
 
 def test_declining_message_is_not_alarmist():

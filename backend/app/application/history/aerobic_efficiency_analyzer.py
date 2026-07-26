@@ -52,6 +52,15 @@ _AEROBIC_MAX_HRR = 0.80
 # folga relativa do EF pra chamar de "mudou" (ruído de terreno/calor/dia)
 _EF_NOISE = 0.02  # 2%
 
+# teto de credibilidade da tradução tangível. Uma rampa de iniciante gera um
+# ganho REAL porém incrível (ex.: 8:30→5:40/km na mesma FC = ~105 s/km) que soa
+# como bug. Acima do teto, guardamos o limite e marcamos capped → o writer diz
+# "mais de X". Valores escolhidos pra cobrir bem o ganho crível de ~8 semanas
+# (recreativo evolui ~10-30 s/km; além disso é iniciante/ruído — não precisa do
+# número exato pra passar a mensagem).
+_TANGIBLE_MAX_PACE_GAIN_SEC = 40
+_TANGIBLE_MAX_HR_DROP_BPM = 12
+
 # normalização de calor: acima da temperatura de conforto a FC sobe pro mesmo
 # ritmo (deriva térmica). Corrige a FC de volta a uma referência amena pra o
 # EF de um treino quente não parecer perda de forma. Coeficiente CONSERVADOR
@@ -132,6 +141,16 @@ class AerobicEfficiencyAnalyzer:
             ef_earlier, ef_recent, ref_hr, ref_pace
         )
 
+        # teto de credibilidade: acima do plausível vira "mais de X" (o número
+        # cru é real mas incrível numa rampa de iniciante — soaria como bug)
+        pace_gain, pace_capped = AerobicEfficiencyAnalyzer._cap(
+            pace_gain, _TANGIBLE_MAX_PACE_GAIN_SEC
+        )
+
+        hr_drop, hr_capped = AerobicEfficiencyAnalyzer._cap(
+            hr_drop, _TANGIBLE_MAX_HR_DROP_BPM
+        )
+
         return AerobicEfficiency(
             direction=direction,
             runs_counted=len(runs),
@@ -142,7 +161,29 @@ class AerobicEfficiencyAnalyzer:
             ref_pace=ref_pace,
             pace_gain_sec=pace_gain,
             hr_drop_bpm=hr_drop,
+            pace_gain_capped=pace_capped,
+            hr_drop_capped=hr_capped,
         )
+
+    @staticmethod
+    def _cap(value: int | None, limit: int) -> tuple[int | None, bool]:
+        """Clampa a magnitude a um teto plausível, preservando o sinal. Devolve
+        (valor, capped) — capped=True quando bateu no teto (o writer dirá 'mais
+        de'). None passa direto."""
+
+        if value is None:
+
+            return None, False
+
+        if value > limit:
+
+            return limit, True
+
+        if value < -limit:
+
+            return -limit, True
+
+        return value, False
 
     # ------------------------------------------------------------------
 
