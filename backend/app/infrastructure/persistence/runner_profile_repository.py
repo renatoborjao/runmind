@@ -28,7 +28,7 @@ class RunnerProfileRepository:
 
     def load(
         self,
-        profile: str = "renato",
+        profile: str,
     ) -> RunnerProfile:
 
         file = self.storage / f"{profile}.json"

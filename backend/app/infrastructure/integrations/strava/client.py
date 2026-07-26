@@ -25,7 +25,7 @@ class StravaClient:
 
     def __init__(
         self,
-        profile: str = "renato",
+        profile: str,
     ):
 
         self.profile = profile

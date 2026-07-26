@@ -8,7 +8,7 @@ class LoadRunnerProfile:
 
     @staticmethod
     def execute(
-        profile: str = "renato",
+        profile: str,
     ) -> RunnerProfile:
 
         repository = RunnerProfileRepository()

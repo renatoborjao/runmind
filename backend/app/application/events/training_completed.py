@@ -23,7 +23,7 @@ class TrainingCompletedEvent:
 
     @staticmethod
     async def execute(
-        profile: str = "renato",
+        profile: str,
         activity: Activity | None = None,
     ):
 

@@ -69,7 +69,7 @@ def test_direct_activity_bypasses_strava():
         mock_archive.return_value.load_activities.return_value = []
 
         history = asyncio.run(
-            LoadTrainingHistory.execute(activity=activity),
+            LoadTrainingHistory.execute(profile="renato2", activity=activity),
         )
 
         # o caminho direto (webhook) também alimenta o arquivo
@@ -103,7 +103,7 @@ def test_direct_activity_is_merged_with_archived_history():
         mock_archive.return_value.load_activities.return_value = archived
 
         history = asyncio.run(
-            LoadTrainingHistory.execute(activity=new),
+            LoadTrainingHistory.execute(profile="renato2", activity=new),
         )
 
     # nova primeiro (mesmo objeto, dados completos), depois arquivo por data
@@ -144,7 +144,7 @@ def test_cross_source_duplicate_is_deduped():
         ]
 
         history = asyncio.run(
-            LoadTrainingHistory.execute(activity=new),
+            LoadTrainingHistory.execute(profile="renato2", activity=new),
         )
 
     ids = [a.id for a in history.activities]

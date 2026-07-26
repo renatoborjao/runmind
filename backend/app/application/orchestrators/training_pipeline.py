@@ -28,7 +28,7 @@ class TrainingPipeline:
 
     @staticmethod
     async def execute(
-        profile: str = "renato",
+        profile: str,
         activity: Activity | None = None,
     ):
 

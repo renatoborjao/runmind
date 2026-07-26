@@ -204,14 +204,23 @@ def _parse_state(state: str) -> tuple[str, str]:
 def _resolve_token_target(state: str) -> tuple[str, str]:
     """De quem são os tokens: (profile/slug, origem).
 
-    - sem state: comportamento original (renato);
     - perfil existente (por telefone ou telegram_id): o próprio perfil;
     - onboarding em andamento: o slug reservado.
+
+    Sem state não dá pra saber de quem é o callback — antes isso caía num
+    perfil fixo ("renato"), o que num app multi-atleta gravaria tokens no
+    dono errado. Agora rejeita, igual a um cadastro não encontrado.
     """
 
     if not state:
 
-        return "renato", "profile"
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Link do Strava sem identificação. "
+                "Comece a conversa com o coach primeiro."
+            ),
+        )
 
     channel, address = _parse_state(state)
 
