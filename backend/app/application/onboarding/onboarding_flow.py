@@ -56,6 +56,10 @@ QUESTIONS = {
         "Prazer, {name}! 🙌\n\n"
         "Quantos anos você tem?"
     ),
+    "ASK_SEX": (
+        "Você é homem ou mulher? "
+        "(é só pra calibrar a intensidade dos treinos do jeito certo 💪)"
+    ),
     "ASK_WEIGHT": (
         "E quanto você pesa? (em kg)"
     ),
@@ -242,6 +246,23 @@ class OnboardingFlow:
             )
 
         state["answers"]["age"] = age
+
+        state["step"] = "ASK_SEX"
+
+        repo.save(address, state)
+
+        return QUESTIONS["ASK_SEX"]
+
+    @staticmethod
+    async def _on_ask_sex(address, state, parsed, repo) -> str:
+
+        sex = parsed.get("sex")
+
+        if sex not in ("M", "F"):
+
+            return RETRY_PREFIX + QUESTIONS["ASK_SEX"]
+
+        state["answers"]["sex"] = sex
 
         state["step"] = "ASK_WEIGHT"
 
@@ -622,6 +643,14 @@ class OnboardingFlow:
 
             applied.append("age")
 
+        sex = corrections.get("sex")
+
+        if sex in ("M", "F"):
+
+            answers["sex"] = sex
+
+            applied.append("sex")
+
         weight = corrections.get("weight")
 
         if isinstance(weight, (int, float)) and 30 <= weight <= 250:
@@ -952,6 +981,7 @@ class OnboardingFlow:
                 "id": slug,
                 "name": answers["name"],
                 "age": answers["age"],
+                "sex": answers.get("sex"),
                 "weight": answers["weight"],
                 "height": answers["height"],
                 "channel": channel,
@@ -1372,10 +1402,12 @@ class OnboardingFlow:
 
             question = "Posso montar seu plano com esses dados? (sim/não)"
 
+        sex_txt = OnboardingFlow._sex_label(answers.get("sex"))
+
         return (
             "Fechou! Confere se está tudo certo:\n\n"
             f"• Nome: {answers['name']}\n"
-            f"• Idade: {answers['age']} anos — "
+            f"• Idade: {answers['age']} anos{sex_txt} — "
             f"{answers['weight']:.0f} kg, {answers['height']:.2f} m\n"
             f"• Experiência: {experience}\n"
             f"{coach_line}"
@@ -1383,6 +1415,12 @@ class OnboardingFlow:
             f"• Objetivo: {answers['goal']}\n\n"
             f"{question}"
         )
+
+    @staticmethod
+    def _sex_label(sex) -> str:
+        """', homem' / ', mulher' pro resumo; vazio se desconhecido."""
+
+        return {"M": ", homem", "F": ", mulher"}.get(sex or "", "")
 
     @staticmethod
     def _valid_iso_date(value) -> str | None:

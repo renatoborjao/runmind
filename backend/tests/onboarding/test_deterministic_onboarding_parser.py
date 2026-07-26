@@ -167,6 +167,23 @@ def test_age_ambiguous_defers():
     assert parse("ASK_AGE", "entre 30 e 40") is None
 
 
+def test_sex_variants():
+
+    assert parse("ASK_SEX", "homem") == {"sex": "M"}
+    assert parse("ASK_SEX", "sou masculino") == {"sex": "M"}
+    assert parse("ASK_SEX", "M") == {"sex": "M"}
+    assert parse("ASK_SEX", "mulher") == {"sex": "F"}
+    assert parse("ASK_SEX", "feminino") == {"sex": "F"}
+    assert parse("ASK_SEX", "F") == {"sex": "F"}
+
+
+def test_sex_ambiguous_defers():
+    """Sem pista clara (ou os dois) -> None, cai no Gemini."""
+
+    assert parse("ASK_SEX", "sei lá") is None
+    assert parse("ASK_SEX", "tanto faz") is None
+
+
 def test_weight_variants():
 
     assert parse("ASK_WEIGHT", "91kg") == {"weight": 91.0}

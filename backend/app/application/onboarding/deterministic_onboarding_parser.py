@@ -756,12 +756,43 @@ def _skip(text: str) -> dict | None:
 
 
 # ==========================================================
+# ASK_SEX (M / F)
+# ==========================================================
+
+_MALE_PATTERNS = (
+    r"\bhomem\b", r"\bmasculino\b", r"\bmasc\b", r"\bmenino\b", r"\bm\b",
+)
+
+_FEMALE_PATTERNS = (
+    r"\bmulher\b", r"\bfeminino\b", r"\bfem\b", r"\bmenina\b", r"\bf\b",
+)
+
+
+def _sex(text: str) -> dict | None:
+    """"homem/masculino/m" -> M, "mulher/feminino/f" -> F. Ambos ou nenhum
+    (ambíguo) -> None (cai no Gemini)."""
+
+    normalized = _norm(text)
+
+    female = any(re.search(p, normalized) for p in _FEMALE_PATTERNS)
+
+    male = any(re.search(p, normalized) for p in _MALE_PATTERNS)
+
+    if female == male:   # os dois ou nenhum
+
+        return None
+
+    return {"sex": "F" if female else "M"}
+
+
+# ==========================================================
 # Despacho
 # ==========================================================
 
 _HANDLERS = {
     "ASK_NAME": _name,
     "ASK_AGE": _age,
+    "ASK_SEX": _sex,
     "ASK_WEIGHT": _weight,
     "ASK_HEIGHT": _height,
     "ASK_STRAVA": lambda text: _yn(text, "has_strava"),

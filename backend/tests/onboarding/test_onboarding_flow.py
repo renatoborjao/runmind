@@ -153,6 +153,7 @@ FULL_CONVERSATION = [
     ("oi", {}),
     ("me chamo Fulano", {"name": "Fulano"}),
     ("33", {"age": 33}),
+    ("homem", {"sex": "M"}),
     ("91kg", {"weight": 91.0}),
     ("1,78", {"height": 1.78}),
     ("não uso", {"has_strava": False}),
@@ -175,8 +176,8 @@ FULL_CONVERSATION = [
     ("sim, pode montar", {"confirmed": True}),
 ]
 
-# índice da resposta que trata o Strava (após nome, idade, peso, altura)
-STRAVA_REPLY_INDEX = 5
+# índice da resposta que trata o Strava (após nome, idade, sexo, peso, altura)
+STRAVA_REPLY_INDEX = 6
 
 
 def test_full_onboarding_without_strava_creates_profile(tmp_path):
@@ -213,6 +214,7 @@ def test_full_onboarding_without_strava_creates_profile(tmp_path):
     data = json.loads(profile_file.read_text(encoding="utf-8"))
 
     assert data["name"] == "Fulano"
+    assert data["sex"] == "M"
     assert data["phone"] == PHONE
     assert data["weekly_training_days"] == 2
     assert data["preferred_running_days"] == ["Tuesday", "Saturday"]
@@ -230,6 +232,7 @@ STRAVA_STALL_CONVERSATION = [
     ("oi", {}),
     ("Bia", {"name": "Bia"}),
     ("29", {"age": 29}),
+    ("mulher", {"sex": "F"}),
     ("60kg", {"weight": 60.0}),
     ("1,65", {"height": 1.65}),
     ("não tenho", {"has_strava": False}),
@@ -247,11 +250,11 @@ def test_no_strava_gates_onboarding_until_account_created(tmp_path):
     )
 
     # resposta ao "não tenho": guia a criação, ainda SEM link de conexão
-    assert "cria" in replies[5].lower()
-    assert "connect" not in replies[5]
+    assert "cria" in replies[6].lower()
+    assert "connect" not in replies[6]
 
     # "ainda não": continua PARADO no passo de espera, sem avançar nem link
-    assert "connect" not in replies[6]
+    assert "connect" not in replies[7]
     assert onboarding_repo.load(PHONE)["step"] == "AWAIT_STRAVA_SIGNUP"
 
 
@@ -261,6 +264,7 @@ RANGE_PACE_CONVERSATION = [
     ("oi", {}),
     ("Ana", {"name": "Ana"}),
     ("30", {"age": 30}),
+    ("mulher", {"sex": "F"}),
     ("62kg", {"weight": 62.0}),
     ("1,68", {"height": 1.68}),
     ("tenho sim", {"has_strava": True}),
@@ -289,7 +293,7 @@ def test_range_km_asks_concrete_run_and_uses_stated_distance(tmp_path):
     )
 
     # após o treinador, a pergunta do pace pede um treino concreto
-    assert "quantos km e em quanto tempo" in replies[9]
+    assert "quantos km e em quanto tempo" in replies[10]
 
     # pace calculado da distância cravada (8 km), não da média (10 km)
     data = json.loads(
@@ -302,7 +306,7 @@ def test_multiple_objectives_preserved_in_goal(tmp_path):
     """O atleta cita VÁRIOS objetivos (saúde + emagrecer + marca): o perfil
     guarda a descrição inteira (não trunca) e ainda extrai o alvo concreto."""
 
-    conversation = FULL_CONVERSATION[:13] + [
+    conversation = FULL_CONVERSATION[:14] + [
         ("agora sim", {"confirmed": True}),  # CONFIRM_DAYS -> ASK_GOAL
         (
             "quero saúde, emagrecer e correr 10km em 55min",
@@ -334,6 +338,7 @@ NON_RUNNER_CONVERSATION = [
     ("oi", {}),
     ("Adolfo", {"name": "Adolfo"}),
     ("35", {"age": 35}),
+    ("homem", {"sex": "M"}),
     ("138kg", {"weight": 138.0}),
     ("1,88", {"height": 1.88}),
     ("sim", {"has_strava": True}),
@@ -364,13 +369,13 @@ def test_non_runner_captures_movement_and_stores_capability(tmp_path):
     )
 
     # após "não corro", pergunta como ele se move hoje (base do run/walk)
-    assert "como você se movimenta" in replies[6]
+    assert "como você se movimenta" in replies[7]
 
     # os dias são confirmados antes de seguir (eco dos dias escolhidos)
-    assert "confirmar" in replies[8].lower()
+    assert "confirmar" in replies[9].lower()
 
     # o resumo reflete a capacidade (agora um passo depois, após confirmar)
-    assert "trote e caminhada" in replies[10]
+    assert "trote e caminhada" in replies[11]
 
     assert "Cadastro feito, Adolfo" in replies[-1]
 
@@ -463,6 +468,7 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
         ("oi", {}),
         ("Ciclano", {"name": "Ciclano"}),
         ("40", {"age": 40}),
+        ("homem", {"sex": "M"}),
         ("80kg", {"weight": 80.0}),
         ("1.70", {"height": 1.70}),
         ("uso sim", {"has_strava": True}),
@@ -484,17 +490,17 @@ def test_strava_yes_sends_connect_link_and_still_asks_pace(tmp_path):
 
     replies, _, profile_repo = _run_conversation(tmp_path, conversation)
 
-    # link de conexão com state=telefone (após nome, idade, peso, altura)
-    strava_reply = replies[5]
+    # link de conexão com state=telefone (após nome, idade, sexo, peso, altura)
+    strava_reply = replies[6]
     assert f"/api/v1/strava/connect?state=wa:{PHONE}" in strava_reply
 
     # sequência: já corre? -> frequência -> km -> treinador -> pace -> dias
     assert "já corre hoje" in strava_reply
-    assert "Quantas vezes" in replies[6]
-    assert "quantos km" in replies[7]
-    assert "treinador" in replies[8]
-    assert "em quanto tempo" in replies[9]
-    assert "Quais dias" in replies[10]
+    assert "Quantas vezes" in replies[7]
+    assert "quantos km" in replies[8]
+    assert "treinador" in replies[9]
+    assert "em quanto tempo" in replies[10]
+    assert "Quais dias" in replies[11]
 
     data = json.loads(
         (profile_repo.storage / "ciclano.json").read_text(
@@ -566,7 +572,7 @@ def test_confirm_days_step_echoes_chosen_days(tmp_path):
 
     replies, onboarding_repo, _ = _run_conversation(
         tmp_path,
-        FULL_CONVERSATION[:13],  # até a resposta dos dias
+        FULL_CONVERSATION[:14],  # até a resposta dos dias
     )
 
     # resposta à escolha dos dias: eco + pedido de confirmação
@@ -583,7 +589,7 @@ def test_correction_at_confirm_days_updates_and_reasks(tmp_path):
     """No passo de confirmar os dias, reescrever os dias atualiza e pede
     confirmação de novo — não avança com o valor antigo."""
 
-    conversation = FULL_CONVERSATION[:13] + [
+    conversation = FULL_CONVERSATION[:14] + [
         (
             "na verdade segunda, quarta e sexta",
             {"corrections": {"days": ["Monday", "Wednesday", "Friday"]}},
@@ -597,10 +603,10 @@ def test_correction_at_confirm_days_updates_and_reasks(tmp_path):
     replies, _, profile_repo = _run_conversation(tmp_path, conversation)
 
     # eco inicial mostrava terça/sábado
-    assert "terça-feira" in replies[12]
+    assert "terça-feira" in replies[13]
 
     # após a correção, reecoa já com os dias novos
-    corrected_echo = replies[13]
+    corrected_echo = replies[14]
     assert "Ajustei" in corrected_echo
     assert "segunda-feira" in corrected_echo
     assert "sexta-feira" in corrected_echo
@@ -618,7 +624,7 @@ def test_reject_at_confirm_days_reasks_days(tmp_path):
     """Dizer "não" na confirmação dos dias volta a perguntar os dias —
     não apaga o cadastro."""
 
-    conversation = FULL_CONVERSATION[:13] + [
+    conversation = FULL_CONVERSATION[:14] + [
         ("não, tá errado", {"confirmed": False}),
     ]
 
@@ -745,6 +751,7 @@ COACH_CONVERSATION_START = [
     ("oi", {}),
     ("Treinada", {"name": "Treinada"}),
     ("30", {"age": 30}),
+    ("mulher", {"sex": "F"}),
     ("60kg", {"weight": 60.0}),
     ("1.60", {"height": 1.60}),
     ("tenho sim", {"has_strava": True}),
