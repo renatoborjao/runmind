@@ -222,8 +222,14 @@ class FitnessEvolutionWriter:
 
         if ef.ref_hr and ef.pace_gain_sec and ef.pace_gain_sec > 0:
 
+            amount = (
+                f"mais de {ef.pace_gain_sec}"
+                if ef.pace_gain_capped
+                else f"~{ef.pace_gain_sec}"
+            )
+
             return (
-                f"na mesma FC (~{ef.ref_hr} bpm), ~{ef.pace_gain_sec} s/km mais "
+                f"na mesma FC (~{ef.ref_hr} bpm), {amount} s/km mais "
                 "rápido que no começo"
             )
 
@@ -231,8 +237,14 @@ class FitnessEvolutionWriter:
 
             pace = PaceFormatter.format(ef.ref_pace)
 
+            amount = (
+                f"mais de {abs(ef.hr_drop_bpm)}"
+                if ef.hr_drop_capped
+                else f"~{abs(ef.hr_drop_bpm)}"
+            )
+
             return (
-                f"no mesmo pace (~{pace}/km), FC ~{abs(ef.hr_drop_bpm)} bpm mais "
+                f"no mesmo pace (~{pace}/km), FC {amount} bpm mais "
                 "alta que no começo"
             )
 

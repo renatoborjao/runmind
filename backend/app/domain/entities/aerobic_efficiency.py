@@ -38,6 +38,13 @@ class AerobicEfficiency:
     pace_gain_sec: int | None = None   # s/km mais rápido na MESMA FC
     hr_drop_bpm: int | None = None     # bpm a menos no MESMO pace
 
+    # teto de credibilidade: uma rampa dramática (iniciante evoluindo rápido)
+    # gera um número REAL porém incrível (ex.: 105 s/km) que soa como bug. Acima
+    # de um limite plausível, guardamos o TETO e marcamos capped=True — o writer
+    # fraseia "mais de X" (honesto e crível) em vez de cuspir o número cru.
+    pace_gain_capped: bool = False
+    hr_drop_capped: bool = False
+
     @property
     def has_data(self) -> bool:
 
