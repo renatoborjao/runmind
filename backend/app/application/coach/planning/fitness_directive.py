@@ -34,9 +34,10 @@ _TAIL_GRADUAL = (
 
 def fitness_plan_directive(evo: FitnessEvolution) -> str:
     """Diretriz pro prompt do plano a partir do veredito de evolução. Vazio
-    quando não há sinal com lastro (INSUFFICIENT)."""
+    quando não há sinal com lastro (INSUFFICIENT) ou quando o dado é velho
+    (parou de correr) — não empurra uma direção baseada em foto antiga."""
 
-    if not evo.has_data:
+    if evo.stale or not evo.has_data:
 
         return ""
 

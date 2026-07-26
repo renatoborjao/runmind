@@ -205,6 +205,65 @@ def test_analyze_degrades_to_ef_when_health_is_empty():
     assert evo.direction == EVO_IMPROVING
 
 
+# -- guard de dado velho (honestidade da leitura) ---------------------
+
+def test_days_since_last_run_measures_gap_to_reference():
+
+    runs = [
+        make_activity(
+            id=1, start_date=datetime(2026, 7, 10, 7),
+            distance=10000.0, average_speed=3.2, average_heartrate=150.0,
+        ),
+        make_activity(
+            id=2, start_date=datetime(2026, 7, 3, 7),
+            distance=10000.0, average_speed=3.2, average_heartrate=150.0,
+        ),
+    ]
+
+    # última corrida = 10/07; REF = 25/07 -> 15 dias
+    assert FitnessEvolutionAnalyzer._days_since_last_run(runs, REF) == 15
+
+
+def test_days_since_last_run_none_without_runs():
+
+    assert FitnessEvolutionAnalyzer._days_since_last_run([], REF) is None
+
+
+def test_stale_when_stopped_running_even_with_ef_data():
+    """8 corridas comparáveis DENTRO da janela, mas a última foi há mais de 3
+    semanas: a leitura tem EF (has_data) porém é STALE — reflete um momento
+    passado, não decreta 'evoluindo agora'."""
+
+    runs = [
+        make_activity(
+            id=3000 + i,
+            start_date=datetime(2026, 6, 1, 7) + timedelta(days=i * 4),
+            distance=10000.0,
+            average_speed=3.20 + i * 0.03,
+            average_heartrate=150.0,
+        )
+        for i in range(8)   # última: 29/06, ~26 dias antes de REF
+    ]
+
+    evo = FitnessEvolutionAnalyzer.analyze(
+        runs, health_series=[], reference_date=REF,
+    )
+
+    assert evo.has_data                  # o EF juntou lastro
+    assert evo.days_since_last_run > 21
+    assert evo.stale                     # mas é velho
+
+
+def test_fresh_runs_are_not_stale():
+
+    evo = FitnessEvolutionAnalyzer.analyze(
+        _rising_runs(), health_series=[], reference_date=REF,
+    )
+
+    assert not evo.stale
+    assert evo.days_since_last_run <= 21
+
+
 def test_thin_health_series_abstains():
     """Poucos dias de VO₂máx não viram tendência (não inventa sinal)."""
 

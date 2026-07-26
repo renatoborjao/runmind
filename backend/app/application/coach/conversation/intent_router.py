@@ -18,6 +18,8 @@ class ChatIntent(str, Enum):
 
     FITNESS_TREND = "FITNESS_TREND"
 
+    STATE_PORTRAIT = "STATE_PORTRAIT"
+
 
 # Pedido claro sobre o treino JÁ FEITO (quer a análise completa).
 _LAST_PATTERNS = [
@@ -69,6 +71,20 @@ _FITNESS_PATTERNS = [
     r"\bmeu (fitness|condicionamento|fisico)\b",
 ]
 
+# Pergunta HOLÍSTICA ("como estou no geral / me dá um raio-x") — quer o retrato
+# unificado (corpo & carga + forma), não um eixo só. Frases genéricas de
+# propósito, distintas de corpo/forma (que exigem palavra específica).
+_PORTRAIT_PATTERNS = [
+    r"^como (eu )?(estou|to|tou|ando)\s*\??$",
+    r"\bcomo (eu )?(estou|to|tou|ando) (no geral|de modo geral|no momento|indo|hoje)\b",
+    r"\bpanorama\b",
+    r"\braio.?x\b",
+    r"\b(visao|resumo|quadro|estado) geral\b",
+    r"\bcomo (voce )?me ve\b",
+    r"\bmeu (estado|panorama)\b",
+    r"\bme (da|de|manda|mostra) (um |o )?(raio.?x|panorama|resumo geral|quadro geral)\b",
+]
+
 _LAST_REGEXES = [re.compile(p) for p in _LAST_PATTERNS]
 
 _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
@@ -78,6 +94,8 @@ _WEEKLY_PLAN_REGEXES = [re.compile(p) for p in _WEEKLY_PLAN_PATTERNS]
 _BODY_REGEXES = [re.compile(p) for p in _BODY_PATTERNS]
 
 _FITNESS_REGEXES = [re.compile(p) for p in _FITNESS_PATTERNS]
+
+_PORTRAIT_REGEXES = [re.compile(p) for p in _PORTRAIT_PATTERNS]
 
 
 class IntentRouter:
@@ -111,6 +129,10 @@ class IntentRouter:
         if any(regex.search(normalized) for regex in _FITNESS_REGEXES):
 
             matched.append(ChatIntent.FITNESS_TREND)
+
+        if any(regex.search(normalized) for regex in _PORTRAIT_REGEXES):
+
+            matched.append(ChatIntent.STATE_PORTRAIT)
 
         if len(matched) == 1:
 

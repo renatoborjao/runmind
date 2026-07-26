@@ -7,6 +7,9 @@ from app.application.coach.intelligence.body_reading_service import (
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
+from app.application.coach.intelligence.state_portrait_service import (
+    StatePortraitService,
+)
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
@@ -15,6 +18,9 @@ from app.application.coach.writer.body_reading_writer import (
 )
 from app.application.coach.writer.fitness_evolution_writer import (
     FitnessEvolutionWriter,
+)
+from app.application.coach.writer.state_portrait_writer import (
+    StatePortraitWriter,
 )
 from app.application.orchestrators.last_training_report import (
     LastTrainingReport,
@@ -135,6 +141,15 @@ class OnDemandAnswers:
             evolution = FitnessReadingService.read_evolution(profile)
 
             return FitnessEvolutionWriter.write(evolution, runner.name)
+
+        if intent == ChatIntent.STATE_PORTRAIT:
+
+            # retrato ÚNICO: corpo & carga + forma cruzados num panorama só.
+            # None (nenhum eixo com lastro) cai no Gemini, que responde a
+            # partir do contexto.
+            reading, evolution = StatePortraitService.read(profile)
+
+            return StatePortraitWriter.write(reading, evolution, runner.name)
 
         return None
 

@@ -12,6 +12,12 @@ from app.application.coach.intelligence.checkin_service import (
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
+from app.application.coach.intelligence.state_portrait_service import (
+    StatePortraitService,
+)
+from app.application.coach.writer.state_portrait_writer import (
+    StatePortraitWriter,
+)
 from app.application.history.enriched_history_builder import (
     EnrichedHistoryBuilder,
 )
@@ -141,6 +147,36 @@ async def fitness(profile: str):
     try:
 
         return asdict(FitnessReadingService.read_evolution(profile))
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/portrait/{profile}")
+async def portrait(profile: str):
+    """Retrato ÚNICO "como você está": corpo & carga + forma cruzados. Mostra o
+    veredito de cada eixo e a mensagem composta — janela de inspeção do
+    panorama sem enviar nada ao atleta."""
+
+    try:
+
+        reading, evolution = StatePortraitService.read(profile, persist=False)
+
+        return {
+            "body_state": reading.body_state,
+            "limiter": reading.limiter,
+            "load_status": reading.load.status,
+            "evolution_direction": evolution.direction,
+            "evolution_stale": evolution.stale,
+            "days_since_last_run": evolution.days_since_last_run,
+            "message": StatePortraitWriter.write(
+                reading, evolution, profile
+            ),
+        }
 
     except Exception as e:
 

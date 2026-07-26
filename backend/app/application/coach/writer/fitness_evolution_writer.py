@@ -33,6 +33,13 @@ class FitnessEvolutionWriter:
         """Mensagem completa da evolução. None quando não há NENHUM sinal com
         lastro (o chamador decide o fallback)."""
 
+        # dado velho: faz tempo demais sem correr — não damos veredito de
+        # "agora" como se fosse fresco. Isto vem ANTES do has_data: mesmo com
+        # sinal antigo com lastro, a leitura honesta é "sem leitura fresca".
+        if evo.stale:
+
+            return FitnessEvolutionWriter._stale(evo, runner_name)
+
         if not evo.has_data:
 
             return None
@@ -58,6 +65,12 @@ class FitnessEvolutionWriter:
         """Uma linha compacta pro recap mensal. Delega ao EF (o sinal
         sempre-presente e tangível)."""
 
+        # dado velho: sem corrida recente, a linha de forma seria enganosa —
+        # cala (o recap simplesmente omite a linha de evolução).
+        if evo.stale:
+
+            return None
+
         if evo.ef is None:
 
             return None
@@ -68,7 +81,41 @@ class FitnessEvolutionWriter:
 
         return AerobicEfficiencyWriter.line(evo.ef)
 
+    @staticmethod
+    def tangible(evo: FitnessEvolution) -> str | None:
+        """A tradução sentível do EF numa linha (no mesmo esforço, quanto mais
+        rápido / na mesma FC). Pública pra o retrato unificado reusar sem
+        duplicar a regra. None quando não há EF com tamanho."""
+
+        if evo.ef is None:
+
+            return None
+
+        return FitnessEvolutionWriter._ef_tangible(evo.ef)
+
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _stale(evo: FitnessEvolution, name: str) -> str:
+        """Sem corrida recente: honesto é dizer que a leitura é de um momento
+        passado, não dar um veredito velho como se fosse de agora."""
+
+        days = evo.days_since_last_run
+
+        gap = f"faz {days} dias" if days else "faz um tempo"
+
+        return "\n".join(
+            [
+                f"😴 Ainda sem leitura fresca da tua evolução, {name}.",
+                "",
+                f"{gap.capitalize()} que não registro uma corrida sua — então o "
+                "que eu tenho reflete aquele momento, não o de agora. Prefiro "
+                "não te dar um veredito velho como se fosse atual.",
+                "",
+                "🎯 Quando você voltar a rodar, em poucas corridas eu já releio "
+                "tua forma com dado fresco. 👊",
+            ]
+        )
 
     @staticmethod
     def _headline(evo: FitnessEvolution, name: str) -> str:

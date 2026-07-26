@@ -1,5 +1,5 @@
-from app.application.coach.intelligence.body_reading_service import (
-    BodyReadingService,
+from app.application.coach.intelligence.state_portrait_service import (
+    StatePortraitService,
 )
 from app.application.coach.memory.coach_learning_engine import (
     CoachLearningEngine,
@@ -13,8 +13,8 @@ from app.application.coach.memory.coaching_signal_recorder import (
 from app.application.coach.memory.week_evidence_builder import (
     WeekEvidenceBuilder,
 )
-from app.application.coach.writer.body_reading_writer import (
-    BodyReadingWriter,
+from app.application.coach.writer.state_portrait_writer import (
+    StatePortraitWriter,
 )
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
@@ -33,7 +33,6 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import now_in, use_athlete_timezone
-from app.core.config import get_settings
 from app.infrastructure.persistence.coach_learning_repository import (
     CoachLearningRepository,
 )
@@ -134,10 +133,10 @@ class WeeklyReviewNotifier:
             message,
         )
 
-        # logo depois, a "leitura do corpo" (carga à luz da recuperação) —
-        # mensagem separada pra não misturar o tom, só pra quem tem dado de
-        # saúde do Garmin. O gate semanal acima já cobre o dedup.
-        await WeeklyReviewNotifier._send_body_reading(profile, runner)
+        # logo depois, o RETRATO ÚNICO "como você está" (corpo & carga + forma
+        # cruzados) — mensagem separada pra não misturar o tom. O gate semanal
+        # acima já cobre o dedup.
+        await WeeklyReviewNotifier._send_state_portrait(profile, runner)
 
         # e, silenciosamente, o cérebro coach APRENDE com a semana que fechou
         # (nada é enviado ao atleta — modo observação; ver [[project]]).
@@ -184,35 +183,26 @@ class WeeklyReviewNotifier:
             print(f"Falha ao destilar aprendizados de '{profile}': {e}")
 
     @staticmethod
-    async def _send_body_reading(profile: str, runner) -> None:
-        """Leitura do corpo pós-resumo. Best-effort: falhar aqui nunca
-        derruba o resumo (que já foi enviado)."""
+    async def _send_state_portrait(profile: str, runner) -> None:
+        """Retrato único "como você está" pós-resumo (corpo & carga + forma
+        cruzados). Best-effort: falhar aqui nunca derruba o resumo (que já foi
+        enviado). O serviço grava o snapshot canônico de domingo do corpo.
+        None quando nenhum eixo tem lastro (atleta novíssimo) → não envia."""
 
         try:
 
-            # grava o snapshot de domingo (a série canônica da trajetória) e
-            # compara com as leituras anteriores
-            reading, trajectory = BodyReadingService.read(profile)
+            reading, evolution = StatePortraitService.read(profile)
 
-            # sem recuperação do Garmin: não há leitura do corpo pra mandar
-            # (atleta só-Strava recebe só o resumo normal)
-            if not reading.recovery.has_data:
+            message = StatePortraitWriter.write(
+                reading, evolution, runner.name
+            )
+
+            if message is None:
 
                 return
-
-            # trajetória na mensagem só atrás da flag (modo observação)
-            note = (
-                trajectory
-                if get_settings().body_trajectory_in_message_enabled
-                else None
-            )
-
-            message = await BodyReadingWriter.write(
-                reading, runner.name, trajectory=note
-            )
 
             await CoachOutbox.send(runner, message)
 
         except Exception as e:
 
-            print(f"Falha na leitura do corpo de '{profile}': {e}")
+            print(f"Falha no retrato de '{profile}': {e}")

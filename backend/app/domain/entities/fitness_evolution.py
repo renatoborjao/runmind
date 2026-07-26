@@ -14,6 +14,12 @@ EVO_CLEAR = "CLEAR"
 EVO_MARGINAL = "MARGINAL"
 EVO_MIXED = "MIXED"   # sinais discordam (ex.: economia estável, VO₂máx subindo)
 
+# guard de dado velho: sem uma corrida registrada há mais que isto, a leitura
+# reflete um momento PASSADO, não o de agora — a forma aeróbica já começa a
+# destreinar em ~2-3 semanas paradas. Acima disso, não damos veredito de "agora"
+# como se fosse fresco; abstemos e avisamos. Ver [[project_ideias_produto]] #20.
+EVO_STALE_AFTER_DAYS = 21
+
 
 @dataclass(slots=True)
 class FitnessEvolution:
@@ -45,10 +51,26 @@ class FitnessEvolution:
     vo2max: SignalTrend | None = None
     rhr: SignalTrend | None = None
 
+    # dias desde a última corrida registrada (None = nenhuma corrida no
+    # histórico). Alimenta o guard de dado velho (`stale`).
+    days_since_last_run: int | None = None
+
     @property
     def has_data(self) -> bool:
 
         return self.direction != EVO_INSUFFICIENT
+
+    @property
+    def stale(self) -> bool:
+        """A leitura reflete um momento passado: faz tempo demais desde a
+        última corrida, então NÃO vale dar o veredito como se fosse de agora
+        (o corpo já pode ter mudado). O writer avisa; a diretriz de plano e a
+        linha do recap se calam."""
+
+        return (
+            self.days_since_last_run is not None
+            and self.days_since_last_run > EVO_STALE_AFTER_DAYS
+        )
 
     @property
     def improving(self) -> bool:

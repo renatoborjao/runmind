@@ -42,6 +42,17 @@ def _trend(direction):
     )
 
 
+def test_stale_reading_silences_directive():
+    """Dado velho (parou de correr): a diretriz se cala — não empurra uma
+    direção baseada em foto antiga (o plano fica igual ao de hoje)."""
+
+    evo = _evo(EVO_IMPROVING)
+
+    evo.days_since_last_run = 30
+
+    assert fitness_plan_directive(evo) == ""
+
+
 def test_insufficient_is_silent():
     """Sem sinal com lastro, nada entra no prompt (plano idêntico ao de hoje)."""
 
