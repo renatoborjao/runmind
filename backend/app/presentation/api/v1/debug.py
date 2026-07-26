@@ -12,6 +12,9 @@ from app.application.coach.intelligence.checkin_service import (
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
+from app.application.coach.intelligence.readiness_service import (
+    ReadinessService,
+)
 from app.application.coach.intelligence.state_portrait_service import (
     StatePortraitService,
 )
@@ -219,6 +222,36 @@ async def checkins(profile: str):
         return {
             "recent_rendered": CheckinService.render_recent(profile),
             "checkins": [asdict(c) for c in CheckinRepository().load(profile)],
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/readiness/{profile}")
+async def readiness(profile: str):
+    """Vigia de prontidão (MODO OBSERVAÇÃO): avalia o corpo à luz do treino de
+    hoje, mostra o veredito e o diário do que o coach DIRIA. Nada é enviado —
+    é a janela pra conferir os alertas antes de ligar o envio real."""
+
+    from app.infrastructure.persistence.readiness_diary_repository import (
+        ReadinessDiaryRepository,
+    )
+
+    try:
+
+        verdict, entry = await ReadinessService.evaluate(profile, persist=True)
+
+        return {
+            "verdict": asdict(verdict),
+            "today": asdict(entry),
+            "diary": [
+                asdict(e) for e in ReadinessDiaryRepository().load(profile)
+            ],
         }
 
     except Exception as e:

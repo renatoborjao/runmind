@@ -156,6 +156,13 @@ class Settings(BaseSettings):
     # até validar no /debug/body-trajectory/{profile} (modo observação).
     body_trajectory_in_message_enabled: bool = False
 
+    # Vigia de prontidão: a avaliação e o diário (GET /debug/readiness) rodam
+    # SEMPRE (observação). Esta flag controla só o ENVIO proativo dos alertas
+    # de prontidão (atenção/sinal verde) ao atleta. Fica DESLIGADA até validar
+    # o diário nos atletas reais. A sobrecarga (STRAINED) já é tratada pelo
+    # BodyConductNotifier — o vigia só cobre a lacuna (CAUTION/GREEN).
+    readiness_alerts_enabled: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
 
