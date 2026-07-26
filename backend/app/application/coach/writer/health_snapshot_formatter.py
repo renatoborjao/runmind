@@ -19,11 +19,14 @@ _TRAINING_STATUS = {
     "STRAINED": "sobrecarga",
 }
 
+# O HRV Status da Garmin compara o HRV recente com a faixa NORMAL do próprio
+# atleta (base pessoal de ~3 semanas). Traduzimos pro que o rótulo significa —
+# "equilibrado/desequilibrado" sozinho lia como se o RELÓGIO tivesse problema.
 _HRV_STATUS = {
-    "BALANCED": "equilibrado",
-    "UNBALANCED": "desequilibrado",
-    "LOW": "baixo",
-    "POOR": "ruim",
+    "BALANCED": "dentro da sua faixa normal",
+    "UNBALANCED": "fora da sua faixa normal",
+    "LOW": "abaixo do seu normal",
+    "POOR": "bem abaixo do seu normal",
 }
 
 
@@ -85,10 +88,11 @@ class HealthSnapshotFormatter:
 
             hrv = HealthSnapshotFormatter._num(recovery.hrv_recent)
 
-            # o STATUS de HRV é da própria Garmin (equilibrado/desequilibrado)
+            # o STATUS de HRV é da própria Garmin — descrito como faixa (não o
+            # rótulo cru, que soava como defeito do relógio)
             status = _HRV_STATUS.get(recovery.hrv_status or "")
 
-            status_txt = f" · Garmin: {status}" if status else ""
+            status_txt = f" · {status} (Garmin)" if status else ""
 
             lines.append(f"• 💓 HRV: {hrv} ms{arrow}{status_txt}")
 

@@ -77,7 +77,9 @@ def test_garmin_computed_numbers_are_shown():
     assert "Prontidão (Garmin): 74/100" in panel
     assert "Status de treino (Garmin): produtivo" in panel
     assert "nota Garmin 82/100" in panel        # colado no sono
-    assert "Garmin: equilibrado" in panel        # colado no HRV
+    # HRV status descrito como faixa (não "desequilibrado" cru, que soava
+    # como defeito do relógio)
+    assert "dentro da sua faixa normal (Garmin)" in panel
 
 
 def test_no_garmin_numbers_on_basic_watch():
