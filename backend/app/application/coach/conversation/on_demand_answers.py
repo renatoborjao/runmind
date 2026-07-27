@@ -13,6 +13,9 @@ from app.application.coach.intelligence.state_portrait_service import (
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
+from app.application.coach.planning.race_strategy_engine import (
+    RaceStrategyEngine,
+)
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
 )
@@ -23,6 +26,7 @@ from app.application.coach.writer.help_menu import HelpMenu
 from app.application.coach.writer.state_portrait_writer import (
     StatePortraitWriter,
 )
+from app.application.history.metrics_resolver import MetricsResolver
 from app.application.orchestrators.last_training_report import (
     LastTrainingReport,
 )
@@ -35,6 +39,7 @@ from app.application.planner.weekly_plan_matcher import (
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
@@ -151,6 +156,27 @@ class OnDemandAnswers:
             reading, evolution = StatePortraitService.read(profile)
 
             return StatePortraitWriter.write(reading, evolution, runner.name)
+
+        if intent == ChatIntent.RACE_STRATEGY:
+
+            goal = BuildTrainingGoal.execute(runner)
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            metrics = MetricsResolver.resolve(runner, history)
+
+            message = RaceStrategyEngine.build(runner.name, goal, metrics)
+
+            # sem distância/tempo e sem forma pra estimar: pede o alvo
+            if message is None:
+
+                return (
+                    "Bora montar sua estratégia de prova! 🏁 Me diz a "
+                    "distância e um tempo-alvo (ex.: '10 km em 50 min') que "
+                    "eu te passo o pace e os splits."
+                )
+
+            return message
 
         if intent == ChatIntent.HELP:
 

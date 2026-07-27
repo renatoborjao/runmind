@@ -18,6 +18,9 @@ from app.application.review.body_conduct_notifier import (
 from app.application.review.monthly_recap_notifier import (
     MonthlyRecapNotifier,
 )
+from app.application.review.race_companion_notifier import (
+    RaceCompanionNotifier,
+)
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
 from app.application.strava.strava_activity_catchup import (
     StravaActivityCatchup,
@@ -170,6 +173,17 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="external_plan_reminder",
+    )
+
+    # Companheiro de prova — 7h local: polimento, semana da prova, véspera e
+    # manhã da prova, ancorados na data da prova (dedup por marco). Silencioso
+    # quando não há prova marcada.
+    _scheduler.add_job(
+        RaceCompanionNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="race_companion",
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã

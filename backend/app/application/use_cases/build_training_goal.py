@@ -32,22 +32,34 @@ class BuildTrainingGoal:
     def _distance_km(
         target_race: str | None,
     ) -> float:
-        """"10 km" -> 10.0, "21k" -> 21.0, "5,5 km" -> 5.5."""
+        """"10 km" -> 10.0, "21k" -> 21.0, "5,5 km" -> 5.5. Provas nomeadas
+        sem número ("meia maratona", "maratona") viram a distância oficial."""
 
         if not target_race:
 
             return DEFAULT_DISTANCE_KM
+
+        lowered = target_race.lower()
+
+        # nomeadas sem número explícito (antes do regex, que não acha dígito)
+        if "meia" in lowered and "marat" in lowered:
+
+            return 21.0975
 
         match = re.search(
             r"(\d+(?:[.,]\d+)?)",
             target_race,
         )
 
-        if not match:
+        if match:
 
-            return DEFAULT_DISTANCE_KM
+            return float(match.group(1).replace(",", "."))
 
-        return float(match.group(1).replace(",", "."))
+        if "marat" in lowered:
+
+            return 42.195
+
+        return DEFAULT_DISTANCE_KM
 
     @staticmethod
     def _race_date(

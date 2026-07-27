@@ -306,3 +306,28 @@ def test_help_does_not_collide_with_plan():
         IntentRouter.detect("qual meu plano da semana?")
         == ChatIntent.WEEKLY_PLAN
     )
+
+
+def test_como_corro_a_prova_is_race_strategy():
+
+    assert (
+        IntentRouter.detect("como corro minha prova?")
+        == ChatIntent.RACE_STRATEGY
+    )
+
+
+def test_pace_da_prova_is_race_strategy():
+
+    assert (
+        IntentRouter.detect("qual o pace da prova?")
+        == ChatIntent.RACE_STRATEGY
+    )
+
+
+def test_race_strategy_does_not_collide_with_weekly_plan():
+    """'plano da prova' é estratégia; 'plano da semana' é a agenda."""
+
+    assert (
+        IntentRouter.detect("qual o plano da semana?")
+        == ChatIntent.WEEKLY_PLAN
+    )
