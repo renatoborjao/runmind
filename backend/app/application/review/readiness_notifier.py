@@ -14,15 +14,12 @@ depois, quando o Renato aprovar os alertas no diário. Ver
 from app.application.coach.intelligence.readiness_service import (
     ReadinessService,
 )
-from app.application.notifications.coach_outbox import CoachOutbox
 from app.core.config import get_settings
 from app.domain.entities.readiness_verdict import (
     READINESS_CAUTION,
     READINESS_GREEN,
     ReadinessVerdict,
 )
-from app.domain.entities.runner_profile import RunnerProfile
-from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 
 _ALERT_TIERS = frozenset({READINESS_CAUTION, READINESS_GREEN})
 
@@ -30,54 +27,75 @@ _ALERT_TIERS = frozenset({READINESS_CAUTION, READINESS_GREEN})
 class ReadinessNotifier:
 
     @staticmethod
-    async def observe_and_maybe_alert(
-        profile: str,
-        runner: RunnerProfile,
-    ) -> None:
+    async def block(profile: str) -> str | None:
+        """Bloco de prontidão pra 'bom dia' do despertar: OBSERVA sempre (grava
+        o diário — o gate do Renato) e, atrás da flag, DEVOLVE a mensagem
+        narrada (ou None). Não envia — quem compõe o briefing junta os blocos.
+
+        None quando: flag desligada, corpo neutro, ou o estado não virou."""
 
         # avalia + grava o diário SEMPRE (observação) — isto é o gate do Renato
         verdict, entry = await ReadinessService.evaluate(profile)
 
-        # daqui pra baixo é ENVIO — só com a flag ligada
+        # daqui pra baixo é FALA — só com a flag ligada
         if not get_settings().readiness_alerts_enabled:
 
-            return
+            return None
 
         # só a lacuna (CAUTION/GREEN) e só quando o estado VIROU (would_notify)
         if verdict.tier not in _ALERT_TIERS or not entry.would_notify:
 
-            return
+            return None
 
-        # 1x por (dia, estado) — dedup extra por cima da mudança de estado
-        period = f"{entry.day}:{verdict.tier}"
-
-        if DispatchGuard.already_sent("readiness_alert", profile, period):
-
-            return
-
-        message = ReadinessNotifier._message(verdict)
-
-        await CoachOutbox.send(runner, message)
-
-        DispatchGuard.mark("readiness_alert", profile, period)
+        return ReadinessNotifier._message(verdict)
 
     @staticmethod
     def _message(verdict: ReadinessVerdict) -> str:
 
+        # narra o PORQUÊ: cita os sinais reais na voz do coach, em vez do
+        # genérico. Sem sinais capturados, cai num texto ainda humano.
+        observed = ReadinessNotifier._join_pt(verdict.signals)
+
         if verdict.tier == READINESS_CAUTION:
 
-            foco = f" (principalmente {verdict.limiter})" if verdict.limiter else ""
+            abertura = (
+                f"Oi! Reparei que {observed}"
+                if observed
+                else "Oi! Dei uma olhada no seu corpo hoje e a recuperação "
+                "está pedindo atenção"
+            )
 
             return (
-                "Oi! Dei uma olhada no seu corpo hoje e a recuperação está "
-                f"pedindo atenção{foco}. O treino de hoje é dos puxados — se "
-                "sentir que não rende, pode pegar leve sem culpa. Recuperar "
-                "bem agora é o que sustenta a evolução. 💪"
+                f"{abertura} — por isso hoje, se o treino puxado não render, "
+                "pode pegar leve sem culpa. Recuperar bem agora é o que "
+                "sustenta a evolução. 💪"
             )
 
         # GREEN
-        return (
-            "Bom dia! Seu corpo está recuperado e com espaço pra puxar. Se "
-            "hoje é dia de treino forte, pode ir com confiança — o momento "
-            "está a favor. 🚀"
+        abertura = (
+            f"Bom dia! {observed[0].upper()}{observed[1:]}, "
+            "seu corpo está recuperado e com espaço pra puxar"
+            if observed
+            else "Bom dia! Seu corpo está recuperado e com espaço pra puxar"
         )
+
+        return (
+            f"{abertura}. Se hoje é dia de treino forte, pode ir com "
+            "confiança — o momento está a favor. 🚀"
+        )
+
+    @staticmethod
+    def _join_pt(items: tuple[str, ...]) -> str:
+        """Junta frases em pt-BR: 'a', 'a e b', 'a, b e c'."""
+
+        parts = [p for p in items if p]
+
+        if not parts:
+
+            return ""
+
+        if len(parts) == 1:
+
+            return parts[0]
+
+        return f"{', '.join(parts[:-1])} e {parts[-1]}"

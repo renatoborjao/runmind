@@ -136,3 +136,66 @@ def test_reason_carrega_limitador_e_sinais_concretos():
     assert "HRV caindo" in v.reason
     assert "FC de repouso subindo" in v.reason
     assert "6 de 14 noites" in v.reason
+
+
+def test_caution_signals_em_linguagem_humana():
+    """Os sinais que o coach FALA vêm em pt-BR de gente, não no formato de
+    debug do reason."""
+
+    recovery = RecoveryTrend(
+        days_covered=14,
+        hrv_recent=42.0, hrv_direction=FALLING,
+        short_nights=2, nights_counted=14,
+    )
+
+    v = ReadinessEvaluator.evaluate(
+        _reading(BODY_RECOVERY_FLAG, recovery=recovery, limiter="sono"),
+        DEMAND_DEMANDING,
+    )
+
+    joined = " | ".join(v.signals)
+
+    assert "noites curtas" in joined
+    assert "seu HRV vem caindo" in joined
+
+
+def test_caution_signals_uma_noite_no_singular():
+
+    recovery = RecoveryTrend(
+        days_covered=14, short_nights=1, nights_counted=14,
+    )
+
+    v = ReadinessEvaluator.evaluate(
+        _reading(BODY_RECOVERY_FLAG, recovery=recovery, limiter=None),
+        DEMAND_DEMANDING,
+    )
+
+    assert any("uma noite curta" in s for s in v.signals)
+
+
+def test_caution_sem_sinais_concretos_cita_o_limitador():
+
+    v = ReadinessEvaluator.evaluate(
+        _reading(BODY_RECOVERY_FLAG, limiter="sono"),
+        DEMAND_DEMANDING,
+    )
+
+    assert any("sono" in s for s in v.signals)
+
+
+def test_green_signals_positivos():
+
+    recovery = RecoveryTrend(
+        days_covered=14,
+        hrv_recent=60.0, hrv_direction=RISING,
+        short_nights=0, nights_counted=14,
+    )
+
+    v = ReadinessEvaluator.evaluate(
+        _reading(BODY_FRESH, recovery=recovery, limiter=None),
+        DEMAND_DEMANDING,
+    )
+
+    joined = " | ".join(v.signals)
+
+    assert "seu HRV vem subindo" in joined or "dormindo bem" in joined
