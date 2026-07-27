@@ -26,7 +26,7 @@ check() {
 }
 
 common_env=(
-  RETRY_SLEEP=0 MAX_ROUNDS=20 OCI_ADS="AD-1,AD-2"
+  RETRY_SLEEP=0 THROTTLE_SLEEP=0 MAX_ROUNDS=20 OCI_ADS="AD-1,AD-2"
   OCI_COMPARTMENT=x OCI_SUBNET=x OCI_IMAGE=x OCI_SSH_KEY=/dev/null
 )
 
@@ -71,6 +71,31 @@ check "$rc2" "1" "para num erro que não é de capacidade"
 echo "$out2" | grep -q "NÃO é de capacidade" \
   && check ok ok "explica o motivo da parada" \
   || check no ok "explica o motivo da parada"
+
+# --- caso 3: rate limit (429) nas 2 primeiras -> RETENTA, depois CRIA --
+COUNTER3="$WORK/count3"
+echo 0 > "$COUNTER3"
+
+cat > "$WORK/oci_429" <<EOF
+#!/usr/bin/env bash
+n=\$(cat "$COUNTER3"); n=\$((n + 1)); echo \$n > "$COUNTER3"
+if [ \$n -le 2 ]; then
+  echo '{"code": "TooManyRequests", "status": 429}' >&2
+  exit 1
+fi
+echo "instance RUNNING"
+exit 0
+EOF
+chmod +x "$WORK/oci_429"
+
+out3="$(env "${common_env[@]}" OCI_BIN="$WORK/oci_429" \
+        bash "$HERE/oracle_retry.sh" 2>&1)"
+rc3=$?
+
+check "$rc3" "0" "rate limit (429) NÃO é fatal: recua e retenta até criar"
+echo "$out3" | grep -q "rate limit (429)" \
+  && check ok ok "loga o recuo por rate limit" \
+  || check no ok "loga o recuo por rate limit"
 
 echo ""
 echo "RESULTADO: $pass ok, $fail falha(s)"
