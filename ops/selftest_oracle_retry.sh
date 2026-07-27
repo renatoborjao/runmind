@@ -97,6 +97,31 @@ echo "$out3" | grep -q "rate limit (429)" \
   && check ok ok "loga o recuo por rate limit" \
   || check no ok "loga o recuo por rate limit"
 
+# --- caso 4: timeout de rede nas 2 primeiras -> RETENTA, depois CRIA ---
+COUNTER4="$WORK/count4"
+echo 0 > "$COUNTER4"
+
+cat > "$WORK/oci_net" <<EOF
+#!/usr/bin/env bash
+n=\$(cat "$COUNTER4"); n=\$((n + 1)); echo \$n > "$COUNTER4"
+if [ \$n -le 2 ]; then
+  echo "RequestException: The connection to endpoint timed out." >&2
+  exit 1
+fi
+echo "instance RUNNING"
+exit 0
+EOF
+chmod +x "$WORK/oci_net"
+
+out4="$(env "${common_env[@]}" OCI_BIN="$WORK/oci_net" \
+        bash "$HERE/oracle_retry.sh" 2>&1)"
+rc4=$?
+
+check "$rc4" "0" "erro transitório de rede NÃO é fatal: recua e retenta até criar"
+echo "$out4" | grep -q "transitório de rede" \
+  && check ok ok "loga o recuo por erro de rede" \
+  || check no ok "loga o recuo por erro de rede"
+
 echo ""
 echo "RESULTADO: $pass ok, $fail falha(s)"
 [ "$fail" -eq 0 ]

@@ -79,9 +79,16 @@ while true; do
       echo "  ⏳ rate limit (429) em $AD — recuo ${THROTTLE_SLEEP}s e sigo"
       sleep "$THROTTLE_SLEEP"
 
+    elif grep -qiE "timed out|timeout|requestexception|connection error|connectionerror|max retries|serviceunavailable|internalservererror|\"status\": 5[0-9][0-9]" "$ERR_LOG"; then
+
+      # rede/servidor transitório (timeout de conexão, 5xx, PC que dormiu e
+      # acordou com a conexão estourada): NÃO é pra desistir — recua e segue.
+      echo "  🌐 erro transitório de rede/servidor em $AD — recuo ${RETRY_SLEEP}s e sigo"
+      sleep "$RETRY_SLEEP"
+
     else
 
-      echo "❌ erro que NÃO é de capacidade nem rate-limit — parando pra você ver:"
+      echo "❌ erro que NÃO é de capacidade, rate-limit nem rede — parando pra você ver:"
       cat "$ERR_LOG"
       exit 1
 
