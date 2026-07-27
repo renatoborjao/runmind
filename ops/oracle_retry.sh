@@ -35,7 +35,8 @@ IFS=',' read -r -a ADS <<< "${OCI_ADS:-AD-1,AD-2,AD-3}"
 
 # ---- knobs (também usados pelo self-test) --------------------------
 OCI_BIN="${OCI_BIN:-oci}"          # binário da OCI CLI (o self-test injeta um fake)
-RETRY_SLEEP="${RETRY_SLEEP:-120}"  # segundos entre rodadas
+RETRY_SLEEP="${RETRY_SLEEP:-300}"  # segundos entre rodadas (gentil: evita rate limit)
+THROTTLE_SLEEP="${THROTTLE_SLEEP:-900}"  # recuo maior quando a Oracle rate-limita (429)
 MAX_ROUNDS="${MAX_ROUNDS:-0}"      # 0 = infinito (o self-test limita)
 
 ERR_LOG="$(mktemp)"
@@ -71,9 +72,16 @@ while true; do
 
       echo "  sem vaga em $AD, sigo tentando"
 
+    elif grep -qiE "toomanyrequests|\"status\": 429|throttl" "$ERR_LOG"; then
+
+      # rate limit: transitório, NÃO é pra desistir — só estamos indo rápido
+      # demais. Recua bem mais antes da próxima e segue no loop.
+      echo "  ⏳ rate limit (429) em $AD — recuo ${THROTTLE_SLEEP}s e sigo"
+      sleep "$THROTTLE_SLEEP"
+
     else
 
-      echo "❌ erro que NÃO é de capacidade — parando pra você ver:"
+      echo "❌ erro que NÃO é de capacidade nem rate-limit — parando pra você ver:"
       cat "$ERR_LOG"
       exit 1
 
