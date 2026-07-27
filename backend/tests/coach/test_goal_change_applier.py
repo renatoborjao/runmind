@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.coach.conversation.goal_change_applier import (
+    _ASK_WHICH_GOAL,
     GoalChangeApplier,
 )
 from tests.coach.factories import make_runner
@@ -9,11 +10,28 @@ from tests.coach.factories import make_runner
 MODULE = "app.application.coach.conversation.goal_change_applier"
 
 
+def _patches(pending=False):
+    """Contexto comum: estado pendente controlável + repos/serviços mockados."""
+
+    pending_repo = MagicMock()
+    pending_repo.is_pending.return_value = pending
+
+    return (
+        patch(f"{MODULE}.PendingGoalRepository", return_value=pending_repo),
+        pending_repo,
+    )
+
+
 def test_not_a_goal_change_returns_none_without_calling_ia():
 
     runner = make_runner()
 
-    with patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser:
+    pending_patch, pending_repo = _patches(pending=False)
+
+    with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+    ):
 
         reply = asyncio.run(
             GoalChangeApplier.handle(
@@ -23,15 +41,20 @@ def test_not_a_goal_change_returns_none_without_calling_ia():
 
     assert reply is None
     mock_parser.parse.assert_not_called()
+    pending_repo.mark.assert_not_called()
 
 
-def test_gate_passes_but_ia_finds_no_goal_falls_through():
-    """Portão barato deu falso positivo ('prova' + 'agora'), mas a IA não
-    achou uma declaração de objetivo de verdade -> segue o fluxo normal."""
+def test_false_positive_without_explicit_change_falls_through():
+    """Portão barato deu falso positivo ('prova' + 'agora'), mas não é um
+    pedido CLARO de trocar meta e a IA não achou objetivo -> segue o fluxo
+    normal, sem perguntar nada nem armar estado."""
 
     runner = make_runner()
 
+    pending_patch, pending_repo = _patches(pending=False)
+
     with (
+        pending_patch,
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
     ):
@@ -46,13 +69,128 @@ def test_gate_passes_but_ia_finds_no_goal_falls_through():
 
     assert reply is None
     mock_repo_cls.return_value.update_fields.assert_not_called()
+    pending_repo.mark.assert_not_called()
 
 
-def test_new_goal_updates_profile_regenerates_and_confirms():
+def test_explicit_change_without_goal_arms_pending_and_asks():
+    """'quero trocar meus objetivos' (sem dizer qual): o coach pergunta e
+    ARMA o estado, pra ler a resposta seguinte como a meta nova."""
+
+    runner = make_runner()
+
+    pending_patch, pending_repo = _patches(pending=False)
+
+    with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+    ):
+
+        mock_parser.parse = AsyncMock(return_value={})
+
+        reply = asyncio.run(
+            GoalChangeApplier.handle(
+                "renato", runner, "quero trocar meus objetivos",
+            )
+        )
+
+    assert reply == _ASK_WHICH_GOAL
+    pending_repo.mark.assert_called_once_with("renato")
+    mock_repo_cls.return_value.update_fields.assert_not_called()
+
+
+def test_pending_answer_without_goal_releases_state():
+    """Estava esperando a meta, mas a resposta não trouxe uma -> solta o
+    estado e deixa o fluxo normal seguir."""
+
+    runner = make_runner()
+
+    pending_patch, pending_repo = _patches(pending=True)
+
+    with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+    ):
+
+        mock_parser.parse = AsyncMock(return_value={})
+
+        reply = asyncio.run(
+            GoalChangeApplier.handle(
+                "renato", runner, "ah deixa pra lá, outra hora",
+            )
+        )
+
+    assert reply is None
+    pending_repo.clear.assert_called_once_with("renato")
+
+
+def test_pending_answer_with_aspiration_registers_without_regenerating():
+    """Resposta pós-pergunta ('quero correr 21km, com saúde') SEM data:
+    registra a meta + memória de aspiração e MANTÉM a semana — não regera
+    plano agressivo. É o bug que estamos matando."""
 
     runner = make_runner(external_coach=False)
 
+    pending_patch, pending_repo = _patches(pending=True)
+
     with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
+        patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
+    ):
+
+        mock_parser.parse = AsyncMock(
+            return_value={
+                "goal": "correr 21km com saúde",
+                "target_race": "21 km",
+                "target_time": None,
+                "race_date": None,
+            }
+        )
+
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+
+        mock_provider.for_profile = AsyncMock()
+
+        reply = asyncio.run(
+            GoalChangeApplier.handle(
+                "renato", runner, "quero conseguir correr 21km, com saúde",
+            )
+        )
+
+    # meta registrada (só o goal — sem virar a semana nem gravar prova/data)
+    mock_repo.update_fields.assert_called_once_with(
+        "renato",
+        {"goal": "correr 21km com saúde"},
+    )
+
+    # aspiração de longo prazo vira memória 'objetivo'
+    mock_memory.process.assert_called_once()
+    ops = mock_memory.process.call_args.args[1]
+    assert ops["add"][0]["category"] == "objetivo"
+    assert "correr 21km com saúde" in ops["add"][0]["content"]
+
+    # NÃO regenerou a semana
+    mock_provider.for_profile.assert_not_awaited()
+
+    # estado consumido + mensagem tranquiliza (mantém a semana)
+    pending_repo.clear.assert_called_once_with("renato")
+    assert "correr 21km com saúde" in reply
+    assert "semana atual segue" in reply
+
+
+def test_concrete_goal_with_target_time_regenerates_and_confirms():
+    """Meta com tempo-alvo (concreta): atualiza o perfil e regera a semana."""
+
+    runner = make_runner(external_coach=False)
+
+    pending_patch, _ = _patches(pending=False)
+
+    with (
+        pending_patch,
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
@@ -100,19 +238,22 @@ def test_new_goal_updates_profile_regenerates_and_confirms():
     assert "[PLANO]" in reply
 
 
-def test_new_goal_without_race_details_does_not_wipe_existing_race():
-    """'meu objetivo agora é só saúde' não deve apagar a prova já
-    registrada (só quando o atleta disser explicitamente que mudou)."""
+def test_aspiration_one_shot_updates_goal_only():
+    """'quero mudar meu objetivo pra só saúde' (uma tacada, sem data/tempo)
+    não deve apagar a prova já registrada — cai no caminho de aspiração."""
 
     runner = make_runner(
         target_race="10 km", target_time="00:50:00", race_date="2026-09-01",
     )
 
+    pending_patch, _ = _patches(pending=False)
+
     with (
+        pending_patch,
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
-        patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
     ):
 
         mock_parser.parse = AsyncMock(
@@ -127,15 +268,11 @@ def test_new_goal_without_race_details_does_not_wipe_existing_race():
         mock_repo = MagicMock()
         mock_repo_cls.return_value = mock_repo
 
-        mock_provider.for_profile = AsyncMock(
-            return_value=(runner, MagicMock()),
-        )
-
-        mock_formatter.week_plan_message.return_value = "[PLANO]"
+        mock_provider.for_profile = AsyncMock()
 
         asyncio.run(
             GoalChangeApplier.handle(
-                "renato", runner, "meu objetivo agora é só saúde",
+                "renato", runner, "quero mudar meu objetivo pra só saúde",
             )
         )
 
@@ -143,20 +280,31 @@ def test_new_goal_without_race_details_does_not_wipe_existing_race():
         "renato",
         {"goal": "só saúde e constância"},
     )
+    mock_memory.process.assert_called_once()
+    mock_provider.for_profile.assert_not_awaited()
 
 
-def test_external_coach_only_records_without_regenerating():
+def test_external_coach_concrete_goal_records_without_regenerating():
+    """Treinador humano + meta concreta: só registra, nunca regera o plano."""
 
     runner = make_runner(external_coach=True)
 
+    pending_patch, _ = _patches(pending=False)
+
     with (
+        pending_patch,
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
     ):
 
         mock_parser.parse = AsyncMock(
-            return_value={"goal": "correr mais leve"}
+            return_value={
+                "goal": "meia sub-2h",
+                "target_race": "21 km",
+                "target_time": "02:00:00",
+                "race_date": None,
+            }
         )
 
         mock_repo = MagicMock()
@@ -166,15 +314,10 @@ def test_external_coach_only_records_without_regenerating():
 
         reply = asyncio.run(
             GoalChangeApplier.handle(
-                "renato", runner, "quero mudar meu objetivo pra correr mais leve",
+                "renato", runner, "quero mudar minha meta pra meia sub-2h",
             )
         )
 
-    mock_repo.update_fields.assert_called_once_with(
-        "renato",
-        {"goal": "correr mais leve"},
-    )
-
+    mock_repo.update_fields.assert_called_once()
     mock_provider.for_profile.assert_not_awaited()
-
-    assert "correr mais leve" in reply
+    assert "meia sub-2h" in reply

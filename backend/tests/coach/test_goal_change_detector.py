@@ -38,3 +38,28 @@ def test_no_change_cue_is_not_a_change():
     assert not GoalChangeDetector.looks_like_goal_change(
         "gosto muito da minha meta atual"
     )
+
+
+def test_explicit_change_request_true_on_clear_intent():
+    """'quero trocar meus objetivos' é pedido claro de troca — arma o
+    estado mesmo sem dizer a meta ainda."""
+
+    assert GoalChangeDetector.is_explicit_change_request(
+        "quero trocar meus objetivos"
+    )
+    assert GoalChangeDetector.is_explicit_change_request(
+        "preciso mudar minha meta"
+    )
+
+
+def test_explicit_change_request_false_on_weak_cue():
+    """Falso positivo do portão barato ('prova' + 'agora') NÃO é pedido
+    explícito de troca — não deve armar o estado nem perguntar à toa."""
+
+    assert not GoalChangeDetector.is_explicit_change_request(
+        "a prova que fiz agora foi ótima"
+    )
+    # sem palavra de meta, mesmo com verbo de troca, não é troca de objetivo
+    assert not GoalChangeDetector.is_explicit_change_request(
+        "quero trocar meu treino de terça"
+    )
