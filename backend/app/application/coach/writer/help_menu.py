@@ -26,6 +26,8 @@ class HelpMenu:
                 '• "Qual meu treino de hoje?" ou "próximo treino?"',
                 '• "Qual meu plano da semana?"',
                 '• "Como foi meu último treino?"',
+                '• "Monta um treino pra domingo" — pra um dia que faltou '
+                "no seu plano",
                 "",
                 "💪 Seu corpo e sua forma",
                 '• "Como está meu corpo?" — recuperação e carga',
@@ -56,6 +58,8 @@ class HelpMenu:
         "com o que já foi feito marcado.",
         '💡 Você sabia? Mande "ajuda" a qualquer hora pra ver tudo que dá pra '
         "me perguntar.",
+        '💡 Você sabia? Se faltar treino num dia (o seu ou do seu treinador), '
+        'peça "monta um treino pra domingo" que eu crio um pros seus dados.',
     ]
 
     @staticmethod

@@ -39,6 +39,12 @@ class PlannedSession:
     # corrida/caminhada — musculação e outras atividades não entram.
     kind: str = "run"
 
+    # Origem da sessão: "plan" (parte do plano da semana — nosso ou do
+    # treinador externo) ou "oneoff" (treino AVULSO que montamos sob demanda
+    # pra um dia específico que o plano não cobria). O avulso é empurrado ao
+    # relógio isolado do resto e reconhecido como nosso na avaliação pós-treino.
+    origin: str = "plan"
+
     # Riqueza do plano gerado pela IA-treinadora: como executar (blocos,
     # séries, strides, fechamento progressivo) e o porquê do treino.
     structure: str = ""

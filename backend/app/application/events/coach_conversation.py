@@ -19,6 +19,9 @@ from app.application.coach.conversation.negotiation_flow import NegotiationFlow
 from app.application.coach.conversation.on_demand_answers import (
     OnDemandAnswers,
 )
+from app.application.coach.conversation.one_off_workout_flow import (
+    OneOffWorkoutFlow,
+)
 from app.application.coach.conversation.plan_preference_applier import (
     PlanPreferenceApplier,
 )
@@ -136,6 +139,26 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # "SIM" pra oferta de mandar o treino AVULSO pro relógio — empurra só
+        # a sessão avulsa (push escopado), antes do sync do plano da semana.
+        if reply_text is None:
+
+            try:
+
+                reply_text = await OneOffWorkoutFlow.resolve_watch_reply(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha no relógio do avulso de '{profile}': {e}")
+
+                reply_text = None
+
         # "SIM" pra oferta de mandar os treinos pro Garmin (ou pedido
         # explícito "manda pro relógio") — sincroniza na hora, sem Gemini.
         if reply_text is None:
@@ -230,6 +253,27 @@ class CoachConversationEvent:
                     f"Falha na resposta determinística ({intent}) "
                     f"para '{profile}': {e}"
                 )
+
+                reply_text = None
+
+        # Pedido pra MONTAR um treino avulso ("monta um treino pra domingo"):
+        # o nosso coach monta uma sessão pro dia que o plano não cobre (típico
+        # do atleta de treinador externo) — ancorada nos dados/evolução dele.
+        if reply_text is None:
+
+            try:
+
+                reply_text = await OneOffWorkoutFlow.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha ao montar treino avulso de '{profile}': {e}")
 
                 reply_text = None
 
