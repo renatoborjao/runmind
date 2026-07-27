@@ -14,94 +14,113 @@ from app.domain.entities.readiness_verdict import (
 MOD = "app.application.review.readiness_notifier"
 
 
-def _verdict(tier, limiter="sono") -> ReadinessVerdict:
+def _verdict(tier, signals=()) -> ReadinessVerdict:
 
     return ReadinessVerdict(
         tier=tier, reason="motivo", should_speak=True,
-        body_state="RECOVERY_FLAG", limiter=limiter,
+        body_state="RECOVERY_FLAG", limiter="sono", signals=signals,
     )
 
 
 def _entry(tier, would_notify=True) -> ReadinessDiaryEntry:
 
     return ReadinessDiaryEntry(
-        day="2026-07-28", at="2026-07-28T09:00:00-03:00", tier=tier,
+        day="2026-07-28", at="2026-07-28T06:00:00-03:00", tier=tier,
         body_state="RECOVERY_FLAG", reason="motivo", demand="demanding",
         would_notify=would_notify, from_tier="NEUTRAL",
     )
 
 
-def _run(tier, *, flag, would_notify=True, already_sent=False):
-    """Roda observe_and_maybe_alert com tudo mockado. Devolve (send_mock,
-    mark_mock)."""
-
-    send = AsyncMock()
+def _block(tier, *, flag, would_notify=True):
+    """Roda block() com tudo mockado; devolve a mensagem (ou None)."""
 
     with (
         patch(f"{MOD}.ReadinessService") as svc,
         patch(f"{MOD}.get_settings",
               return_value=SimpleNamespace(readiness_alerts_enabled=flag)),
-        patch(f"{MOD}.CoachOutbox") as outbox,
-        patch(f"{MOD}.DispatchGuard") as guard,
     ):
 
         svc.evaluate = AsyncMock(
             return_value=(_verdict(tier), _entry(tier, would_notify))
         )
-        outbox.send = send
-        guard.already_sent.return_value = already_sent  # mark é sync (auto-mock)
 
-        asyncio.run(
-            ReadinessNotifier.observe_and_maybe_alert(
-                "renato2", SimpleNamespace()
-            )
-        )
+        result = asyncio.run(ReadinessNotifier.block("renato2"))
 
-        # observação SEMPRE roda
+        # observação SEMPRE roda (grava o diário — o gate do Renato)
         svc.evaluate.assert_awaited_once()
 
-        return send, guard
+        return result
 
 
-def test_flag_desligada_so_observa_nunca_envia():
+def test_flag_desligada_so_observa_nao_fala():
 
-    send, _ = _run(READINESS_CAUTION, flag=False)
-
-    send.assert_not_awaited()
+    assert _block(READINESS_CAUTION, flag=False) is None
 
 
-def test_flag_ligada_envia_caution():
+def test_flag_ligada_narra_caution():
 
-    send, guard = _run(READINESS_CAUTION, flag=True)
-
-    send.assert_awaited_once()
-    guard.mark.assert_called_once()
+    assert _block(READINESS_CAUTION, flag=True) is not None
 
 
-def test_flag_ligada_envia_green():
+def test_flag_ligada_narra_green():
 
-    send, _ = _run(READINESS_GREEN, flag=True)
-
-    send.assert_awaited_once()
+    assert _block(READINESS_GREEN, flag=True) is not None
 
 
-def test_brake_nao_duplica_fica_com_o_proposer():
+def test_brake_fica_com_o_proposer():
 
-    # STRAINED/BRAKE é tratado pelo BodyConductNotifier — o vigia não manda
-    send, _ = _run(READINESS_BRAKE, flag=True)
-
-    send.assert_not_awaited()
+    # STRAINED/BRAKE é tratado pelo BodyConductNotifier — o bloco não fala
+    assert _block(READINESS_BRAKE, flag=True) is None
 
 
-def test_sem_virada_nao_envia():
+def test_sem_virada_nao_fala():
 
-    send, _ = _run(READINESS_CAUTION, flag=True, would_notify=False)
-
-    send.assert_not_awaited()
+    assert _block(READINESS_CAUTION, flag=True, would_notify=False) is None
 
 
-def test_dedup_no_mesmo_dia_e_estado():
+def test_message_caution_narra_os_sinais():
 
-    send, _ = _run(READINESS_CAUTION, flag=True, already_sent=True)
+    v = ReadinessVerdict(
+        tier=READINESS_CAUTION, reason="x", should_speak=True,
+        body_state="RECOVERY_FLAG", limiter="sono",
+        signals=("você teve 2 noites curtas essa semana", "seu HRV vem caindo"),
+    )
 
-    send.assert_not_awaited()
+    msg = ReadinessNotifier._message(v)
+
+    assert "2 noites curtas" in msg
+    assert "seu HRV vem caindo" in msg
+    assert "pegar leve" in msg
+
+
+def test_message_caution_sem_sinais_ainda_humano():
+
+    v = ReadinessVerdict(
+        tier=READINESS_CAUTION, reason="x", should_speak=True,
+        body_state="RECOVERY_FLAG", limiter=None, signals=(),
+    )
+
+    msg = ReadinessNotifier._message(v)
+
+    assert "recuperação" in msg.lower()
+
+
+def test_message_green_cita_positivo():
+
+    v = ReadinessVerdict(
+        tier=READINESS_GREEN, reason="x", should_speak=True,
+        body_state="FRESH", signals=("seu HRV vem subindo",),
+    )
+
+    msg = ReadinessNotifier._message(v)
+
+    assert "hrv vem subindo" in msg.lower()
+    assert "confiança" in msg
+
+
+def test_join_pt():
+
+    assert ReadinessNotifier._join_pt(()) == ""
+    assert ReadinessNotifier._join_pt(("a",)) == "a"
+    assert ReadinessNotifier._join_pt(("a", "b")) == "a e b"
+    assert ReadinessNotifier._join_pt(("a", "b", "c")) == "a, b e c"

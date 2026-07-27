@@ -34,7 +34,6 @@ def test_registers_hourly_notifier_jobs_for_multi_timezone():
             "weekly_plan_notification",
             "weekly_review_notification",
             "external_plan_reminder",
-            "morning_briefing",
         ):
 
             job = jobs[job_id]
@@ -43,6 +42,12 @@ def test_registers_hourly_notifier_jobs_for_multi_timezone():
             # de hora em hora: sem dia/hora fixos (o gate local resolve)
             assert "day_of_week" not in job
             assert "hour" not in job
+
+        # o "bom dia" do despertar roda a cada 15 min (janela + dado da noite
+        # decidem por atleta), não de hora em hora
+        briefing = jobs["morning_briefing"]
+        assert briefing["trigger"] == "interval"
+        assert briefing["minutes"] == 15
 
         mock_instance.start.assert_called_once()
 

@@ -12,20 +12,34 @@ MODULE = "app.application.planner.morning_briefing_notifier"
 RUNNER = make_runner()
 
 
-def _run(missed, today, local_hour=6, already_sent=False):
+def _run(
+    missed,
+    today,
+    *,
+    hour=6,
+    minute=0,
+    data_ready=False,
+    readiness=None,
+    already_sent=False,
+):
 
     sent = {}
 
     with (
         patch(f"{MODULE}.MissedWorkoutFlow") as flow,
         patch(f"{MODULE}.DailyTrainingNotifier") as daily,
+        patch(f"{MODULE}.ReadinessNotifier") as readiness_mod,
         patch(f"{MODULE}.CoachOutbox") as notifier,
         patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
         patch(f"{MODULE}.now_in") as now_in,
         patch(f"{MODULE}.DispatchGuard") as guard,
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._night_data_ready",
+            return_value=data_ready,
+        ),
     ):
 
-        now_in.return_value = datetime(2026, 7, 14, local_hour, 0)
+        now_in.return_value = datetime(2026, 7, 14, hour, minute)
         guard.already_sent.return_value = already_sent
 
         load_runner.execute.return_value = RUNNER
@@ -36,6 +50,7 @@ def _run(missed, today, local_hour=6, already_sent=False):
         daily.build = AsyncMock(
             return_value=(RUNNER, today) if today else None
         )
+        readiness_mod.block = AsyncMock(return_value=readiness)
 
         async def _capture(runner, message):
             sent["runner"] = runner
@@ -48,51 +63,92 @@ def _run(missed, today, local_hour=6, already_sent=False):
     return sent
 
 
-def test_miss_and_today_go_in_one_message_furo_first():
+def test_despertar_junta_furo_prontidao_e_treino_na_ordem():
+    """Com dado da noite: furo -> corpo/prontidão -> treino, numa mensagem só."""
 
-    sent = _run(missed="Furou ontem — quer que eu ajuste?", today="🏃 Hoje: 8km")
+    sent = _run(
+        missed="Furou ontem — quer que eu ajuste?",
+        today="🏃 Hoje: 8km",
+        data_ready=True,
+        readiness="Reparei que seu HRV vem caindo — pega leve.",
+        hour=6,
+    )
 
-    # um envio só, furo primeiro depois hoje
     assert sent["message"] == (
-        "Furou ontem — quer que eu ajuste?\n\n🏃 Hoje: 8km"
+        "Furou ontem — quer que eu ajuste?\n\n"
+        "Reparei que seu HRV vem caindo — pega leve.\n\n"
+        "🏃 Hoje: 8km"
     )
 
 
-def test_only_the_miss_when_today_is_rest():
+def test_prontidao_so_entra_com_dado_da_noite():
+    """Sem dado (rede das 06h): manda furo + treino, SEM o bloco de corpo,
+    mesmo que houvesse alerta."""
 
-    sent = _run(missed="Furou ontem, mas segue igual. 💪", today=None)
+    sent = _run(
+        missed="Furou ontem",
+        today="🏃 Hoje: 8km",
+        data_ready=False,
+        readiness="NÃO DEVERIA APARECER",
+        hour=6,
+    )
 
-    assert sent["message"] == "Furou ontem, mas segue igual. 💪"
-
-
-def test_only_today_when_there_was_no_miss():
-
-    sent = _run(missed=None, today="🏃 Hoje: tiros 6x800")
-
-    assert sent["message"] == "🏃 Hoje: tiros 6x800"
-
-
-def test_nothing_sent_when_no_miss_and_rest_day():
-
-    sent = _run(missed=None, today=None)
-
-    assert sent == {}
+    assert sent["message"] == "Furou ontem\n\n🏃 Hoje: 8km"
 
 
-def test_no_briefing_outside_local_06h():
-    """Fora das 06h locais do atleta, nada sai (o job roda de hora em hora)."""
+def test_sem_bloco_de_corpo_quando_neutro():
+    """Dado chegou, mas prontidão devolve None (neutro/flag off): furo +
+    treino seguem."""
 
-    sent = _run(missed="Furou ontem", today="🏃 Hoje", local_hour=10)
+    sent = _run(
+        missed=None, today="🏃 Hoje: tiros", data_ready=True, readiness=None,
+    )
 
-    assert sent == {}
+    assert sent["message"] == "🏃 Hoje: tiros"
 
 
-def test_no_briefing_when_already_sent_today():
-    """Dedup: já enviado hoje -> não repete mesmo no horário certo."""
+def test_espera_o_despertar_antes_das_06h():
+    """Cedo (05:00) e sem dado ainda: não manda nada — espera o próximo tick."""
 
     sent = _run(
         missed="Furou ontem", today="🏃 Hoje",
-        local_hour=6, already_sent=True,
+        data_ready=False, hour=5, minute=0,
     )
+
+    assert sent == {}
+
+
+def test_despertar_cedo_manda_na_hora():
+    """Acordou 05:15 e o dado chegou: manda já (não espera as 06h)."""
+
+    sent = _run(
+        missed=None, today="🏃 Hoje: 10km",
+        data_ready=True, hour=5, minute=15,
+    )
+
+    assert sent["message"] == "🏃 Hoje: 10km"
+
+
+def test_fora_da_janela_nada_sai():
+
+    sent = _run(missed="Furou", today="🏃 Hoje", data_ready=True, hour=11)
+
+    assert sent == {}
+
+
+def test_dedup_um_bom_dia_por_dia():
+
+    sent = _run(
+        missed="Furou", today="🏃 Hoje", data_ready=True,
+        hour=6, already_sent=True,
+    )
+
+    assert sent == {}
+
+
+def test_silencio_quando_nao_ha_nada_a_dizer():
+    """Sem furo, sem alerta, hoje é descanso: silêncio (mas marca o dia)."""
+
+    sent = _run(missed=None, today=None, data_ready=True, hour=6)
 
     assert sent == {}

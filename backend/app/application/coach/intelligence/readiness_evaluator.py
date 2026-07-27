@@ -63,6 +63,7 @@ class ReadinessEvaluator:
                 should_speak=todays_demand != DEMAND_REST,
                 body_state=state,
                 limiter=limiter,
+                signals=ReadinessEvaluator._concern_phrases(reading),
             )
 
         if state == BODY_RECOVERY_FLAG:
@@ -75,6 +76,7 @@ class ReadinessEvaluator:
                 should_speak=todays_demand == DEMAND_DEMANDING,
                 body_state=state,
                 limiter=limiter,
+                signals=ReadinessEvaluator._concern_phrases(reading),
             )
 
         if state == BODY_FRESH:
@@ -87,6 +89,7 @@ class ReadinessEvaluator:
                 should_speak=todays_demand == DEMAND_DEMANDING,
                 body_state=state,
                 limiter=limiter,
+                signals=ReadinessEvaluator._green_phrases(reading),
             )
 
         # BALANCED / ABSORBING: está tudo no lugar — o coach fica quieto
@@ -123,6 +126,60 @@ class ReadinessEvaluator:
         parts.extend(ReadinessEvaluator._recovery_flags(reading))
 
         return "; ".join(parts)
+
+    @staticmethod
+    def _concern_phrases(reading: BodyReading) -> tuple[str, ...]:
+        """Sinais de ALERTA em linguagem de gente — é o que o coach fala pra
+        narrar o porquê ('seu HRV vem caindo', '2 noites curtas essa semana').
+        Ordem: o mais 'sentido' primeiro (sono), depois HRV, depois FC."""
+
+        rec = reading.recovery
+        phrases: list[str] = []
+
+        if rec.short_nights and rec.nights_counted:
+
+            if rec.short_nights == 1:
+
+                phrases.append("você teve uma noite curta essa semana")
+
+            else:
+
+                phrases.append(
+                    f"você teve {rec.short_nights} noites curtas essa semana"
+                )
+
+        if rec.hrv_direction == FALLING and rec.hrv_recent is not None:
+
+            phrases.append("seu HRV vem caindo")
+
+        if rec.rhr_direction == RISING and rec.rhr_recent is not None:
+
+            phrases.append("sua FC de repouso subiu um pouco")
+
+        # nada concreto capturado, mas há um limitador nomeado: fala dele
+        if not phrases and reading.limiter:
+
+            phrases.append(f"o {reading.limiter} tá pesando na recuperação")
+
+        return tuple(phrases)
+
+    @staticmethod
+    def _green_phrases(reading: BodyReading) -> tuple[str, ...]:
+        """Sinais POSITIVOS pro sinal verde ('seu HRV tá firme', 'você vem
+        dormindo bem'). Vazio quando não há nada marcante a destacar."""
+
+        rec = reading.recovery
+        phrases: list[str] = []
+
+        if rec.hrv_direction == RISING and rec.hrv_recent is not None:
+
+            phrases.append("seu HRV vem subindo")
+
+        if rec.nights_counted and not rec.short_nights:
+
+            phrases.append("você vem dormindo bem")
+
+        return tuple(phrases)
 
     @staticmethod
     def _recovery_flags(reading: BodyReading) -> list[str]:

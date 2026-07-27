@@ -24,3 +24,8 @@ class ReadinessVerdict:
     should_speak: bool           # merece fala proativa HOJE (antes do dedup de estado)
     body_state: str
     limiter: str | None = None
+
+    # sinais em linguagem de gente ("seu HRV vem caindo", "2 noites curtas
+    # essa semana") — é o que o coach FALA pra narrar o porquê do veredito,
+    # em vez do genérico. Vazio = mensagem cai no texto sem sinais.
+    signals: tuple[str, ...] = ()
