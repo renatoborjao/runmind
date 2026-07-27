@@ -5,6 +5,7 @@ from app.application.coach.intelligence.personal_record_detector import (
 from app.application.coach.intelligence.proactive_aversion_detector import (
     ProactiveAversionDetector,
 )
+from app.application.coach.intelligence.race_debrief import RaceDebrief
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
 )
@@ -93,6 +94,26 @@ class TrainingCompletedEvent:
         except Exception as e:
 
             print(f"Falha na celebração de recorde: {e}")
+
+        # Debrief de prova: se ESTE treino foi a prova-alvo (data + distância),
+        # manda a análise especial do dia (resultado vs meta) e consome a data.
+        # Vale pra todos, inclusive treinador externo — é reconhecimento, não
+        # muda plano. Falha aqui jamais derruba o feedback já enviado.
+        try:
+
+            debrief = await RaceDebrief.after_feedback(
+                profile,
+                runner,
+                result["activity"],
+            )
+
+            if debrief:
+
+                await CoachOutbox.send(runner, debrief)
+
+        except Exception as e:
+
+            print(f"Falha no debrief de prova: {e}")
 
         return result
 

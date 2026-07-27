@@ -28,6 +28,7 @@ class HelpMenu:
                 '• "Como foi meu último treino?"',
                 '• "Monta um treino pra domingo" — pra um dia que faltou '
                 "no seu plano",
+                '• "Como corro minha prova?" — estratégia de pace pro dia',
                 "",
                 "💪 Seu corpo e sua forma",
                 '• "Como está meu corpo?" — recuperação e carga',

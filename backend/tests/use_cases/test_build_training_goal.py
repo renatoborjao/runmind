@@ -30,9 +30,22 @@ def test_distance_defaults_without_number():
         make_runner(target_race=None),
     ).distance_km == 10.0
 
+    # texto sem número nem prova nomeada cai no default
+    assert BuildTrainingGoal.execute(
+        make_runner(target_race="corrida de rua"),
+    ).distance_km == 10.0
+
+
+def test_named_distances_without_number():
+    """Provas nomeadas sem número viram a distância oficial."""
+
+    assert BuildTrainingGoal.execute(
+        make_runner(target_race="meia maratona"),
+    ).distance_km == 21.0975
+
     assert BuildTrainingGoal.execute(
         make_runner(target_race="maratona"),
-    ).distance_km == 10.0
+    ).distance_km == 42.195
 
 
 def test_race_date_parsed_when_present():
