@@ -29,13 +29,15 @@ from app.infrastructure.persistence.weekly_plan_repository import (
 )
 
 
-# domingo (weekday 6) 15h LOCAL: entrega do plano. Segunda (0) 8h: lembrete
-# do treinador externo.
+# domingo (weekday 6) 20h LOCAL: entrega do plano — UMA HORA DEPOIS do
+# fechamento da semana (19h), quando o cérebro já aprendeu com ela; assim a
+# semana nova sai moldada pelo aprendizado fresco. Segunda (0) 8h: lembrete do
+# treinador externo.
 _SUNDAY = 6
 
 _MONDAY = 0
 
-PLAN_HOUR = 15
+PLAN_HOUR = 20
 
 EXTERNAL_REMINDER_HOUR = 8
 
@@ -52,7 +54,7 @@ class WeeklyPlanNotifier:
     @staticmethod
     async def notify_all() -> None:
         """Roda de HORA EM HORA; cada _notify_one decide se é o horário local
-        do atleta (domingo 15h) e faz dedup."""
+        do atleta (domingo 20h) e faz dedup."""
 
         for profile in RunnerProfileRepository().list_all():
 
@@ -78,7 +80,7 @@ class WeeklyPlanNotifier:
 
         local = now_in(runner.timezone)
 
-        # só no domingo 15h LOCAL do atleta, uma vez por semana (dedup)
+        # só no domingo 20h LOCAL do atleta, uma vez por semana (dedup)
         if local.weekday() != _SUNDAY or local.hour != PLAN_HOUR:
 
             return
@@ -118,9 +120,10 @@ class WeeklyPlanNotifier:
 
         goal = BuildTrainingGoal.execute(runner)
 
-        # Entrega de domingo 15h: gera e anuncia o plano da PRÓXIMA semana.
-        # Só a partir daqui ele vira a semana ativa do atleta (o cache >= o
-        # devolve nas leituras seguintes) — nunca antes da entrega.
+        # Entrega de domingo 20h: gera e anuncia o plano da PRÓXIMA semana, já
+        # com o aprendizado da semana (destilado às 19h) no contexto. Só a
+        # partir daqui ele vira a semana ativa do atleta (o cache o devolve nas
+        # leituras seguintes) — nunca antes da entrega.
         plan = await AIPlanService.ensure_plan(
             profile=profile,
             runner=runner,

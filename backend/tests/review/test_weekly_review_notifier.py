@@ -18,7 +18,7 @@ def _run_notify_all(profiles, runners, messages):
         patch(f"{MODULE}.WeeklyReviewNarrativeWriter") as mock_narrative,
         patch(f"{MODULE}.WeeklyReviewMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
-        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 19, 0)),
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
         patch(f"{MODULE}.StatePortraitService") as mock_portrait_service,
         patch(f"{MODULE}.StatePortraitWriter") as mock_portrait_writer,

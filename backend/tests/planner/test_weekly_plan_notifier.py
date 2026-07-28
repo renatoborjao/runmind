@@ -33,7 +33,7 @@ def _run_external(plan):
         patch(f"{MODULE}.WeeklyPlanRepository") as mock_plan_repo_cls,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
-        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 15, 0)),
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
     ):
 
@@ -97,7 +97,7 @@ def test_notify_all_sends_to_every_profile():
         patch(f"{MODULE}.AIPlanService") as mock_ai,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
-        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 15, 0)),
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
     ):
 
@@ -148,7 +148,7 @@ def test_notify_all_continues_after_one_profile_fails():
         patch(f"{MODULE}.AIPlanService") as mock_ai,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.CoachOutbox") as mock_notification,
-        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 15, 0)),
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
     ):
 

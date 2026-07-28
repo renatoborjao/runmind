@@ -45,10 +45,12 @@ from app.infrastructure.persistence.runner_profile_repository import (
 # cobre as 8 semanas da tendência com folga
 HISTORY_LIMIT = 60
 
-# domingo (weekday 6) 20h LOCAL: fecha a semana ISO inteira
+# domingo (weekday 6) 19h LOCAL: fecha a semana ISO (o dia já rendeu) e o
+# cérebro APRENDE com ela — uma hora ANTES da entrega do plano (20h), pra a
+# semana nova sair já moldada pelo aprendizado fresco. Ver [[project_memoria_treinamento]].
 _SUNDAY = 6
 
-REVIEW_HOUR = 20
+REVIEW_HOUR = 19
 
 
 def _week_key(local) -> str:
@@ -63,7 +65,7 @@ class WeeklyReviewNotifier:
     @staticmethod
     async def notify_all() -> None:
         """Roda de HORA EM HORA; cada _notify_one decide se é o horário local
-        do atleta (domingo 20h) e faz dedup."""
+        do atleta (domingo 19h) e faz dedup."""
 
         for profile in RunnerProfileRepository().list_all():
 
@@ -89,7 +91,7 @@ class WeeklyReviewNotifier:
 
         local = now_in(runner.timezone)
 
-        # só no domingo 20h LOCAL do atleta, uma vez por semana (dedup)
+        # só no domingo 19h LOCAL do atleta, uma vez por semana (dedup)
         if local.weekday() != _SUNDAY or local.hour != REVIEW_HOUR:
 
             return
