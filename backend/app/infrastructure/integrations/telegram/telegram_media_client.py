@@ -54,4 +54,8 @@ class TelegramMediaClient:
 
             return "image/webp"
 
+        if lower.endswith((".oga", ".ogg", ".opus")):
+
+            return "audio/ogg"
+
         return "image/jpeg"

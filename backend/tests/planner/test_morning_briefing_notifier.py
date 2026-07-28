@@ -52,9 +52,10 @@ def _run(
         )
         readiness_mod.block = AsyncMock(return_value=readiness)
 
-        async def _capture(runner, message):
+        async def _capture(runner, message, **kwargs):
             sent["runner"] = runner
             sent["message"] = message
+            sent["kwargs"] = kwargs
 
         notifier.send = AsyncMock(side_effect=_capture)
 

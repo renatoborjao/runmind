@@ -89,6 +89,41 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
 
+    # ==========================
+    # VOZ (áudio)
+    # ==========================
+
+    # Transcrição LOCAL das notas de voz do atleta (faster-whisper, Whisper
+    # da OpenAI, MIT). Roda em CPU/ARM, grátis e self-hosted — o áudio nunca
+    # sai da máquina. O texto transcrito entra no MESMO pipeline de conversa
+    # que o coach já entende. "base" equilibra qualidade x custo em CPU;
+    # "small" é mais preciso e mais pesado. Ver [[project_ideias_produto]].
+    whisper_model: str = "base"
+
+    # áudio acima disso (segundos) o coach pede pra escrever, em vez de
+    # gastar CPU transcrevendo um monólogo
+    voice_max_seconds: int = 300
+
+    # Motor de TTS quando o COACH fala (voz -> áudio). "gemini" = Gemini TTS
+    # (mesmo Google que já usamos; voz natural, teste cego escolheu a Charon
+    # calorosa — o edge-tts grátis saiu robótico demais); "edge" = edge-tts
+    # (fallback grátis/externo). Trocável por config sem retrabalho. Falha de
+    # TTS nunca vira silêncio — a mensagem sai em texto do mesmo jeito.
+    voice_engine: str = "gemini"
+
+    # Gemini TTS: modelo + voz + estilo (o estilo guia a entonação; a Charon
+    # com tom de treinador brasileiro caloroso foi a escolhida no teste cego).
+    voice_gemini_model: str = "gemini-3.1-flash-tts-preview"
+    voice_gemini_voice: str = "Charon"
+    voice_gemini_style: str = (
+        "Fale como um treinador brasileiro próximo e caloroso, num tom de "
+        "conversa espontânea de manhã, ritmo fluido e natural, sem soar "
+        "leitura: "
+    )
+
+    # voz pt-BR do edge-tts (fallback)
+    voice_edge_voice: str = "pt-BR-AntonioNeural"
+
     # Telegram chat_id do DONO (Renato) pra alertas operacionais — quando o
     # coach falha várias vezes seguidas, o backend avisa aqui em vez de a
     # falha morrer no log até alguém testar por acaso. Vazio = alertas OFF

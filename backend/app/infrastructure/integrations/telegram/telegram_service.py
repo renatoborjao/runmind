@@ -39,3 +39,41 @@ class TelegramService:
             response.raise_for_status()
 
             return response.json()
+
+    @staticmethod
+    async def send_voice(
+        chat_id: str,
+        audio: bytes,
+        caption: str = "",
+    ):
+        """Manda uma nota de voz (bolha de áudio, não 'arquivo de música').
+        `audio` precisa ser OGG/OPUS — o SpeechSynthesizer entrega assim."""
+
+        settings = get_settings()
+
+        data = {"chat_id": chat_id}
+
+        if caption:
+
+            # legenda do Telegram tem teto de 1024 chars
+            data["caption"] = to_plain_text(caption)[:1024]
+
+        files = {"voice": ("coach.ogg", audio, "audio/ogg")}
+
+        async with httpx.AsyncClient(timeout=60) as client:
+
+            response = await client.post(
+                f"https://api.telegram.org/bot"
+                f"{settings.telegram_bot_token}/sendVoice",
+                data=data,
+                files=files,
+            )
+
+            print("==== TELEGRAM VOICE ====")
+            print("STATUS:", response.status_code)
+            print(response.text[:300])
+            print("========================")
+
+            response.raise_for_status()
+
+            return response.json()
