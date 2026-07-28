@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
 from app.application.coach.intelligence.body_reading_builder import (
     BodyReadingBuilder,
 )
@@ -19,6 +22,9 @@ from app.domain.entities.training_load import (
     LOAD_INSUFFICIENT,
     LOAD_OPTIMAL,
 )
+from tests.coach.factories import make_activity
+
+MOD = "app.application.coach.intelligence.body_reading_builder"
 
 
 def _rec(hrv=STABLE, rhr=STABLE, sleep=7.5, short=0, nights=10, stress=25):
@@ -114,3 +120,38 @@ def test_limiter_stress_when_high():
 def test_no_limiter_when_all_good():
 
     assert BodyReadingBuilder._limiter(_rec()) is None
+
+
+# ------- carga do corpo soma corrida + cross-training (só pro corpo) -------
+
+
+def test_build_load_counts_running_and_cross_training():
+    """A carga do corpo une o arquivo de corrida COM o cross-training do
+    Garmin. O que a leitura de corrida vê (arquivo) não muda; o corpo vê os
+    dois. Ver [[project_analise_corpo_garmin]]."""
+
+    run = make_activity(id=1, sport="Run")
+    strength = make_activity(id=2, sport="strength_training")
+
+    with (
+        patch(f"{MOD}.GarminHealthRepository") as health,
+        patch(f"{MOD}.RunnerProfileRepository") as prof,
+        patch(f"{MOD}.ActivityArchiveRepository") as archive,
+        patch(f"{MOD}.CrossTrainingRepository") as cross,
+        patch(f"{MOD}.RecoveryTrendAnalyzer") as recovery,
+        patch(f"{MOD}.TrainingLoadAnalyzer") as load,
+    ):
+
+        health.return_value.load.return_value = []
+        prof.return_value.load.return_value = SimpleNamespace(age=30, sex="F")
+        archive.return_value.load_activities.return_value = [run]
+        cross.return_value.load_activities.return_value = [strength]
+        recovery.analyze.return_value = _rec()
+        load.analyze.return_value = MagicMock(status=LOAD_OPTIMAL)
+
+        BodyReadingBuilder.build("fernanda")
+
+        (history,), _kwargs = load.analyze.call_args
+        ids = {a.id for a in history.activities}
+
+        assert ids == {1, 2}   # corrida + musculação no contador do corpo
