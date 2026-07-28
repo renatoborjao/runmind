@@ -251,6 +251,52 @@ class GarminActivitySource:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def summary_from_item(item: dict) -> Activity:
+        """Activity MÍNIMO a partir do item da LISTA (get_activities), SEM o
+        deep-fetch pesado. Só o que a carga do corpo precisa: início, duração
+        e FC média. Guarda o typeKey CRU como `sport` (ex.: "strength_training",
+        "lap_swimming") — informativo pro dry-run; a decisão corrida×não-corrida
+        é do chamador via _sport()/is_foot_sport(). Ver
+        [[project_analise_corpo_garmin]].
+
+        NOTA: campos do item da lista lidos de forma defensiva — confirmar com
+        um dump real (garmin_dump.py) num relógio com musculação/natação."""
+
+        type_dto = item.get("activityType") or {}
+
+        type_key = str(_first(type_dto, "typeKey", default="other"))
+
+        start = _first(item, "startTimeLocal", "startTimeGMT")
+
+        moving = int(_first(item, "movingDuration", "duration", default=0) or 0)
+
+        return Activity(
+            id=int(item.get("activityId")),
+            name=str(_first(item, "activityName", default=type_key)),
+            sport=type_key,
+            start_date=GarminActivitySource._parse_date(start),
+            timezone="UTC",
+            distance=0.0,
+            moving_time=moving,
+            elapsed_time=moving,
+            average_speed=0.0,
+            max_speed=0.0,
+            average_heartrate=_num(_first(item, "averageHR", "averageHeartRate")),
+            max_heartrate=None,
+            elevation_gain=0.0,
+            elevation_high=None,
+            elevation_low=None,
+            start_latitude=None,
+            start_longitude=None,
+            end_latitude=None,
+            end_longitude=None,
+            kudos=0,
+            comments=0,
+            suffer_score=None,
+            raw={},
+        )
+
+    @staticmethod
     def _to_activity(activity_id: int, s: dict, raw: dict) -> Activity:
 
         # get_activity devolve DTOs aninhados: os números vivem no summaryDTO,

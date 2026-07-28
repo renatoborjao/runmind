@@ -35,6 +35,9 @@ from app.domain.entities.training_load import (
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
+from app.infrastructure.persistence.cross_training_repository import (
+    CrossTrainingRepository,
+)
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
@@ -61,7 +64,14 @@ class BodyReadingBuilder:
 
         max_hr = BodyReadingBuilder._max_hr(getattr(runner, "age", None))
 
-        activities = ActivityArchiveRepository().load_activities(profile)
+        # o corpo sente TODO o estresse: a carga soma a corrida (arquivo) COM o
+        # cross-training do Garmin (musculação/natação/Hyrox). Isso NUNCA entra
+        # na leitura/plano/chat de corrida — só no contador do corpo. Ver
+        # [[project_analise_corpo_garmin]].
+        activities = (
+            ActivityArchiveRepository().load_activities(profile)
+            + CrossTrainingRepository().load_activities(profile)
+        )
 
         load = TrainingLoadAnalyzer.analyze(
             TrainingHistory(activities=activities),
