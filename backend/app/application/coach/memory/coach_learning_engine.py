@@ -41,8 +41,11 @@ Categorias de aprendizado:
   quanto o que ele JÁ SUSTENTA com folga (capacidade demonstrada informa que
   dá pra ser mais ambicioso)
 - resposta: como o corpo dele responde ao estímulo — INCLUSIVE resposta BOA
-  (recupera bem, tolera tal carga/ACWR) e traço ESTRUTURAL que persiste mesmo
-  em semana verde (ex.: sono cronicamente curto mesmo com o corpo equilibrado)
+  (recupera bem, tolera tal carga/ACWR), a resposta ao TREINO ao longo do tempo
+  (evolui/estagna na forma aeróbica, responde ao estímulo de qualidade), como
+  ele PERCEBE o esforço (RPE alto/baixo pro que a FC media diz) e traço
+  ESTRUTURAL que persiste mesmo em semana verde (ex.: sono cronicamente curto
+  mesmo com o corpo equilibrado)
 
 Responda APENAS com JSON:
 {{"add": [{{"category": "...", "content": "..."}}],
