@@ -1,7 +1,8 @@
 """Vigia de prontidão — orquestra a leitura viva do corpo numa conduta do dia.
 
-MODO OBSERVAÇÃO: avalia o corpo à luz do treino de hoje, faz o dedup por
-MUDANÇA DE ESTADO e GRAVA no diário o que o coach DIRIA — mas NÃO envia nada.
+MODO OBSERVAÇÃO: avalia o corpo à luz do treino de hoje, aplica a cadência de
+ORIENTAÇÃO (fala no 1º dia de decisão do episódio de alerta e quando PIORA;
+cala nas repetições) e GRAVA no diário o que o coach DIRIA — mas NÃO envia nada.
 É o gate do Renato: ler `/debug/readiness/{p}` dos atletas reais e conferir os
 vereditos antes de ligar o envio de verdade (que vive no BodyConductNotifier).
 
@@ -25,7 +26,11 @@ from app.application.planner.current_plan_provider import CurrentPlanProvider
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.core.clock import now_local, today_local, use_athlete_timezone
 from app.domain.entities.readiness_diary_entry import ReadinessDiaryEntry
-from app.domain.entities.readiness_verdict import ReadinessVerdict
+from app.domain.entities.readiness_verdict import (
+    READINESS_BRAKE,
+    READINESS_CAUTION,
+    ReadinessVerdict,
+)
 from app.domain.entities.training_plan import TrainingPlan
 from app.infrastructure.persistence.readiness_diary_repository import (
     ReadinessDiaryRepository,
@@ -57,12 +62,15 @@ class ReadinessService:
 
         repo = ReadinessDiaryRepository()
 
-        previous = repo.last(profile)
+        history = repo.load(profile)
 
-        # dedup por MUDANÇA DE ESTADO: só falaria quando o veredito VIRA — um
-        # STRAINED que persiste 3 dias fala UMA vez (no dia que virou)
-        would_notify = verdict.should_speak and (
-            previous is None or previous.tier != verdict.tier
+        previous = history[-1] if history else None
+
+        # cadência de ORIENTAÇÃO (o coach orienta, não repete): fala no 1º dia
+        # de decisão do episódio de alerta e quando PIORA; cala nas repetições.
+        would_notify = (
+            verdict.should_speak
+            and ReadinessService._is_new_orientation(history, verdict)
         )
 
         entry = ReadinessDiaryEntry(
@@ -81,6 +89,57 @@ class ReadinessService:
             repo.record(profile, entry)
 
         return verdict, entry
+
+    # tiers de ALERTA e sua severidade — o episódio é a sequência CONTÍGUA
+    # deles; "piorar" é subir de severidade (CAUTION→BRAKE).
+    _CONCERN_SEVERITY = {READINESS_CAUTION: 1, READINESS_BRAKE: 2}
+
+    @staticmethod
+    def _is_new_orientation(
+        history: list[ReadinessDiaryEntry],
+        verdict: ReadinessVerdict,
+    ) -> bool:
+        """Momento NOVO de orientar (o coach orienta, não repete):
+
+        - ALERTA (CAUTION/BRAKE): fala no 1º dia de DECISÃO do episódio de
+          alerta — mesmo sem virada de tier, o que corrige o dia puxado de
+          quem está cronicamente no vermelho (a régua antiga, por virada de
+          tier, calava justo aí) — E quando PIORA (CAUTION→BRAKE). Nas demais
+          repetições, cala: o padrão de várias semanas no vermelho é
+          orientação de OUTRO nível (resumo de domingo / cérebro), não ping
+          diário.
+        - VERDE/neutro: novidade = acabou de ENTRAR no estado (não repete).
+
+        Ver [[feedback_orientar_nao_mandar]] e [[project_analise_corpo_garmin]].
+        """
+
+        severity = ReadinessService._CONCERN_SEVERITY.get(verdict.tier)
+
+        if severity is None:
+
+            # verde/neutro: só é novidade se mudou de tier (entrou agora)
+            return not history or history[-1].tier != verdict.tier
+
+        # varre o episódio de alerta contíguo (do mais recente pra trás): já
+        # falamos nele? em que severidade no máximo? um dia SEM alerta encerra
+        # o episódio (o próximo alerta é decisão nova).
+        spoke_severity = 0
+
+        for entry in reversed(history):
+
+            if entry.tier not in ReadinessService._CONCERN_SEVERITY:
+
+                break
+
+            if entry.would_notify:
+
+                spoke_severity = max(
+                    spoke_severity,
+                    ReadinessService._CONCERN_SEVERITY[entry.tier],
+                )
+
+        # 1º alerta do episódio (nunca falamos) OU piorou desde a última fala
+        return spoke_severity == 0 or severity > spoke_severity
 
     @staticmethod
     def _todays_demand(plan: TrainingPlan, today) -> str:
