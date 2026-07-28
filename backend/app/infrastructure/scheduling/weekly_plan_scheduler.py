@@ -134,26 +134,28 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
     )
 
     # MULTI-FUSO: os jobs abaixo rodam de HORA EM HORA; cada notifier decide,
-    # por atleta, se é o horário LOCAL de enviar (domingo 15h/20h, segunda 8h,
+    # por atleta, se é o horário LOCAL de enviar (domingo 19h/20h, segunda 8h,
     # 06h diário no fuso DELE) e faz dedup pra não repetir. Assim o amigo de
     # Portugal recebe no horário de Lisboa, não no do Brasil.
 
-    # Entrega do plano — domingo 15h local (gate no WeeklyPlanNotifier).
-    _scheduler.add_job(
-        WeeklyPlanNotifier.notify_all,
-        trigger="cron",
-        minute=0,
-        misfire_grace_time=3600,
-        id="weekly_plan_notification",
-    )
-
-    # Review — domingo 20h local (fecha a semana ISO inteira).
+    # Fechamento da semana — domingo 19h local (gate no WeeklyReviewNotifier):
+    # resumo + "como você está" e, em silêncio, o cérebro APRENDE com a semana.
     _scheduler.add_job(
         WeeklyReviewNotifier.notify_all,
         trigger="cron",
         minute=0,
         misfire_grace_time=3600,
         id="weekly_review_notification",
+    )
+
+    # Entrega do plano — domingo 20h local (gate no WeeklyPlanNotifier): UMA
+    # HORA DEPOIS do fechamento, pra o plano sair já moldado pelo aprendizado.
+    _scheduler.add_job(
+        WeeklyPlanNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="weekly_plan_notification",
     )
 
     # Recap mensal — dia 1 do mês, 9h local: balanço do mês que fechou,
