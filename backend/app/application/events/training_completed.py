@@ -89,7 +89,10 @@ class TrainingCompletedEvent:
 
             if celebration:
 
-                await CoachOutbox.send(runner, celebration)
+                # recorde batido é beat emocional: sai em texto + áudio
+                await CoachOutbox.send(
+                    runner, celebration, voice=True, profile=profile,
+                )
 
         except Exception as e:
 
@@ -109,7 +112,10 @@ class TrainingCompletedEvent:
 
             if debrief:
 
-                await CoachOutbox.send(runner, debrief)
+                # "você conseguiu / cruzou": beat emocional em texto + áudio
+                await CoachOutbox.send(
+                    runner, debrief, voice=True, profile=profile,
+                )
 
         except Exception as e:
 

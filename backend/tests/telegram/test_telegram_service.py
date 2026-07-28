@@ -35,3 +35,35 @@ def test_send_message_posts_to_bot_api():
 
     assert url.endswith("/sendMessage")
     assert payload == {"chat_id": "42", "text": "bom treino!"}
+
+
+def test_send_voice_posts_multipart_audio():
+
+    response = MagicMock()
+    response.status_code = 200
+    response.text = "{}"
+    response.json.return_value = {"ok": True}
+    response.raise_for_status.return_value = None
+
+    client = MagicMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.post = AsyncMock(return_value=response)
+
+    with patch(f"{MODULE}.httpx.AsyncClient", return_value=client):
+
+        asyncio.run(
+            TelegramService.send_voice(
+                chat_id="42",
+                audio=b"oggbytes",
+            )
+        )
+
+    url = client.post.await_args.args[0]
+    data = client.post.await_args.kwargs["data"]
+    files = client.post.await_args.kwargs["files"]
+
+    assert url.endswith("/sendVoice")
+    assert data == {"chat_id": "42"}
+    assert files["voice"][1] == b"oggbytes"
+    assert files["voice"][2] == "audio/ogg"

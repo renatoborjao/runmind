@@ -103,3 +103,23 @@ def test_update_id_is_extracted_as_string():
 
     assert TelegramInboundParser.update_id({"update_id": 987}) == "987"
     assert TelegramInboundParser.update_id({}) is None
+
+
+def test_voice_note_becomes_voice_payload():
+
+    msg = _base_message(
+        text=None,
+        voice={"file_id": "voice1", "duration": 12, "mime_type": "audio/ogg"},
+    )
+
+    voice = TelegramInboundParser.extract_voice(msg)
+
+    assert voice == {"file_id": "voice1", "duration": 12}
+
+    # voz não é mídia (foto/PDF), é áudio à parte
+    assert TelegramInboundParser.extract_media(msg) is None
+
+
+def test_plain_text_has_no_voice():
+
+    assert TelegramInboundParser.extract_voice(_base_message()) is None

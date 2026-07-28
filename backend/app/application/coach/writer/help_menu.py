@@ -35,6 +35,12 @@ class HelpMenu:
                 '• "Estou evoluindo?" — sua forma ao longo das semanas',
                 '• "Como estou?" — o retrato completo (corpo + forma)',
                 "",
+                "🎙️ Pode me mandar áudio",
+                "Grave uma nota de voz que eu te entendo (te respondo por "
+                "escrito). E eu te falo em áudio nos momentos que importam — "
+                'dia da prova, recorde batido. Prefere nem isso? É só dizer '
+                '"prefiro sem áudio".',
+                "",
                 "💬 E pode falar comigo normal",
                 "Me conta como se sente (\"dormi mal\", \"perna doendo\"), "
                 "peça pra trocar seu objetivo, ou negocie um treino que não "
@@ -61,6 +67,8 @@ class HelpMenu:
         "me perguntar.",
         '💡 Você sabia? Se faltar treino num dia (o seu ou do seu treinador), '
         'peça "monta um treino pra domingo" que eu crio um pros seus dados.',
+        "💡 Você sabia? Pode me mandar áudio em vez de digitar — eu te entendo. "
+        "E nos momentos especiais (dia da prova, recorde) eu te falo em áudio.",
     ]
 
     @staticmethod

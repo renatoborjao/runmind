@@ -39,6 +39,9 @@ from app.application.coach.memory.memory_extraction_engine import (
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
+from app.application.coach.voice.voice_preference_flow import (
+    VoicePreferenceFlow,
+)
 from app.application.events.assistant_errors import (
     AssistantUnavailable,
 )
@@ -136,6 +139,22 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha ao resolver proposta de '{profile}': {e}")
+
+                reply_text = None
+
+        # Liga/desliga os áudios do coach ("prefiro sem áudio" / "pode mandar
+        # voz"): preferência dinâmica, detector barato por palavra-chave.
+        if reply_text is None:
+
+            try:
+
+                reply_text = VoicePreferenceFlow.handle(profile, incoming_text)
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha na preferência de voz de '{profile}': {e}")
 
                 reply_text = None
 

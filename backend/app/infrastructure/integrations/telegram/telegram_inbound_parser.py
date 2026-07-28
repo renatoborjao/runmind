@@ -57,6 +57,23 @@ class TelegramInboundParser:
         return message.get("text") or message.get("caption")
 
     @staticmethod
+    def extract_voice(message: dict) -> dict | None:
+        """Nota de voz do Telegram -> {file_id, duration}. Voz vem em
+        OGG/OPUS; a transcrição (whisper) roda FORA do caminho do ack,
+        no processamento em background. None quando não há áudio."""
+
+        voice = message.get("voice")
+
+        if not voice:
+
+            return None
+
+        return {
+            "file_id": voice["file_id"],
+            "duration": voice.get("duration", 0),
+        }
+
+    @staticmethod
     def extract_media(message: dict) -> dict | None:
         """Foto (maior resolução) ou documento suportado ->
         {file_id, mimetype, caption}."""

@@ -126,6 +126,9 @@ class MorningBriefingNotifier:
 
             return
 
+        # "bom dia" do despertar sai só em TEXTO: é a mensagem diária mais
+        # longa (furo + corpo + treino), e um áudio disso todo dia cansa. A
+        # voz fica reservada pros beats curtos que emocionam (prova, recorde).
         await CoachOutbox.send(runner, "\n\n".join(parts))
 
     @staticmethod

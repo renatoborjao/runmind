@@ -89,7 +89,13 @@ class RaceCompanionNotifier:
 
             return
 
-        await CoachOutbox.send(runner, message)
+        # dia da prova e véspera são os toques EMOCIONAIS: saem em texto +
+        # áudio (arrancada na voz do coach). Semana/polimento seguem só texto.
+        emotional = touch in ("race_day", "eve")
+
+        await CoachOutbox.send(
+            runner, message, voice=emotional, profile=profile,
+        )
 
         DispatchGuard.mark(
             _KIND, profile, f"{goal.race_date.isoformat()}:{touch}"

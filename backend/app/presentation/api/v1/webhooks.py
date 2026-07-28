@@ -2,15 +2,8 @@ import asyncio
 import hashlib
 import hmac
 
-from fastapi import APIRouter
-from fastapi import BackgroundTasks
-from fastapi import Header
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
-
-from app.core.config import get_settings
 
 from app.application.events.assistant_errors import (
     AssistantUnavailable,
@@ -24,26 +17,30 @@ from app.application.events.external_plan_received import (
 from app.application.events.onboarding_conversation import (
     OnboardingEvent,
 )
-from app.application.notifications.notification_service import (
-    NotificationService,
-)
 from app.application.events.training_completed import (
     TrainingCompletedEvent,
+)
+from app.application.garmin.garmin_activity_poller import (
+    GarminActivityPoller,
+)
+from app.application.notifications.notification_service import (
+    NotificationService,
 )
 from app.application.use_cases.owner_resolver import (
     OwnerResolver,
 )
+from app.core.config import get_settings
 from app.domain.value_objects.sports import (
     is_foot_sport,
+)
+from app.infrastructure.integrations.audio.voice_transcriber import (
+    VoiceTranscriber,
 )
 from app.infrastructure.integrations.evolution.inbound_parser import (
     WhatsAppInboundParser,
 )
 from app.infrastructure.integrations.evolution.phone_normalizer import (
     PhoneNormalizer,
-)
-from app.application.garmin.garmin_activity_poller import (
-    GarminActivityPoller,
 )
 from app.infrastructure.integrations.garmin.garmin_client import (
     GarminClient,
@@ -53,6 +50,12 @@ from app.infrastructure.integrations.strava.client import (
 )
 from app.infrastructure.integrations.telegram.telegram_inbound_parser import (
     TelegramInboundParser,
+)
+from app.infrastructure.integrations.telegram.telegram_media_client import (
+    TelegramMediaClient,
+)
+from app.infrastructure.integrations.telegram.telegram_service import (
+    TelegramService,
 )
 from app.infrastructure.integrations.whatsapp_cloud.whatsapp_cloud_inbound_parser import (
     WhatsAppCloudInboundParser,
@@ -568,22 +571,120 @@ async def route_inbound(
 INBOUND_RETRY_DELAYS = [0, 30, 90]
 
 
+async def _transcribe_inbound_voice(
+    channel: str,
+    address: str,
+    voice: dict,
+) -> str | None:
+    """Baixa a nota de voz e transcreve (fora do ack). Devolve o texto, ou
+    None quando não dá pra seguir — e nesse caso JÁ avisou o atleta (áudio
+    longo demais / não deu pra ouvir). Fiel à conversa viva: falha de voz
+    nunca vira silêncio."""
+
+    settings = get_settings()
+
+    duration = voice.get("duration", 0)
+
+    if duration and duration > settings.voice_max_seconds:
+
+        await _say_to_channel(
+            channel,
+            address,
+            "Esse áudio ficou longo demais pra eu ouvir com atenção. 🙉 "
+            "Manda um mais curtinho ou me escreve que eu te respondo.",
+        )
+
+        return None
+
+    try:
+
+        # voz é canal do Telegram (único ao vivo); WhatsApp fica pra depois
+        audio, _mimetype = await TelegramMediaClient.download(voice["file_id"])
+
+        text = await VoiceTranscriber.transcribe(audio)
+
+    except Exception as e:
+
+        print(f"Falha ao transcrever voz de {channel} {address}: {e}")
+
+        await _say_to_channel(
+            channel,
+            address,
+            "Tentei ouvir seu áudio mas não consegui agora. 😕 "
+            "Pode repetir ou me mandar por escrito?",
+        )
+
+        return None
+
+    if not text:
+
+        await _say_to_channel(
+            channel,
+            address,
+            "Não consegui te ouvir direito nesse áudio. 🙉 "
+            "Repete pra mim ou escreve?",
+        )
+
+        return None
+
+    print(f"Voz transcrita ({channel} {address}): {text!r}")
+
+    return text
+
+
+async def _say_to_channel(
+    channel: str,
+    address: str,
+    message: str,
+) -> None:
+    """Aviso curto direto no canal (fora do fluxo do coach). Best-effort:
+    falha aqui só loga, nunca propaga."""
+
+    try:
+
+        if channel == "telegram":
+
+            await TelegramService.send_message(address, message)
+
+        else:
+
+            print(f"_say_to_channel sem canal de voz p/ {channel}")
+
+    except Exception as e:
+
+        print(f"Falha ao avisar {channel} {address}: {e}")
+
+
 async def _run_inbound(
     channel: str,
     address: str,
     text: str | None,
     media: dict | None,
     sender_name: str,
+    voice: dict | None = None,
 ) -> None:
     """Processa a mensagem FORA do caminho do ack. O webhook já respondeu
     200 (o canal não vai reentregar), então uma falha aqui nunca derruba
     nada.
+
+    Se a mensagem veio em áudio, transcreve ANTES do loop (uma vez só, pra
+    não re-transcrever a cada retry) e segue com o texto pelo pipeline
+    normal. Falha de transcrição já avisa o atleta e encerra — nunca silêncio.
 
     Se o assistente (coach OU onboarding) estiver indisponível (Gemini fora
     mesmo após a cascata de modelos), NÃO manda o fallback de cara: espera e
     tenta de novo algumas vezes (a janela de rate limit reseta), e só no
     último fôlego cai no "me embananei". Assim uma instabilidade passageira
     quase nunca chega ao atleta."""
+
+    if voice is not None and not text:
+
+        text = await _transcribe_inbound_voice(channel, address, voice)
+
+        if text is None:
+
+            # já avisou o atleta (áudio longo / não deu pra ouvir)
+            return
 
     for attempt, delay in enumerate(INBOUND_RETRY_DELAYS):
 
@@ -704,7 +805,9 @@ async def receive_telegram_webhook(
 
     media = TelegramInboundParser.extract_media(message)
 
-    if not text and not media:
+    voice = TelegramInboundParser.extract_voice(message)
+
+    if not text and not media and not voice:
 
         return {"ignored": True, "reason": "no supported content found"}
 
@@ -733,6 +836,7 @@ async def receive_telegram_webhook(
         text=text,
         media=media,
         sender_name=TelegramInboundParser.sender_name(message),
+        voice=voice,
     )
 
     return {"queued": True, "update_id": update_id}
