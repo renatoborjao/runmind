@@ -1,7 +1,10 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
+)
+from app.application.coach.intelligence.fitness_reading_service import (
+    FitnessReadingService,
 )
 from app.application.coach.memory.coaching_signal_recorder import (
     CoachingSignalRecorder,
@@ -14,12 +17,18 @@ from app.application.coach.planning.executed_week_summary import (
 )
 from app.application.history.adherence_analyzer import AdherenceAnalyzer
 from app.core.clock import today_local
-from app.core.weekdays import weekday_label
+from app.core.weekdays import weekday_label, weekday_name
 from app.domain.entities.adherence_report import (
     ADHERENCE_INSUFFICIENT,
     AdherenceReport,
 )
 from app.domain.entities.training_history import TrainingHistory
+from app.infrastructure.persistence.checkin_repository import (
+    CheckinRepository,
+)
+from app.infrastructure.persistence.session_rpe_repository import (
+    SessionRpeRepository,
+)
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -76,6 +85,23 @@ class WeekEvidenceBuilder:
         if body:
 
             parts.append(body)
+
+        # forma aeróbica ao longo do tempo (está evoluindo?) — a RESPOSTA ao
+        # estímulo, não só se cumpriu. É o que ensina "responde a X" / "estagna
+        # apesar de Y".
+        evolution = WeekEvidenceBuilder._evolution(profile, today)
+
+        if evolution:
+
+            parts.append(evolution)
+
+        # o que ELE SENTIU da semana (sRPE dos treinos + check-ins) — o eixo
+        # subjetivo que o relógio não mede.
+        subjective = WeekEvidenceBuilder._subjective(profile, closing, today)
+
+        if subjective:
+
+            parts.append(subjective)
 
         # contexto de vida (viagem/lesão/agenda que o atleta CONTOU) — pra a
         # destilação não transformar um furo pontual e explicado (ex.: viagem)
@@ -230,3 +256,166 @@ class WeekEvidenceBuilder:
             line += "\n" + trajectory.fact
 
         return line
+
+    @staticmethod
+    def _evolution(profile, today) -> str:
+        """A forma aeróbica ao longo do tempo (o eixo "estou evoluindo?"). É a
+        RESPOSTA ao estímulo — o que o cérebro precisa pra aprender o que faz o
+        atleta melhorar ou estagnar, além de só cumprir/furar. Só entra com
+        lastro E fresco (não `stale`): forma velha não é a de agora. Best-effort
+        — falha aqui não derruba o resto da evidência."""
+
+        try:
+
+            evo = FitnessReadingService.read_evolution(
+                profile, reference_date=today,
+            )
+
+        except Exception:
+
+            return ""
+
+        if not evo.has_data or evo.stale:
+
+            return ""
+
+        parts = [
+            "Forma aeróbica ao longo do tempo (está evoluindo?): "
+            f"{evo.direction} ({evo.confidence})"
+        ]
+
+        ef = evo.ef
+
+        if ef and ef.has_data and ef.pace_gain_sec is not None:
+
+            prefix = "mais de " if ef.pace_gain_capped else ""
+
+            parts.append(
+                f"economia na rodagem: {prefix}{ef.pace_gain_sec} s/km mais "
+                f"rápido na mesma FC ({ef.runs_counted} corridas)"
+            )
+
+        if evo.quality is not None:
+
+            parts.append(f"em ritmo forte: {evo.quality.direction}")
+
+        if evo.vo2max is not None:
+
+            parts.append(f"VO₂máx da Garmin: {evo.vo2max.direction}")
+
+        if evo.rhr is not None:
+
+            parts.append(f"FC-repouso: {evo.rhr.direction}")
+
+        return "; ".join(parts) + "."
+
+    @staticmethod
+    def _subjective(profile, closing, today) -> str:
+        """O que ELE SENTIU da semana: sRPE dos treinos (esforço percebido) +
+        check-ins de sensação. Ensina traço durável — percebe esforço acima ou
+        abaixo do que a FC mede, tolera ou não tal carga. Só a semana FECHADA.
+        Best-effort."""
+
+        if closing is None:
+
+            return ""
+
+        try:
+
+            window = WeekEvidenceBuilder._week_window(closing)
+
+            lines = (
+                WeekEvidenceBuilder._srpe_lines(profile, window)
+                + WeekEvidenceBuilder._checkin_lines(profile, window)
+            )
+
+        except Exception:
+
+            return ""
+
+        if not lines:
+
+            return ""
+
+        return "Como ELE sentiu a semana (subjetivo):\n" + "\n".join(lines)
+
+    @staticmethod
+    def _week_window(closing) -> tuple[date, date]:
+
+        start = closing.week_start
+
+        return start, start + timedelta(days=6)
+
+    @staticmethod
+    def _in_window(day_iso: str, window: tuple[date, date]) -> bool:
+
+        try:
+
+            day = date.fromisoformat(day_iso)
+
+        except (ValueError, TypeError):
+
+            return False
+
+        return window[0] <= day <= window[1]
+
+    @staticmethod
+    def _srpe_lines(profile, window) -> list[str]:
+
+        sessions = SessionRpeRepository().load_sessions(profile)
+
+        lines = []
+
+        for s in sorted(sessions, key=lambda x: x.day):
+
+            if not WeekEvidenceBuilder._in_window(s.day, window):
+
+                continue
+
+            label = weekday_label(weekday_name(date.fromisoformat(s.day)))
+
+            lines.append(
+                f"- {label}: esforço percebido RPE {s.rpe}/10 "
+                f"(sRPE {s.srpe:.0f})"
+            )
+
+        return lines
+
+    @staticmethod
+    def _checkin_lines(profile, window) -> list[str]:
+
+        checkins = CheckinRepository().load(profile)
+
+        lines = []
+
+        for c in sorted(checkins, key=lambda x: x.day):
+
+            if not c.has_data or not WeekEvidenceBuilder._in_window(
+                c.day, window,
+            ):
+
+                continue
+
+            label = weekday_label(weekday_name(date.fromisoformat(c.day)))
+
+            bits = []
+
+            if c.energy is not None:
+
+                bits.append(f"energia {c.energy}/5")
+
+            if c.sleep_quality is not None:
+
+                bits.append(f"sono {c.sleep_quality}/5")
+
+            if c.soreness is not None:
+
+                bits.append(f"dor {c.soreness}/5")
+
+            if c.note:
+
+                bits.append(c.note)
+
+            lines.append(f"- {label}: relatou {', '.join(bits)}")
+
+        return lines

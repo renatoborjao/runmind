@@ -11,7 +11,23 @@ from app.domain.entities.adherence_report import (
     MissedPattern,
     WeekAdherence,
 )
+from app.domain.entities.aerobic_efficiency import (
+    EFF_IMPROVING,
+    AerobicEfficiency,
+)
 from app.domain.entities.body_reading import BodyReading, RecoveryTrend
+from app.domain.entities.daily_checkin import DailyCheckin
+from app.domain.entities.fitness_evolution import (
+    EVO_CLEAR,
+    EVO_IMPROVING,
+    FitnessEvolution,
+)
+from app.domain.entities.session_rpe import SessionRpe
+from app.domain.entities.signal_trend import (
+    CONF_CLEAR,
+    TREND_IMPROVING,
+    SignalTrend,
+)
 from app.domain.entities.training_load import TrainingLoad
 
 MOD = "app.application.coach.memory.week_evidence_builder"
@@ -69,11 +85,61 @@ def _body(has_data=True) -> BodyReading:
     )
 
 
-def _build(executed="", report=None, body=None, signals=None, life=""):
+def _evo(**over) -> FitnessEvolution:
+    """Veredito de evolução com lastro e fresco (não stale)."""
+
+    defaults = dict(
+        direction=EVO_IMPROVING,
+        confidence=EVO_CLEAR,
+        ef=AerobicEfficiency(
+            direction=EFF_IMPROVING,
+            runs_counted=6,
+            pace_gain_sec=17,
+        ),
+        days_since_last_run=2,
+    )
+
+    defaults.update(over)
+
+    return FitnessEvolution(**defaults)
+
+
+def _trend(direction=TREND_IMPROVING) -> SignalTrend:
+
+    return SignalTrend(
+        direction=direction,
+        confidence=CONF_CLEAR,
+        points=8,
+        span_days=40,
+        span_weeks=6,
+        relative_change=0.03,
+        per_week=0.1,
+        r_squared=0.6,
+        recent_value=52.0,
+        earlier_value=50.0,
+        mean_value=51.0,
+    )
+
+
+def _build(
+    executed="",
+    report=None,
+    body=None,
+    signals=None,
+    life="",
+    evolution=None,
+    srpe=None,
+    checkins=None,
+):
 
     report = report or _report()
     body = body if body is not None else _body()
     signals = signals or []
+    # por padrão, evolução INSUFICIENTE e sem subjetivo — as novas seções só
+    # entram nos testes que as fornecem
+    evolution = evolution if evolution is not None else FitnessEvolution()
+    srpe = srpe or []
+    checkins = checkins or []
 
     with patch(f"{MOD}.WeeklyPlanRepository") as repo_cls, patch(
         f"{MOD}.ExecutedWeekSummary"
@@ -84,6 +150,12 @@ def _build(executed="", report=None, body=None, signals=None, life=""):
     ) as rec, patch(
         f"{MOD}.RunnerMemoryService"
     ) as mem, patch(
+        f"{MOD}.FitnessReadingService"
+    ) as fit, patch(
+        f"{MOD}.SessionRpeRepository"
+    ) as srpe_cls, patch(
+        f"{MOD}.CheckinRepository"
+    ) as chk_cls, patch(
         f"{MOD}.today_local", return_value=date(2026, 7, 19)
     ):
 
@@ -98,6 +170,9 @@ def _build(executed="", report=None, body=None, signals=None, life=""):
         brs.read.return_value = (body, MagicMock(fact=""))
         rec.load.return_value = signals
         mem.render.return_value = life
+        fit.read_evolution.return_value = evolution
+        srpe_cls.return_value.load_sessions.return_value = srpe
+        chk_cls.return_value.load.return_value = checkins
 
         return WeekEvidenceBuilder.build("renato", _history())
 
@@ -150,3 +225,93 @@ def test_empty_when_nothing_to_learn():
     )
 
     assert evidence == ""
+
+
+def test_evolution_included_with_tangible_gain_and_signals():
+
+    evidence = _build(
+        evolution=_evo(
+            quality=_trend(),
+            vo2max=_trend(),
+        ),
+    )
+
+    assert "está evoluindo?" in evidence
+    assert "IMPROVING (CLEAR)" in evidence
+    assert "17 s/km" in evidence
+    assert "6 corridas" in evidence
+    assert "em ritmo forte: IMPROVING" in evidence
+    assert "VO₂máx da Garmin: IMPROVING" in evidence
+
+
+def test_evolution_capped_gain_is_phrased_as_more_than():
+
+    evidence = _build(
+        evolution=_evo(
+            ef=AerobicEfficiency(
+                direction=EFF_IMPROVING,
+                runs_counted=5,
+                pace_gain_sec=40,
+                pace_gain_capped=True,
+            ),
+        ),
+    )
+
+    assert "mais de 40 s/km" in evidence
+
+
+def test_evolution_skipped_when_insufficient_or_stale():
+
+    # insuficiente (default) não entra
+    assert "está evoluindo?" not in _build()
+
+    # com lastro mas VELHO (stale) também não — forma velha não é a de agora
+    stale = _evo(days_since_last_run=30)
+    assert "está evoluindo?" not in _build(evolution=stale)
+
+
+def test_subjective_srpe_and_checkin_of_the_closed_week():
+
+    evidence = _build(
+        srpe=[
+            # 16/07 = quinta (dentro da semana 13-19/07)
+            SessionRpe(
+                activity_id=1,
+                day="2026-07-16",
+                duration_min=50.0,
+                rpe=8,
+                srpe=400.0,
+                at="2026-07-16T19:00:00-03:00",
+            ),
+            # 05/07 = fora da semana fechada, NÃO entra
+            SessionRpe(
+                activity_id=2,
+                day="2026-07-05",
+                duration_min=40.0,
+                rpe=5,
+                srpe=200.0,
+                at="2026-07-05T19:00:00-03:00",
+            ),
+        ],
+        checkins=[
+            DailyCheckin(
+                day="2026-07-15",
+                at="2026-07-15T08:00:00-03:00",
+                energy=2,
+                sleep_quality=1,
+                note="acordei detonado",
+            ),
+        ],
+    )
+
+    assert "Como ELE sentiu a semana" in evidence
+    assert "quinta-feira: esforço percebido RPE 8/10 (sRPE 400)" in evidence
+    assert "sRPE 200" not in evidence          # fora da semana fechada
+    assert "energia 2/5" in evidence
+    assert "sono 1/5" in evidence
+    assert "acordei detonado" in evidence
+
+
+def test_subjective_skipped_when_no_reports():
+
+    assert "sentiu a semana" not in _build(srpe=[], checkins=[])
