@@ -4,8 +4,9 @@ Roda no mesmo momento matinal do BodyConductNotifier (09h local), pra ser UMA
 voz de manhã, não três. Sempre avalia + grava o diário (observação); só ENVIA
 quando `readiness_alerts_enabled` está ligada. Cobre só a LACUNA do ajuste de
 corpo: CAUTION (recuperação pedindo atenção num dia puxado) e GREEN (sinal
-verde num dia puxado). A sobrecarga real (STRAINED/BRAKE) continua no
-BodyConductNotifier, que propõe mudar o plano — aqui não duplicamos.
+verde num dia puxado). A sobrecarga real (STRAINED/BRAKE) é tratada pela
+proposta do `BodyConductProposer` (também no bom dia do despertar, no dia do
+treino), que propõe mudar o plano — aqui não duplicamos.
 
 O texto é determinístico (custo zero, previsível). Dá pra trocar por Gemini
 depois, quando o Renato aprovar os alertas no diário. Ver

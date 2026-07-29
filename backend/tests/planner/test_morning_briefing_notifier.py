@@ -20,6 +20,7 @@ def _run(
     minute=0,
     data_ready=False,
     readiness=None,
+    proposal=None,
     already_sent=False,
 ):
 
@@ -29,6 +30,7 @@ def _run(
         patch(f"{MODULE}.MissedWorkoutFlow") as flow,
         patch(f"{MODULE}.DailyTrainingNotifier") as daily,
         patch(f"{MODULE}.ReadinessNotifier") as readiness_mod,
+        patch(f"{MODULE}.BodyConductProposer") as proposer,
         patch(f"{MODULE}.CoachOutbox") as notifier,
         patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
         patch(f"{MODULE}.now_in") as now_in,
@@ -51,6 +53,7 @@ def _run(
             return_value=(RUNNER, today) if today else None
         )
         readiness_mod.block = AsyncMock(return_value=readiness)
+        proposer.for_briefing = AsyncMock(return_value=proposal)
 
         async def _capture(runner, message, **kwargs):
             sent["runner"] = runner
@@ -79,6 +82,42 @@ def test_despertar_junta_furo_prontidao_e_treino_na_ordem():
         "Furou ontem — quer que eu ajuste?\n\n"
         "Reparei que seu HRV vem caindo — pega leve.\n\n"
         "🏃 Hoje: 8km"
+    )
+
+
+def test_proposta_strained_entra_e_suprime_o_treino_repetido():
+    """Corpo em sobrecarga: a PROPOSTA de aliviar o treino de hoje entra no
+    lugar da prontidão (readiness None) e o bloco de treino é SUPRIMIDO — a
+    proposta já fala do treino, não repete."""
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: Intervalado de Limiar 7km",
+        data_ready=True,
+        readiness=None,
+        proposal="Teu corpo pediu freio hoje. Troco o Limiar por leve? (sim)",
+    )
+
+    assert sent["message"] == (
+        "Teu corpo pediu freio hoje. Troco o Limiar por leve? (sim)"
+    )
+    assert "Intervalado" not in sent["message"]   # treino não repete
+
+
+def test_prontidao_ganha_da_proposta_e_treino_segue():
+    """Prontidão (CAUTION/GREEN) fala -> nem chama a proposta, e o treino de
+    hoje segue no fim (o aviso é genérico, o treino complementa)."""
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: 8km",
+        data_ready=True,
+        readiness="Reparei que seu HRV vem caindo — pega leve.",
+        proposal="NÃO DEVERIA APARECER",
+    )
+
+    assert sent["message"] == (
+        "Reparei que seu HRV vem caindo — pega leve.\n\n🏃 Hoje: 8km"
     )
 
 

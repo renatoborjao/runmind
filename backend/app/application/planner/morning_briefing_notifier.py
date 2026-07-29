@@ -1,5 +1,8 @@
 from datetime import date, time
 
+from app.application.coach.planning.body_conduct_proposer import (
+    BodyConductProposer,
+)
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
 )
@@ -38,8 +41,9 @@ class MorningBriefingNotifier:
     sincronizou. Aí o coach fala fresco e ANTES do treino, cedo ou tarde:
 
       1) furo de ONTEM (se houve),
-      2) leitura de corpo / prontidão de HOJE (se merece — atrás da flag),
-      3) treino de HOJE.
+      2) corpo de HOJE: prontidão (CAUTION/GREEN, atrás da flag) OU, em
+         sobrecarga, a PROPOSTA de aliviar o treino de hoje,
+      3) treino de HOJE (suprimido quando a proposta já o descreve).
 
     Blocos independentes: cada um só entra se tiver o que dizer. Sem relógio (sem
     dado até as 06h), manda furo + treino sem o bloco de corpo. Uma voz de manhã,
@@ -104,8 +108,12 @@ class MorningBriefingNotifier:
 
             parts.append(missed[1])
 
-        # 2) corpo / prontidão de HOJE — só quando o dado da noite chegou e
-        #    (atrás da flag) o estado merece voz
+        # 2) corpo de HOJE — só quando o dado da noite chegou. É UM bloco:
+        #    prontidão (CAUTION/GREEN, atrás da flag) OU, se o corpo está em
+        #    SOBRECARGA, a PROPOSTA de aliviar o treino de hoje. Nunca os dois
+        #    (STRAINED cala a prontidão), então nunca infla.
+        proposal = None
+
         if data_ready:
 
             block = await ReadinessNotifier.block(profile)
@@ -114,12 +122,23 @@ class MorningBriefingNotifier:
 
                 parts.append(block)
 
-        # 3) treino de HOJE (descanso volta None)
-        today = await DailyTrainingNotifier.build(profile)
+            else:
 
-        if today is not None:
+                proposal = await BodyConductProposer.for_briefing(profile)
 
-            parts.append(today[1])
+                if proposal:
+
+                    parts.append(proposal)
+
+        # 3) treino de HOJE (descanso volta None) — MAS se a proposta STRAINED
+        #    já falou do treino de hoje, não repete (ela já o descreve).
+        if proposal is None:
+
+            today = await DailyTrainingNotifier.build(profile)
+
+            if today is not None:
+
+                parts.append(today[1])
 
         # nada a dizer (sem furo, sem alerta, hoje é descanso): silêncio
         if not parts:

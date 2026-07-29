@@ -194,8 +194,9 @@ class Settings(BaseSettings):
     # Vigia de prontidão: a avaliação e o diário (GET /debug/readiness) rodam
     # SEMPRE (observação). Esta flag controla só o ENVIO proativo dos alertas
     # de prontidão (atenção/sinal verde) ao atleta. Fica DESLIGADA até validar
-    # o diário nos atletas reais. A sobrecarga (STRAINED) já é tratada pelo
-    # BodyConductNotifier — o vigia só cobre a lacuna (CAUTION/GREEN).
+    # o diário nos atletas reais. A sobrecarga (STRAINED) já é tratada pela
+    # proposta do BodyConductProposer no despertar — o vigia cobre a lacuna
+    # (CAUTION/GREEN).
     readiness_alerts_enabled: bool = False
 
     @property

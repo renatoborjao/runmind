@@ -12,9 +12,6 @@ from app.application.planner.morning_briefing_notifier import (
     MorningBriefingNotifier,
 )
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
-from app.application.review.body_conduct_notifier import (
-    BodyConductNotifier,
-)
 from app.application.review.monthly_recap_notifier import (
     MonthlyRecapNotifier,
 )
@@ -201,16 +198,10 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         id="morning_briefing",
     )
 
-    # Ajuste de corpo — 09h local: se o corpo pede freio (STRAINED), o coach
-    # alivia/remaneja a próxima sessão exigente e informa. Dedup por semana
-    # (no máximo um ajuste/semana). Barato quando ninguém está sobrecarregado.
-    _scheduler.add_job(
-        BodyConductNotifier.notify_all,
-        trigger="cron",
-        minute=0,
-        misfire_grace_time=3600,
-        id="body_conduct_adjustment",
-    )
+    # Ajuste de corpo (STRAINED): a proposta de aliviar o treino agora sai no
+    # "bom dia" do DESPERTAR, no DIA do treino, com o dado fresco da noite
+    # (BodyConductProposer.for_briefing dentro do MorningBriefingNotifier) —
+    # não é mais um job fixo de 09h. Ver [[project_analise_corpo_garmin]].
 
     # autocura da sessão do WhatsApp (quedas transitórias) — só quando
     # o canal está ligado; com WHATSAPP_ENABLED=false não fica batendo

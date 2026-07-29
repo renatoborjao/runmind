@@ -23,6 +23,7 @@ MOD = "app.application.coach.planning.body_conduct_proposer"
 
 WEEK = date(2026, 7, 6)      # segunda
 FRIDAY = date(2026, 7, 10)   # véspera do longão de sábado
+SATURDAY = date(2026, 7, 11)  # o dia do longão
 
 
 def _reading(state=BODY_STRAINED) -> BodyReading:
@@ -59,7 +60,8 @@ def _runner(external=False):
 _UNSET = object()
 
 
-def _run(reading=None, plan=None, today=FRIDAY, runner=None, decision=_UNSET):
+def _run(reading=None, plan=None, today=FRIDAY, runner=None, decision=_UNSET,
+         when="eve"):
 
     reading = reading or _reading()
     plan = plan or _plan()
@@ -95,6 +97,7 @@ def _run(reading=None, plan=None, today=FRIDAY, runner=None, decision=_UNSET):
         message = asyncio.run(
             BodyConductProposer.propose(
                 "renato", runner, plan, reading, None, history, today,
+                when=when,
             )
         )
 
@@ -110,6 +113,27 @@ def test_eve_of_demanding_session_proposes_and_stages():
     repo.save.assert_called_once()
     saved = repo.save.call_args.args[1]
     assert saved.kind == "body_ease"
+
+
+def test_today_of_demanding_session_proposes_with_fresh_data():
+
+    # sábado: o treino exigente é HOJE -> propõe no dia, com dado fresco
+    message, repo, decide = _run(today=SATURDAY, when="today")
+
+    assert message is not None
+    repo.save.assert_called_once()
+    decide.assert_awaited_once()
+    # e o engine recebeu when="today" (usa o prompt de HOJE, não de véspera)
+    assert decide.await_args.kwargs.get("when") == "today"
+
+
+def test_today_mode_no_demanding_session_today_does_not_propose():
+
+    # sexta: hoje (sexta) não tem treino (plano é ter/sáb) -> nada a propor
+    message, repo, decide = _run(today=FRIDAY, when="today")
+
+    assert message is None
+    decide.assert_not_awaited()
 
 
 def test_healthy_body_never_proposes():
