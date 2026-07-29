@@ -80,6 +80,46 @@ Responda APENAS JSON:
 {{"action": "keep", "message": ""}}
 """
 
+# Variante DIA-DO-TREINO: a proposta sai na manhã do próprio treino (gatilho do
+# despertar), com o dado FRESCO da noite. Sem a lógica de "véspera/descanso pode
+# restaurar" — aqui o dado é de agora e a decisão é pra hoje.
+PROMPT_TEMPLATE_TODAY = """Você é o TREINADOR de corrida do RunMind, cuidando do \
+atleta {runner_name}. HOJE ele tem um treino EXIGENTE e o corpo dele, NESTA \
+MANHÃ (dado fresco do sono/recuperação da noite), está pedindo recuperação. \
+Você decide a conduta pelos dados — mas quem sente se ele acordou inteiro é ele; \
+então você PROPÕE e ele confirma.
+
+Hoje é {today}. Meta: {goal}.
+
+O CORPO dele agora (carga à luz da recuperação):
+{body}
+
+PLANO DESTA SEMANA (dias de corrida):
+{sessions}
+
+O treino exigente de HOJE é: {target} ({target_day}).
+
+Decida a melhor conduta pra ESSE treino de hoje, pesando a meta e que recuperar \
+agora é o que SUSTENTA a evolução (não corte por cortar, mas não empilhe carga \
+num corpo que não assimila):
+- "ease": aliviar o treino de HOJE. Dê "ease_km" (distância menor, leve) — vira \
+rodagem leve.
+- "move": remanejar pra um dia LIVRE mais pra frente da semana. Dê \
+"target_day" (inglês), que NÃO pode ter treino planejado.
+- "keep": manter (o corpo aguenta / a meta pede) — sem mudança.
+
+A "message" é uma PROPOSTA curta de WhatsApp (sem markdown): diz o que você viu \
+no corpo dele HOJE, propõe a mudança pro treino de hoje e POR QUÊ (recuperação/\
+evolução). TERMINA deixando claro que basta ele confirmar que você ajusta (ou \
+dizer que está pronto que você mantém). Tom de treinador que cuida. No "keep", a \
+message pode ficar vazia.
+
+Responda APENAS JSON:
+{{"action": "ease", "ease_km": 6, "message": "..."}}
+{{"action": "move", "target_day": "Friday", "message": "..."}}
+{{"action": "keep", "message": ""}}
+"""
+
 
 @dataclass(slots=True)
 class BodyConductDecision:
@@ -134,6 +174,41 @@ class BodyConductEngine:
         return None
 
     @staticmethod
+    def todays_demanding_session(
+        plan: TrainingPlan,
+        today: date,
+        done_days: set[str] | None = None,
+    ) -> PlannedSession | None:
+        """A sessão exigente de HOJE ainda não cumprida (data == hoje) — pro
+        ajuste no dia do treino (gatilho do despertar). Intensa/longa por
+        rótulo; senão, longão de hoje (>= 10km). None se hoje não há treino
+        exigente pendente."""
+
+        done = {d.lower() for d in (done_days or set())}
+
+        todays = [
+            s
+            for s in plan.sessions
+            if plan.session_date(s) == today
+            and s.day.lower() not in done
+            and s.kind in _RUNNING_KINDS
+        ]
+
+        for session in todays:
+
+            if BodyConductEngine._is_demanding(session):
+
+                return session
+
+        for session in todays:
+
+            if (session.planned_distance_km or 0) >= 10:
+
+                return session
+
+        return None
+
+    @staticmethod
     async def decide(
         runner: RunnerProfile,
         plan: TrainingPlan,
@@ -141,11 +216,17 @@ class BodyConductEngine:
         session: PlannedSession,
         today: date,
         goal: str,
+        when: str = "eve",
     ) -> BodyConductDecision | None:
 
         settings = get_settings()
 
-        prompt = PROMPT_TEMPLATE.format(
+        # "today" = proposta na manhã do treino (dado fresco); "eve" = véspera
+        template = (
+            PROMPT_TEMPLATE_TODAY if when == "today" else PROMPT_TEMPLATE
+        )
+
+        prompt = template.format(
             runner_name=runner.name,
             today=(
                 f"{weekday_label(weekday_name(today))}, "

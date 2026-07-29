@@ -37,9 +37,12 @@ class BodyConductProposer:
         trajectory: BodyTrajectory | None,
         history: TrainingHistory,
         today: date,
+        when: str = "eve",
     ) -> str | None:
         """Devolve a mensagem-proposta (e estagia a proposta) quando cabe:
-        corpo em sobrecarga E há treino exigente AMANHÃ. Senão, None."""
+        corpo em sobrecarga E há treino exigente. `when`:
+        - "today" = treino exigente é HOJE (gatilho do despertar, dado fresco);
+        - "eve" = treino exigente é AMANHÃ (véspera; on-demand)."""
 
         # treinador humano ou corpo sem sobrecarga: não mexe
         if runner.external_coach:
@@ -56,22 +59,35 @@ class BodyConductProposer:
 
         done_days = WeeklyPlanMatcher.fulfilled_days(plan, history.activities)
 
-        session = BodyConductEngine.next_demanding_session(
-            plan, today, done_days
-        )
+        if when == "today":
 
-        # só na VÉSPERA (treino exigente é AMANHÃ). Antes disso, um descanso
-        # ainda pode restaurar o atleta — não se antecipa o corte.
-        if session is None or plan.session_date(session) != today + timedelta(
-            days=1
-        ):
+            # o treino exigente é HOJE (o seletor já garante data == hoje)
+            session = BodyConductEngine.todays_demanding_session(
+                plan, today, done_days
+            )
+
+        else:
+
+            session = BodyConductEngine.next_demanding_session(
+                plan, today, done_days
+            )
+
+            # só na VÉSPERA (exigente é AMANHÃ): antes disso um descanso ainda
+            # pode restaurar o atleta — não se antecipa o corte.
+            if session is not None and plan.session_date(
+                session
+            ) != today + timedelta(days=1):
+
+                session = None
+
+        if session is None:
 
             return None
 
         goal = BuildTrainingGoal.execute(runner)
 
         decision = await BodyConductEngine.decide(
-            runner, plan, reading, session, today, goal.name,
+            runner, plan, reading, session, today, goal.name, when=when,
         )
 
         # IA caiu ou o coach decidiu MANTER: sem proposta
@@ -91,3 +107,47 @@ class BodyConductProposer:
         )
 
         return decision.message
+
+    @staticmethod
+    async def for_briefing(profile: str) -> str | None:
+        """Ponto de entrada do 'bom dia' do despertar: carrega tudo e propõe o
+        ajuste do treino de HOJE quando o corpo está em sobrecarga, com o dado
+        FRESCO da noite. Best-effort — nunca derruba o briefing. Espelha
+        ReadinessNotifier.block. Ver [[project_analise_corpo_garmin]]."""
+
+        from app.application.coach.intelligence.body_reading_service import (
+            BodyReadingService,
+        )
+        from app.application.planner.current_plan_provider import (
+            CurrentPlanProvider,
+        )
+        from app.application.use_cases.load_training_history import (
+            LoadTrainingHistory,
+        )
+        from app.core.clock import today_local
+
+        try:
+
+            reading, trajectory = BodyReadingService.read(
+                profile, persist=False
+            )
+
+            # só sobrecarga real; barato quando não é (não carrega plano/histórico)
+            if reading.body_state != BODY_STRAINED:
+
+                return None
+
+            runner, plan = await CurrentPlanProvider.for_profile(profile)
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            return await BodyConductProposer.propose(
+                profile, runner, plan, reading, trajectory, history,
+                today_local(), when="today",
+            )
+
+        except Exception as e:
+
+            print(f"Proposta de corpo (briefing) de '{profile}' falhou: {e}")
+
+            return None
