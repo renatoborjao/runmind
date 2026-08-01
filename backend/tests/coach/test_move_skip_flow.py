@@ -20,7 +20,10 @@ MODULE = "app.application.coach.conversation.move_skip_flow"
         ("joga o treino de terça pra quarta", True),
         ("posso pular o treino de amanhã?", True),
         ("vou precisar reprogramar meu longao para amanhã, domingo", True),
+        ("preciso alterar o longao para domingo", True),
+        ("muda o treino de terça pra quinta", True),
         ("como foi meu último treino?", False),
+        ("mudei de ideia sobre a prova", False),
         ("bom dia!", False),
     ],
 )

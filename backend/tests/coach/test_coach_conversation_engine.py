@@ -80,3 +80,14 @@ def test_system_prompt_contains_non_negotiable_guardrails():
     assert "NUNCA inventa números" in SYSTEM_PROMPT_TEMPLATE
     assert "NUNCA afirma ter executado" in SYSTEM_PROMPT_TEMPLATE
     assert "desculpa técnica falsa" in SYSTEM_PROMPT_TEMPLATE
+
+
+def test_system_prompt_does_not_deny_garmin_capability():
+    """O push pro Garmin EXISTE (fluxo próprio do sistema). O prompt não pode
+    fazer o Gemini negar essa capacidade — só o proíbe de afirmar que ELE já
+    executou nesta mensagem. Ver bug do Renato (31/07)."""
+
+    assert "MANDAR TREINO PRO GARMIN" in SYSTEM_PROMPT_TEMPLATE
+    assert "CONSEGUE, sim, sincronizar" in SYSTEM_PROMPT_TEMPLATE
+    # orienta o atleta a acionar o fluxo real em vez de negar a capacidade
+    assert "manda pro relógio" in SYSTEM_PROMPT_TEMPLATE
