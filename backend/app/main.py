@@ -21,13 +21,18 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
 
+    # Em produção fechamos a "planta" pública da API (Swagger/ReDoc/OpenAPI):
+    # não há painel front consumindo isso, e expor o schema num host público
+    # é superfície à toa. Em dev seguem abertos (úteis pra inspecionar).
+    is_production = settings.app_env == "production"
+
     app = FastAPI(
         title="RunMind API",
         description="The AI-powered platform for runners.",
         version=settings.app_version,
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url=None if is_production else "/docs",
+        redoc_url=None if is_production else "/redoc",
+        openapi_url=None if is_production else "/openapi.json",
         lifespan=lifespan,
     )
 
