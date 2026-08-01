@@ -160,21 +160,48 @@ def test_pace_band_triggers_with_margin_and_ignores_micro_improvement():
     ) is None
 
 
-def test_km_milestone_crossed_updates_silently_without_celebrating():
-    """Decisão do Renato: 'km acumulado' não é recorde de corredor de
-    verdade — segue sendo rastreado (o recap mensal usa), mas não gera mais
-    mensagem de comemoração depois de cada treino."""
+def test_seed_does_not_inherit_pre_runmind_strava_km():
+    """O acumulado conta só a jornada COM o RunMind: conectar o Strava com um
+    histórico gordo NÃO herda esses km (decisão do Renato 2026-08-01). Os PRs
+    reais (corrida mais longa) seguem vindo do histórico completo."""
 
     runner = make_runner()
 
-    # 96km acumulados antes de hoje; corrida mais longa já semeada em
-    # 15km, pra hoje (10km) não disparar OUTRO recorde e confundir o teste
+    # histórico pré-RunMind de 400km no Strava
+    past = [_run(d % 28 + 1, 6, 10_000, 3.0, d) for d in range(1, 41)]
+
+    _feed(runner, list(reversed(past)))  # semeia
+
+    records = PersonalRecordRepository().load(runner.id)
+
+    assert records["total_km_accumulated"] == 0.0   # NÃO herdou os 400km
+    assert "total_km_milestone" not in records       # nenhum marco pré-dado
+    assert records["longest_km"] == 10.0             # PR real segue do histórico
+
+
+def test_km_milestone_crossed_updates_silently_without_celebrating():
+    """Decisão do Renato: 'km acumulado' não é recorde de corredor de
+    verdade — segue sendo rastreado (o recap mensal usa), mas não gera mais
+    mensagem de comemoração depois de cada treino. O acumulado é COM o
+    RunMind (do zero na conexão), então aqui simulamos 96km já rodados com o
+    app antes de hoje."""
+
+    runner = make_runner()
+
+    # corrida mais longa já semeada em 15km, pra hoje (10km) não disparar
+    # OUTRO recorde e confundir o teste
     base = [
         _run(1, 6, 15_000, 3.0, 1),
         *[_run(d, 6, 9_000, 3.0, d) for d in range(2, 11)],
     ]
 
-    _feed(runner, list(reversed(base)))  # semeia: 96km, longest=15km
+    _feed(runner, list(reversed(base)))  # semeia: acumulado ZERA, longest=15km
+
+    # 96km já rodados COM o RunMind (jornada prévia, não herança do Strava)
+    records = PersonalRecordRepository().load(runner.id)
+    assert records["total_km_accumulated"] == 0.0
+    records["total_km_accumulated"] = 96.0
+    PersonalRecordRepository().save(runner.id, records)
 
     today = _run(1, 7, 10_000, 3.0, 100)  # empurra pra 106km -> cruza 100
 
@@ -416,9 +443,14 @@ def test_km_milestone_is_dated_only_on_the_live_path():
 
     runner = make_runner()
 
-    base = [_run(d, 6, 9_000, 3.0, d) for d in range(1, 11)]  # 90km, sem cruzar marco
+    base = [_run(d, 6, 9_000, 3.0, d) for d in range(1, 11)]  # só semeia PRs
 
-    _feed(runner, list(reversed(base)))  # semeia
+    _feed(runner, list(reversed(base)))  # semeia; acumulado zera
+
+    # 90km já rodados COM o RunMind antes de hoje
+    records = PersonalRecordRepository().load(runner.id)
+    records["total_km_accumulated"] = 90.0
+    PersonalRecordRepository().save(runner.id, records)
 
     today = _run(1, 7, 15_000, 3.0, 100)  # cruza 100km AO VIVO
 

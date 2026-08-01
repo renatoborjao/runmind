@@ -367,17 +367,16 @@ class PersonalRecordDetector:
 
             records["pace_by_band_dates"] = pace_by_band_dates
 
-        total_km = history.total_distance / 1000
-
-        # contador incremental (pro caminho ao vivo nunca mais precisar
-        # resomar do Strava) — a base é literalmente o total já conhecido
-        records["total_km_accumulated"] = round(total_km, 2)
-
-        crossed = [m for m in _KM_MILESTONES if m <= total_km]
-
-        if crossed:
-
-            records["total_km_milestone"] = max(crossed)
+        # "Km acumulado COM o RunMind" começa do ZERO na conexão — NÃO herda o
+        # histórico pré-RunMind do Strava. O marco "passou de X km com o
+        # RunMind" só é honesto se contar o que o atleta rodou USANDO o app
+        # (decisão do Renato 2026-08-01: pouco importa a quilometragem de
+        # Strava anterior; o que vale é a jornada com a gente). O caminho ao
+        # vivo (`after_feedback`) incrementa a partir daqui, treino a treino.
+        # Os PRs acima (corrida mais longa, pace por faixa) e a semana de maior
+        # volume abaixo SEGUEM vindo do histórico completo — são a capacidade
+        # real do corredor, não a jornada; só o acumulado é que zera aqui.
+        records["total_km_accumulated"] = 0.0
 
         buckets = group_by_week(history.activities)
 
