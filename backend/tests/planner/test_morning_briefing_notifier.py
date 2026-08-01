@@ -22,6 +22,7 @@ def _run(
     readiness=None,
     proposal=None,
     already_sent=False,
+    has_garmin=True,
 ):
 
     sent = {}
@@ -35,6 +36,7 @@ def _run(
         patch(f"{MODULE}.LoadRunnerProfile") as load_runner,
         patch(f"{MODULE}.now_in") as now_in,
         patch(f"{MODULE}.DispatchGuard") as guard,
+        patch(f"{MODULE}.GarminClient") as garmin,
         patch(
             f"{MODULE}.MorningBriefingNotifier._night_data_ready",
             return_value=data_ready,
@@ -43,6 +45,10 @@ def _run(
 
         now_in.return_value = datetime(2026, 7, 14, hour, minute)
         guard.already_sent.return_value = already_sent
+
+        # has_garmin = is_connected AND analysis_enabled
+        garmin.is_connected.return_value = has_garmin
+        garmin.analysis_enabled.return_value = has_garmin
 
         load_runner.execute.return_value = RUNNER
 
@@ -121,16 +127,51 @@ def test_prontidao_ganha_da_proposta_e_treino_segue():
     )
 
 
-def test_prontidao_so_entra_com_dado_da_noite():
-    """Sem dado (rede das 06h): manda furo + treino, SEM o bloco de corpo,
-    mesmo que houvesse alerta."""
+def test_sem_relogio_rede_das_06h():
+    """Sem Garmin: rede das 06h — manda furo + treino, SEM o bloco de corpo
+    (não há dado da noite pra esperar), mesmo que houvesse alerta."""
 
     sent = _run(
         missed="Furou ontem",
         today="🏃 Hoje: 8km",
         data_ready=False,
+        has_garmin=False,
         readiness="NÃO DEVERIA APARECER",
         hour=6,
+    )
+
+    assert sent["message"] == "Furou ontem\n\n🏃 Hoje: 8km"
+
+
+def test_com_garmin_segura_o_briefing_ate_o_dado_chegar():
+    """Com Garmin mas o dado ainda não sincronizou (10h): SEGURA o briefing
+    inteiro — nada sai, nem o furo (pra nunca soltar o 'bom dia' sem o corpo
+    de quem tem como medir). Era o bug da Fernanda: às 06h mandava sem corpo."""
+
+    sent = _run(
+        missed="Furou ontem",
+        today="🏃 Hoje: 8km",
+        data_ready=False,
+        has_garmin=True,
+        readiness="NÃO DEVERIA APARECER",
+        hour=10,
+    )
+
+    assert sent == {}
+
+
+def test_com_garmin_ultima_rede_11h_manda_sem_corpo():
+    """Garmin que não sincronizou até as 11h (não dormiu com o relógio):
+    desiste de esperar e manda furo + treino SEM o corpo — falha nunca
+    vira silêncio."""
+
+    sent = _run(
+        missed="Furou ontem",
+        today="🏃 Hoje: 8km",
+        data_ready=False,
+        has_garmin=True,
+        readiness="NÃO DEVERIA APARECER",
+        hour=11,
     )
 
     assert sent["message"] == "Furou ontem\n\n🏃 Hoje: 8km"
@@ -170,8 +211,9 @@ def test_despertar_cedo_manda_na_hora():
 
 
 def test_fora_da_janela_nada_sai():
+    """Passou das 11h30 (fim da janela): nada sai, nem com dado."""
 
-    sent = _run(missed="Furou", today="🏃 Hoje", data_ready=True, hour=11)
+    sent = _run(missed="Furou", today="🏃 Hoje", data_ready=True, hour=12)
 
     assert sent == {}
 

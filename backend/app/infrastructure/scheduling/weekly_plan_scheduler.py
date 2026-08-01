@@ -186,10 +186,11 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã
-    # (04:30–10:00 local) e quando o dado da noite do Garmin chega (atleta
-    # acordou e sincronizou): furo de ONTEM + corpo/prontidão + treino de HOJE
-    # numa mensagem só, ANTES do treino. Sem relógio, cai na rede das 06h (sem
-    # o bloco de corpo). Dedup: um por dia.
+    # (04:30–11:30 local). Quem TEM Garmin: segura o briefing inteiro até o dado
+    # da noite chegar (atleta acordou e sincronizou) — furo de ONTEM + corpo/
+    # prontidão + treino de HOJE numa mensagem só, ANTES do treino; se não vier
+    # até as 11h, manda sem o corpo. Quem NÃO tem relógio: rede das 06h (sem o
+    # bloco de corpo). Dedup: um por dia.
     _scheduler.add_job(
         MorningBriefingNotifier.notify_all,
         trigger="interval",
