@@ -12,13 +12,20 @@ from app.infrastructure.persistence.plan_proposal_repository import (
     PlanProposalRepository,
 )
 
-# portão barato: só chama a IA se a mensagem cheira a mover/pular treino
+# portão barato: só chama a IA se a mensagem cheira a mover/pular treino.
+# Se um verbo aqui casar mas não for um move de verdade, o MoveSkipEngine
+# devolve None e o fluxo cai fora — o portão é só um pré-filtro barato.
 _MOVE_CUES = [
     "joga", "jogar", "passa o", "passa pra", "passar o", "move o", "mover",
     "no lugar de", "em vez de", "adia", "adiar", "remarca", "remarcar",
     "antecipa", "antecipar", "troca o dia", "troca pra", "trocar de dia",
     "empurra o treino", "empurrar o treino", "faco quarta", "corro quarta",
     "reprograma", "reprogramar", "reprogramo",
+    # "alterar/mudar o treino/longão pro dia X" — sinônimos que faltavam e
+    # faziam o pedido cair no Gemini (que só "anotava" sem aplicar nada).
+    "altera o", "alterar o", "altera pra", "alterar pra", "altera para",
+    "alterar para", "muda o", "mudar o", "muda pra", "mudar pra",
+    "muda para", "mudar para",
 ]
 
 _SKIP_CUES = [
