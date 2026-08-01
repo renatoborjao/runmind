@@ -1,0 +1,54 @@
+name: Uptime check -> ntfy
+
+# Vigia EXTERNO (roda na infra do GitHub, fora da VM) — pinga o /health do
+# RunMind e, se cair, dispara um push no ntfy do Renato. Camada que pega
+# "a VM caiu do nada", que nenhum alerta rodando DENTRO da VM consegue pegar.
+# O tópico ntfy vem do secret NTFY_URL (repo é público — nunca hardcodar).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # a cada ~10 min (o cron do GitHub pode atrasar/pular sob carga)
+  workflow_dispatch:          # permite rodar manual (Actions -> Run workflow)
+    inputs:
+      test_alert:
+        description: "Manda um push de TESTE (nao checa o health)"
+        type: boolean
+        default: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health e alerta no ntfy se cair
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+        run: |
+          if [ -z "$NTFY_URL" ]; then
+            echo "::error::Secret NTFY_URL nao configurado — nada pra onde alertar."
+            exit 1
+          fi
+
+          # modo teste manual: prova a corrente sem depender de queda real
+          if [ "${{ github.event.inputs.test_alert }}" = "true" ]; then
+            curl -s -H "Title: RunMind — teste de alerta" \
+                 -H "Priority: default" -H "Tags: white_check_mark" \
+                 -d "Teste do vigia de uptime (GitHub Actions -> ntfy). Se voce recebeu isto, o alerta funciona." \
+                 "$NTFY_URL"
+            echo "push de teste enviado"
+            exit 0
+          fi
+
+          URL="https://runmind.duckdns.org/api/v1/health"
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$URL" || echo "000")
+          echo "health HTTP $code"
+
+          if [ "$code" != "200" ]; then
+            curl -s -H "Title: 🚨 RunMind fora do ar" \
+                 -H "Priority: urgent" -H "Tags: rotating_light" \
+                 -d "O /health respondeu HTTP $code (esperado 200). VM, backend ou Caddy pode ter caido. Confere: ssh ubuntu@163.176.28.178" \
+                 "$NTFY_URL"
+            echo "::error::health check falhou (HTTP $code) — alerta enviado ao ntfy"
+            exit 1
+          fi
+
+          echo "tudo no ar."
