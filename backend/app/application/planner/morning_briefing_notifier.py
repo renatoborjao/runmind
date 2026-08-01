@@ -26,13 +26,20 @@ from app.infrastructure.persistence.runner_profile_repository import (
 )
 
 # Janela de VIGÍLIA do despertar (hora local): o coach fica esperando o dado da
-# noite chegar. Roda a cada ~15 min (o scheduler), mas só age nesta faixa.
+# noite chegar. Roda a cada ~15 min (o scheduler), mas só age nesta faixa. O
+# fim vai até 11h30 pra dar folga aos ticks da última rede das 11h (abaixo).
 WINDOW_START = time(4, 30)
-WINDOW_END = time(10, 0)
+WINDOW_END = time(11, 30)
 
-# Rede de horário: se o dado da noite NÃO chegou (atleta sem relógio) até aqui,
-# manda o briefing mesmo assim — sem o bloco de corpo. Ninguém fica sem "bom dia".
+# Rede das 06h — só pra quem NÃO tem relógio: não há dado da noite pra esperar,
+# então manda furo + treino cedo. Ninguém sem "bom dia".
 FALLBACK_HOUR = 6
+
+# Última rede — só pra quem TEM Garmin: o coach SEGURA o briefing inteiro
+# esperando o dado da noite sincronizar (pra nunca separar o corpo do resto).
+# Se até aqui não chegou (não dormiu com o relógio, não sincronizou), desiste
+# e manda furo + treino SEM o corpo — falha nunca vira silêncio.
+LAST_RESORT_HOUR = 11
 
 
 class MorningBriefingNotifier:
@@ -45,9 +52,10 @@ class MorningBriefingNotifier:
          sobrecarga, a PROPOSTA de aliviar o treino de hoje,
       3) treino de HOJE (suprimido quando a proposta já o descreve).
 
-    Blocos independentes: cada um só entra se tiver o que dizer. Sem relógio (sem
-    dado até as 06h), manda furo + treino sem o bloco de corpo. Uma voz de manhã,
-    não três. Ver [[project_analise_corpo_garmin]]."""
+    Blocos independentes: cada um só entra se tiver o que dizer. Quem TEM Garmin
+    segura o briefing inteiro até o dado da noite sincronizar (última rede às 11h,
+    aí sem o bloco de corpo). Quem NÃO tem relógio recebe furo + treino na rede das
+    06h. Uma voz de manhã, não três. Ver [[project_analise_corpo_garmin]]."""
 
     @staticmethod
     async def notify_all() -> None:
@@ -86,17 +94,36 @@ class MorningBriefingNotifier:
 
             return
 
-        data_ready = MorningBriefingNotifier._night_data_ready(
-            profile, local.date()
+        has_garmin = (
+            GarminClient.is_connected(profile)
+            and GarminClient.analysis_enabled(profile)
         )
 
-        # ainda cedo e o dado não chegou: espera o despertar (próximo tick)
-        if not data_ready and local.hour < FALLBACK_HOUR:
+        # Quando enviar?
+        #  • COM Garmin: SEGURA o briefing inteiro (furo + corpo + treino) até o
+        #    dado da noite chegar — pra nunca soltar o "bom dia" sem o corpo de
+        #    quem tem como medir. Só desiste na última rede das 11h, aí manda sem
+        #    o corpo (não dormiu com o relógio / não sincronizou).
+        #  • SEM relógio: não há dado pra esperar — rede das 06h (furo + treino).
+        data_ready = False
+
+        if has_garmin:
+
+            data_ready = MorningBriefingNotifier._night_data_ready(
+                profile, local.date()
+            )
+
+            if not data_ready and local.hour < LAST_RESORT_HOUR:
+
+                return
+
+        elif local.hour < FALLBACK_HOUR:
 
             return
 
-        # commit da decisão do dia: ou o dado chegou (despertar), ou passou da
-        # rede das 06h. Marca já pra não reprocessar a cada tick.
+        # commit da decisão do dia: o dado chegou (despertar), ou passou a última
+        # rede das 11h (Garmin), ou a rede das 06h (sem relógio). Marca já pra não
+        # reprocessar a cada tick.
         DispatchGuard.mark("briefing", profile, period)
 
         parts: list[str] = []
