@@ -189,6 +189,90 @@ async def portrait(profile: str):
         )
 
 
+@router.get("/pace-zones/{profile}")
+async def pace_zones(profile: str):
+    """Zonas de pace Z1–Z5 derivadas do ritmo real do atleta + o cartão
+    formatado. Janela de inspeção pra conferir as faixas antes de responder."""
+
+    from app.application.coach.writer.pace_zones_writer import PaceZonesWriter
+    from app.application.history.pace_model_builder import PaceModelBuilder
+    from app.application.history.pace_zone_builder import PaceZoneBuilder
+    from app.application.use_cases.load_training_history import (
+        LoadTrainingHistory,
+    )
+    from app.domain.entities.pace_model import (
+        SOURCE_DECLARED,
+        SOURCE_ROOKIE,
+    )
+    from app.infrastructure.persistence.runner_profile_repository import (
+        RunnerProfileRepository,
+    )
+
+    try:
+
+        runner = RunnerProfileRepository().load(profile)
+
+        if runner is None:
+
+            raise HTTPException(status_code=404, detail="perfil não encontrado")
+
+        history = await LoadTrainingHistory.execute(profile=profile)
+
+        model = PaceModelBuilder.build(history, runner)
+
+        zones = PaceZoneBuilder.build(model)
+
+        estimated = model.source in (SOURCE_DECLARED, SOURCE_ROOKIE)
+
+        return {
+            "model": asdict(model),
+            "zones": [asdict(zone) for zone in zones.zones],
+            "card": PaceZonesWriter.write(
+                zones, runner.name, estimated=estimated
+            ),
+        }
+
+    except HTTPException:
+
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/sleep/{profile}")
+async def sleep(profile: str):
+    """Sono como eixo próprio (média/tendência/regularidade/dívida) + o cartão.
+    Janela de inspeção pra conferir a leitura antes de responder."""
+
+    from app.application.coach.intelligence.sleep_reading_service import (
+        SleepReadingService,
+    )
+    from app.application.coach.writer.sleep_reading_writer import (
+        SleepReadingWriter,
+    )
+
+    try:
+
+        reading = SleepReadingService.read(profile)
+
+        return {
+            "reading": asdict(reading),
+            "card": SleepReadingWriter.write(reading, profile),
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
 @router.get("/session-rpe/{profile}")
 async def session_rpe(profile: str):
     """sRPE por sessão (esforço percebido → carga subjetiva) + o pendente e a
