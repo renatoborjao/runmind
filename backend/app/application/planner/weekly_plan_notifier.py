@@ -1,6 +1,9 @@
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
+from app.application.coach.planning.ai_plan_service import AIPlanService
+from app.application.garmin.garmin_sync import GarminSync
+from app.application.garmin.plan_watch_sync import resync_watch_if_pushed
 from app.application.history.metrics_resolver import MetricsResolver
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
@@ -8,26 +11,23 @@ from app.application.notifications.coach_outbox import (
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
-from app.application.coach.planning.ai_plan_service import AIPlanService
 from app.application.planner.weekly_plan_service import WeeklyPlanService
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import now_in, today_local, use_athlete_timezone
-from app.infrastructure.persistence.dispatch_guard import DispatchGuard
-from app.application.garmin.garmin_sync import GarminSync
-from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.infrastructure.integrations.garmin.garmin_offer_store import (
     GarminOfferStore,
 )
+from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
-
 
 # domingo (weekday 6) 20h LOCAL: entrega do plano — UMA HORA DEPOIS do
 # fechamento da semana (19h), quando o cérebro já aprendeu com ela; assim a
@@ -139,9 +139,16 @@ class WeeklyPlanNotifier:
             plan,
         )
 
-        # atleta com Garmin conectado: oferece mandar os treinos pro
-        # relógio. Marca a oferta como pendente pra entender o "SIM".
-        if GarminSync.should_offer(profile, runner):
+        # relógio: quem JÁ sincronizou antes (tem snapshot) recebe a semana
+        # nova AUTOMÁTICA — sem re-perguntar "quer no relógio?" todo domingo.
+        # Quem nunca sincronizou continua recebendo a oferta opt-in de 1ª vez.
+        if await resync_watch_if_pushed(profile, plan):
+
+            message += (
+                "\n\n⌚ Já mandei os treinos desta semana pro seu relógio."
+            )
+
+        elif GarminSync.should_offer(profile, runner):
 
             message += GarminSync.offer_text()
 
