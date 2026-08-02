@@ -72,6 +72,21 @@ def test_qualified_yes_is_not_an_automatic_apply(text):
     assert ProposalReplyDetector.detect(text) == ProposalReply.UNCLEAR
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        # bug real (02/08): a preposição "para" casava como recusa (verbo
+        # parar) e descartava a proposta. Ressalva de rumo não é "não".
+        "digo para a partir de semana que vem",
+        "para de segunda a sexta",
+        "só os treinos de terça e quinta",
+    ],
+)
+def test_para_preposition_is_not_a_rejection(text):
+
+    assert ProposalReplyDetector.detect(text) != ProposalReply.REJECT
+
+
 def test_cue_inside_a_word_does_not_trigger():
 
     # "sim" dentro de "assim"/"simples" NÃO pode virar um aceite — só

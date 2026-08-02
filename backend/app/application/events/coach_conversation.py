@@ -30,6 +30,9 @@ from app.application.coach.conversation.plan_preference_detector import (
 )
 from app.application.coach.conversation.proposal_flow import ProposalFlow
 from app.application.coach.conversation.rpe_flow import RpeFlow
+from app.application.coach.conversation.training_preference_flow import (
+    TrainingPreferenceFlow,
+)
 from app.application.coach.intelligence.checkin_service import (
     CheckinService,
 )
@@ -333,6 +336,31 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha no fluxo de aversão de '{profile}': {e}")
+
+                reply_text = None
+
+        # Preferência DURÁVEL de rotina ("treinos de semana em até 50 min, a
+        # partir da próxima"): entende, grava na MEMÓRIA (que já alimenta a
+        # geração do plano) e confirma — sem tocar na semana atual. ANTES da
+        # negociação: um pedido pra frente não pode virar proposta de mexer na
+        # semana de agora (que pode já ter fechado).
+        if reply_text is None:
+
+            try:
+
+                reply_text = await TrainingPreferenceFlow.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(
+                    f"Falha na preferência de rotina de '{profile}': {e}"
+                )
 
                 reply_text = None
 
