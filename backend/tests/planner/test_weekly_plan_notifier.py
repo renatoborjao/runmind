@@ -179,6 +179,83 @@ def test_notify_all_continues_after_one_profile_fails():
         assert msg == "mensagem"
 
 
+def _run_sunday(*, resync_result, should_offer=False):
+    """Domingo 20h pra UM atleta; controla o resultado do resync e da oferta."""
+
+    sent = {}
+
+    with (
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
+        patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
+        patch(f"{MODULE}.TrainingAssessmentBuilder"),
+        patch(f"{MODULE}.MetricsResolver"),
+        patch(f"{MODULE}.BuildTrainingGoal"),
+        patch(f"{MODULE}.AIPlanService") as mock_ai,
+        patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
+        patch(f"{MODULE}.CoachOutbox") as mock_notification,
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 12, 20, 0)),
+        patch(f"{MODULE}.DispatchGuard") as mock_guard,
+        patch(
+            f"{MODULE}.resync_watch_if_pushed",
+            new=AsyncMock(return_value=resync_result),
+        ) as mock_resync,
+        patch(f"{MODULE}.GarminSync") as mock_garmin_sync,
+        patch(f"{MODULE}.GarminOfferStore") as mock_offer_store,
+    ):
+
+        mock_guard.already_sent.return_value = False
+
+        mock_repo = MagicMock()
+        mock_repo.list_all.return_value = ["renato"]
+        mock_repo_cls.return_value = mock_repo
+
+        mock_load_runner.execute.return_value = make_runner(name="Renato")
+        mock_load_history.execute = AsyncMock(return_value=object())
+
+        plan = MagicMock(name="plan")
+        mock_ai.ensure_plan = AsyncMock(return_value=plan)
+        mock_formatter.format.return_value = "PLANO"
+
+        mock_garmin_sync.should_offer.return_value = should_offer
+        mock_garmin_sync.offer_text.return_value = "\n\n[OFERTA]"
+
+        async def _capture(runner, message):
+            sent["message"] = message
+
+        mock_notification.send = AsyncMock(side_effect=_capture)
+
+        asyncio.run(WeeklyPlanNotifier.notify_all())
+
+        return sent, mock_resync, mock_garmin_sync, mock_offer_store, plan
+
+
+def test_sunday_auto_pushes_for_previously_synced_athlete():
+    """Quem JÁ sincronizou o relógio recebe a semana nova automática — sem
+    re-perguntar 'quer no relógio?' todo domingo."""
+
+    sent, mock_resync, mock_garmin_sync, mock_offer_store, plan = _run_sunday(
+        resync_result=True,
+    )
+
+    assert "PLANO" in sent["message"]
+    assert "relógio" in sent["message"]        # avisou que mandou
+    assert "[OFERTA]" not in sent["message"]   # NÃO re-perguntou
+    mock_resync.assert_awaited_once_with("renato", plan)
+    mock_offer_store.set_pending.assert_not_called()
+
+
+def test_sunday_offers_when_never_synced():
+    """Quem nunca sincronizou segue recebendo a oferta opt-in de 1ª vez."""
+
+    sent, _, mock_garmin_sync, mock_offer_store, _ = _run_sunday(
+        resync_result=False, should_offer=True,
+    )
+
+    assert "[OFERTA]" in sent["message"]
+    mock_offer_store.set_pending.assert_called_once_with("renato")
+
+
 # ---- lembrete de segunda pro treinador externo ----
 
 CURRENT_WEEK = WeeklyPlanService._week_start(today_local())
