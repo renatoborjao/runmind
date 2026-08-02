@@ -62,16 +62,19 @@ class DailyTrainingNotifier:
     @staticmethod
     async def build(
         profile: str,
+        greet: bool = True,
     ) -> tuple[RunnerProfile, str] | None:
         """Mensagem do treino de hoje (+ clima), ou None em dia de descanso.
         Separada do envio pra o briefing matinal poder juntar com o furo de
-        ontem num único envio."""
+        ontem num único envio. `greet=False` suprime o "Bom dia" do cabeçalho
+        quando um bloco anterior (leitura de corpo) já cumprimentou."""
 
         runner, plan = await CurrentPlanProvider.for_profile(profile)
 
         message = WeeklyPlanMessageFormatter.today_session_message(
             runner.name,
             plan,
+            greet=greet,
         )
 
         if message is None:
