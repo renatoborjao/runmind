@@ -7,6 +7,9 @@ from app.application.coach.intelligence.body_reading_service import (
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
+from app.application.coach.intelligence.sleep_reading_service import (
+    SleepReadingService,
+)
 from app.application.coach.intelligence.state_portrait_service import (
     StatePortraitService,
 )
@@ -23,10 +26,16 @@ from app.application.coach.writer.fitness_evolution_writer import (
     FitnessEvolutionWriter,
 )
 from app.application.coach.writer.help_menu import HelpMenu
+from app.application.coach.writer.pace_zones_writer import PaceZonesWriter
+from app.application.coach.writer.sleep_reading_writer import (
+    SleepReadingWriter,
+)
 from app.application.coach.writer.state_portrait_writer import (
     StatePortraitWriter,
 )
 from app.application.history.metrics_resolver import MetricsResolver
+from app.application.history.pace_model_builder import PaceModelBuilder
+from app.application.history.pace_zone_builder import PaceZoneBuilder
 from app.application.orchestrators.last_training_report import (
     LastTrainingReport,
 )
@@ -45,6 +54,7 @@ from app.application.use_cases.load_training_history import (
 )
 from app.core.clock import today_local
 from app.core.config import get_settings
+from app.domain.entities.pace_model import SOURCE_DECLARED, SOURCE_ROOKIE
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_load import LOAD_INSUFFICIENT
 
@@ -177,6 +187,31 @@ class OnDemandAnswers:
                 )
 
             return message
+
+        if intent == ChatIntent.PACE_ZONES:
+
+            # tabela Z1–Z5 da FONTE ÚNICA (VDOT do melhor esforço real + trava
+            # de condição). O builder sempre resolve (real -> declarado ->
+            # estreante), então o cartão sempre sai — honesto pro momento dele.
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            model = PaceModelBuilder.build(history, runner)
+
+            zones = PaceZoneBuilder.build(model)
+
+            estimated = model.source in (SOURCE_DECLARED, SOURCE_ROOKIE)
+
+            return PaceZonesWriter.write(
+                zones, runner.name, estimated=estimated
+            )
+
+        if intent == ChatIntent.SLEEP:
+
+            # sono como EIXO PRÓPRIO: média/tendência/regularidade/dívida. None
+            # (sem Garmin/sem noite medida) cai no Gemini, que responde natural.
+            reading = SleepReadingService.read(profile)
+
+            return SleepReadingWriter.write(reading, runner.name)
 
         if intent == ChatIntent.HELP:
 

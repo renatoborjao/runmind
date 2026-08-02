@@ -201,10 +201,36 @@ def test_meu_condicionamento():
     )
 
 
-def test_meu_sono_is_body_reading():
+def test_meu_sono_is_sleep_axis():
+    """Sono virou EIXO PRÓPRIO — sai do corpo, vai pro cartão de sono."""
 
     assert (
         IntentRouter.detect("e o meu sono, como anda?")
+        == ChatIntent.SLEEP
+    )
+
+
+def test_como_esta_meu_sono_is_sleep():
+
+    assert (
+        IntentRouter.detect("como está meu sono?")
+        == ChatIntent.SLEEP
+    )
+
+
+def test_qualidade_do_sono_is_sleep():
+
+    assert (
+        IntentRouter.detect("como anda a qualidade do meu sono?")
+        == ChatIntent.SLEEP
+    )
+
+
+def test_meu_corpo_still_body_not_sleep():
+    """'como está meu corpo' segue no corpo (não é o eixo de sono)."""
+
+    assert (
+        IntentRouter.detect("como está meu corpo?")
         == ChatIntent.BODY_READING
     )
 
@@ -330,4 +356,41 @@ def test_race_strategy_does_not_collide_with_weekly_plan():
     assert (
         IntentRouter.detect("qual o plano da semana?")
         == ChatIntent.WEEKLY_PLAN
+    )
+
+
+# ==========================================================
+# PACE_ZONES
+# ==========================================================
+
+def test_minhas_zonas_de_pace_is_pace_zones():
+
+    assert (
+        IntentRouter.detect("quais minhas zonas de pace?")
+        == ChatIntent.PACE_ZONES
+    )
+
+
+def test_em_que_ritmo_eu_treino_is_pace_zones():
+
+    assert (
+        IntentRouter.detect("em que ritmo eu treino?")
+        == ChatIntent.PACE_ZONES
+    )
+
+
+def test_pace_do_facil_is_pace_zones():
+
+    assert (
+        IntentRouter.detect("qual o pace do fácil?")
+        == ChatIntent.PACE_ZONES
+    )
+
+
+def test_pace_zones_does_not_collide_with_race_strategy():
+    """'zonas de pace' é treino; 'pace da prova' é estratégia de prova."""
+
+    assert (
+        IntentRouter.detect("qual o pace da prova?")
+        == ChatIntent.RACE_STRATEGY
     )

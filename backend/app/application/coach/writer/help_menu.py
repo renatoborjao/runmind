@@ -32,7 +32,9 @@ class HelpMenu:
                 "",
                 "💪 Seu corpo e sua forma",
                 '• "Como está meu corpo?" — recuperação e carga',
+                '• "Como está meu sono?" — média, tendência e regularidade',
                 '• "Estou evoluindo?" — sua forma ao longo das semanas',
+                '• "Quais minhas zonas de pace?" — seus ritmos de treino',
                 '• "Como estou?" — o retrato completo (corpo + forma)',
                 "",
                 "🎙️ Pode me mandar áudio",
@@ -57,6 +59,8 @@ class HelpMenu:
         "forma vem subindo ao longo das semanas.",
         '💡 Você sabia? "Como está meu corpo?" te mostra recuperação e carga '
         "do jeito honesto, sem susto.",
+        '💡 Você sabia? Pergunte "quais minhas zonas de pace?" pra ver seus '
+        "ritmos de treino (Z1 a Z5) — eles sobem sozinhos conforme você evolui.",
         '💡 Você sabia? "Qual meu próximo treino?" te dá a sessão detalhada na '
         "hora, a qualquer momento.",
         "💡 Você sabia? Pode me contar como se sente — \"dormi mal\", \"perna "

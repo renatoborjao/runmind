@@ -22,6 +22,10 @@ class ChatIntent(str, Enum):
 
     RACE_STRATEGY = "RACE_STRATEGY"
 
+    PACE_ZONES = "PACE_ZONES"
+
+    SLEEP = "SLEEP"
+
     HELP = "HELP"
 
 
@@ -58,9 +62,9 @@ _BODY_PATTERNS = [
     r"\b(minha|meu) (recuperacao|prontidao|sobrecarga|fadiga)\b",
     r"\b(estou|to|tou|ando)\b.*\b(sobrecarregado|cansado|recuperado|descansado|detonado|zerado)\b",
     r"\bposso (treinar|puxar|forcar|correr)\b.*\b(forte|pesado|firme)\b",
-    r"\bcomo (esta|ta)\b.*\b(meu sono|meu hrv|minha vfc|minha carga)\b",
+    r"\bcomo (esta|ta)\b.*\b(meu hrv|minha vfc|minha carga)\b",
     r"\bleitura do (meu )?corpo\b",
-    r"\b(meu sono|meu hrv|minha vfc|minha frequencia (cardiaca )?de repouso|meu body battery|minha bateria corporal)\b",
+    r"\b(meu hrv|minha vfc|minha frequencia (cardiaca )?de repouso|meu body battery|minha bateria corporal)\b",
 ]
 
 # Pergunta sobre EVOLUÇÃO/forma ("estou melhorando?") — quer a leitura de
@@ -99,6 +103,33 @@ _RACE_PATTERNS = [
     r"\bcomo (devo )?(distribuir|dosar) (o )?(ritmo|pace|esforco)\b",
 ]
 
+# Pedido das ZONAS DE PACE ("em que ritmo eu treino?") — quer a tabela Z1–Z5
+# derivada do ritmo real. Distinto da estratégia de prova (que exige "prova").
+_PACE_ZONE_PATTERNS = [
+    r"\b(minhas|meus) (zonas|paces|ritmos)\b",
+    r"\bzonas? de (pace|ritmo|treino)\b",
+    r"\b(pace|ritmo)s? (de|do|da) (facil|leve|limiar|tiro|rodagem|longao|recuperacao|treino)\b",
+    (
+        r"\b(em que|qual|quais|que)\b.*\b(pace|ritmo)\b.*"
+        r"\b(facil|leve|forte|limiar|tiro|moderado|rodagem|recuperacao|z[1-5])\b"
+    ),
+    r"\bem que (ritmo|pace) (eu )?(treino|corro|devo (correr|treinar|rodar))\b",
+    r"\bqual (o )?meu pace\b",
+    r"\bmeu(s)? ritmo(s)? de (treino|corrida)\b",
+]
+
+# Pedido sobre o SONO como eixo próprio ("como está meu sono?") — quer a
+# leitura de sono (média/tendência/regularidade/dívida), não a do corpo inteiro.
+# Perguntas SOBRE o sono; relatos ("dormi mal") seguem sendo check-in reativo.
+_SLEEP_PATTERNS = [
+    r"\b(meu|o meu) sono\b",
+    r"\bcomo (esta|ta|anda|vai)\b.*\bsono\b",
+    r"\bqualidade do (meu )?sono\b",
+    r"\b(tenho|ando|venho) dormindo (bem|mal|pouco)\b",
+    r"\bmeu sono (ta|esta|anda) (bom|ruim|ok|melhor|pior)\b",
+    r"\bminhas noites (de sono)?\b",
+]
+
 # Pedido de AJUDA/descoberta ("o que dá pra te perguntar?") — quer o cardápio
 # do que o bot responde. Cobre "/ajuda", "menu", "o que você faz".
 _HELP_PATTERNS = [
@@ -126,6 +157,10 @@ _FITNESS_REGEXES = [re.compile(p) for p in _FITNESS_PATTERNS]
 _PORTRAIT_REGEXES = [re.compile(p) for p in _PORTRAIT_PATTERNS]
 
 _RACE_REGEXES = [re.compile(p) for p in _RACE_PATTERNS]
+
+_PACE_ZONE_REGEXES = [re.compile(p) for p in _PACE_ZONE_PATTERNS]
+
+_SLEEP_REGEXES = [re.compile(p) for p in _SLEEP_PATTERNS]
 
 _HELP_REGEXES = [re.compile(p) for p in _HELP_PATTERNS]
 
@@ -169,6 +204,14 @@ class IntentRouter:
         if any(regex.search(normalized) for regex in _RACE_REGEXES):
 
             matched.append(ChatIntent.RACE_STRATEGY)
+
+        if any(regex.search(normalized) for regex in _PACE_ZONE_REGEXES):
+
+            matched.append(ChatIntent.PACE_ZONES)
+
+        if any(regex.search(normalized) for regex in _SLEEP_REGEXES):
+
+            matched.append(ChatIntent.SLEEP)
 
         if any(regex.search(normalized) for regex in _HELP_REGEXES):
 

@@ -1,16 +1,10 @@
+from app.application.history.pace_model_builder import PaceModelBuilder
 from app.application.history.runner_metrics import RunnerMetricsBuilder
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 
-# Mesmos offsets do RunnerMetricsBuilder (derivação por pace médio).
-EASY_MIN_OFFSET = -0.25
-EASY_MAX_OFFSET = 0.35
-THRESHOLD_OFFSET = -0.60
-VO2_OFFSET = -1.10
-
-# Defaults conservadores de estreante (nunca correu / não informou pace).
-ROOKIE_PACE = 8.0  # min/km
+# Defaults conservadores de estreante (nunca correu / não informou volume).
 ROOKIE_WEEKLY_KM = 6.0
 ROOKIE_MAX_LONG_RUN = 3.0
 
@@ -18,12 +12,14 @@ ROOKIE_MAX_LONG_RUN = 3.0
 class MetricsResolver:
     """Métricas do corredor com ou sem histórico:
 
-    1. histórico com paces -> RunnerMetricsBuilder (dados reais);
-    2. sem histórico, com pace/volume autodeclarados no onboarding;
-    3. sem nada -> defaults conservadores de estreante.
+    1. histórico com corridas -> RunnerMetricsBuilder (paces via PaceModel/VDOT
+       real + volume real);
+    2. sem histórico -> paces da FONTE (pace declarado no onboarding, modelo
+       conservador) + volume declarado;
+    3. sem nada -> defaults de estreante.
 
-    Conforme os treinos do Strava chegam, o caminho 1 assume sozinho.
-    """
+    Conforme os treinos do Strava chegam, o caminho 1 assume sozinho, e os
+    paces sobem sozinhos com a forma. Ver [[PaceModelBuilder]]."""
 
     @staticmethod
     def resolve(
@@ -38,36 +34,23 @@ class MetricsResolver:
 
         if has_paces:
 
-            return RunnerMetricsBuilder.build(history)
+            return RunnerMetricsBuilder.build(history, runner)
 
-        pace = runner.initial_pace_min_km or ROOKIE_PACE
+        # sem histórico utilizável: paces pela fonte (declarado/estreante),
+        # volume pelo autodeclarado — enviesado pro conservador
+        model = PaceModelBuilder.build(history, runner)
 
         weekly_km = runner.initial_weekly_km or ROOKIE_WEEKLY_KM
 
-        return MetricsResolver._from_pace(pace, weekly_km)
-
-    @staticmethod
-    def _from_pace(
-        pace: float,
-        weekly_km: float,
-    ) -> RunnerMetrics:
-
         return RunnerMetrics(
-
-            easy_pace_min=round(pace + EASY_MIN_OFFSET, 2),
-
-            easy_pace_max=round(pace + EASY_MAX_OFFSET, 2),
-
-            threshold_pace=round(pace + THRESHOLD_OFFSET, 2),
-
-            vo2_pace=round(pace + VO2_OFFSET, 2),
-
+            easy_pace_min=model.easy_min,
+            easy_pace_max=model.easy_max,
+            threshold_pace=model.threshold,
+            vo2_pace=model.interval,
             average_hr=0,
-
             max_long_run=max(
                 round(weekly_km * 0.35, 1),
                 ROOKIE_MAX_LONG_RUN,
             ),
-
             weekly_volume=round(weekly_km, 1),
         )
