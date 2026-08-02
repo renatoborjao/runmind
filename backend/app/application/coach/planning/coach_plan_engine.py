@@ -66,8 +66,29 @@ REGRAS:
   constância, não vire só máquina de prova — cuide da sustentabilidade e do
   prazer de correr. Se NÃO houver alvo de performance (só saúde/evolução
   geral), priorize regularidade e progressão gentil, sem puxar ritmo agressivo.
-- Cada corrida com um PROPÓSITO distinto (velocidade, base/rodagem, longão,
-  regenerativo...) e faixa de pace ancorada na META dele.
+- Cada corrida com um PROPÓSITO distinto e faixa de pace ancorada na META dele.
+- VARIE O ESTÍMULO — isto é EXPERTISE de treinador, não enfeite. Um bom plano
+  NÃO repete os mesmos 3 tipos toda semana; você tem um LEQUE e GIRA entre eles
+  conforme a fase e a meta, sempre mantendo a sobrecarga progressiva:
+    * Intervalado curto (VO2): 200-800m fortes + recuperação (ex.: 8x400,
+      5x800) — potência aeróbica.
+    * Intervalado longo / cruzeiro: 1000-2000m perto do limiar (ex.: 4x1000,
+      3x1600) — resistência à velocidade.
+    * Tempo / Limiar contínuo: 20-40 min "confortavelmente difícil" (ritmo de
+      limiar) — o motor pra 10k/21k.
+    * Fartlek: variações livres de ritmo (ex.: 2min forte / 2min leve x6-8, ou
+      por sensação) — troca de ritmo, quebra a monotonia.
+    * Progressivo: começa fácil e ACELERA em blocos até forte no fim — ensina a
+      terminar forte (ótimo no longão).
+    * Longão: o mais longo da semana — constante, progressivo OU com blocos no
+      ritmo-alvo (varie a forma dele também).
+    * Regenerativo/base: rodagem leve pra absorver a carga.
+  QUANDO usar: longe da prova / construindo base -> volume, longão, tempo de
+  limiar; perto da prova -> afiar no ritmo-alvo (tiros no pace de prova). Se as
+  SEMANAS RECENTES vieram com os mesmos tipos, TRAGA algo diferente que sirva à
+  fase/meta (troque um "tiro" por um TEMPO de limiar, um longão constante por um
+  PROGRESSIVO, meta um FARTLEK no lugar do intervalado na pista). Repetir o mesmo
+  cardápio semana após semana é plano preguiçoso — evite.
 - LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E
   claramente ACIMA da rodagem típica dele. Se o atleta ainda corre pouco (ex.:
   rodagem típica/maior treino ~5 km), NÃO rotule nenhuma corrida de "Longão" —
@@ -103,7 +124,8 @@ REGRAS:
   Explique a troca no "purpose" da sessão, pra ele ver que você ouviu e por
   que o objetivo foi mantido.
 
-Responda APENAS com JSON:
+Responda APENAS com JSON (o exemplo abaixo é só de FORMATO — NÃO é template pra
+copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedade):
 {{"weekly_objective": "objetivo/foco curto da semana",
   "sessions": [
     {{"day": "Tuesday", "kind": "run", "workout_type": "Velocidade",

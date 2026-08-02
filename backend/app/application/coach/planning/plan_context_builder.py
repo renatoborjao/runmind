@@ -7,6 +7,8 @@ from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_goal import TrainingGoal
 from app.domain.entities.training_plan import TrainingPlan
 
+_RUNNING_KINDS = {"run", "walk", "run_walk"}
+
 
 class PlanContextBuilder:
     """Monta o retrato REAL do atleta que a IA-treinadora lê para gerar o
@@ -30,6 +32,7 @@ class PlanContextBuilder:
         learnings: str = "",
         body_directive: str = "",
         fitness_directive: str = "",
+        recent_plans: list[TrainingPlan] | None = None,
     ) -> str:
 
         lines = [f"Atleta: {runner.name}"]
@@ -94,6 +97,16 @@ class PlanContextBuilder:
         if last_plan is not None and last_plan.sessions:
 
             lines.append(PlanContextBuilder._last_plan_line(last_plan))
+
+        # tipos das últimas semanas — pra a IA VER se está repetindo o mesmo
+        # cardápio e VARIAR (periodização). É o sinal que quebra a monotonia.
+        if recent_plans:
+
+            line = PlanContextBuilder._recent_types_line(recent_plans)
+
+            if line:
+
+                lines.append(line)
 
         # o VIVO: o que ele realmente executou (pace/distância por treino)
         if executed:
@@ -295,3 +308,36 @@ class PlanContextBuilder:
         )
 
         return f"Plano da semana passada: {sessions}."
+
+    @staticmethod
+    def _recent_types_line(recent_plans: list[TrainingPlan]) -> str:
+        """Os tipos de treino das últimas semanas, semana a semana — pra a IA
+        ENXERGAR se vem repetindo o mesmo cardápio e variar o estímulo."""
+
+        weeks = []
+
+        for plan in recent_plans:
+
+            types = [
+                session.workout_type
+                for session in plan.sessions
+                if session.kind in _RUNNING_KINDS and session.workout_type
+            ]
+
+            if types:
+
+                label = plan.week_start.strftime("%d/%m")
+
+                weeks.append(f"{label}: {', '.join(types)}")
+
+        if not weeks:
+
+            return ""
+
+        return (
+            "Tipos de treino das últimas semanas — "
+            + " | ".join(weeks)
+            + ". IMPORTANTE: se os tipos vêm SE REPETINDO, VARIE agora (traga "
+            "tempo/limiar, fartlek ou progressivo que sirva à fase/meta) em "
+            "vez de repetir o mesmo cardápio."
+        )
