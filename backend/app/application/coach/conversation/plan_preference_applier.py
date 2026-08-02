@@ -1,7 +1,7 @@
 from app.application.coach.conversation.plan_preference_detector import (
     PlanPreference,
 )
-from app.application.garmin.plan_watch_sync import resync_watch_if_pushed
+from app.application.garmin.watch_offer import watch_update_offer
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
 )
@@ -62,10 +62,6 @@ class PlanPreferenceApplier:
             force=True,
         )
 
-        # plano REGERADO: se o atleta já tinha os treinos no relógio, mantém o
-        # Garmin em sincronia (só pra quem já sincronizou; best-effort)
-        synced = await resync_watch_if_pushed(profile, plan)
-
         has_long = any(
             session.workout_type == "LONG_RUN"
             for session in plan.sessions
@@ -86,13 +82,9 @@ class PlanPreferenceApplier:
             plan,
         )
 
-        watch_note = (
-            "\n\n⌚ Já atualizei os treinos no seu relógio também."
-            if synced
-            else ""
-        )
-
+        # mudança de DIA de treino: informa e PERGUNTA se quer no relógio
+        # (não empurra sozinho); o 'sim' seguinte sincroniza.
         return (
             f"Fechou, {runner.name}! Ajustei seu plano pra fazer o longão "
-            f"{day_label}. 💪\n\n{plan_text}{watch_note}"
+            f"{day_label}. 💪\n\n{plan_text}{watch_update_offer(profile)}"
         )

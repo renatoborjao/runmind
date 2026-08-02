@@ -4,7 +4,6 @@ from app.application.coach.conversation.goal_change_detector import (
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
-from app.application.garmin.plan_watch_sync import resync_watch_if_pushed
 from app.application.onboarding.onboarding_answer_parser import (
     OnboardingAnswerParser,
 )
@@ -190,23 +189,14 @@ class GoalChangeApplier:
             force=True,
         )
 
-        # plano REGERADO pra meta nova: mantém o relógio em sincronia (só pra
-        # quem já sincronizou; best-effort)
-        synced = await resync_watch_if_pushed(profile, plan)
-
         plan_text = WeeklyPlanMessageFormatter.week_plan_message(
             runner.name,
             plan,
         )
 
-        watch_note = (
-            "\n\n⌚ Já atualizei os treinos no seu relógio também."
-            if synced
-            else ""
-        )
-
+        # troca de objetivo: só INFORMA que anotou e ajustou (o relógio segue
+        # o próximo domingo automático / ele pode pedir "manda pro relógio").
         return (
             f"Fechou, {runner.name}! Atualizei seu objetivo pra: {goal}. 🎯 "
             f"Já ajustei o plano da semana pra essa meta nova.\n\n{plan_text}"
-            f"{watch_note}"
         )

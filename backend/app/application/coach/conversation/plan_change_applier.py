@@ -1,11 +1,9 @@
 import copy
 
-from app.application.garmin.garmin_reconciler import GarminReconciler
 from app.domain.entities.plan_proposal import PlanProposal
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
 from app.domain.entities.workout_step import parse_steps
-from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -33,24 +31,13 @@ class PlanChangeApplier:
 
             return None
 
-        previous = copy.deepcopy(live)
-
         updated = copy.deepcopy(live)
 
         PlanChangeApplier._apply_operations(updated, proposal.operations)
 
-        # relógio conectado: reconcilia (grava os registros de push nas
-        # sessões) ANTES de salvar, pra o plano guardar o estado do Garmin.
-        # conecta uma vez e reusa em todas as ops da reconciliação.
-        if GarminClient.is_connected(profile):
-
-            GarminReconciler.reconcile(
-                profile,
-                previous_plan=previous,
-                current_plan=updated,
-                garmin=GarminClient.connect(profile),
-            )
-
+        # NÃO empurra pro relógio aqui: mudança mid-week PERGUNTA antes (o
+        # ProposalFlow oferece "quer no relógio?" e o 'sim' sincroniza pelo
+        # caminho opt-in). Só o plano do domingo vai automático pro Garmin.
         repository.save(profile, updated)
 
         return updated

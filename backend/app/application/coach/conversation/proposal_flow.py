@@ -3,13 +3,14 @@ from datetime import datetime, timedelta
 from app.application.coach.conversation.plan_change_applier import (
     PlanChangeApplier,
 )
-from app.application.coach.memory.coaching_signal_recorder import (
-    CoachingSignalRecorder,
-)
 from app.application.coach.conversation.proposal_reply_detector import (
     ProposalReply,
     ProposalReplyDetector,
 )
+from app.application.coach.memory.coaching_signal_recorder import (
+    CoachingSignalRecorder,
+)
+from app.application.garmin.watch_offer import watch_update_offer
 from app.core.clock import now_local
 from app.infrastructure.persistence.plan_proposal_repository import (
     PlanProposalRepository,
@@ -95,10 +96,9 @@ class ProposalFlow:
 
             print(f"Falha ao registrar sinal de aprendizado '{profile}': {e}")
 
-        return (
-            "Feito! Ajustei seu plano. 💪 Se você usa o relógio, já "
-            "atualizei os treinos lá também."
-        )
+        # mudança mid-week: NÃO empurra sozinho — informa e PERGUNTA se quer
+        # atualizar o relógio (o 'sim' seguinte sincroniza). Domingo é auto.
+        return "Feito! Ajustei seu plano. 💪" + watch_update_offer(profile)
 
     @staticmethod
     def _expired(proposal) -> bool:
