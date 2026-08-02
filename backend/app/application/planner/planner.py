@@ -94,7 +94,6 @@ class TrainingPlanner:
                 assessment.level,
                 phase,
                 baseline,
-                runner.preferred_long_run_day,
             )
 
         else:
@@ -105,7 +104,6 @@ class TrainingPlanner:
                 running_days,
                 assessment.level,
                 phase,
-                runner.preferred_long_run_day,
             )
 
         return TrainingPlan(
@@ -148,7 +146,6 @@ class TrainingPlanner:
         running_days: list[str],
         level: str,
         phase: str,
-        preferred_long_run_day: str | None = None,
     ) -> list:
         """Compõe a semana pelo SessionComposer (tipos por nível/fase e
         nº de dias) e distribui o volume: longão pela capacidade, o resto
@@ -158,7 +155,6 @@ class TrainingPlanner:
             level,
             phase,
             running_days,
-            preferred_long_run_day,
         )
 
         if not composed:
@@ -235,7 +231,6 @@ class TrainingPlanner:
         level: str,
         phase: str,
         baseline: RunnerBaseline,
-        preferred_long_run_day: str | None = None,
     ) -> list:
         """Respeita os DIAS ESCOLHIDOS pelo atleta (todos entram) e mantém o
         LONGÃO o mais fiel possível ao real, cortando só o necessário pra
@@ -246,7 +241,6 @@ class TrainingPlanner:
             level,
             phase,
             running_days,
-            preferred_long_run_day,
         )
 
         if not composed:

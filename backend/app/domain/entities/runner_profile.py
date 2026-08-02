@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
@@ -31,10 +30,9 @@ class RunnerProfile:
         default_factory=list
     )
 
-    # Preferência do atleta: dia em que gosta de fazer o longão (ex.:
-    # "Sunday"). Fixa o longão nesse dia se for dia de treino; None =
-    # o planejador decide (fim de semana por padrão).
-    preferred_long_run_day: str | None = None
+    # NOTA: a preferência de DIA do longão não é mais um campo rígido — virou
+    # preferência DINÂMICA na memória evolutiva (o longão é um treino como
+    # outro qualquer). Ver [[project_longao_dinamico]] e PlanPreferenceApplier.
 
     target_race: str | None = None
 

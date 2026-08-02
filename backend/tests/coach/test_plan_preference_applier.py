@@ -12,68 +12,63 @@ from tests.coach.factories import make_runner
 MODULE = "app.application.coach.conversation.plan_preference_applier"
 
 
-def test_valid_day_updates_profile_regenerates_and_confirms():
+def _long_run_plan():
+
+    long_session = MagicMock()
+    long_session.workout_type = "LONG_RUN"
+    plan = MagicMock()
+    plan.sessions = [long_session]
+
+    return plan
+
+
+def test_valid_day_records_memory_regenerates_and_confirms():
 
     runner = make_runner(
         preferred_running_days=["Tuesday", "Thursday", "Sunday"],
     )
 
     with (
-        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(f"{MODULE}.watch_update_offer", return_value=""),
     ):
 
-        mock_repo = MagicMock()
-        mock_repo_cls.return_value = mock_repo
-
-        # plano regerado tem um longão (atleta intermediário+)
-        long_session = MagicMock()
-        long_session.workout_type = "LONG_RUN"
-        plan = MagicMock()
-        plan.sessions = [long_session]
-
         mock_provider.for_profile = AsyncMock(
-            return_value=(runner, plan),
+            return_value=(runner, _long_run_plan()),
         )
-
         mock_formatter.week_plan_message.return_value = "[PLANO]"
 
         reply = asyncio.run(
             PlanPreferenceApplier.apply(
-                "renato",
-                runner,
-                PlanPreference(long_run_day="Sunday"),
+                "renato", runner, PlanPreference(long_run_day="Sunday"),
             )
         )
 
-    # gravou a preferência no perfil
-    mock_repo.update_fields.assert_called_once_with(
-        "renato",
-        {"preferred_long_run_day": "Sunday"},
-    )
+    # a preferência vira MEMÓRIA (dinâmica), não campo rígido
+    ops = mock_memory.process.call_args.args[1]
+    assert ops["add"][0]["category"] == "preferencia"
+    assert "longão" in ops["add"][0]["content"]
+    assert "Sunday" in ops["add"][0]["content"]
 
-    # regerou o plano da semana forçando (força=True)
     mock_provider.for_profile.assert_awaited_once_with("renato", force=True)
-
     assert "Ajustei seu plano" in reply
     assert "domingo" in reply
     assert "[PLANO]" in reply
-    # mudança de dia NÃO empurra sozinho: sem nota de relógio aqui
     assert "relógio" not in reply
 
 
 def test_regenerated_plan_offers_watch_update():
-    """Mudança de DIA do longão pra quem usa o relógio: NÃO empurra sozinho —
-    informa o ajuste e OFERECE atualizar o relógio (⌚), pro 'sim' seguinte."""
+    """Mudança de DIA do longão pra quem usa relógio: NÃO empurra sozinho —
+    informa e OFERECE atualizar o relógio (⌚), pro 'sim' seguinte."""
 
     runner = make_runner(
         preferred_running_days=["Tuesday", "Thursday", "Sunday"],
     )
 
     with (
-        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService"),
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(
@@ -82,25 +77,17 @@ def test_regenerated_plan_offers_watch_update():
         ) as mock_offer,
     ):
 
-        mock_repo_cls.return_value = MagicMock()
-
-        long_session = MagicMock()
-        long_session.workout_type = "LONG_RUN"
-        plan = MagicMock()
-        plan.sessions = [long_session]
-
-        mock_provider.for_profile = AsyncMock(return_value=(runner, plan))
+        mock_provider.for_profile = AsyncMock(
+            return_value=(runner, _long_run_plan())
+        )
         mock_formatter.week_plan_message.return_value = "[PLANO]"
 
         reply = asyncio.run(
             PlanPreferenceApplier.apply(
-                "renato",
-                runner,
-                PlanPreference(long_run_day="Sunday"),
+                "renato", runner, PlanPreference(long_run_day="Sunday"),
             )
         )
 
-    # ofereceu (não empurrou) atualizar o relógio
     mock_offer.assert_called_once_with("renato")
     assert "relógio" in reply
 
@@ -112,36 +99,27 @@ def test_beginner_without_long_run_records_preference_without_forcing():
     )
 
     with (
-        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.watch_update_offer", return_value=""),
     ):
 
-        mock_repo = MagicMock()
-        mock_repo_cls.return_value = mock_repo
-
-        # plano de iniciante: só rodagens, sem longão
         easy = MagicMock()
         easy.workout_type = "EASY"
         plan = MagicMock()
         plan.sessions = [easy]
 
-        mock_provider.for_profile = AsyncMock(
-            return_value=(runner, plan),
-        )
+        mock_provider.for_profile = AsyncMock(return_value=(runner, plan))
 
         reply = asyncio.run(
             PlanPreferenceApplier.apply(
-                "renato",
-                runner,
-                PlanPreference(long_run_day="Sunday"),
+                "renato", runner, PlanPreference(long_run_day="Sunday"),
             )
         )
 
-    # preferência é registrada pra quando o longão entrar
-    mock_repo.update_fields.assert_called_once()
+    # preferência registrada na memória pra quando o longão entrar
+    mock_memory.process.assert_called_once()
 
-    # mas não confirma um ajuste de longão que ainda não existe
     assert "Ajustei seu plano" not in reply
     assert "construir base" in reply
     assert "domingo" in reply
@@ -154,25 +132,20 @@ def test_day_outside_training_days_is_not_applied():
     )
 
     with (
-        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
     ):
-
-        mock_repo = MagicMock()
-        mock_repo_cls.return_value = mock_repo
 
         mock_provider.for_profile = AsyncMock()
 
         reply = asyncio.run(
             PlanPreferenceApplier.apply(
-                "renato",
-                runner,
-                PlanPreference(long_run_day="Sunday"),
+                "renato", runner, PlanPreference(long_run_day="Sunday"),
             )
         )
 
-    # não força nada quando o dia não é de treino
-    mock_repo.update_fields.assert_not_called()
+    # não grava nem regera quando o dia não é de treino
+    mock_memory.process.assert_not_called()
     mock_provider.for_profile.assert_not_awaited()
 
     assert "não está nos seus dias" in reply
@@ -187,25 +160,19 @@ def test_external_coach_only_records_preference():
     )
 
     with (
-        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
     ):
-
-        mock_repo = MagicMock()
-        mock_repo_cls.return_value = mock_repo
 
         mock_provider.for_profile = AsyncMock()
 
         reply = asyncio.run(
             PlanPreferenceApplier.apply(
-                "renato",
-                runner,
-                PlanPreference(long_run_day="Sunday"),
+                "renato", runner, PlanPreference(long_run_day="Sunday"),
             )
         )
 
-    # registra a preferência, mas não gera plano (treinador humano)
-    mock_repo.update_fields.assert_called_once()
+    mock_memory.process.assert_called_once()
     mock_provider.for_profile.assert_not_awaited()
 
     assert "longão" in reply.lower()

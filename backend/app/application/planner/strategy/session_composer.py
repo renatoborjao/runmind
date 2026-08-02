@@ -28,7 +28,6 @@ class SessionComposer:
         level: str,
         phase: str,
         running_days: list[str],
-        preferred_long_run_day: str | None = None,
     ) -> list[dict]:
 
         days_sorted = sorted(
@@ -48,10 +47,12 @@ class SessionComposer:
 
         # Longão é decisão do coach, não do atleta: iniciante (quem mal
         # corre) NÃO faz longão — constrói base com rodagens. Ele entra
-        # sozinho quando o atleta evolui pra intermediário. A preferência
-        # de dia só vale quando o longão de fato faz parte do plano.
+        # sozinho quando o atleta evolui pra intermediário. Este é o caminho
+        # DETERMINÍSTICO (fallback): põe o longão no fim de semana (último dia).
+        # A preferência de DIA do atleta é dinâmica (memória) e é honrada pela
+        # IA no plano de verdade — aqui não entra campo rígido.
         long_day = (
-            SessionComposer._long_day(days_sorted, preferred_long_run_day)
+            days_sorted[-1]
             if SessionComposer._includes_long_run(level)
             else None
         )
@@ -99,22 +100,6 @@ class SessionComposer:
         e avançado sim — o longão entra com a evolução do atleta."""
 
         return level != "Beginner"
-
-    @staticmethod
-    def _long_day(
-        days_sorted: list[str],
-        preferred: str | None,
-    ) -> str:
-
-        if preferred:
-
-            for day in days_sorted:
-
-                if day.lower() == preferred.lower():
-
-                    return day
-
-        return days_sorted[-1]
 
     @staticmethod
     def _quality_types(level: str, phase: str) -> list[str]:
