@@ -14,3 +14,8 @@ class SleepImpact:
     low_sleep_runs: int = 0
     rested_runs: int = 0
     threshold_hours: float = 7.0
+
+    # True = comparação RELATIVA (noites mais curtas vs mais longas DELE), usada
+    # quando o atleta quase nunca passa do piso saudável (crônico) e não haveria
+    # grupo de contraste com o corte absoluto. Muda só o texto, não o método.
+    relative: bool = False

@@ -52,11 +52,8 @@ class SleepPerformanceAnalyzer:
             if h.sleep_hours is not None
         }
 
-        low: list[float] = []      # EF das corridas após noite curta
-
-        rested: list[float] = []   # EF das corridas após noite boa
-
-        hrs: list[float] = []      # FC das comparáveis (referência da tradução)
+        # (EF, sono, FC) de cada corrida comparável com sono conhecido
+        runs: list[tuple[float, float, float]] = []
 
         for a in activities:
 
@@ -78,15 +75,37 @@ class SleepPerformanceAnalyzer:
 
             ef = a.average_speed / a.average_heartrate  # m/s por bpm
 
-            hrs.append(a.average_heartrate)
+            runs.append((ef, sleep, a.average_heartrate))
 
-            if sleep < HEALTHY_FLOOR_HOURS:
+        hrs = [hr for _, _, hr in runs]
 
-                low.append(ef)
+        # 1º corte ABSOLUTO (dormiu abaixo do piso saudável vs acima)
+        low = [ef for ef, s, _ in runs if s < HEALTHY_FLOOR_HOURS]
 
-            else:
+        rested = [ef for ef, s, _ in runs if s >= HEALTHY_FLOOR_HOURS]
 
-                rested.append(ef)
+        relative = False
+
+        # crônico de sono curto: quase nunca passa do piso -> sem contraste
+        # absoluto. Cai no corte RELATIVO (noites mais curtas vs mais longas
+        # DELE) pra capturar a dose-resposta mesmo dentro do sono curto.
+        if len(low) < _MIN_PER_GROUP or len(rested) < _MIN_PER_GROUP:
+
+            sleeps = [s for _, s, _ in runs]
+
+            if len(sleeps) < 2 * _MIN_PER_GROUP:
+
+                return SleepImpact(
+                    low_sleep_runs=len(low), rested_runs=len(rested)
+                )
+
+            mid = statistics.median(sleeps)
+
+            low = [ef for ef, s, _ in runs if s < mid]
+
+            rested = [ef for ef, s, _ in runs if s >= mid]
+
+            relative = True
 
         if len(low) < _MIN_PER_GROUP or len(rested) < _MIN_PER_GROUP:
 
@@ -118,6 +137,7 @@ class SleepPerformanceAnalyzer:
             pace_cost_sec=min(cost, _MAX_COST_SEC),
             low_sleep_runs=len(low),
             rested_runs=len(rested),
+            relative=relative,
         )
 
     # ------------------------------------------------------------------
@@ -161,8 +181,14 @@ def sleep_impact_plan_directive(impact: SleepImpact) -> str:
 
     floor = int(impact.threshold_hours)
 
+    when = (
+        "nas noites mais curtas dele (vs as mais longas)"
+        if impact.relative
+        else f"dormindo abaixo de {floor}h"
+    )
+
     return (
-        f"Sono: dormindo abaixo de {floor}h, o pace dele no MESMO esforço cai "
-        f"~{impact.pace_cost_sec}s/km (dado real dele). Pese na dose — em "
-        "semana de dívida de sono, segure a mão em vez de forçar qualidade."
+        f"Sono: {when}, o pace dele no MESMO esforço cai ~{impact.pace_cost_sec}"
+        "s/km (dado real dele). Pese na dose — em semana de dívida de sono, "
+        "segure a mão em vez de forçar qualidade."
     )

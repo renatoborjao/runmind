@@ -80,6 +80,29 @@ def test_no_finding_when_sleep_does_not_hurt():
     assert SleepPerformanceAnalyzer.analyze(activities, series, REF).has_finding is False
 
 
+def test_relative_split_for_chronic_short_sleeper():
+    """Atleta que quase nunca passa de 7h (crônico): sem contraste absoluto,
+    cai no corte RELATIVO (noites mais curtas vs mais longas DELE) e ainda
+    acha o custo — é o cara que MAIS precisa dessa leitura."""
+
+    # todas as noites < 7h: 5h (mais lento) vs 6h (mais rápido)
+    activities = (
+        [_run(d, 2.85) for d in (20, 21, 22, 23)]
+        + [_run(d, 3.0) for d in (24, 25, 26, 27)]
+    )
+
+    series = (
+        [_night(d, 5.0) for d in (20, 21, 22, 23)]
+        + [_night(d, 6.0) for d in (24, 25, 26, 27)]
+    )
+
+    impact = SleepPerformanceAnalyzer.analyze(activities, series, REF)
+
+    assert impact.has_finding is True
+    assert impact.relative is True
+    assert impact.pace_cost_sec >= 5
+
+
 def test_no_finding_without_enough_runs_per_group():
 
     activities = [_run(20, 3.0), _run(24, 2.8)]  # 1 por grupo
