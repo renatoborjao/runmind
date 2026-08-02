@@ -64,22 +64,18 @@ def _proposal(operations, week_start=WEEK) -> PlanProposal:
     )
 
 
-def _apply(tmp_path, live, proposal, connected):
+def _apply(tmp_path, live, proposal):
+    """Aplica a proposta no plano vivo. O relógio NÃO é tocado aqui — mudança
+    mid-week vira oferta no ProposalFlow (testado lá), não sync automático."""
 
     repo = _repo(tmp_path)
     repo.save("renato", live)
 
-    with (
-        patch(f"{MODULE}.WeeklyPlanRepository", return_value=repo),
-        patch(f"{MODULE}.GarminClient") as gc,
-        patch(f"{MODULE}.GarminReconciler") as recon,
-    ):
-
-        gc.is_connected.return_value = connected
+    with patch(f"{MODULE}.WeeklyPlanRepository", return_value=repo):
 
         updated = PlanChangeApplier.apply("renato", proposal)
 
-    return updated, repo, recon
+    return updated, repo
 
 
 def test_replace_swaps_the_session_and_persists(tmp_path):
@@ -96,42 +92,12 @@ def test_replace_swaps_the_session_and_persists(tmp_path):
           "session": asdict(fartlek)}]
     )
 
-    updated, repo, recon = _apply(tmp_path, live, proposal, connected=False)
+    updated, repo = _apply(tmp_path, live, proposal)
 
     assert updated.find_session_by_day("Thursday").workout_type == "Fartlek"
-    recon.reconcile.assert_not_called()          # relógio desconectado
 
     # persistiu de verdade
     assert repo.load("renato").find_session_by_day(
-        "Thursday"
-    ).workout_type == "Fartlek"
-
-
-def test_reconciles_the_watch_when_connected(tmp_path):
-
-    live = _plan(
-        _session("Tuesday"),
-        _session("Thursday", wt="Velocidade", dist=9.0),
-    )
-
-    fartlek = _session("Thursday", wt="Fartlek", dist=9.0)
-
-    proposal = _proposal(
-        [{"action": "replace", "day": "Thursday",
-          "session": asdict(fartlek)}]
-    )
-
-    updated, repo, recon = _apply(tmp_path, live, proposal, connected=True)
-
-    recon.reconcile.assert_called_once()
-
-    kwargs = recon.reconcile.call_args.kwargs
-
-    # reconcilia o ANTES (Velocidade) contra o DEPOIS (Fartlek)
-    assert kwargs["previous_plan"].find_session_by_day(
-        "Thursday"
-    ).workout_type == "Velocidade"
-    assert kwargs["current_plan"].find_session_by_day(
         "Thursday"
     ).workout_type == "Fartlek"
 
@@ -142,7 +108,7 @@ def test_drop_removes_the_session(tmp_path):
 
     proposal = _proposal([{"action": "drop", "day": "Thursday"}])
 
-    updated, repo, recon = _apply(tmp_path, live, proposal, connected=False)
+    updated, repo = _apply(tmp_path, live, proposal)
 
     assert updated.find_session_by_day("Thursday") is None
     assert "Thursday" not in updated.running_days
@@ -158,7 +124,7 @@ def test_stale_week_is_not_applied(tmp_path):
         week_start=date(2026, 7, 13),
     )
 
-    updated, repo, recon = _apply(tmp_path, live, proposal, connected=False)
+    updated, repo = _apply(tmp_path, live, proposal)
 
     assert updated is None
     # plano vivo intacto

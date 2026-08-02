@@ -22,10 +22,7 @@ def test_valid_day_updates_profile_regenerates_and_confirms():
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
-        patch(
-            f"{MODULE}.resync_watch_if_pushed",
-            new=AsyncMock(return_value=False),
-        ),
+        patch(f"{MODULE}.watch_update_offer", return_value=""),
     ):
 
         mock_repo = MagicMock()
@@ -63,13 +60,13 @@ def test_valid_day_updates_profile_regenerates_and_confirms():
     assert "Ajustei seu plano" in reply
     assert "domingo" in reply
     assert "[PLANO]" in reply
-    # não sincronizou (nunca empurrou): sem nota de relógio
+    # mudança de dia NÃO empurra sozinho: sem nota de relógio aqui
     assert "relógio" not in reply
 
 
-def test_regenerated_plan_synced_to_watch_adds_note():
-    """Quem JÁ tinha os treinos no relógio: ao regerar por preferência, o
-    Garmin é ressincronizado e a resposta avisa (⌚)."""
+def test_regenerated_plan_offers_watch_update():
+    """Mudança de DIA do longão pra quem usa o relógio: NÃO empurra sozinho —
+    informa o ajuste e OFERECE atualizar o relógio (⌚), pro 'sim' seguinte."""
 
     runner = make_runner(
         preferred_running_days=["Tuesday", "Thursday", "Sunday"],
@@ -80,9 +77,9 @@ def test_regenerated_plan_synced_to_watch_adds_note():
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
         patch(
-            f"{MODULE}.resync_watch_if_pushed",
-            new=AsyncMock(return_value=True),
-        ) as mock_resync,
+            f"{MODULE}.watch_update_offer",
+            return_value="\n\n⌚ Quer no relógio? Responde sim.",
+        ) as mock_offer,
     ):
 
         mock_repo_cls.return_value = MagicMock()
@@ -103,8 +100,8 @@ def test_regenerated_plan_synced_to_watch_adds_note():
             )
         )
 
-    # ressincronizou o plano REGERADO contra o snapshot do relógio
-    mock_resync.assert_awaited_once_with("renato", plan)
+    # ofereceu (não empurrou) atualizar o relógio
+    mock_offer.assert_called_once_with("renato")
     assert "relógio" in reply
 
 
@@ -117,10 +114,7 @@ def test_beginner_without_long_run_records_preference_without_forcing():
     with (
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
-        patch(
-            f"{MODULE}.resync_watch_if_pushed",
-            new=AsyncMock(return_value=False),
-        ),
+        patch(f"{MODULE}.watch_update_offer", return_value=""),
     ):
 
         mock_repo = MagicMock()

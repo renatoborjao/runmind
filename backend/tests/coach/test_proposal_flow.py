@@ -55,6 +55,28 @@ def test_confirm_applies_and_clears():
     assert "Ajustei" in reply
 
 
+def test_confirm_offers_watch_update_instead_of_auto_push():
+    """Mudança mid-week aplicada: NÃO empurra sozinho — a resposta INFORMA e
+    anexa a oferta de atualizar o relógio (pro 'sim' seguinte sincronizar)."""
+
+    repo, applier, c1, c2 = _patched(_proposal())
+
+    with (
+        c1,
+        c2,
+        patch(
+            f"{MODULE}.watch_update_offer",
+            return_value="\n\n⌚ Quer no relógio? Responde sim.",
+        ) as mock_offer,
+    ):
+
+        reply = ProposalFlow.resolve("renato", "pode aplicar")
+
+    mock_offer.assert_called_once_with("renato")
+    assert "Ajustei" in reply
+    assert "relógio" in reply
+
+
 def test_confirm_on_stale_week_explains_instead_of_applying():
 
     repo, applier, c1, c2 = _patched(_proposal(), applied=None)
