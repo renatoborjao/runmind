@@ -32,22 +32,9 @@ def _context(runner) -> str:
     )
 
 
-def test_preferred_long_run_day_reaches_the_ai_as_a_soft_default():
-
-    runner = make_runner(
-        preferred_running_days=["Tuesday", "Thursday", "Sunday"],
-        preferred_long_run_day="Sunday",
-    )
-
-    context = _context(runner).lower()
-
-    assert "longao" in context or "longão" in context
-    assert "domingo" in context
-    # é padrão, não regra fixa (o dinâmico pode sobrepor)
-    assert "pode mudar" in context
-
-
-def test_no_preferred_day_adds_no_long_run_line():
+def test_no_long_run_soft_default_line():
+    """O dia do longão não é mais campo rígido — não sai a linha de 'padrão'
+    no contexto (a preferência vem pela memória evolutiva, injetada à parte)."""
 
     runner = make_runner(
         preferred_running_days=["Tuesday", "Thursday", "Sunday"],

@@ -1,6 +1,9 @@
 from app.application.coach.conversation.plan_preference_detector import (
     PlanPreference,
 )
+from app.application.coach.memory.runner_memory_service import (
+    RunnerMemoryService,
+)
 from app.application.garmin.watch_offer import watch_update_offer
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
@@ -10,9 +13,6 @@ from app.application.planner.weekly_plan_message_formatter import (
 )
 from app.core.weekdays import weekday_label
 from app.domain.entities.runner_profile import RunnerProfile
-from app.infrastructure.persistence.runner_profile_repository import (
-    RunnerProfileRepository,
-)
 
 
 class PlanPreferenceApplier:
@@ -44,9 +44,22 @@ class PlanPreferenceApplier:
                 f"Quer que eu inclua {day_label} nos seus dias? É só falar."
             )
 
-        RunnerProfileRepository().update_fields(
+        # a preferência vira memória evolutiva (o longão é um treino dinâmico
+        # como outro qualquer, não um campo rígido): a IA a lê e honra ao
+        # gerar. Ver [[project_longao_dinamico]].
+        RunnerMemoryService.process(
             profile,
-            {"preferred_long_run_day": day},
+            {
+                "add": [
+                    {
+                        "category": "preferencia",
+                        "content": (
+                            f"Prefere fazer o longão na {day_label} "
+                            f"({day}) — quando o longão fizer parte do plano."
+                        ),
+                    }
+                ]
+            },
         )
 
         # atleta com treinador: só registra, não gera plano
