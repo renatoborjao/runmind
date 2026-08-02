@@ -25,8 +25,12 @@ _CONFIRM = [
     "quero sim", "gostei", "aprovado",
 ]
 
+# "para" NÃO entra aqui: quase sempre é a PREPOSIÇÃO ("digo para semana que
+# vem", "para de segunda"), não o verbo parar — casava recusa em cima de um
+# aceite qualificado e descartava a proposta (bug real 02/08). Recusa de
+# verdade já é coberta por nao/deixa/esquece/cancela.
 _REJECT = [
-    "nao", "nem", "deixa", "esquece", "para", "melhor nao", "prefiro nao",
+    "nao", "nem", "deixa", "esquece", "melhor nao", "prefiro nao",
     "agora nao", "deixa quieto", "deixa pra la", "nao quero", "nao precisa",
     "cancela", "negativo",
 ]
