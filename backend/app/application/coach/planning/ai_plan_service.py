@@ -147,6 +147,13 @@ class AIPlanService:
             week_start,
         )
 
+        # últimas semanas de plano — pra a IA VER os tipos recentes e variar
+        recent_plans = AIPlanService._recent_plans(
+            repository,
+            profile,
+            week_start,
+        )
+
         baseline = RunnerBaselineBuilder.build(history, runner)
 
         recent_adherence = WeeklyPlanService._recent_adherence(
@@ -198,6 +205,7 @@ class AIPlanService:
             baseline=baseline,
             recent_adherence=recent_adherence,
             last_plan=last_week_plan,
+            recent_plans=recent_plans,
             executed=executed,
             memory=memory,
             weeks_to_race=weeks_to_race,
@@ -282,6 +290,23 @@ class AIPlanService:
             return None
 
         return max(past, key=lambda plan: plan.week_start)
+
+    @staticmethod
+    def _recent_plans(repository, profile, week_start, limit: int = 4):
+        """As últimas `limit` semanas de plano (week_start < alvo), em ordem
+        cronológica. A IA lê os TIPOS recentes pra VARIAR o estímulo em vez de
+        repetir o mesmo trio semana após semana."""
+
+        past = sorted(
+            (
+                plan
+                for plan in repository.history(profile)
+                if plan.week_start < week_start
+            ),
+            key=lambda plan: plan.week_start,
+        )
+
+        return past[-limit:]
 
     @staticmethod
     def _weeks_to_race(goal: TrainingGoal, week_start: date) -> int | None:
