@@ -211,7 +211,12 @@ class OnDemandAnswers:
             # (sem Garmin/sem noite medida) cai no Gemini, que responde natural.
             reading = SleepReadingService.read(profile)
 
-            return SleepReadingWriter.write(reading, runner.name)
+            # + o CUSTO real do sono no desempenho dele (best-effort)
+            impact = await OnDemandAnswers._sleep_impact(profile)
+
+            return SleepReadingWriter.write(
+                reading, runner.name, impact=impact
+            )
 
         if intent == ChatIntent.HELP:
 
@@ -219,6 +224,32 @@ class OnDemandAnswers:
             return HelpMenu.card(runner.name)
 
         return None
+
+    @staticmethod
+    async def _sleep_impact(profile: str):
+        """Custo real do sono no desempenho (best-effort). None se falhar —
+        nunca derruba o cartão de sono."""
+
+        try:
+
+            from app.application.history.sleep_performance_analyzer import (
+                SleepPerformanceAnalyzer,
+            )
+            from app.infrastructure.persistence.garmin_health_repository import (
+                GarminHealthRepository,
+            )
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            series = GarminHealthRepository().load(profile)
+
+            return SleepPerformanceAnalyzer.analyze(history.activities, series)
+
+        except Exception as e:
+
+            print(f"Impacto do sono falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     async def _body_conduct_offer(

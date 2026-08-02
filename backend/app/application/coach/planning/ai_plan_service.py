@@ -252,6 +252,32 @@ class AIPlanService:
 
             print(f"Nota de sRPE falhou p/ '{profile}': {e}")
 
+        # o CUSTO do sono no desempenho dele — se o sono curto faz o pace cair
+        # no mesmo esforço, o coach pesa isso na dose (protege dívida de sono)
+        try:
+
+            from app.application.history.sleep_performance_analyzer import (
+                SleepPerformanceAnalyzer,
+                sleep_impact_plan_directive,
+            )
+            from app.infrastructure.persistence.activity_archive_repository import (
+                ActivityArchiveRepository,
+            )
+            from app.infrastructure.persistence.garmin_health_repository import (
+                GarminHealthRepository,
+            )
+
+            impact = SleepPerformanceAnalyzer.analyze(
+                ActivityArchiveRepository().load_activities(profile),
+                GarminHealthRepository().load(profile),
+            )
+
+            parts.append(sleep_impact_plan_directive(impact))
+
+        except Exception as e:
+
+            print(f"Diretriz de sono falhou p/ '{profile}': {e}")
+
         return "\n".join(p for p in parts if p)
 
     @staticmethod
