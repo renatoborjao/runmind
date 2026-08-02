@@ -161,12 +161,18 @@ class WeeklyPlanMessageFormatter:
         runner_name: str,
         plan: TrainingPlan,
         reference_date: date | None = None,
+        greet: bool = True,
     ) -> str | None:
         """Treino de HOJE detalhado — ou None se hoje é dia de descanso
         (usado pelo lembrete matinal, que aí não envia nada). Casa pela
         DATA real da sessão, NÃO pelo nome do dia: um plano de outra semana
         (ex.: o da semana que vem, já gerado no domingo) jamais vira "treino
-        de hoje" só porque cai no mesmo dia da semana."""
+        de hoje" só porque cai no mesmo dia da semana.
+
+        `greet=False` tira o "Bom dia, {nome}!" do cabeçalho: no briefing do
+        despertar, quando a leitura de corpo já abriu com "Bom dia!", o treino
+        vem logo abaixo e não repete a saudação (dois "bom dia" na mesma
+        mensagem). Sozinho (lembrete de 06h, ou treino liderando), greet=True."""
 
         reference_date = reference_date or today_local()
 
@@ -183,8 +189,14 @@ class WeeklyPlanMessageFormatter:
 
             return None
 
+        intro = (
+            f"🏃 Bom dia, {runner_name}! Hoje é dia de treino 🌅"
+            if greet
+            else "🏃 Hoje é dia de treino 🌅"
+        )
+
         return WeeklyPlanMessageFormatter._single_session_message(
-            f"🏃 Bom dia, {runner_name}! Hoje é dia de treino 🌅",
+            intro,
             plan,
             session,
         )

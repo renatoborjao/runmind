@@ -311,6 +311,24 @@ def test_today_session_message_on_training_day():
     assert "Série: 5x400m forte a 5:43/km" in text
 
 
+def test_today_session_message_without_greeting():
+    """No briefing do despertar, quando a leitura de corpo já abriu com
+    "Bom dia!", o cabeçalho do treino vem SEM saudação (senão a mensagem
+    tem dois "bom dia"). O resto do treino segue intacto."""
+
+    text = WeeklyPlanMessageFormatter.today_session_message(
+        "Renato",
+        _week_plan(),
+        reference_date=date(2026, 7, 23),
+        greet=False,
+    )
+
+    assert text is not None
+    assert "Bom dia" not in text          # sem saudação repetida
+    assert text.startswith("🏃 Hoje é dia de treino")
+    assert "Série: 5x400m forte a 5:43/km" in text
+
+
 def test_today_session_message_on_rest_day_is_none():
 
     # quarta 22/07 é descanso

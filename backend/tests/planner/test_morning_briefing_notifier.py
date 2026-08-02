@@ -70,6 +70,12 @@ def _run(
 
         asyncio.run(MorningBriefingNotifier._notify_one("renato"))
 
+        # como o treino foi cumprimentado? (só quando algo foi enviado, pra não
+        # sujar os casos de silêncio que asseguram sent == {})
+        if "message" in sent and daily.build.await_args is not None:
+
+            sent["greet"] = daily.build.await_args.kwargs.get("greet")
+
     return sent
 
 
@@ -89,6 +95,35 @@ def test_despertar_junta_furo_prontidao_e_treino_na_ordem():
         "Reparei que seu HRV vem caindo — pega leve.\n\n"
         "🏃 Hoje: 8km"
     )
+
+
+def test_corpo_cumprimenta_entao_treino_nao_repete_bom_dia():
+    """Bug real (02/08): a leitura de corpo abre com "Bom dia!" E o treino
+    abria com "Bom dia, Renato!" — dois "bom dia" na mesma mensagem. Com
+    bloco de corpo presente, o treino tem que vir SEM saudação (greet=False)."""
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: 8km",
+        data_ready=True,
+        readiness="Bom dia! Seu HRV vem subindo, corpo recuperado.",
+    )
+
+    assert sent["greet"] is False
+
+
+def test_treino_sozinho_cumprimenta():
+    """Sem bloco de corpo (neutro/flag off), o treino LIDERA a mensagem e
+    carrega o "Bom dia" (greet=True) — senão o briefing sai sem saudação."""
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: 8km",
+        data_ready=True,
+        readiness=None,
+    )
+
+    assert sent["greet"] is True
 
 
 def test_proposta_strained_entra_e_suprime_o_treino_repetido():

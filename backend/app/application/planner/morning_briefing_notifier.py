@@ -141,6 +141,10 @@ class MorningBriefingNotifier:
         #    (STRAINED cala a prontidão), então nunca infla.
         proposal = None
 
+        # a leitura de corpo (ReadinessNotifier.block) sempre abre com "Bom
+        # dia!"; se ela entra, o treino logo abaixo NÃO repete a saudação.
+        greeted = False
+
         if data_ready:
 
             block = await ReadinessNotifier.block(profile)
@@ -148,6 +152,7 @@ class MorningBriefingNotifier:
             if block:
 
                 parts.append(block)
+                greeted = True
 
             else:
 
@@ -158,10 +163,11 @@ class MorningBriefingNotifier:
                     parts.append(proposal)
 
         # 3) treino de HOJE (descanso volta None) — MAS se a proposta STRAINED
-        #    já falou do treino de hoje, não repete (ela já o descreve).
+        #    já falou do treino de hoje, não repete (ela já o descreve). Só
+        #    cumprimenta se o corpo já não cumprimentou (evita dois "bom dia").
         if proposal is None:
 
-            today = await DailyTrainingNotifier.build(profile)
+            today = await DailyTrainingNotifier.build(profile, greet=not greeted)
 
             if today is not None:
 
