@@ -22,6 +22,10 @@ def test_valid_day_updates_profile_regenerates_and_confirms():
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
+        patch(
+            f"{MODULE}.resync_watch_if_pushed",
+            new=AsyncMock(return_value=False),
+        ),
     ):
 
         mock_repo = MagicMock()
@@ -59,6 +63,49 @@ def test_valid_day_updates_profile_regenerates_and_confirms():
     assert "Ajustei seu plano" in reply
     assert "domingo" in reply
     assert "[PLANO]" in reply
+    # não sincronizou (nunca empurrou): sem nota de relógio
+    assert "relógio" not in reply
+
+
+def test_regenerated_plan_synced_to_watch_adds_note():
+    """Quem JÁ tinha os treinos no relógio: ao regerar por preferência, o
+    Garmin é ressincronizado e a resposta avisa (⌚)."""
+
+    runner = make_runner(
+        preferred_running_days=["Tuesday", "Thursday", "Sunday"],
+    )
+
+    with (
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
+        patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
+        patch(
+            f"{MODULE}.resync_watch_if_pushed",
+            new=AsyncMock(return_value=True),
+        ) as mock_resync,
+    ):
+
+        mock_repo_cls.return_value = MagicMock()
+
+        long_session = MagicMock()
+        long_session.workout_type = "LONG_RUN"
+        plan = MagicMock()
+        plan.sessions = [long_session]
+
+        mock_provider.for_profile = AsyncMock(return_value=(runner, plan))
+        mock_formatter.week_plan_message.return_value = "[PLANO]"
+
+        reply = asyncio.run(
+            PlanPreferenceApplier.apply(
+                "renato",
+                runner,
+                PlanPreference(long_run_day="Sunday"),
+            )
+        )
+
+    # ressincronizou o plano REGERADO contra o snapshot do relógio
+    mock_resync.assert_awaited_once_with("renato", plan)
+    assert "relógio" in reply
 
 
 def test_beginner_without_long_run_records_preference_without_forcing():
@@ -70,6 +117,10 @@ def test_beginner_without_long_run_records_preference_without_forcing():
     with (
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
+        patch(
+            f"{MODULE}.resync_watch_if_pushed",
+            new=AsyncMock(return_value=False),
+        ),
     ):
 
         mock_repo = MagicMock()

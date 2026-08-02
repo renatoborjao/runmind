@@ -195,6 +195,10 @@ def test_concrete_goal_with_target_time_regenerates_and_confirms():
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
         patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
         patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
+        patch(
+            f"{MODULE}.resync_watch_if_pushed",
+            new=AsyncMock(return_value=False),
+        ),
     ):
 
         mock_parser.parse = AsyncMock(
