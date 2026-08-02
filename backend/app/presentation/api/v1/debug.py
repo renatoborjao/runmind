@@ -255,14 +255,30 @@ async def sleep(profile: str):
     from app.application.coach.writer.sleep_reading_writer import (
         SleepReadingWriter,
     )
+    from app.application.history.sleep_performance_analyzer import (
+        SleepPerformanceAnalyzer,
+    )
+    from app.application.use_cases.load_training_history import (
+        LoadTrainingHistory,
+    )
+    from app.infrastructure.persistence.garmin_health_repository import (
+        GarminHealthRepository,
+    )
 
     try:
 
         reading = SleepReadingService.read(profile)
 
+        history = await LoadTrainingHistory.execute(profile=profile)
+
+        impact = SleepPerformanceAnalyzer.analyze(
+            history.activities, GarminHealthRepository().load(profile)
+        )
+
         return {
             "reading": asdict(reading),
-            "card": SleepReadingWriter.write(reading, profile),
+            "impact": asdict(impact),
+            "card": SleepReadingWriter.write(reading, profile, impact=impact),
         }
 
     except Exception as e:

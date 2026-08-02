@@ -7,6 +7,7 @@ sono nem sempre é controlável. O elo sono->PERFORMANCE com os números dele é
 coaching de sono (item #4, [[project_ideias_produto]]), construído por cima."""
 
 from app.domain.entities.body_reading import FALLING, RISING
+from app.domain.entities.sleep_impact import SleepImpact
 from app.domain.entities.sleep_reading import (
     HEALTHY_FLOOR_HOURS,
     SleepReading,
@@ -16,9 +17,14 @@ from app.domain.entities.sleep_reading import (
 class SleepReadingWriter:
 
     @staticmethod
-    def write(reading: SleepReading, runner_name: str) -> str | None:
+    def write(
+        reading: SleepReading,
+        runner_name: str,
+        impact: SleepImpact | None = None,
+    ) -> str | None:
         """None quando não há noite medida (sem Garmin/sem sono) — o chamador
-        cai no Gemini, que responde com naturalidade."""
+        cai no Gemini, que responde com naturalidade. `impact` (opcional) anexa
+        o custo REAL do sono curto no desempenho dele, quando há sinal."""
 
         if not reading.has_data or reading.avg_hours is None:
 
@@ -63,11 +69,32 @@ class SleepReadingWriter:
 
         lines.append("")
 
+        # o CUSTO real (números dele) vem antes do fecho, quando há sinal
+        if impact is not None and impact.has_finding:
+
+            lines.append(SleepReadingWriter.impact_line(impact))
+
+            lines.append("")
+
         lines.append(SleepReadingWriter._closing(reading))
 
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def impact_line(impact: SleepImpact) -> str:
+        """A frase do custo: 'nos dias que dormiu <7h, teu pace no mesmo esforço
+        caiu ~Xs/km'. Orienta com valor, não cobra ([[feedback_orientar_nao_mandar]])."""
+
+        floor = int(impact.threshold_hours)
+
+        return (
+            f"📉 Reparei uma coisa nos seus números: nos dias que você dormiu "
+            f"abaixo de {floor}h, no MESMO esforço seu pace ficou "
+            f"~{impact.pace_cost_sec}s/km mais lento. O sono é o que mais "
+            "segura sua evolução — quando der, é o ganho mais barato que existe."
+        )
 
     @staticmethod
     def _closing(reading: SleepReading) -> str:
