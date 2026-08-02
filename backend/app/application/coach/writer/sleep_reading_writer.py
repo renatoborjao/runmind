@@ -89,11 +89,17 @@ class SleepReadingWriter:
 
         floor = int(impact.threshold_hours)
 
+        when = (
+            "depois das suas noites mais curtas (vs as mais longas)"
+            if impact.relative
+            else f"nos dias que você dormiu abaixo de {floor}h"
+        )
+
         return (
-            f"📉 Reparei uma coisa nos seus números: nos dias que você dormiu "
-            f"abaixo de {floor}h, no MESMO esforço seu pace ficou "
-            f"~{impact.pace_cost_sec}s/km mais lento. O sono é o que mais "
-            "segura sua evolução — quando der, é o ganho mais barato que existe."
+            f"📉 Reparei uma coisa nos seus números: {when}, no MESMO esforço "
+            f"seu pace ficou ~{impact.pace_cost_sec}s/km mais lento. O sono é o "
+            "que mais segura sua evolução — quando der, é o ganho mais barato "
+            "que existe."
         )
 
     @staticmethod
