@@ -95,6 +95,18 @@ class GoalChangeApplier:
         # temos um objetivo de verdade: consome o estado pendente
         pending_repo.clear(profile)
 
+        # ADICIONAR (somar aos objetivos que já tem) vs TROCAR (sobrescrever):
+        # "além da prova, quero emagrecer" acumula; "meu objetivo agora é X"
+        # substitui. Design A de múltiplos objetivos concorrentes.
+        if GoalChangeDetector.is_additional_objective(incoming_text):
+
+            return await GoalChangeApplier._add_objective(
+                profile,
+                runner,
+                goal,
+                extracted,
+            )
+
         # ---- aspiração (sem data e sem tempo-alvo): registra e progride ----
         if not (extracted.get("race_date") or extracted.get("target_time")):
 
@@ -110,6 +122,101 @@ class GoalChangeApplier:
             runner,
             goal,
             extracted,
+        )
+
+    @staticmethod
+    def _merge_goal(existing: str | None, new: str) -> str:
+        """Combina o objetivo novo com os que já existem no headline, sem
+        apagar — os objetivos concorrentes vivem, de verdade, na memória."""
+
+        existing = (existing or "").strip()
+
+        if not existing:
+
+            return new
+
+        if new.lower() in existing.lower():
+
+            return existing
+
+        return f"{existing}; e também {new}"
+
+    @staticmethod
+    async def _add_objective(
+        profile: str,
+        runner: RunnerProfile,
+        goal: str,
+        extracted: dict,
+    ) -> str:
+        """Soma uma meta às que o atleta já tem (não sobrescreve). Os objetivos
+        concorrentes vivem na memória evolutiva (o coach os equilibra no plano);
+        a prova datada MAIS PRÓXIMA ancora a periodização."""
+
+        desc = f"Objetivo adicional: {goal}"
+
+        if extracted.get("target_race"):
+
+            desc += f" — prova {extracted['target_race']}"
+
+            if extracted.get("race_date"):
+
+                desc += f" em {extracted['race_date']}"
+
+            if extracted.get("target_time"):
+
+                desc += f" (alvo {extracted['target_time']})"
+
+        RunnerMemoryService.process(
+            profile,
+            {"add": [{"category": "objetivo", "content": desc}]},
+        )
+
+        updates = {"goal": GoalChangeApplier._merge_goal(runner.goal, goal)}
+
+        # a prova nova só assume a âncora se for a MAIS PRÓXIMA (ISO compara
+        # como string); senão fica guardada na memória como meta futura
+        new_date = extracted.get("race_date")
+
+        anchor_changed = bool(
+            new_date and (not runner.race_date or new_date < runner.race_date)
+        )
+
+        if anchor_changed:
+
+            updates["race_date"] = new_date
+
+            if extracted.get("target_race"):
+
+                updates["target_race"] = extracted["target_race"]
+
+            if extracted.get("target_time"):
+
+                updates["target_time"] = extracted["target_time"]
+
+        RunnerProfileRepository().update_fields(profile, updates)
+
+        if runner.external_coach:
+
+            return f"Anotado! Somei mais um objetivo aos seus: {goal}. 🎯"
+
+        if anchor_changed:
+
+            _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
+
+            plan_text = WeeklyPlanMessageFormatter.week_plan_message(
+                runner.name, plan
+            )
+
+            return (
+                f"Anotado, {runner.name}! Somei esse objetivo aos seus — e "
+                "como a prova nova é a mais próxima, ajustei o plano pra mirar "
+                f"ela sem largar o resto. 🎯\n\n{plan_text}"
+            )
+
+        return (
+            f"Anotado, {runner.name}! Somei esse objetivo aos seus — agora eu "
+            "equilibro todos no seu plano, sem abandonar nenhum. 🎯 Sua semana "
+            "atual segue como está; vou levando com equilíbrio."
         )
 
     @staticmethod

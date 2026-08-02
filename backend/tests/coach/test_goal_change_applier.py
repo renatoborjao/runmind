@@ -284,6 +284,162 @@ def test_aspiration_one_shot_updates_goal_only():
     mock_provider.for_profile.assert_not_awaited()
 
 
+def test_additional_objective_accumulates_without_overwriting():
+    """'além da prova, também quero emagrecer' SOMA um objetivo (não troca):
+    funde no headline sem apagar o anterior, grava memória, mantém a semana e
+    NÃO mexe na prova já registrada."""
+
+    runner = make_runner(
+        goal="correr 21km com saúde",
+        target_race="10 km",
+        race_date="2026-08-23",
+        external_coach=False,
+    )
+
+    pending_patch, _ = _patches(pending=False)
+
+    with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService") as mock_memory,
+        patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
+    ):
+
+        mock_parser.parse = AsyncMock(
+            return_value={
+                "goal": "emagrecer",
+                "target_race": None,
+                "target_time": None,
+                "race_date": None,
+            }
+        )
+
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+
+        mock_provider.for_profile = AsyncMock()
+
+        reply = asyncio.run(
+            GoalChangeApplier.handle(
+                "renato",
+                runner,
+                "além da minha prova, também quero emagrecer",
+            )
+        )
+
+    # headline FUNDE os dois (não sobrescreve); só o goal muda (prova intacta)
+    mock_repo.update_fields.assert_called_once_with(
+        "renato",
+        {"goal": "correr 21km com saúde; e também emagrecer"},
+    )
+
+    ops = mock_memory.process.call_args.args[1]
+    assert ops["add"][0]["category"] == "objetivo"
+    assert "emagrecer" in ops["add"][0]["content"]
+
+    # não regenera a semana (objetivo sem data)
+    mock_provider.for_profile.assert_not_awaited()
+    assert "Somei" in reply
+
+
+def test_additional_nearer_dated_race_becomes_anchor_and_regenerates():
+    """Objetivo adicional COM prova mais próxima que a atual vira a âncora de
+    periodização e regera a semana."""
+
+    runner = make_runner(
+        goal="maratona no fim do ano",
+        race_date="2026-11-15",
+        external_coach=False,
+    )
+
+    pending_patch, _ = _patches(pending=False)
+
+    with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService"),
+        patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
+        patch(f"{MODULE}.WeeklyPlanMessageFormatter") as mock_formatter,
+    ):
+
+        mock_parser.parse = AsyncMock(
+            return_value={
+                "goal": "10k em agosto",
+                "target_race": "10 km",
+                "target_time": None,
+                "race_date": "2026-08-23",
+            }
+        )
+
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+
+        mock_provider.for_profile = AsyncMock(return_value=(runner, MagicMock()))
+        mock_formatter.week_plan_message.return_value = "[PLANO]"
+
+        reply = asyncio.run(
+            GoalChangeApplier.handle(
+                "renato",
+                runner,
+                "além da minha prova de fim de ano, também quero um 10k em 23/08",
+            )
+        )
+
+    updates = mock_repo.update_fields.call_args.args[1]
+    assert updates["race_date"] == "2026-08-23"   # a mais próxima ancora
+    mock_provider.for_profile.assert_awaited_once_with("renato", force=True)
+    assert "[PLANO]" in reply
+
+
+def test_additional_farther_dated_race_stays_in_memory():
+    """Objetivo adicional com prova MAIS DISTANTE que a atual não muda a âncora
+    (nem regera) — fica guardado como meta futura."""
+
+    runner = make_runner(
+        goal="10k em agosto",
+        race_date="2026-08-23",
+        external_coach=False,
+    )
+
+    pending_patch, _ = _patches(pending=False)
+
+    with (
+        pending_patch,
+        patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
+        patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
+        patch(f"{MODULE}.RunnerMemoryService"),
+        patch(f"{MODULE}.CurrentPlanProvider") as mock_provider,
+    ):
+
+        mock_parser.parse = AsyncMock(
+            return_value={
+                "goal": "maratona no fim do ano",
+                "target_race": "42 km",
+                "target_time": None,
+                "race_date": "2026-11-15",
+            }
+        )
+
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+
+        mock_provider.for_profile = AsyncMock()
+
+        asyncio.run(
+            GoalChangeApplier.handle(
+                "renato",
+                runner,
+                "além da minha prova de 10k, também quero uma maratona no fim do ano",
+            )
+        )
+
+    updates = mock_repo.update_fields.call_args.args[1]
+    assert "race_date" not in updates          # âncora atual (mais próxima) fica
+    mock_provider.for_profile.assert_not_awaited()
+
+
 def test_external_coach_concrete_goal_records_without_regenerating():
     """Treinador humano + meta concreta: só registra, nunca regera o plano."""
 
