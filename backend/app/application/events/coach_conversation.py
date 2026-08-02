@@ -251,6 +251,33 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # Preferência DURÁVEL de rotina ("treinos de semana em até 50 min, a
+        # partir da próxima"): entende, grava na MEMÓRIA (que já alimenta a
+        # geração do plano) e confirma — sem tocar na semana atual (que pode já
+        # ter fechado). ANTES do IntentRouter: uma frase como "quero que no meu
+        # PLANO os treinos de semana durem até 50 min" não pode virar o card de
+        # "mostrar meu plano" (o portão exige sinal de durabilidade, então
+        # "qual meu plano?" puro segue pro IntentRouter normalmente).
+        if reply_text is None:
+
+            try:
+
+                reply_text = await TrainingPreferenceFlow.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(
+                    f"Falha na preferência de rotina de '{profile}': {e}"
+                )
+
+                reply_text = None
+
         intent = (
             IntentRouter.detect(incoming_text)
             if reply_text is None
@@ -336,31 +363,6 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha no fluxo de aversão de '{profile}': {e}")
-
-                reply_text = None
-
-        # Preferência DURÁVEL de rotina ("treinos de semana em até 50 min, a
-        # partir da próxima"): entende, grava na MEMÓRIA (que já alimenta a
-        # geração do plano) e confirma — sem tocar na semana atual. ANTES da
-        # negociação: um pedido pra frente não pode virar proposta de mexer na
-        # semana de agora (que pode já ter fechado).
-        if reply_text is None:
-
-            try:
-
-                reply_text = await TrainingPreferenceFlow.handle(
-                    profile,
-                    runner,
-                    incoming_text,
-                )
-
-                used_deterministic = reply_text is not None
-
-            except Exception as e:
-
-                print(
-                    f"Falha na preferência de rotina de '{profile}': {e}"
-                )
 
                 reply_text = None
 

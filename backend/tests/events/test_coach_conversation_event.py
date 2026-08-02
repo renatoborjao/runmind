@@ -504,6 +504,67 @@ def test_plan_preference_is_applied_and_short_circuits_gemini():
         mock_extraction.extract.assert_not_awaited()
 
 
+def test_durable_preference_wins_over_weekly_plan_intent():
+    """Regressão (02/08): 'quero que no MEU PLANO os treinos de semana durem
+    até 50 min' tem 'meu plano' e casava a intenção WEEKLY_PLAN (o coach
+    despejava o plano e nada virava memória). A preferência DURÁVEL roda ANTES
+    do IntentRouter — captura e confirma, sem virar card de plano."""
+
+    runner = make_runner(name="Renato", phone="+5511975658679")
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
+        patch(f"{MODULE}.ConversationContextBuilder") as mock_context,
+        patch(f"{MODULE}.ConversationRepository") as mock_repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as mock_engine,
+        patch(f"{MODULE}.TrainingPreferenceFlow") as mock_pref,
+        patch(f"{MODULE}.OnDemandAnswers") as mock_on_demand,
+        patch(f"{MODULE}.NotificationService") as mock_notification,
+        patch(f"{MODULE}.RunnerMemoryRepository") as mock_memory_repo,
+        patch(f"{MODULE}.MemoryExtractionEngine") as mock_extraction,
+        patch(f"{MODULE}.RunnerMemoryService"),
+    ):
+
+        mock_load_runner.execute.return_value = runner
+
+        mock_context.build = AsyncMock(return_value="fatos")
+
+        mock_repo = MagicMock()
+        mock_repo.recent_turns.return_value = []
+        mock_repo_cls.return_value = mock_repo
+
+        mock_engine.reply = AsyncMock(return_value="resposta do gemini")
+
+        mock_pref.handle = AsyncMock(
+            return_value="Anotado! Terça e quinta em até 50 min. 💪",
+        )
+
+        mock_on_demand.answer = AsyncMock(return_value="🏃 Seu plano da semana")
+
+        mock_notification.send = AsyncMock()
+
+        mock_memory_repo.return_value.active.return_value = []
+        mock_extraction.extract = AsyncMock(
+            return_value={"add": [], "archive": []},
+        )
+
+        reply = asyncio.run(
+            CoachConversationEvent.execute(
+                profile="renato",
+                incoming_text=(
+                    "quero que no meu plano os treinos de dia de semana durem "
+                    "ate 50 min, de segunda a quinta"
+                ),
+            )
+        )
+
+        # a preferência resolveu; o card de plano NÃO disparou
+        assert reply == "Anotado! Terça e quinta em até 50 min. 💪"
+        mock_pref.handle.assert_awaited_once()
+        mock_on_demand.answer.assert_not_awaited()
+        mock_engine.reply.assert_not_awaited()
+
+
 def test_intent_without_deterministic_answer_falls_back_to_gemini():
 
     (
