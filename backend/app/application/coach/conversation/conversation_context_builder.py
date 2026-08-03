@@ -307,17 +307,21 @@ class ConversationContextBuilder:
                 else None
             )
 
-            deload_line = deload_chat_line(
-                DeloadAnalyzer.assess(
-                    reading.load.weekly_loads,
-                    reading.recovery,
-                    weeks_to_race=weeks_to_race,
+            # atleta de treinador externo: o plano é do treinador dele — não
+            # anunciamos "descarga" sobre um plano que não montamos
+            if not getattr(runner, "external_coach", False):
+
+                deload_line = deload_chat_line(
+                    DeloadAnalyzer.assess(
+                        reading.load.weekly_loads,
+                        reading.recovery,
+                        weeks_to_race=weeks_to_race,
+                    )
                 )
-            )
 
-            if deload_line:
+                if deload_line:
 
-                lines.append(deload_line)
+                    lines.append(deload_line)
 
         except Exception as e:
 
