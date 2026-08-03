@@ -249,6 +249,26 @@ class ConversationContextBuilder:
 
                 lines.append(f"- Corpo/recuperação: {state}{extra}")
 
+            # risco de lesão precoce (reusa a leitura do corpo + histórico)
+            from app.application.history.injury_risk_analyzer import (
+                InjuryRiskAnalyzer,
+                injury_risk_chat_line,
+            )
+
+            runner = LoadRunnerProfile.execute(profile)
+
+            risk_line = injury_risk_chat_line(
+                InjuryRiskAnalyzer.assess(
+                    reading.load,
+                    reading.recovery,
+                    getattr(runner, "injuries", None),
+                )
+            )
+
+            if risk_line:
+
+                lines.append(risk_line)
+
         except Exception as e:
 
             print(f"Estado (corpo) falhou p/ '{profile}': {e}")
