@@ -114,7 +114,9 @@ class PlanContextBuilder:
 
         if memory:
 
-            lines.append(f"Memória do atleta:\n{memory}")
+            # o render já abre com "Memória do corredor (...)"; não prefixa outro
+            # cabeçalho ("Memória do atleta:") em cima — era duplicação
+            lines.append(memory)
 
         # o que o coach APRENDEU observando o comportamento/resultado dele ao
         # longo das semanas (distinto da memória acima, que é o que ele DIZ).
