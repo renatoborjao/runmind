@@ -287,6 +287,38 @@ class ConversationContextBuilder:
 
                 lines.append(risk_line)
 
+            # DESCARGA proativa: se a semana é de recuperação planejada, o coach
+            # precisa saber (e saber explicar) por que o plano está mais leve.
+            from app.application.history.deload_analyzer import (
+                DeloadAnalyzer,
+                deload_chat_line,
+            )
+            from app.application.use_cases.build_training_goal import (
+                BuildTrainingGoal,
+            )
+
+            goal = BuildTrainingGoal.execute(runner)
+
+            today = today_local()
+
+            weeks_to_race = (
+                (goal.race_date - today).days // 7
+                if goal.race_date and goal.race_date > today
+                else None
+            )
+
+            deload_line = deload_chat_line(
+                DeloadAnalyzer.assess(
+                    reading.load.weekly_loads,
+                    reading.recovery,
+                    weeks_to_race=weeks_to_race,
+                )
+            )
+
+            if deload_line:
+
+                lines.append(deload_line)
+
         except Exception as e:
 
             print(f"Estado (corpo) falhou p/ '{profile}': {e}")

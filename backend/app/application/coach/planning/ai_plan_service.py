@@ -191,7 +191,7 @@ class AIPlanService:
         # o corpo AGORA (carga à luz da recuperação): se pede freio, vira
         # diretriz de dose pra IA decidir a semana. Best-effort — falhar aqui
         # nunca deixa o atleta sem plano.
-        body_directive = AIPlanService._body_directive(profile)
+        body_directive = AIPlanService._body_directive(profile, weeks_to_race)
 
         # a FORMA (o atleta está evoluindo?): eficiência aeróbica subindo ->
         # progride; estagnada -> já traz o estímulo que fura o platô; caindo ->
@@ -217,7 +217,7 @@ class AIPlanService:
         )
 
     @staticmethod
-    def _body_directive(profile: str) -> str:
+    def _body_directive(profile: str, weeks_to_race: int | None = None) -> str:
         """Sinais de ESTADO pra a dose: o objetivo (carga à luz da recuperação,
         do Garmin) + o subjetivo (o que o atleta RELATOU sentir). Os dois
         contam — o relógio não sente o que o atleta sente. Best-effort."""
@@ -272,6 +272,31 @@ class AIPlanService:
         except Exception as e:
 
             print(f"Diretriz de risco de lesão falhou p/ '{profile}': {e}")
+
+        # DESCARGA proativa (recuperação PLANEJADA): depois de ~3 semanas de
+        # carga sem recuo, a próxima é leve de propósito — o corpo consolida a
+        # forma. Complementa o risco de lesão (reativo) com prevenção. Reusa a
+        # série de carga semanal já lida acima. Best-effort.
+        try:
+
+            if body_reading is not None:
+
+                from app.application.history.deload_analyzer import (
+                    DeloadAnalyzer,
+                    deload_directive,
+                )
+
+                decision = DeloadAnalyzer.assess(
+                    body_reading.load.weekly_loads,
+                    body_reading.recovery,
+                    weeks_to_race=weeks_to_race,
+                )
+
+                parts.append(deload_directive(decision))
+
+        except Exception as e:
+
+            print(f"Diretriz de descarga falhou p/ '{profile}': {e}")
 
         try:
 
