@@ -3,6 +3,7 @@ from datetime import date
 
 from google.genai import types
 
+from app.application.coach.planning.workout_menu import WORKOUT_MENU
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.domain.entities.planned_session import PlannedSession
@@ -70,19 +71,7 @@ REGRAS:
 - VARIE O ESTÍMULO — isto é EXPERTISE de treinador, não enfeite. Um bom plano
   NÃO repete os mesmos 3 tipos toda semana; você tem um LEQUE e GIRA entre eles
   conforme a fase e a meta, sempre mantendo a sobrecarga progressiva:
-    * Intervalado curto (VO2): 200-800m fortes + recuperação (ex.: 8x400,
-      5x800) — potência aeróbica.
-    * Intervalado longo / cruzeiro: 1000-2000m perto do limiar (ex.: 4x1000,
-      3x1600) — resistência à velocidade.
-    * Tempo / Limiar contínuo: 20-40 min "confortavelmente difícil" (ritmo de
-      limiar) — o motor pra 10k/21k.
-    * Fartlek: variações livres de ritmo (ex.: 2min forte / 2min leve x6-8, ou
-      por sensação) — troca de ritmo, quebra a monotonia.
-    * Progressivo: começa fácil e ACELERA em blocos até forte no fim — ensina a
-      terminar forte (ótimo no longão).
-    * Longão: o mais longo da semana — constante, progressivo OU com blocos no
-      ritmo-alvo (varie a forma dele também).
-    * Regenerativo/base: rodagem leve pra absorver a carga.
+{menu}
   QUANDO usar: longe da prova / construindo base -> volume, longão, tempo de
   limiar; perto da prova -> afiar no ritmo-alvo (tiros no pace de prova). Se as
   SEMANAS RECENTES vieram com os mesmos tipos, TRAGA algo diferente que sirva à
@@ -168,7 +157,7 @@ class CoachPlanEngine:
 
         settings = get_settings()
 
-        prompt = PROMPT_TEMPLATE.format(context=context)
+        prompt = PROMPT_TEMPLATE.format(context=context, menu=WORKOUT_MENU)
 
         # generate_json re-gera se o JSON do plano vier torto (blindagem) —
         # o plano é core; não pode cair no determinístico por escorregada do

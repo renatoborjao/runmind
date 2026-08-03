@@ -6,6 +6,10 @@ from google.genai import types
 from app.application.coach.planning.ai_session_builder import (
     build_session_dict,
 )
+from app.application.coach.planning.workout_menu import (
+    PHASE_EMPHASIS,
+    WORKOUT_MENU,
+)
 from app.core.config import get_settings
 from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.integrations.gemini.client import (
@@ -31,11 +35,22 @@ RETRATO REAL DO ATLETA (histórico e evolução — a base da sua decisão):
 Monte UM treino só pra o dia alvo, como treinador de verdade:
 - ANCORE tudo no retrato real (volume, paces, evolução) — nada genérico.
 - COMPLEMENTE a semana: não empilhe dois dias fortes coladinhos; se ele já \
-teve/terá carga forte perto, faça um dia mais leve (rodagem/regenerativo); se a \
-semana está leve, pode ser o estímulo que falta rumo à meta.
-- Respeite saúde e recuperação. Dose o volume pelo que ele SUSTENTA hoje.
+teve/terá carga forte perto, faça um dia de absorver (rodagem/regenerativo); se \
+a semana está leve, este é o dia de ENTREGAR o estímulo que falta rumo à meta.
+- ESCOLHA O TIPO CERTO com EXPERTISE — NÃO caia sempre na rodagem leve por \
+segurança. Você tem um LEQUE de estímulos; pegue o que a semana e a fase pedem:
+{menu}
+  QUANDO usar: {phase}. Se a semana já cobre a qualidade que a meta pede e o dia \
+é de absorver carga, aí sim rodagem/regenerativo. Mas quando FALTA qualidade \
+rumo à meta, traga a qualidade certa (um tempo de limiar, um fartlek, um \
+intervalado) — não um trote genérico "por garantia".
+- AVERSÃO: se o retrato disser que ele não gosta de um tipo, mantenha o \
+estímulo e troque só a FORMA (fartlek na rua no lugar de tiro na pista); só \
+remova de verdade se for dor/restrição física.
+- Respeite saúde, recuperação e lesões. Dose o volume pelo que ele SUSTENTA hoje.
 
-Responda APENAS JSON:
+Responda APENAS JSON (o "session" abaixo é só de FORMATO — escolha o tipo pela \
+semana/fase/meta, NÃO copie "Rodagem leve"):
 {{"message": "mensagem curta de WhatsApp: apresenta o treino e explica em 1 \
 frase por que ESSE treino nesse dia (o encaixe na semana). Sem markdown (no \
 máximo • e um *negrito*). NÃO pergunte se pode aplicar.",
@@ -86,6 +101,8 @@ class OneOffWorkoutEngine:
             target_label=target_label,
             week_context=week_context or "(nada registrado nesta semana)",
             portrait=portrait or "(sem retrato disponível)",
+            menu=WORKOUT_MENU,
+            phase=PHASE_EMPHASIS,
         )
 
         return await generate_json(
