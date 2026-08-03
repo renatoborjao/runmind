@@ -8,6 +8,7 @@ from app.application.coach.planning.ai_session_builder import (
 )
 from app.application.coach.planning.workout_menu import (
     PHASE_EMPHASIS,
+    TIME_OR_DISTANCE_RULE,
     WORKOUT_MENU,
 )
 from app.core.config import get_settings
@@ -47,6 +48,7 @@ intervalado) — não um trote genérico "por garantia".
 - AVERSÃO: se o retrato disser que ele não gosta de um tipo, mantenha o \
 estímulo e troque só a FORMA (fartlek na rua no lugar de tiro na pista); só \
 remova de verdade se for dor/restrição física.
+- {time_rule}
 - Respeite saúde, recuperação e lesões. Dose o volume pelo que ele SUSTENTA hoje.
 
 Responda APENAS JSON (o "session" abaixo é só de FORMATO — escolha o tipo pela \
@@ -65,6 +67,8 @@ conversar", "Foco: base aeróbica sem forçar"],
     ],
     "purpose": "base aeróbica complementando a semana"}}
 }}
+Sessão POR TEMPO: troque "distance_km": 8.0 por "duration_min": 50 (fica sem km)
+e use "duration_min" nos steps.
 """
 
 
@@ -103,6 +107,7 @@ class OneOffWorkoutEngine:
             portrait=portrait or "(sem retrato disponível)",
             menu=WORKOUT_MENU,
             phase=PHASE_EMPHASIS,
+            time_rule=TIME_OR_DISTANCE_RULE,
         )
 
         return await generate_json(

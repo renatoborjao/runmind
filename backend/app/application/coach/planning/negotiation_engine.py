@@ -6,6 +6,7 @@ from google.genai import types
 from app.application.coach.planning.ai_session_builder import (
     build_session_dict,
 )
+from app.application.coach.planning.workout_menu import TIME_OR_DISTANCE_RULE
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.domain.entities.runner_profile import RunnerProfile
@@ -52,6 +53,7 @@ Decida:
      o trade-off (nunca só obedeça, nunca só recuse).
    - Mantenha os MESMOS dias/frequência do atleta (não adicione nem remova dias
      sem ele pedir). Ancore os paces na meta.
+   - {time_rule}
 3) Devolva a SEMANA INTEIRA já ajustada (todas as sessões de corrida dos dias
    dele), mesmo as que não mudaram.
 
@@ -72,6 +74,9 @@ máximo • e um *negrito*).",
       ],
       "purpose": "aliviar a carga mantendo a base"}}
   ]}}
+
+Sessão POR TEMPO: troque "distance_km": 6.0 por "duration_min": 50 (fica sem km)
+e use "duration_min" nos steps.
 """
 
 
@@ -104,6 +109,7 @@ class NegotiationEngine:
             objective=plan.objective or runner.goal,
             sessions=NegotiationEngine._render_sessions(plan),
             message=incoming_text.replace('"', "'"),
+            time_rule=TIME_OR_DISTANCE_RULE,
         )
 
         return await generate_json(
@@ -130,15 +136,21 @@ class NegotiationEngine:
 
                 continue
 
-            distance = (
-                f"{session.planned_distance_km:.0f}km"
-                if session.planned_distance_km
-                else "s/ distância"
-            )
+            if session.planned_distance_km:
+
+                size = f"{session.planned_distance_km:.0f}km"
+
+            elif session.planned_duration_minutes:
+
+                size = f"{session.planned_duration_minutes}min"
+
+            else:
+
+                size = "s/ distância"
 
             lines.append(
                 f"- {weekday_label(session.day)} ({session.day}): "
-                f"{session.workout_type}, {distance}"
+                f"{session.workout_type}, {size}"
                 + (f" — {session.purpose}" if session.purpose else "")
             )
 

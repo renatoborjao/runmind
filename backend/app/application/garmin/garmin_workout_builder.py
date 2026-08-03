@@ -215,15 +215,24 @@ def _build_steps(
 
 
 def _fallback_steps(session: PlannedSession) -> list[WorkoutStep]:
-    """Sem passos estruturados: um bloco de corrida por distância, com pace
-    se houver. Mantém o comportamento antigo pra planos externos/IA antiga."""
+    """Sem passos estruturados: um bloco de corrida por distância (ou por TEMPO,
+    quando a sessão é medida em minutos), com pace se houver. Mantém o
+    comportamento antigo pra planos externos/IA antiga."""
 
     meters = (session.planned_distance_km or 0) * 1000
+
+    # sessão por tempo (50 min de rodagem): bloco por duração, não por km
+    duration_sec = (
+        session.planned_duration_minutes * 60
+        if not meters and session.planned_duration_minutes
+        else None
+    )
 
     return [
         WorkoutStep(
             kind=RUN,
             distance_m=meters or None,
+            duration_sec=duration_sec,
             pace_min=session.target_pace_min,
             pace_max=session.target_pace_max,
         )

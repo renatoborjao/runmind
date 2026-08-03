@@ -27,3 +27,17 @@ PHASE_EMPHASIS = (
     "perto da prova -> afinar no ritmo-alvo (tiros no pace de prova); "
     "véspera -> poupar"
 )
+
+# POR TEMPO vs POR DISTÂNCIA — compartilhada pelos 3 motores (plano semanal,
+# negociação, avulso). Sem chaves `{}`: entra crua num .format() de prompt.
+# Bug real (03/08): atleta pediu "50 min de rodagem" e o coach converteu em
+# "8 km"; ele já preferia por tempo. Ver [[project_tudo_dinamico]].
+TIME_OR_DISTANCE_RULE = (
+    "POR TEMPO OU POR DISTÂNCIA: por padrão prescreva em distância "
+    '(distance_km). MAS se o atleta PEDIR ou PREFERIR treinar por TEMPO (ex.: '
+    '"quero 50 min de rodagem", ou a memória/preferência dele diz que prefere '
+    'por minutos), prescreva a sessão em MINUTOS: use "duration_min" no lugar '
+    'de "distance_km" (a sessão fica SEM km) e monte os "steps" por tempo '
+    '("duration_min"). NUNCA converta os minutos que ele pediu em km — respeite '
+    "a unidade que ele quer."
+)
