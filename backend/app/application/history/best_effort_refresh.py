@@ -1,15 +1,18 @@
-"""Atualiza a marca-d'água do VDOT contínuo do atleta: pega as corridas recentes
-ainda não processadas, baixa os best_efforts do Strava (o trecho sustentado mais
-rápido de cada uma), calcula o VDOT e sobe o máximo. Só corridas NOVAS (dedup por
-id) e com teto por rodada (respeita o rate limit). Best-effort — falhar aqui
-nunca derruba nada. Ver [[project_modelo_pace_vdot]] (âncora contínua)."""
+"""Atualiza os INSIGHTS por corrida que dependem do detalhe do Strava (não vêm
+no arquivo): (1) o VDOT do melhor esforço CONTÍNUO (best_efforts) — a âncora
+contínua do pace; (2) a FORMA-SOB-FADIGA (a cadência quebrou no fim?) — sinal
+precoce de risco de lesão. Pega as corridas recentes ainda não vistas por CADA
+sinal, baixa o detalhe e atualiza. Só corridas NOVAS (dedup por id) e com teto
+por rodada (rate limit). Best-effort. Ver [[project_modelo_pace_vdot]]."""
 
 from app.application.history.best_effort_vdot import BestEffortVdot
+from app.application.history.form_fatigue_analyzer import FormFatigueAnalyzer
 from app.domain.value_objects.sports import is_run_sport
 from app.infrastructure.integrations.strava.client import StravaClient
 from app.infrastructure.persistence.best_effort_vdot_store import (
     BestEffortVdotStore,
 )
+from app.infrastructure.persistence.form_fatigue_store import FormFatigueStore
 
 
 class BestEffortRefresh:
@@ -27,13 +30,17 @@ class BestEffortRefresh:
 
         except Exception as e:
 
-            print(f"Best-effort refresh (lista) falhou p/ '{profile}': {e}")
+            print(f"Insight refresh (lista) falhou p/ '{profile}': {e}")
 
             return
 
-        store = BestEffortVdotStore()
+        vdot_store = BestEffortVdotStore()
 
-        seen = store.processed_ids(profile)
+        fade_store = FormFatigueStore()
+
+        vdot_seen = vdot_store.processed_ids(profile)
+
+        fade_seen = fade_store.processed_ids(profile)
 
         processed = 0
 
@@ -43,23 +50,62 @@ class BestEffortRefresh:
 
                 break
 
-            if not is_run_sport(activity.sport) or activity.id in seen:
+            if not is_run_sport(activity.sport):
 
                 continue
 
-            try:
+            did = False
 
-                efforts = await client.get_activity_best_efforts(activity.id)
+            if activity.id not in vdot_seen:
 
-                vdot = BestEffortVdot.from_efforts(efforts)
+                did = await BestEffortRefresh._do_vdot(
+                    client, vdot_store, profile, activity.id
+                ) or did
 
-                store.update(profile, activity.id, vdot)
+            if activity.id not in fade_seen:
+
+                did = await BestEffortRefresh._do_fade(
+                    client, fade_store, profile, activity.id
+                ) or did
+
+            if did:
 
                 processed += 1
 
-            except Exception as e:
+    @staticmethod
+    async def _do_vdot(client, store, profile, activity_id) -> bool:
 
-                print(
-                    f"Best-effort refresh (detalhe {activity.id}) falhou "
-                    f"p/ '{profile}': {e}"
-                )
+        try:
+
+            efforts = await client.get_activity_best_efforts(activity_id)
+
+            store.update(profile, activity_id, BestEffortVdot.from_efforts(efforts))
+
+            return True
+
+        except Exception as e:
+
+            print(f"Best-effort (detalhe {activity_id}) falhou p/ '{profile}': {e}")
+
+            return False
+
+    @staticmethod
+    async def _do_fade(client, store, profile, activity_id) -> bool:
+
+        try:
+
+            streams = await client.get_activity_streams(activity_id)
+
+            faded = FormFatigueAnalyzer.fades(
+                streams.get("cadence") or [], streams.get("distance") or [],
+            )
+
+            store.record(profile, activity_id, faded)
+
+            return True
+
+        except Exception as e:
+
+            print(f"Forma-sob-fadiga ({activity_id}) falhou p/ '{profile}': {e}")
+
+            return False
