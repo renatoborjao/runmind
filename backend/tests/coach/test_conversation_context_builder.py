@@ -642,8 +642,12 @@ def test_race_summary_includes_countdown_and_target():
         reference_date=date(2026, 7, 3),
     )
 
-    assert "Prova alvo: 10 km Sub 50 em 15/08/2026" in line
+    # a meta já aparece no cabeçalho; a linha da prova só ancora a DATA-alvo
+    # (não repete a frase da meta como nome de prova)
+    assert "Data-alvo da meta: 15/08/2026" in line
+    assert "10 km Sub 50" not in line
     assert "daqui a 6 semanas" in line
+    assert "alvo 00:50:00" in line
     assert "alvo 00:50:00" in line
 
 
@@ -739,7 +743,9 @@ def test_athlete_state_gives_the_coach_the_full_picture():
 
     assert "QUADRO ATUAL DO ATLETA" in out
     assert "forma vem subindo" in out
-    assert "Corpo/recuperação" in out and "sono" in out
+    assert "Corpo/recuperação" in out
+    # o sono NÃO se repete como "ponto de atenção" no corpo — tem linha própria
+    assert "ponto de atenção: sono" not in out
     assert "5.5h" in out and "caindo" in out
 
 

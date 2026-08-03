@@ -263,8 +263,12 @@ class ConversationContextBuilder:
 
             if state:
 
-                limiter = ConversationContextBuilder._LIMITER_PT.get(
-                    reading.limiter or ""
+                # o sono tem LINHA PRÓPRIA abaixo (mais detalhada); não repete
+                # aqui como "ponto de atenção" — evita dizer sono 2x no quadro
+                limiter = (
+                    ConversationContextBuilder._LIMITER_PT.get(reading.limiter)
+                    if reading.limiter and reading.limiter != "sono"
+                    else None
                 )
 
                 extra = f"; ponto de atenção: {limiter}" if limiter else ""
@@ -459,8 +463,10 @@ class ConversationContextBuilder:
             f", alvo {goal.target_time}" if goal.target_time else ""
         )
 
+        # a META já aparece no cabeçalho ("Meta: ..."); aqui só ancoramos a
+        # DATA-alvo, sem repetir a frase inteira da meta como "nome da prova"
         return (
-            f"Prova alvo: {goal.name} em "
+            f"Data-alvo da meta: "
             f"{goal.race_date.strftime('%d/%m/%Y')} "
             f"(daqui a {weeks} semanas{target})\n"
         )
