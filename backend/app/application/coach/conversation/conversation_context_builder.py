@@ -18,6 +18,9 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.application.planner.weekly_plan_service import (
     WeeklyPlanService,
 )
+from app.application.use_cases.build_training_goal import (
+    BuildTrainingGoal,
+)
 from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
@@ -34,9 +37,6 @@ from app.infrastructure.persistence.coach_outbox_repository import (
 )
 from app.infrastructure.persistence.conversation_repository import (
     ConversationRepository,
-)
-from app.application.use_cases.build_training_goal import (
-    BuildTrainingGoal,
 )
 
 
@@ -152,6 +152,17 @@ class ConversationContextBuilder:
 
             facts = f"{facts}{lifetime}\n"
 
+        # O QUADRO COMPLETO do atleta (evolução + corpo + sono + o que o coach
+        # aprendeu): o coach de CONVERSA tem que raciocinar como TREINADOR — com
+        # a trajetória inteira na cabeça —, não responder olhando só o dia. Best-
+        # effort: cada peça que falhar simplesmente não entra. Ver item "coach
+        # considera plano/evolução/dia-a-dia".
+        state = ConversationContextBuilder._athlete_state(profile)
+
+        if state:
+
+            facts = f"{facts}\n{state}\n"
+
         memory = RunnerMemoryService.render(profile)
 
         if memory:
@@ -170,6 +181,131 @@ class ConversationContextBuilder:
             )
 
         return facts
+
+    # estado do corpo (veredito) traduzido pro coach de conversa
+    _BODY_STATE_PT = {
+        "STRAINED": "sobrecarregado (carga alta + recuperação caindo)",
+        "RECOVERY_FLAG": "recuperação em queda",
+        "ABSORBING": "absorvendo bem a carga (rampa saudável)",
+        "BALANCED": "equilibrado (carga ótima + recuperado)",
+        "FRESH": "descansado, com folga pra puxar",
+        "BUILDING": "ainda montando base de dados do corpo",
+    }
+
+    _LIMITER_PT = {
+        "sono": "sono",
+        "fc_repouso": "FC de repouso subindo",
+        "stress": "stress alto",
+    }
+
+    @staticmethod
+    def _athlete_state(profile: str) -> str:
+        """O quadro completo pro coach de conversa: evolução (forma), corpo/
+        recuperação, sono e o que o coach APRENDEU observando o atleta. Tudo
+        determinístico e já pronto — aqui só rende compacto. Best-effort."""
+
+        lines: list[str] = []
+
+        try:
+
+            from app.application.coach.intelligence.fitness_reading_service import (
+                FitnessReadingService,
+            )
+            from app.application.coach.writer.fitness_evolution_writer import (
+                FitnessEvolutionWriter,
+            )
+
+            evo_line = FitnessEvolutionWriter.line(
+                FitnessReadingService.read_evolution(profile)
+            )
+
+            if evo_line:
+
+                lines.append(f"- Evolução da forma: {evo_line}")
+
+        except Exception as e:
+
+            print(f"Estado (evolução) falhou p/ '{profile}': {e}")
+
+        try:
+
+            from app.application.coach.intelligence.body_reading_service import (
+                BodyReadingService,
+            )
+
+            reading, _ = BodyReadingService.read(profile, persist=False)
+
+            state = ConversationContextBuilder._BODY_STATE_PT.get(
+                reading.body_state
+            )
+
+            if state:
+
+                limiter = ConversationContextBuilder._LIMITER_PT.get(
+                    reading.limiter or ""
+                )
+
+                extra = f"; ponto de atenção: {limiter}" if limiter else ""
+
+                lines.append(f"- Corpo/recuperação: {state}{extra}")
+
+        except Exception as e:
+
+            print(f"Estado (corpo) falhou p/ '{profile}': {e}")
+
+        try:
+
+            from app.application.coach.intelligence.sleep_reading_service import (
+                SleepReadingService,
+            )
+
+            sr = SleepReadingService.read(profile)
+
+            if sr.has_data and sr.avg_hours is not None:
+
+                trend = {"rising": "melhorando", "falling": "caindo"}.get(
+                    sr.direction, "estável"
+                )
+
+                debt = " (abaixo do que o corpo pede)" if sr.debt else ""
+
+                lines.append(
+                    f"- Sono: ~{sr.avg_hours:.1f}h/noite, {trend}{debt}"
+                )
+
+        except Exception as e:
+
+            print(f"Estado (sono) falhou p/ '{profile}': {e}")
+
+        try:
+
+            from app.core.config import get_settings
+
+            if get_settings().coach_learning_inject_enabled:
+
+                from app.application.coach.memory.coach_learning_service import (
+                    CoachLearningService,
+                )
+
+                learnings = CoachLearningService.render(profile)
+
+                if learnings:
+
+                    lines.append(learnings)
+
+        except Exception as e:
+
+            print(f"Estado (aprendizados) falhou p/ '{profile}': {e}")
+
+        if not lines:
+
+            return ""
+
+        return (
+            "QUADRO ATUAL DO ATLETA (você é o TREINADOR dele — considere SEMPRE "
+            "a trajetória inteira ao analisar, propor e responder, nunca só o "
+            "dia de hoje):\n" + "\n".join(lines)
+        )
 
     @staticmethod
     def _race_summary(
