@@ -49,7 +49,7 @@ class MissedWorkoutFlow:
 
         runner = LoadRunnerProfile.execute(profile)
 
-        # treinador humano: RunMind não reprograma o plano dele
+        # treinador humano: Ritmind não reprograma o plano dele
         if runner.external_coach:
 
             return None

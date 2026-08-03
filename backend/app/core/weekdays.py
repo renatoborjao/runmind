@@ -26,7 +26,7 @@ WEEKDAYS_PTBR = {
 def weekday_name(date: datetime) -> str:
     """
     Retorna o dia da semana no padrão utilizado
-    internamente pelo RunMind.
+    internamente pelo Ritmind.
 
     Independe do idioma do Windows.
     """

@@ -12,7 +12,7 @@ router = APIRouter(
 @router.post("/register-webhook")
 async def register_webhook():
     """Registra o webhook do bot no Telegram (setWebhook) apontando
-    para a URL pública do RunMind, com o secret de segurança."""
+    para a URL pública do Ritmind, com o secret de segurança."""
 
     settings = get_settings()
 

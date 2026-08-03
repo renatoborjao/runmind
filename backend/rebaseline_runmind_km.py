@@ -1,8 +1,8 @@
 """One-off (2026-08-01): re-baseline do `total_km_accumulated` pra contar SÓ a
-jornada COM o RunMind — km de corrida desde a ENTRADA de cada atleta, não o
-histórico pré-RunMind que o Strava trazia no seed.
+jornada COM o Ritmind — km de corrida desde a ENTRADA de cada atleta, não o
+histórico pré-Ritmind que o Strava trazia no seed.
 
-Decisão do Renato: o marco "passou de X km com o RunMind" tem que ser honesto;
+Decisão do Renato: o marco "passou de X km com o Ritmind" tem que ser honesto;
 pouco importa a quilometragem de Strava anterior, o que vale é o que o atleta
 rodou USANDO o app — e não podemos perder o que já rodou com a gente.
 
@@ -141,7 +141,7 @@ async def main(apply: bool) -> None:
         new_ms = max(crossed) if crossed else None
 
         print(
-            f"  {profile}: entrada={since} | {n} treinos c/ RunMind | "
+            f"  {profile}: entrada={since} | {n} treinos c/ Ritmind | "
             f"acumulado {old_km} -> {km} km | marco {old_ms} -> {new_ms}"
         )
 

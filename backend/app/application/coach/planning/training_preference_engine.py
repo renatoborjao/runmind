@@ -19,7 +19,7 @@ MAX_OUTPUT_TOKENS = 500
 # MEMORY_CATEGORIES): forma do treino/semana OU padrão de agenda
 _CATEGORIES = {"preferencia", "disponibilidade"}
 
-PROMPT_TEMPLATE = """Você é o treinador de corrida do RunMind, cuidando de \
+PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind, cuidando de \
 {runner_name}. Hoje é {today} (use pra resolver "a partir da semana que vem", \
 "a partir de agosto" etc.).
 

@@ -48,7 +48,7 @@ BUSY_REPLY = (
 
 QUESTIONS = {
     "ASK_NAME": (
-        "Oi! 👋 Eu sou o coach do RunMind — vou montar e acompanhar "
+        "Oi! 👋 Eu sou o coach do Ritmind — vou montar e acompanhar "
         "seus treinos de corrida por aqui.\n\n"
         "Pra começar: como você se chama?"
     ),
@@ -336,7 +336,7 @@ class OnboardingFlow:
                 + QUESTIONS["ASK_RUNS_TODAY"]
             )
 
-        # NÃO tem conta: o Strava é o coração do RunMind (sem ele o coach não
+        # NÃO tem conta: o Strava é o coração do Ritmind (sem ele o coach não
         # recebe treino nem dá feedback), então ele CRIA antes de seguir. Fica
         # no passo de espera até confirmar que criou — só aí manda o link de
         # conexão e avança.
@@ -1022,7 +1022,7 @@ class OnboardingFlow:
 
             return OnboardingFlow._finish(address, state, plan_message, repo)
 
-        # Plano gerado pelo RunMind: se ainda dá tempo nesta semana,
+        # Plano gerado pelo Ritmind: se ainda dá tempo nesta semana,
         # pergunta se começa agora ou na próxima; se está no fim da
         # semana, já monta pra próxima (datas sempre futuras).
         today = today_local()

@@ -185,7 +185,7 @@ def _handle_activity_deleted(
     activity_id: int,
     background_tasks: BackgroundTasks,
 ) -> dict:
-    """Reflete no RunMind uma atividade apagada no Strava: tira do
+    """Reflete no Ritmind uma atividade apagada no Strava: tira do
     arquivo permanente, solta a marca de idempotência e — se o atleta
     já recebeu feedback desse treino — manda uma retratação pra ele
     saber que pode ignorar a análise (caso clássico: teste na esteira
@@ -202,7 +202,7 @@ def _handle_activity_deleted(
         # marca no guard = passou pelo webhook; registro no arquivo =
         # gerou análise de corrida. Só as duas juntas provam que o
         # atleta recebeu feedback — evita retratação falsa quando ele
-        # apaga uma pedalada ou um treino antigo de antes do RunMind.
+        # apaga uma pedalada ou um treino antigo de antes do Ritmind.
         feedback_was_sent = guard.is_marked(activity_id)
 
         removed = ActivityArchiveRepository().remove(
@@ -261,7 +261,7 @@ async def _send_deletion_retraction(
         await NotificationService.send(
             runner,
             (
-                "🏃 RunMind\n\n"
+                "🏃 Ritmind\n\n"
                 "Vi que você apagou aquele treino no Strava. 👍\n\n"
                 "Pode desconsiderar a análise que te mandei — "
                 "ele também já saiu do seu histórico por aqui."

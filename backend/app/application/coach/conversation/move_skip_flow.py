@@ -51,7 +51,7 @@ class MoveSkipFlow:
         incoming_text: str,
     ) -> str | None:
 
-        # treinador humano: RunMind não reestrutura o plano dele
+        # treinador humano: Ritmind não reestrutura o plano dele
         if runner.external_coach:
 
             return None

@@ -39,7 +39,7 @@ _LIMITER_LABEL = {
     "stress": "o nível de stress, que está alto",
 }
 
-_SYSTEM_PROMPT = """Você é o coach de corrida do RunMind. Escreva pro atleta \
+_SYSTEM_PROMPT = """Você é o coach de corrida do Ritmind. Escreva pro atleta \
 uma leitura CURTA do corpo dele (WhatsApp/Telegram, tom de treinador \
 experiente, sem markdown).
 

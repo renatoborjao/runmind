@@ -38,7 +38,7 @@ class ProactiveAversionDetector:
         """Devolve a mensagem que ABRE a conversa (pro caller enviar) ou
         None. Não muda o plano nem envia nada por conta própria."""
 
-        # Aversão adapta o plano do RunMind; treinador externo tem plano
+        # Aversão adapta o plano do Ritmind; treinador externo tem plano
         # próprio — não puxamos essa conversa com ele.
         if getattr(runner, "external_coach", False):
 

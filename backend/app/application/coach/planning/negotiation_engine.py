@@ -30,7 +30,7 @@ THINKING_BUDGET = 1024
 # que gera, não o teto — a folga é de graça e derruba os retries.
 MAX_OUTPUT_TOKENS = 6000
 
-PROMPT_TEMPLATE = """Você é o treinador de corrida do RunMind. O atleta \
+PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 {runner_name} mandou uma mensagem que PODE ser um pedido pra AJUSTAR o plano \
 da semana (deixar mais leve/pesado, mais rodagens, menos intensidade, mudar a \
 carga/distribuição...). Meta dele: {objective}.

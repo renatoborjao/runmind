@@ -1,7 +1,7 @@
 """Celebração de PR/marcos: depois de cada treino concluído, verifica se o
 atleta bateu um recorde REAL de corredor (corrida mais longa, treino mais
 rápido numa faixa de distância) e devolve UMA mensagem comemorativa (ou
-None). NUNCA muda o plano — é puro reconhecimento, igual pra atleta RunMind
+None). NUNCA muda o plano — é puro reconhecimento, igual pra atleta Ritmind
 ou de treinador externo.
 
 Decisão do Renato: "km acumulado" e "semana de maior volume" NÃO são
@@ -82,7 +82,7 @@ class PersonalRecordDetector:
     @staticmethod
     async def seed(profile: str) -> None:
         """Estabelece a base de recordes a partir do histórico REAL do
-        Strava, sem esperar um treino ser processado pelo RunMind. Chamado
+        Strava, sem esperar um treino ser processado pelo Ritmind. Chamado
         na conexão do Strava (onboarding e late connector). Não sobrescreve
         quem já tem base (reconexão não reseta o que já foi conquistado)."""
 
@@ -367,9 +367,9 @@ class PersonalRecordDetector:
 
             records["pace_by_band_dates"] = pace_by_band_dates
 
-        # "Km acumulado COM o RunMind" começa do ZERO na conexão — NÃO herda o
-        # histórico pré-RunMind do Strava. O marco "passou de X km com o
-        # RunMind" só é honesto se contar o que o atleta rodou USANDO o app
+        # "Km acumulado COM o Ritmind" começa do ZERO na conexão — NÃO herda o
+        # histórico pré-Ritmind do Strava. O marco "passou de X km com o
+        # Ritmind" só é honesto se contar o que o atleta rodou USANDO o app
         # (decisão do Renato 2026-08-01: pouco importa a quilometragem de
         # Strava anterior; o que vale é a jornada com a gente). O caminho ao
         # vivo (`after_feedback`) incrementa a partir daqui, treino a treino.

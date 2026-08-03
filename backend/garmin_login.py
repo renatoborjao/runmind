@@ -1,6 +1,6 @@
 """Login único no Garmin Connect por atleta. A senha é digitada por VOCÊ
 aqui no terminal (getpass, não aparece na tela) e NÃO é salva — só o token
-gerado fica guardado em storage/garmin/{profile}/, e é ele que o RunMind usa
+gerado fica guardado em storage/garmin/{profile}/, e é ele que o Ritmind usa
 depois pra empurrar os treinos pro relógio.
 
 Uso:  python garmin_login.py <profile>
@@ -48,7 +48,7 @@ def main(profile: str) -> None:
 
     GarminActivityPoller.seed_history(profile)
 
-    print("Histórico marcado. A partir de agora o RunMind empurra treinos")
+    print("Histórico marcado. A partir de agora o Ritmind empurra treinos")
     print("pro seu Garmin e analisa pelos dados dele.")
 
 

@@ -53,7 +53,7 @@ class AIHealthMonitor:
         if was_alerted:
 
             await AIHealthMonitor._notify(
-                "✅ RunMind: o coach voltou a responder normalmente."
+                "✅ Ritmind: o coach voltou a responder normalmente."
             )
 
     @staticmethod
@@ -81,7 +81,7 @@ class AIHealthMonitor:
         if should_alert:
 
             await AIHealthMonitor._notify(
-                f"⚠️ RunMind: o coach falhou {failures} vezes seguidas ao "
+                f"⚠️ Ritmind: o coach falhou {failures} vezes seguidas ao "
                 f"responder atletas. Última causa: {reason[:300]}\n\n"
                 f"Verifique o backend/Gemini."
             )

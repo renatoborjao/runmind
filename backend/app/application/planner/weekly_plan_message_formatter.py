@@ -36,7 +36,7 @@ class WeeklyPlanMessageFormatter:
     ) -> str:
 
         lines = [
-            "🏃 RunMind — Plano da semana",
+            "🏃 Ritmind — Plano da semana",
             "",
             f"Bom domingo, {runner_name}! Aqui está seu plano "
             f"pra semana de {plan.week_start.strftime('%d/%m')}:",
@@ -58,7 +58,7 @@ class WeeklyPlanMessageFormatter:
         plan: TrainingPlan,
     ) -> list[str]:
         """Cabeçalho da periodização: fase do ciclo e aviso de semana de
-        corte. Plano externo (treinador) não tem fase do RunMind."""
+        corte. Plano externo (treinador) não tem fase do Ritmind."""
 
         if plan.source == "externo":
 

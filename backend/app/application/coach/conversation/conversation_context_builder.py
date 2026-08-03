@@ -583,7 +583,7 @@ class ConversationContextBuilder:
 
             note = (
                 "(plano montado pelo treinador do corredor — o "
-                "RunMind só acompanha"
+                "Ritmind só acompanha"
             )
 
             note += (

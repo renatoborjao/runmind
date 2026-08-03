@@ -6,7 +6,7 @@ executado.
 
 Fácil de estender: outros treinadores/ferramentas ganham a própria legenda."""
 
-# código do Treino Online -> (nome legível, tipo interno do RunMind)
+# código do Treino Online -> (nome legível, tipo interno do Ritmind)
 # tipo interno None = não é corrida/caminhada (ignorado no plano).
 TREINO_ONLINE = {
     "AL": ("Alongamentos", None),
@@ -41,7 +41,7 @@ def legend_for_prompt() -> str:
 
 
 def internal_type(code: str) -> str | None:
-    """Tipo interno do RunMind pra uma sigla (None se não for corrida)."""
+    """Tipo interno do Ritmind pra uma sigla (None se não for corrida)."""
 
     entry = TREINO_ONLINE.get((code or "").strip().upper())
 

@@ -161,13 +161,13 @@ def test_pace_band_triggers_with_margin_and_ignores_micro_improvement():
 
 
 def test_seed_does_not_inherit_pre_runmind_strava_km():
-    """O acumulado conta só a jornada COM o RunMind: conectar o Strava com um
+    """O acumulado conta só a jornada COM o Ritmind: conectar o Strava com um
     histórico gordo NÃO herda esses km (decisão do Renato 2026-08-01). Os PRs
     reais (corrida mais longa) seguem vindo do histórico completo."""
 
     runner = make_runner()
 
-    # histórico pré-RunMind de 400km no Strava
+    # histórico pré-Ritmind de 400km no Strava
     past = [_run(d % 28 + 1, 6, 10_000, 3.0, d) for d in range(1, 41)]
 
     _feed(runner, list(reversed(past)))  # semeia
@@ -183,7 +183,7 @@ def test_km_milestone_crossed_updates_silently_without_celebrating():
     """Decisão do Renato: 'km acumulado' não é recorde de corredor de
     verdade — segue sendo rastreado (o recap mensal usa), mas não gera mais
     mensagem de comemoração depois de cada treino. O acumulado é COM o
-    RunMind (do zero na conexão), então aqui simulamos 96km já rodados com o
+    Ritmind (do zero na conexão), então aqui simulamos 96km já rodados com o
     app antes de hoje."""
 
     runner = make_runner()
@@ -197,7 +197,7 @@ def test_km_milestone_crossed_updates_silently_without_celebrating():
 
     _feed(runner, list(reversed(base)))  # semeia: acumulado ZERA, longest=15km
 
-    # 96km já rodados COM o RunMind (jornada prévia, não herança do Strava)
+    # 96km já rodados COM o Ritmind (jornada prévia, não herança do Strava)
     records = PersonalRecordRepository().load(runner.id)
     assert records["total_km_accumulated"] == 0.0
     records["total_km_accumulated"] = 96.0
@@ -333,7 +333,7 @@ def _seed(profile, activities, has_token=True):
 
 def test_seed_establishes_baseline_from_real_strava_history_immediately():
     """Conectar o Strava (onboarding/late connector) já estabelece a base —
-    sem precisar esperar o primeiro treino processado pelo RunMind."""
+    sem precisar esperar o primeiro treino processado pelo Ritmind."""
 
     past = [_run(1, 7, 10_000, 3.33, 1)]
 
@@ -447,7 +447,7 @@ def test_km_milestone_is_dated_only_on_the_live_path():
 
     _feed(runner, list(reversed(base)))  # semeia; acumulado zera
 
-    # 90km já rodados COM o RunMind antes de hoje
+    # 90km já rodados COM o Ritmind antes de hoje
     records = PersonalRecordRepository().load(runner.id)
     records["total_km_accumulated"] = 90.0
     PersonalRecordRepository().save(runner.id, records)

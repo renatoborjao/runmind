@@ -197,7 +197,7 @@ class WeeklyPlanService:
         profile: str,
         current_week_start: date,
     ) -> int:
-        """Índice da semana de treino no RunMind: nº de semanas já
+        """Índice da semana de treino no Ritmind: nº de semanas já
         planejadas antes desta + 1. Determinístico (vem do histórico),
         idempotente na regeração da mesma semana."""
 

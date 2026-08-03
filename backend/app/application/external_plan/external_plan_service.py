@@ -13,7 +13,7 @@ EXTERNAL_SOURCE = "externo"
 
 class ExternalPlanService:
     """Transforma sessões extraídas do plano do treinador em um
-    TrainingPlan acompanhado (nunca ajustado) pelo RunMind."""
+    TrainingPlan acompanhado (nunca ajustado) pelo Ritmind."""
 
     @staticmethod
     def apply(

@@ -42,7 +42,7 @@ _DEMANDING_CUES = (
     "progress", "fartlek", "vo2", "forte", "long",  # longo/longao/longão
 )
 
-PROMPT_TEMPLATE = """Você é o TREINADOR de corrida do RunMind, cuidando do \
+PROMPT_TEMPLATE = """Você é o TREINADOR de corrida do Ritmind, cuidando do \
 atleta {runner_name}. AMANHÃ ele tem um treino EXIGENTE e o corpo dele, HOJE \
 (véspera), está pedindo recuperação. Você decide a conduta pelos dados — mas \
 como falta um dia, um descanso hoje pode restaurá-lo; então você PROPÕE e ele \
@@ -83,7 +83,7 @@ Responda APENAS JSON:
 # Variante DIA-DO-TREINO: a proposta sai na manhã do próprio treino (gatilho do
 # despertar), com o dado FRESCO da noite. Sem a lógica de "véspera/descanso pode
 # restaurar" — aqui o dado é de agora e a decisão é pra hoje.
-PROMPT_TEMPLATE_TODAY = """Você é o TREINADOR de corrida do RunMind, cuidando do \
+PROMPT_TEMPLATE_TODAY = """Você é o TREINADOR de corrida do Ritmind, cuidando do \
 atleta {runner_name}. HOJE ele tem um treino EXIGENTE e o corpo dele, NESTA \
 MANHÃ (dado fresco do sono/recuperação da noite), está pedindo recuperação. \
 Você decide a conduta pelos dados — mas quem sente se ele acordou inteiro é ele; \

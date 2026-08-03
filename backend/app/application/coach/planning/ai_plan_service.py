@@ -82,7 +82,7 @@ class AIPlanService:
 
             return existing
 
-        # só treinador externo fica fora da IA (RunMind só acompanha o
+        # só treinador externo fica fora da IA (Ritmind só acompanha o
         # plano dele). Iniciante run/walk TAMBÉM é gerado pela IA, com os
         # dados do onboarding (peso/altura/capacidade) no contexto.
         if runner.external_coach:

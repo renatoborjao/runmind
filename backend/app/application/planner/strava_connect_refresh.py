@@ -4,7 +4,7 @@ vazio); agora que o histórico chegou, o coach regenera o plano da semana
 com o retrato real e manda pro atleta na hora.
 
 Uma vez só (marcador anti-spam) — reconexões não re-disparam. Vale só pra
-plano do RunMind: quem treina com treinador externo recebe o plano do
+plano do Ritmind: quem treina com treinador externo recebe o plano do
 treinador, então aqui o Strava entra só como histórico/contexto."""
 
 from app.application.coach.intelligence.personal_record_detector import (

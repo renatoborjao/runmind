@@ -55,7 +55,7 @@ def _test_session() -> PlannedSession:
         planned_duration_minutes=None,
         target_pace_min="6:00",
         target_pace_max="6:30",
-        purpose="RunMind DIAGNOSTICO - pode apagar",
+        purpose="Ritmind DIAGNOSTICO - pode apagar",
     )
 
 
@@ -115,7 +115,7 @@ def main(profile: str) -> None:
 
     on_date = date.today() + timedelta(days=45)
 
-    title = "RunMind DIAGNOSTICO apagar"
+    title = "Ritmind DIAGNOSTICO apagar"
 
     print(f"Data de teste (distante, não colide com plano): {on_date}")
 
@@ -123,7 +123,7 @@ def main(profile: str) -> None:
     workout = GarminWorkoutBuilder.build(
         _test_session(),
         name=title,
-        description="RunMind DIAGNOSTICO - pode apagar",
+        description="Ritmind DIAGNOSTICO - pode apagar",
     )
 
     upload = garmin.upload_running_workout(workout)

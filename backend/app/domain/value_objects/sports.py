@@ -1,4 +1,4 @@
-# O RunMind só trata treinos a pé: corrida, caminhada e esteira.
+# O Ritmind só trata treinos a pé: corrida, caminhada e esteira.
 # Esteira no Strava chega como "Run" (com trainer=true) ou "VirtualRun".
 # Qualquer outro esporte (Ride, Swim, WeightTraining...) polui os
 # agregadores semanais e a comparação com o plano.

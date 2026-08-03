@@ -54,7 +54,7 @@ class GarminSync:
 
     @staticmethod
     def should_offer(profile: str, runner: RunnerProfile) -> bool:
-        """Oferece só quando o plano é do RunMind e o atleta conectou o
+        """Oferece só quando o plano é do Ritmind e o atleta conectou o
         Garmin. Atleta com treinador externo já recebe os treinos pela
         ferramenta do treinador — não duplicamos no relógio."""
 
@@ -83,7 +83,7 @@ class GarminSync:
         conversa segue normal)."""
 
         # atleta com treinador externo recebe os treinos pela ferramenta
-        # do treinador — o push do RunMind não se aplica a ele
+        # do treinador — o push do Ritmind não se aplica a ele
         if getattr(runner, "external_coach", False):
 
             return None

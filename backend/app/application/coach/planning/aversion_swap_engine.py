@@ -19,7 +19,7 @@ VALID_DAYS = set(WEEKDAYS.values())
 
 MAX_OUTPUT_TOKENS = 1400
 
-PROMPT_TEMPLATE = """Você é o treinador de corrida do RunMind. O atleta \
+PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 {runner_name} mandou uma mensagem que PODE ser um pedido pra evitar/trocar um \
 tipo de treino da semana dele. Meta: {objective}.
 

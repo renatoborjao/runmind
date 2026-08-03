@@ -1,4 +1,4 @@
-APP_NAME = "🏃 RunMind"
+APP_NAME = "🏃 Ritmind"
 
 TRAINING_COMPLETED = "Parabéns pelo treino, {name}! 👊"
 
