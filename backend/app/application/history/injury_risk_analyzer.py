@@ -38,11 +38,20 @@ class InjuryRiskAnalyzer:
         load: TrainingLoad,
         recovery: RecoveryTrend,
         injuries: list[str] | None = None,
+        form_fading: bool = False,
     ) -> InjuryRisk:
 
         points = 0
 
         reasons: list[str] = []
+
+        # FORMA quebrando sob fadiga (cadência desabando no fim das corridas) —
+        # o atleta arrasta/aterrissa desleixado quando cansa; risco sobe
+        if form_fading:
+
+            points += 1
+
+            reasons.append("forma quebrando sob fadiga (cadência caindo no fim)")
 
         # SPIKE de carga (ACWR)
         if load.acwr is not None:

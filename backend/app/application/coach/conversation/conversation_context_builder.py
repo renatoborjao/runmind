@@ -254,6 +254,9 @@ class ConversationContextBuilder:
                 InjuryRiskAnalyzer,
                 injury_risk_chat_line,
             )
+            from app.infrastructure.persistence.form_fatigue_store import (
+                FormFatigueStore,
+            )
 
             runner = LoadRunnerProfile.execute(profile)
 
@@ -262,6 +265,7 @@ class ConversationContextBuilder:
                     reading.load,
                     reading.recovery,
                     getattr(runner, "injuries", None),
+                    form_fading=FormFatigueStore().is_fading(profile),
                 )
             )
 

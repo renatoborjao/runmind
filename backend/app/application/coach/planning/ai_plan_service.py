@@ -251,6 +251,9 @@ class AIPlanService:
                     InjuryRiskAnalyzer,
                     injury_risk_directive,
                 )
+                from app.infrastructure.persistence.form_fatigue_store import (
+                    FormFatigueStore,
+                )
                 from app.infrastructure.persistence.runner_profile_repository import (
                     RunnerProfileRepository,
                 )
@@ -261,6 +264,7 @@ class AIPlanService:
                     body_reading.load,
                     body_reading.recovery,
                     getattr(runner, "injuries", None),
+                    form_fading=FormFatigueStore().is_fading(profile),
                 )
 
                 parts.append(injury_risk_directive(risk))

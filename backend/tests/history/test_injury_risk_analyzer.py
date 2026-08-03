@@ -81,6 +81,18 @@ def test_volume_ramp_counts():
     assert any("volume pulou" in r for r in risk.reasons)
 
 
+def test_form_fading_adds_a_risk_factor():
+    """Forma quebrando sob fadiga soma 1 ponto; com o ACWR de atenção vira
+    risco elevado."""
+
+    risk = InjuryRiskAnalyzer.assess(
+        _load(acwr=1.35), _recovery(), [], form_fading=True,
+    )
+
+    assert risk.level == RISK_ELEVATED
+    assert any("fadiga" in r for r in risk.reasons)
+
+
 def test_no_acwr_data_does_not_crash():
 
     risk = InjuryRiskAnalyzer.assess(_load(acwr=None), _recovery(), None)
