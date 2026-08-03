@@ -29,6 +29,10 @@ o coach deve lembrar em conversas futuras. Categorias possíveis:
 - preferencia: preferências de treino (horário, terreno, tipo de treino...)
 - disponibilidade: viagens, ausências, mudanças de agenda
 - objetivo: mudança de meta ou prova alvo
+- motivacao: o PORQUÊ profundo de correr / o que a corrida significa pra ele /
+  marcos de identidade (voltou depois de lesão, primeira vez sem parar, corre
+  pela saúde após um susto, por alguém, pra provar algo, pra aliviar o stress).
+  SÓ quando ele REVELA de verdade — nunca invente nem deduza um "porquê".
 - vida: evento de vida relevante ao treino (trabalho puxado, doença, sono...)
 - outro: fato durável que não se encaixa acima
 

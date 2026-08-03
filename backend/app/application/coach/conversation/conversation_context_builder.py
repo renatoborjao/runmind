@@ -183,6 +183,14 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{memory}\n"
 
+        # a ÂNCORA EMOCIONAL (por que ele corre) — seção própria, pra o coach
+        # CONHECER o atleta e puxar o porquê dele nos momentos que importam.
+        anchor = RunnerMemoryService.motivation_anchor(profile)
+
+        if anchor:
+
+            facts = f"{facts}\n{anchor}\n"
+
         summary = ConversationRepository().load_summary(
             profile,
         )["summary"]

@@ -62,7 +62,13 @@ class RunnerMemoryService:
         """Memórias ativas formatadas para o contexto da conversa;
         string vazia quando não há nada a lembrar."""
 
-        memories = RunnerMemoryRepository().active(profile)
+        # a motivação sai numa seção PRÓPRIA (a âncora emocional) — aqui ficam
+        # só os fatos operacionais, pra o "porquê" não virar mais um item de lista
+        memories = [
+            m
+            for m in RunnerMemoryRepository().active(profile)
+            if m.category != "motivacao"
+        ]
 
         if not memories:
 
@@ -83,6 +89,40 @@ class RunnerMemoryService:
             lines.append(
                 f"- [{entry.category}] {entry.content} ({registered})"
             )
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def motivation_anchor(profile: str) -> str:
+        """A ÂNCORA EMOCIONAL do atleta (por que ele corre) + a diretriz de usá-la
+        com verdade nos momentos que importam. Seção distinta da memória de fatos.
+        Vazio quando ele ainda não revelou um porquê."""
+
+        anchors = [
+            m
+            for m in RunnerMemoryRepository().active(profile)
+            if m.category == "motivacao"
+        ]
+
+        if not anchors:
+
+            return ""
+
+        lines = [
+            "POR QUE ELE CORRE (a âncora emocional — o que a corrida significa "
+            "pra ele):"
+        ]
+
+        for entry in anchors:
+
+            lines.append(f"- {entry.content}")
+
+        lines.append(
+            "Puxe isso pra motivar nos momentos que IMPORTAM (semana dura, dia "
+            "de baixa, um marco batido) — com as palavras DELE, de forma "
+            "genuína. NÃO force em toda mensagem nem repita como bordão: é o que "
+            "faz você CONHECER o atleta, não um slogan."
+        )
 
         return "\n".join(lines)
 
