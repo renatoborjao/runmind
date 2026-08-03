@@ -224,17 +224,50 @@ class AIPlanService:
 
         parts = []
 
+        body_reading = None
+
         try:
 
             reading, trajectory = BodyReadingService.read(
                 profile, persist=False
             )
 
+            body_reading = reading
+
             parts.append(body_plan_directive(reading, trajectory))
 
         except Exception as e:
 
             print(f"Diretriz de corpo falhou p/ '{profile}': {e}")
+
+        # RISCO DE LESÃO precoce: spike de carga (ACWR) + rampa de volume +
+        # recuperação caindo + histórico → o coach constrói uma semana mais
+        # segura (prevenção), antes de virar lesão. Best-effort.
+        try:
+
+            if body_reading is not None:
+
+                from app.application.history.injury_risk_analyzer import (
+                    InjuryRiskAnalyzer,
+                    injury_risk_directive,
+                )
+                from app.infrastructure.persistence.runner_profile_repository import (
+                    RunnerProfileRepository,
+                )
+
+                runner = RunnerProfileRepository().load(profile)
+
+                risk = InjuryRiskAnalyzer.assess(
+                    body_reading.load,
+                    body_reading.recovery,
+                    getattr(runner, "injuries", None),
+                )
+
+                parts.append(injury_risk_directive(risk))
+
+        except Exception as e:
+
+            print(f"Diretriz de risco de lesão falhou p/ '{profile}': {e}")
 
         try:
 
