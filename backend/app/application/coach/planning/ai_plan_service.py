@@ -198,6 +198,20 @@ class AIPlanService:
         # alivia. O plano é dinâmico, a IA já propõe — não pergunta ao atleta.
         fitness_directive = AIPlanService._fitness_directive(profile)
 
+        # AUTO-CALIBRAÇÃO: se o atleta vem sistematicamente mais devagar (ou mais
+        # rápido) que o pace prescrito nos tiros, ajusta o alvo ao que ele
+        # SUSTENTA — com evidência real. Anexa à diretriz de forma (mesmo eixo:
+        # como prescrever o ritmo). Best-effort.
+        calibration = AIPlanService._calibration_directive(profile)
+
+        if calibration:
+
+            fitness_directive = (
+                f"{fitness_directive}\n{calibration}"
+                if fitness_directive
+                else calibration
+            )
+
         return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
@@ -358,6 +372,32 @@ class AIPlanService:
         except Exception as e:
 
             print(f"Diretriz de forma falhou p/ '{profile}': {e}")
+
+            return ""
+
+    @staticmethod
+    def _calibration_directive(profile: str) -> str:
+        """Auto-calibração do pace: viés sistemático (prescrito × sustentado nos
+        tiros) vira instrução pra ajustar o alvo de qualidade ao real. Best-
+        effort — falhar aqui nunca deixa o atleta sem plano."""
+
+        try:
+
+            from app.application.history.pace_calibration_analyzer import (
+                PaceCalibrationAnalyzer,
+                calibration_directive,
+            )
+            from app.infrastructure.persistence.pace_calibration_store import (
+                PaceCalibrationStore,
+            )
+
+            deltas = PaceCalibrationStore().deltas(profile)
+
+            return calibration_directive(PaceCalibrationAnalyzer.assess(deltas))
+
+        except Exception as e:
+
+            print(f"Diretriz de calibração falhou p/ '{profile}': {e}")
 
             return ""
 
