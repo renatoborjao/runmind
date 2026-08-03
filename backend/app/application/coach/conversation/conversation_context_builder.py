@@ -45,6 +45,7 @@ class ConversationContextBuilder:
     @staticmethod
     async def build(
         profile: str,
+        incoming_text: str = "",
     ) -> str:
 
         runner = LoadRunnerProfile.execute(profile)
@@ -151,6 +152,19 @@ class ConversationContextBuilder:
         if lifetime:
 
             facts = f"{facts}{lifetime}\n"
+
+        # quebra MENSAL do histórico — só quando o atleta pergunta sobre um
+        # período ("quantos km em maio?", "corri mais mês passado?"). Fora
+        # disso não entra, pra não inflar o prompt do chat. Ver
+        # [[project_consumo_tokens]].
+        history_digest = ConversationContextBuilder._history_digest(
+            profile,
+            incoming_text,
+        )
+
+        if history_digest:
+
+            facts = f"{facts}\n{history_digest}\n"
 
         # O QUADRO COMPLETO do atleta (evolução + corpo + sono + o que o coach
         # aprendeu): o coach de CONVERSA tem que raciocinar como TREINADOR — com
@@ -384,6 +398,40 @@ class ConversationContextBuilder:
             f"{first_label}; maior treino: "
             f"{stats['longest_km']:.1f} km\n"
         )
+
+    @staticmethod
+    def _history_digest(
+        profile: str,
+        incoming_text: str,
+    ) -> str:
+        """Tabela mês-a-mês das corridas arquivadas — aterra o coach pra
+        responder pergunta de período com verdade. Só entra quando a mensagem
+        PARECE histórica (portão barato), pra o prompt do chat seguir enxuto.
+        Best-effort: falhar aqui nunca derruba a conversa."""
+
+        from app.application.coach.conversation.history_query_detector import (
+            HistoryQueryDetector,
+        )
+
+        if not HistoryQueryDetector.looks_historical(incoming_text):
+
+            return ""
+
+        try:
+
+            from app.application.history.monthly_training_digest import (
+                MonthlyTrainingDigest,
+            )
+
+            activities = ActivityArchiveRepository().load_activities(profile)
+
+            return MonthlyTrainingDigest.render(activities, today_local())
+
+        except Exception as e:
+
+            print(f"Digest mensal falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _week_plan_summary(
