@@ -31,13 +31,18 @@ PHASE_EMPHASIS = (
 # POR TEMPO vs POR DISTÂNCIA — compartilhada pelos 3 motores (plano semanal,
 # negociação, avulso). Sem chaves `{}`: entra crua num .format() de prompt.
 # Bug real (03/08): atleta pediu "50 min de rodagem" e o coach converteu em
-# "8 km"; ele já preferia por tempo. Ver [[project_tudo_dinamico]].
+# "8 km". Tempo NÃO é só reativo — é uma forma de prescrição de primeira classe
+# que o treinador pode PROPOR sozinho (ex.: longão por tempo em pé, "1h45 de
+# rodagem"), pra TODOS os atletas. Ver [[project_tudo_dinamico]].
 TIME_OR_DISTANCE_RULE = (
-    "POR TEMPO OU POR DISTÂNCIA: por padrão prescreva em distância "
-    '(distance_km). MAS se o atleta PEDIR ou PREFERIR treinar por TEMPO (ex.: '
-    '"quero 50 min de rodagem", ou a memória/preferência dele diz que prefere '
-    'por minutos), prescreva a sessão em MINUTOS: use "duration_min" no lugar '
-    'de "distance_km" (a sessão fica SEM km) e monte os "steps" por tempo '
-    '("duration_min"). NUNCA converta os minutos que ele pediu em km — respeite '
-    "a unidade que ele quer."
+    "POR TEMPO OU POR DISTÂNCIA — as duas são formas VÁLIDAS de prescrever e "
+    "VOCÊ (treinador) escolhe a que servir melhor a cada sessão. Distância "
+    "(distance_km) é o padrão comum. Mas TEMPO (minutos) é uma opção de "
+    "PRIMEIRA CLASSE que você pode PROPOR por conta própria — natural pra "
+    "rodagem/base e principalmente pro LONGÃO (tempo em pé; ex.: \"1h de "
+    "rodagem leve\", \"longão de 1h45\"). E SEMPRE que o atleta PEDIR ou "
+    "PREFERIR por tempo (pedido na mensagem ou preferência na memória), "
+    "prescreva em minutos. Sessão por tempo: use \"duration_min\" no lugar de "
+    "\"distance_km\" (fica SEM km) e monte os \"steps\" por tempo "
+    "(\"duration_min\"). NUNCA converta em km os minutos que ele pediu."
 )
