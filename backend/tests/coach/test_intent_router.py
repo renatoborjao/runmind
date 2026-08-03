@@ -3,7 +3,6 @@ from app.application.coach.conversation.intent_router import (
     IntentRouter,
 )
 
-
 # ==========================================================
 # LAST_TRAINING
 # ==========================================================
@@ -393,4 +392,46 @@ def test_pace_zones_does_not_collide_with_race_strategy():
     assert (
         IntentRouter.detect("qual o pace da prova?")
         == ChatIntent.RACE_STRATEGY
+    )
+
+
+# ==========================================================
+# MUTAÇÃO suprime cards que só recitam a agenda (bug 03/08)
+# ==========================================================
+
+def test_trocar_treino_de_amanha_nao_vira_card_de_proximo():
+    """Pedido de TROCAR o treino de amanhã não pode acionar o card de
+    'próximo treino' (senão o coach recita o plano e ignora o pedido)."""
+
+    msg = (
+        "amanhã vou treinar com meu irmão, o treino dele é 50min de rodagem "
+        "6-6:20, quero trocar meu treino de amanhã pra fazer o dele, é possível?"
+    )
+
+    assert IntentRouter.detect(msg) is None
+
+
+def test_mudar_treino_de_hoje_nao_vira_card():
+
+    assert IntentRouter.detect("quero mudar meu treino de hoje") is None
+
+
+def test_no_lugar_de_suprime_card():
+
+    assert IntentRouter.detect("faço uma rodagem no lugar do treino de hoje?") is None
+
+
+def test_info_pura_ainda_dispara_apesar_de_hoje_amanha():
+    """Sem sinal de mutação, o card informativo segue funcionando."""
+
+    assert IntentRouter.detect("qual meu treino de hoje?") == ChatIntent.NEXT_TRAINING
+    assert IntentRouter.detect("qual meu treino de amanhã?") == ChatIntent.NEXT_TRAINING
+
+
+def test_mudei_de_ideia_nao_e_mutacao():
+    """'mudei de ideia' não é pedido de mudar o treino — não suprime o card."""
+
+    assert (
+        IntentRouter.detect("mudei de ideia, qual meu treino de hoje?")
+        == ChatIntent.NEXT_TRAINING
     )
