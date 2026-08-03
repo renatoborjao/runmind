@@ -274,18 +274,27 @@ class ConversationContextBuilder:
 
             runner = LoadRunnerProfile.execute(profile)
 
-            risk_line = injury_risk_chat_line(
-                InjuryRiskAnalyzer.assess(
-                    reading.load,
-                    reading.recovery,
-                    getattr(runner, "injuries", None),
-                    form_fading=FormFatigueStore().is_fading(profile),
-                )
+            risk = InjuryRiskAnalyzer.assess(
+                reading.load,
+                reading.recovery,
+                getattr(runner, "injuries", None),
+                form_fading=FormFatigueStore().is_fading(profile),
             )
+
+            risk_line = injury_risk_chat_line(risk)
 
             if risk_line:
 
                 lines.append(risk_line)
+
+            # FORÇA/MOBILIDADE PREVENTIVA (prehab): se o atleta relatou dor, dá
+            # exercícios da área; senão, se o risco está elevado, prehab geral.
+            # É o "o que fazer" que faltava — não só "segure a carga".
+            prehab = ConversationContextBuilder._prehab_line(profile, risk)
+
+            if prehab:
+
+                lines.append(prehab)
 
             # DESCARGA proativa: se a semana é de recuperação planejada, o coach
             # precisa saber (e saber explicar) por que o plano está mais leve.
@@ -380,6 +389,43 @@ class ConversationContextBuilder:
             "a trajetória inteira ao analisar, propor e responder, nunca só o "
             "dia de hoje):\n" + "\n".join(lines)
         )
+
+    @staticmethod
+    def _prehab_line(profile: str, risk) -> str:
+        """Prehab pro quadro do coach: dor relatada -> exercícios da área;
+        senão, risco elevado -> prehab geral; senão nada. Best-effort."""
+
+        try:
+
+            from app.application.coach.intelligence.prehab_advisor import (
+                PrehabAdvisor,
+            )
+            from app.core.clock import today_local
+            from app.infrastructure.persistence.checkin_repository import (
+                CheckinRepository,
+            )
+
+            checkin = CheckinRepository().latest_recent(
+                profile, today_local().isoformat()
+            )
+
+            sore = checkin is not None and (checkin.soreness or 0) >= 2
+
+            if sore:
+
+                note = checkin.note or ""
+
+                return PrehabAdvisor.directive_for_pain(note)
+
+            if getattr(risk, "elevated", False):
+
+                return PrehabAdvisor.directive_general()
+
+        except Exception as e:
+
+            print(f"Prehab falhou p/ '{profile}': {e}")
+
+        return ""
 
     @staticmethod
     def _race_summary(
