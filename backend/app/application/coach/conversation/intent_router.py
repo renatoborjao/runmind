@@ -130,6 +130,38 @@ _SLEEP_PATTERNS = [
     r"\bminhas noites (de sono)?\b",
 ]
 
+# Sinais de que a mensagem quer MUDAR o treino/plano (não VER). Quando
+# presentes, os cards que só RECITAM a agenda (último/próximo/semana) NÃO
+# disparam — senão sequestram o pedido e o coach recita o plano ignorando o que
+# o atleta pediu. A mensagem segue então pros fluxos de mudança (mover/pular,
+# negociação) e, no limite, o Gemini. Bug real (03/08): "quero TROCAR meu treino
+# de amanhã pra fazer o do meu irmão" casou "treino de amanhã" e caiu no card de
+# "próximo treino" — o coach só recitou o Intervalado, ignorando o pedido.
+_MUTATION_PATTERNS = [
+    (
+        r"\b(troca|trocar|troco|troque|muda|mudar|mudo|mude|altera|alterar|"
+        r"substitui|substituir)\b.{0,20}\b(treino|corrida|rodagem|longao|"
+        r"sessao)\b"
+    ),
+    (
+        r"\b(treino|corrida|rodagem|longao|sessao)\b.{0,20}\b(troca|trocar|"
+        r"muda|mudar|altera|alterar|substitui|substituir)\b"
+    ),
+    r"\bno lugar d",
+    r"\bem vez d",
+    r"\bao inves d",
+    r"\bfazer o (dele|dela|treino dele|treino dela)\b",
+    r"\bfazer outro treino\b",
+]
+
+# os cards passivos que só recitam a agenda — os únicos que a mutação silencia
+# (os analíticos: corpo/forma/sono/zonas/prova/retrato seguem valendo)
+_RECITE_INTENTS = {
+    ChatIntent.LAST_TRAINING,
+    ChatIntent.NEXT_TRAINING,
+    ChatIntent.WEEKLY_PLAN,
+}
+
 # Pedido de AJUDA/descoberta ("o que dá pra te perguntar?") — quer o cardápio
 # do que o bot responde. Cobre "/ajuda", "menu", "o que você faz".
 _HELP_PATTERNS = [
@@ -163,6 +195,8 @@ _PACE_ZONE_REGEXES = [re.compile(p) for p in _PACE_ZONE_PATTERNS]
 _SLEEP_REGEXES = [re.compile(p) for p in _SLEEP_PATTERNS]
 
 _HELP_REGEXES = [re.compile(p) for p in _HELP_PATTERNS]
+
+_MUTATION_REGEXES = [re.compile(p) for p in _MUTATION_PATTERNS]
 
 
 class IntentRouter:
@@ -217,11 +251,23 @@ class IntentRouter:
 
             matched.append(ChatIntent.HELP)
 
+        # pedido de MUDANÇA não pode acionar um card que só recita a agenda:
+        # tira os cards passivos do páreo e deixa a mensagem seguir pros fluxos
+        # de mudança (mover/pular, negociação) lá embaixo.
+        if matched and IntentRouter._is_mutation(normalized):
+
+            matched = [m for m in matched if m not in _RECITE_INTENTS]
+
         if len(matched) == 1:
 
             return matched[0]
 
         return None
+
+    @staticmethod
+    def _is_mutation(normalized: str) -> bool:
+
+        return any(regex.search(normalized) for regex in _MUTATION_REGEXES)
 
     @staticmethod
     def _normalize(text: str) -> str:
