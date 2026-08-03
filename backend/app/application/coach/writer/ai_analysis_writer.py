@@ -105,6 +105,14 @@ chame de esteira nem justifique diferença de distância com "esteira".
 aguentou" se os fatos disserem "queda ACENTUADA de ritmo". Segunda metade \
 "um pouco mais lenta" é variação normal de treino (subida, calor, semáforo) \
 — trate como normal, sem tom de falha.
+- POST-MORTEM (por que foi assim): se houver "CONTEXTO DO DIA" e o atleta \
+ficou ABAIXO do esperado (paces fora do alvo, FC alta pro ritmo, não completou), \
+CONECTE o resultado à causa provável desse contexto (sono curto, corpo em \
+atenção, carga acumulada, calor) e reenquadre com honestidade: NÃO é forma \
+perdida, é a condição do dia — e aponte o ajuste (priorizar sono/recuperação). \
+Se ele foi BEM apesar de um contexto ruim, RECONHEÇA a resiliência. NUNCA \
+invente causa que não esteja nos fatos; se o desempenho foi normal/bom, não \
+force desculpa nenhuma.
 - Tom de treinador de verdade: direto, humano, encorajador e útil. Fale com \
 "você". Português do Brasil.
 - 2 a {max_bullets} frases curtas, cada uma um ponto. Sem emojis, sem títulos.
@@ -372,6 +380,21 @@ class AIAnalysisWriter:
         if garmin:
 
             lines.append(garmin)
+
+        # CONTEXTO DO DIA (post-mortem): a condição do atleta quando fez o treino
+        # — sono da noite anterior, prontidão, corpo/carga. Deixa a IA explicar
+        # um treino abaixo do esperado pela CAUSA, não só constatar o resultado.
+        from app.application.coach.context.day_context_reader import (
+            DayContextReader,
+        )
+
+        day_context = DayContextReader.facts(
+            runner.id, activity.start_date.date()
+        )
+
+        if day_context:
+
+            lines.append(day_context)
 
         return "\n".join(lines)
 
