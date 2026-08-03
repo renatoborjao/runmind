@@ -190,3 +190,22 @@ def test_ai_failure_propagates_for_fallback():
                     "Renato", "10k", WEEK_START, "ctx",
                 )
             )
+
+
+def test_session_by_time_carries_duration_not_distance():
+    """Sessão por TEMPO: a IA emite duration_min e a sessão fica sem km
+    (bug 03/08 — atleta pediu '50 min de rodagem' e virou '8 km')."""
+
+    raw = (
+        '{"weekly_objective": "x", "sessions": [{"day": "Tuesday",'
+        ' "kind": "run", "workout_type": "Rodagem Moderada",'
+        ' "duration_min": 50, "pace_min": "6:00", "pace_max": "6:20",'
+        ' "structure": ["50 min em pace moderado"], "purpose": "rodagem"}]}'
+    )
+
+    plan = _generate(raw)
+
+    session = plan.sessions[0]
+
+    assert session.planned_duration_minutes == 50
+    assert session.planned_distance_km is None

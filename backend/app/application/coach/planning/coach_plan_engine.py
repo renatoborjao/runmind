@@ -3,7 +3,10 @@ from datetime import date
 
 from google.genai import types
 
-from app.application.coach.planning.workout_menu import WORKOUT_MENU
+from app.application.coach.planning.workout_menu import (
+    TIME_OR_DISTANCE_RULE,
+    WORKOUT_MENU,
+)
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.domain.entities.planned_session import PlannedSession
@@ -67,6 +70,7 @@ REGRAS:
   constância, não vire só máquina de prova — cuide da sustentabilidade e do
   prazer de correr. Se NÃO houver alvo de performance (só saúde/evolução
   geral), priorize regularidade e progressão gentil, sem puxar ritmo agressivo.
+- {time_rule}
 - Cada corrida com um PROPÓSITO distinto e faixa de pace ancorada na META dele.
 - VARIE O ESTÍMULO — isto é EXPERTISE de treinador, não enfeite. Um bom plano
   NÃO repete os mesmos 3 tipos toda semana; você tem um LEQUE e GIRA entre eles
@@ -140,6 +144,8 @@ copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedad
 Cada sessão é uma corrida/caminhada com distance_km, paces, structure (texto),
 steps (estruturado) e purpose. kind: "run" (corrida) ou "walk"/"run_walk"
 (caminhada/corrida-caminhada, iniciante). Dias em inglês (Monday..Sunday).
+Sessão POR TEMPO: troque "distance_km": 8.0 por "duration_min": 50 (a sessão
+fica sem km) e use "duration_min" nos steps.
 """
 
 
@@ -157,7 +163,11 @@ class CoachPlanEngine:
 
         settings = get_settings()
 
-        prompt = PROMPT_TEMPLATE.format(context=context, menu=WORKOUT_MENU)
+        prompt = PROMPT_TEMPLATE.format(
+            context=context,
+            menu=WORKOUT_MENU,
+            time_rule=TIME_OR_DISTANCE_RULE,
+        )
 
         # generate_json re-gera se o JSON do plano vier torto (blindagem) —
         # o plano é core; não pode cair no determinístico por escorregada do
@@ -284,6 +294,12 @@ class CoachPlanEngine:
 
                 distance = None
 
+            duration = item.get("duration_min")
+
+            if not isinstance(duration, (int, float)) or duration <= 0:
+
+                duration = None
+
             sessions.append(
                 PlannedSession(
                     day=day,
@@ -297,7 +313,12 @@ class CoachPlanEngine:
                         if distance is not None
                         else None
                     ),
-                    planned_duration_minutes=None,
+                    # sessão por TEMPO: o atleta prefere/pediu minutos, não km
+                    planned_duration_minutes=(
+                        int(round(float(duration)))
+                        if duration is not None
+                        else None
+                    ),
                     target_pace_min=CoachPlanEngine._pace(item.get("pace_min")),
                     target_pace_max=CoachPlanEngine._pace(item.get("pace_max")),
                     kind=kind,
