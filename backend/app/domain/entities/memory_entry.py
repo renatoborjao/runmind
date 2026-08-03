@@ -8,6 +8,9 @@ MEMORY_CATEGORIES = (
     "preferencia",
     "disponibilidade",
     "objetivo",
+    # o PORQUÊ profundo de correr / o que corrida significa pra ele / marcos de
+    # identidade — a âncora emocional que faz o coach CONHECER o atleta
+    "motivacao",
     "vida",
     "outro",
 )
