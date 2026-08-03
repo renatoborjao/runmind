@@ -776,10 +776,24 @@ class ConversationContextBuilder:
 
             adjustment = f" [AJUSTADO: {session.adjustment_reason}]"
 
+        # tamanho: km OU minutos (treino POR TEMPO) — sem isto a sessão por
+        # tempo aparecia como "(0.0 km)" nesta linha (bug do treino por tempo)
+        if session.planned_distance_km:
+
+            size = f"{session.planned_distance_km:.1f} km"
+
+        elif session.planned_duration_minutes:
+
+            size = f"{session.planned_duration_minutes} min"
+
+        else:
+
+            size = "—"
+
         return (
             f"{weekday_label(session.day)} "
             f"({session_date.strftime('%d/%m')}){when} — "
             f"{session.workout_type} "
-            f"({session.planned_distance_km or 0:.1f} km) — "
+            f"({size}) — "
             f"{session.objective}{pace}{adjustment}"
         )
