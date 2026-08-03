@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from app.application.history.streak_calculator import StreakCalculator
 from app.application.planner.pace_formatter import PaceFormatter
 from app.application.review.predicted_time_line_formatter import (
     PredictedTimeLineFormatter,
@@ -237,6 +238,21 @@ class WeeklyReviewMessageFormatter:
 
             return []
 
+        lines: list[str] = []
+
+        # sequência de consistência (só quando há 2+ semanas seguidas cumpridas)
+        # — reforço positivo; quebra nunca vira cobrança aqui
+        streak = StreakCalculator.consecutive_weeks(report.weeks)
+
+        if streak >= 2:
+
+            fire = "🔥🔥" if streak >= 4 else "🔥"
+
+            lines.append(
+                f"{fire} {streak} semanas SEGUIDAS cumprindo o plano — é essa "
+                "consistência que constrói de verdade!"
+            )
+
         shown = report.weeks[-ADHERENCE_DISPLAY_WEEKS:]
 
         series = " · ".join(f"{week.done}/{week.planned}" for week in shown)
@@ -247,7 +263,7 @@ class WeeklyReviewMessageFormatter:
 
         rate = f" ({done / planned * 100:.0f}%)" if planned else ""
 
-        lines = [f"• Últimas {len(shown)} semanas: {series}{rate}"]
+        lines.append(f"• Últimas {len(shown)} semanas: {series}{rate}")
 
         if report.trend == ADHERENCE_RISING:
 
