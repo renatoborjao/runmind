@@ -98,7 +98,10 @@ def test_execute_orchestrates_context_reply_persistence_and_notification():
 
     mock_load_runner.execute.assert_called_once_with("renato")
 
-    mock_context_builder.build.assert_awaited_once_with("renato")
+    mock_context_builder.build.assert_awaited_once_with(
+        "renato",
+        incoming_text="Bom dia, coach! Tô animado, tudo certo por aí?",
+    )
 
     mock_engine.reply.assert_awaited_once_with(
         runner_name="Renato",

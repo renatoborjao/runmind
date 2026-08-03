@@ -396,6 +396,7 @@ class CoachConversationEvent:
 
                 context_facts = await ConversationContextBuilder.build(
                     profile,
+                    incoming_text=incoming_text,
                 )
 
                 reply_text = await CoachConversationEngine.reply(

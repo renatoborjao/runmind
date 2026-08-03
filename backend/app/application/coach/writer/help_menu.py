@@ -37,6 +37,8 @@ class HelpMenu:
                 "quanto você já evoluiu (você vs você)",
                 '• "Quais minhas zonas de pace?" — seus ritmos de treino',
                 '• "Como estou?" — o retrato completo (corpo + forma)',
+                '• "Quantos km corri em maio?" ou "como foi meu treino em '
+                'junho?" — seu histórico mês a mês',
                 "",
                 "🎙️ Pode me mandar áudio",
                 "Grave uma nota de voz que eu te entendo (te respondo por "
