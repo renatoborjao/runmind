@@ -147,11 +147,40 @@ class WeeklyReviewNotifier:
         # acima já cobre o dedup.
         await WeeklyReviewNotifier._send_state_portrait(profile, runner)
 
+        # ficou mais rápido? se a forma subiu de forma sustentada, o VDOT (fonte
+        # dos paces) subiu — avisa o atleta e mostra os ritmos novos (fecha o
+        # loop da evolução). Best-effort, uma vez por marco.
+        await WeeklyReviewNotifier._notify_pace_progress(
+            profile, runner, history,
+        )
+
         # e, silenciosamente, o cérebro coach APRENDE com a semana que fechou
         # (nada é enviado ao atleta — modo observação; ver [[project]]).
         await WeeklyReviewNotifier._distill_learnings(
             profile, runner, history,
         )
+
+    @staticmethod
+    async def _notify_pace_progress(profile, runner, history) -> None:
+        """Aviso de "você ficou mais rápido" + ritmos novos, quando a forma
+        subiu além do último marco. Best-effort: falhar aqui nunca derruba o
+        resumo (que já foi enviado)."""
+
+        try:
+
+            from app.application.coach.intelligence.pace_progress_notifier import (
+                PaceProgressNotifier,
+            )
+
+            message = PaceProgressNotifier.check(profile, runner, history)
+
+            if message:
+
+                await CoachOutbox.send(runner, message)
+
+        except Exception as e:
+
+            print(f"Falha no aviso de pace de '{profile}': {e}")
 
     @staticmethod
     async def _distill_learnings(profile, runner, history) -> None:
