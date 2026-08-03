@@ -48,8 +48,10 @@ class HelpMenu:
                 "",
                 "💬 E pode falar comigo normal",
                 "Me conta como se sente (\"dormi mal\", \"perna doendo\"), "
-                "peça pra trocar seu objetivo, ou negocie um treino que não "
-                "curtiu — eu me viro no meio da conversa. 👊",
+                "peça pra trocar seu objetivo, negocie um treino que não "
+                "curtiu, ou peça pra treinar por *tempo* em vez de km "
+                "(\"quero 50 min de rodagem\") — eu me viro no meio da "
+                "conversa. 👊",
             ]
         )
 
