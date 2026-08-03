@@ -1,6 +1,6 @@
 import asyncio
 from datetime import date, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.coach.conversation.conversation_context_builder import (
     ConversationContextBuilder,
@@ -698,3 +698,74 @@ def test_week_plan_summary_keeps_current_week_when_all_sessions_are_past():
 
     assert "JÁ ENCERRADA" not in text
     assert "Plano da semana completo:" in text
+
+
+def test_athlete_state_gives_the_coach_the_full_picture():
+    """O coach de conversa recebe evolução + corpo + sono como quadro completo —
+    raciocina como treinador (trajetória inteira), não só o dia."""
+
+    with (
+        patch(
+            "app.application.coach.intelligence.fitness_reading_service."
+            "FitnessReadingService"
+        ),
+        patch(
+            "app.application.coach.writer.fitness_evolution_writer."
+            "FitnessEvolutionWriter"
+        ) as fw,
+        patch(
+            "app.application.coach.intelligence.body_reading_service."
+            "BodyReadingService"
+        ) as body,
+        patch(
+            "app.application.coach.intelligence.sleep_reading_service."
+            "SleepReadingService"
+        ) as sleep,
+        patch("app.core.config.get_settings") as settings,
+    ):
+
+        fw.line.return_value = "🔥 forma vem subindo"
+
+        reading = MagicMock(body_state="ABSORBING", limiter="sono")
+        body.read.return_value = (reading, None)
+
+        sleep.read.return_value = MagicMock(
+            has_data=True, avg_hours=5.5, direction="falling", debt=True,
+        )
+
+        settings.return_value.coach_learning_inject_enabled = False
+
+        out = ConversationContextBuilder._athlete_state("renato")
+
+    assert "QUADRO ATUAL DO ATLETA" in out
+    assert "forma vem subindo" in out
+    assert "Corpo/recuperação" in out and "sono" in out
+    assert "5.5h" in out and "caindo" in out
+
+
+def test_athlete_state_is_best_effort_when_everything_fails():
+    """Se as leituras falharem, o bloco simplesmente não entra (nunca quebra
+    a conversa)."""
+
+    with (
+        patch(
+            "app.application.coach.intelligence.fitness_reading_service."
+            "FitnessReadingService",
+            side_effect=Exception("boom"),
+        ),
+        patch(
+            "app.application.coach.intelligence.body_reading_service."
+            "BodyReadingService",
+            side_effect=Exception("boom"),
+        ),
+        patch(
+            "app.application.coach.intelligence.sleep_reading_service."
+            "SleepReadingService",
+            side_effect=Exception("boom"),
+        ),
+        patch("app.core.config.get_settings", side_effect=Exception("boom")),
+    ):
+
+        out = ConversationContextBuilder._athlete_state("renato")
+
+    assert out == ""
