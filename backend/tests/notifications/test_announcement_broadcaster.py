@@ -107,11 +107,11 @@ def test_dry_run_sends_nothing_but_previews():
 def test_personalizes_name_placeholder():
 
     result, _, _ = _run(
-        message="Olá, {name}! Novidades no RunMind.",
+        message="Olá, {name}! Novidades no Ritmind.",
         dry_run=True,
     )
 
-    assert result["preview"]["renato"] == "Olá, Renato! Novidades no RunMind."
+    assert result["preview"]["renato"] == "Olá, Renato! Novidades no Ritmind."
 
 
 def test_only_restricts_to_given_profiles():

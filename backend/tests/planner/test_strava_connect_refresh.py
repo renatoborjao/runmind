@@ -68,7 +68,7 @@ def _run(runner, *, is_done=False, should_offer=False, seed_error=None):
 
 
 def test_regenerates_and_sends_for_runmind_athlete():
-    """Atleta do RunMind (sem treinador externo), primeira conexão: regenera
+    """Atleta do Ritmind (sem treinador externo), primeira conexão: regenera
     o plano da semana com force e manda a mensagem; marca como feito."""
 
     m = _run(make_runner(external_coach=False))
@@ -120,7 +120,7 @@ def test_appends_garmin_offer_when_connected():
 
 def test_seeds_personal_records_from_real_strava_history():
     """A base de recordes é semeada AGORA (histórico real já disponível),
-    em vez de esperar o primeiro treino processado pelo RunMind."""
+    em vez de esperar o primeiro treino processado pelo Ritmind."""
 
     m = _run(make_runner(external_coach=False))
 

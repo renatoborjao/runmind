@@ -158,7 +158,7 @@ def test_delete_after_feedback_sends_retraction():
 
 def test_delete_without_feedback_sends_nothing():
 
-    # treino antigo (de antes do RunMind) apagado: some do arquivo,
+    # treino antigo (de antes do Ritmind) apagado: some do arquivo,
     # mas não houve análise — retratação seria sem sentido
     body, _, _, mock_notify, _, _ = _post_delete(
         feedback_was_sent=False,

@@ -75,7 +75,7 @@ class RunnerProfile:
     # typical_km, longest_km.
     plan_baseline: dict | None = None
 
-    # Tem treinador humano: o RunMind só acompanha os treinos enviados
+    # Tem treinador humano: o Ritmind só acompanha os treinos enviados
     # (print/foto/PDF), nunca gera nem ajusta plano.
     external_coach: bool = False
 

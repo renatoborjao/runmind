@@ -21,7 +21,7 @@ from app.infrastructure.integrations.gemini.client import (
 MAX_OUTPUT_TOKENS = 1600
 
 
-PROMPT_TEMPLATE = """Você é o treinador de corrida do RunMind. O atleta \
+PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 {runner_name} pediu que VOCÊ monte um treino AVULSO pra um dia específico que o \
 plano dele não cobre. Meta: {objective}.
 

@@ -1,1 +1,1 @@
-"""RunMind backend application package."""
+"""Ritmind backend application package."""

@@ -27,7 +27,7 @@ class PlanAdjustmentEngine:
         analysis: CoachAnalysis,
     ) -> str | None:
 
-        # plano de treinador humano: NUNCA é ajustado pelo RunMind
+        # plano de treinador humano: NUNCA é ajustado pelo Ritmind
         if plan.source == "externo":
 
             return None

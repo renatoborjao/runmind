@@ -35,7 +35,7 @@ def test_message_carries_the_numbers_and_signature():
     assert "Maior treino do mês: 15.0 km" in message
     assert "Consistência: 78%" in message
     assert "Mês forte, parabéns!" in message
-    assert "Feito com 🏃 RunMind" in message
+    assert "Feito com 🏃 Ritmind" in message
 
     # nudge de indicação (crescimento orgânico) — sem link/contato fixo,
     # o próprio texto sendo encaminhado já é o mecanismo

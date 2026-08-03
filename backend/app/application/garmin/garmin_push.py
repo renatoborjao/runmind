@@ -25,9 +25,9 @@ def _workout_name(session: PlannedSession) -> str:
 
     if session.planned_distance_km:
 
-        return f"RunMind · {label} {session.planned_distance_km:.1f}km"
+        return f"Ritmind · {label} {session.planned_distance_km:.1f}km"
 
-    return f"RunMind · {label}"
+    return f"Ritmind · {label}"
 
 
 def _description(session: PlannedSession) -> str:

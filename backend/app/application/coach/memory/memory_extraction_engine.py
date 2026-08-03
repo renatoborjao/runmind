@@ -19,7 +19,7 @@ MAX_OUTPUT_TOKENS = 400
 EMPTY_OPS: dict = {"add": [], "archive": []}
 
 EXTRACTION_PROMPT_TEMPLATE = """Você mantém a memória de longo prazo do coach \
-de corrida do RunMind sobre o corredor {runner_name}.
+de corrida do Ritmind sobre o corredor {runner_name}.
 
 Hoje é {today} (use para resolver datas relativas como "em agosto").
 

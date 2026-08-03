@@ -49,7 +49,7 @@ class NegotiationFlow:
         incoming_text: str,
     ) -> str | None:
 
-        # treinador humano: RunMind só acompanha, não remonta o plano dele
+        # treinador humano: Ritmind só acompanha, não remonta o plano dele
         if runner.external_coach:
 
             return None

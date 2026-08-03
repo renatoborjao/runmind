@@ -1,7 +1,7 @@
 import httpx
 
 # Open-Meteo: previsão do tempo gratuita e SEM CHAVE (casa com a filosofia
-# de ferramentas livres do RunMind). Só leitura, uso leve (1x/dia por atleta).
+# de ferramentas livres do Ritmind). Só leitura, uso leve (1x/dia por atleta).
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
 

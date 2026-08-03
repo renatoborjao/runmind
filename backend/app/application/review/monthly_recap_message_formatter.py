@@ -22,7 +22,7 @@ class MonthlyRecapMessageFormatter:
     ) -> str:
 
         lines = [
-            f"🏃 RunMind — Recap de {recap['month_label']}",
+            f"🏃 Ritmind — Recap de {recap['month_label']}",
             "",
             f"{runner_name} fechou {recap['month_label']} com:",
             f"• {recap['total_km']:.1f} km em {recap['total_runs']} treino(s)",
@@ -75,7 +75,7 @@ class MonthlyRecapMessageFormatter:
 
         lines.append("")
 
-        lines.append("Feito com 🏃 RunMind 💪")
+        lines.append("Feito com 🏃 Ritmind 💪")
 
         return "\n".join(lines)
 

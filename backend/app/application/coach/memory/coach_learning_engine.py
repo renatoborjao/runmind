@@ -17,7 +17,7 @@ MAX_OUTPUT_TOKENS = 500
 EMPTY_OPS: dict = {"add": [], "archive": [], "reconfirm": []}
 
 EXTRACTION_PROMPT_TEMPLATE = """Você é o cérebro de longo prazo do coach de \
-corrida do RunMind. Sua função aqui NÃO é conversar nem montar treino — é
+corrida do Ritmind. Sua função aqui NÃO é conversar nem montar treino — é
 APRENDER sobre o corredor {runner_name} observando o que ele FEZ (não o que
 disse), pra que o coach lembre disso ao montar os próximos planos e ao cuidar
 dele no dia a dia.

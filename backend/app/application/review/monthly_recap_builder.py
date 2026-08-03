@@ -214,7 +214,7 @@ class MonthlyRecapBuilder:
 
             lines.append(
                 f"🎉 Passou de {records['total_km_milestone']} km "
-                "acumulados com o RunMind"
+                "acumulados com o Ritmind"
             )
 
         best_week_key = records.get("best_week_key")

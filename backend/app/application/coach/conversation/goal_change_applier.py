@@ -286,7 +286,7 @@ class GoalChangeApplier:
 
         RunnerProfileRepository().update_fields(profile, updates)
 
-        # treinador humano: RunMind só acompanha o plano dele, não gera
+        # treinador humano: Ritmind só acompanha o plano dele, não gera
         if runner.external_coach:
 
             return f"Anotado! Atualizei seu objetivo pra: {goal}. 🎯"

@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
     is_production = settings.app_env == "production"
 
     app = FastAPI(
-        title="RunMind API",
+        title="Ritmind API",
         description="The AI-powered platform for runners.",
         version=settings.app_version,
         docs_url=None if is_production else "/docs",

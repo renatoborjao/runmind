@@ -42,7 +42,7 @@ class AversionFlow:
         """Devolve o preview da proposta (mensagem pro atleta) se detectou e
         montou uma troca; None caso contrário (a conversa segue normal)."""
 
-        # treinador humano: RunMind só acompanha o plano dele, não mexe
+        # treinador humano: Ritmind só acompanha o plano dele, não mexe
         if runner.external_coach:
 
             return None

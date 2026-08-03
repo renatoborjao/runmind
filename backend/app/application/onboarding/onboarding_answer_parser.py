@@ -142,7 +142,7 @@ STEP_INSTRUCTIONS = {
 }
 
 PROMPT_TEMPLATE = """Você interpreta respostas do questionário de \
-cadastro do RunMind (coach de corrida via WhatsApp, pt-BR).
+cadastro do Ritmind (coach de corrida via WhatsApp, pt-BR).
 
 Hoje é {today} (use para resolver datas relativas como "em agosto").
 

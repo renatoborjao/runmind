@@ -6,7 +6,7 @@ from app.infrastructure.integrations.gemini.client import generate_text
 MAX_OUTPUT_TOKENS = 400
 
 SUMMARY_PROMPT_TEMPLATE = """Você mantém o resumo corrido das conversas \
-entre o coach de corrida do RunMind e o corredor {runner_name}.
+entre o coach de corrida do Ritmind e o corredor {runner_name}.
 
 RESUMO ATUAL (conversas mais antigas):
 {current_summary}

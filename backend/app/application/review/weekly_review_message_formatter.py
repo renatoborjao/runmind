@@ -56,7 +56,7 @@ class WeeklyReviewMessageFormatter:
         ).strftime("%d/%m")
 
         lines = [
-            "🏃 RunMind — Resumo da semana",
+            "🏃 Ritmind — Resumo da semana",
             "",
             f"Fala, {runner_name}! Fechando a semana de {week_start}.",
             "",
