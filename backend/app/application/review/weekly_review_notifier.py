@@ -147,6 +147,10 @@ class WeeklyReviewNotifier:
         # acima já cobre o dedup.
         await WeeklyReviewNotifier._send_state_portrait(profile, runner)
 
+        # atualiza a ÂNCORA CONTÍNUA do VDOT (best_efforts do Strava das corridas
+        # novas) ANTES de checar o progresso de pace — pra o floor estar fresco.
+        await WeeklyReviewNotifier._refresh_best_efforts(profile)
+
         # ficou mais rápido? se a forma subiu de forma sustentada, o VDOT (fonte
         # dos paces) subiu — avisa o atleta e mostra os ritmos novos (fecha o
         # loop da evolução). Best-effort, uma vez por marco.
@@ -159,6 +163,23 @@ class WeeklyReviewNotifier:
         await WeeklyReviewNotifier._distill_learnings(
             profile, runner, history,
         )
+
+    @staticmethod
+    async def _refresh_best_efforts(profile) -> None:
+        """Sobe a marca-d'água do VDOT contínuo (best_efforts do Strava) das
+        corridas novas. Best-effort: falhar aqui nunca derruba o resumo."""
+
+        try:
+
+            from app.application.history.best_effort_refresh import (
+                BestEffortRefresh,
+            )
+
+            await BestEffortRefresh.refresh(profile)
+
+        except Exception as e:
+
+            print(f"Falha no refresh de best-effort de '{profile}': {e}")
 
     @staticmethod
     async def _notify_pace_progress(profile, runner, history) -> None:

@@ -1,4 +1,5 @@
 from datetime import datetime
+from unittest.mock import patch
 
 from app.application.history.pace_model_builder import PaceModelBuilder
 from app.domain.entities.activity import Activity
@@ -137,6 +138,43 @@ def test_fallback_to_rookie_without_anything():
 
     assert model.source == SOURCE_ROOKIE
     assert model.easy_min == 8.0
+
+
+class _RunnerWithId:
+    id = "renato"
+    initial_pace_min_km = None
+
+
+_STORE = "app.infrastructure.persistence.best_effort_vdot_store.BestEffortVdotStore"
+
+
+def test_best_effort_floor_raises_the_anchor():
+    """Quando o VDOT do esforço CONTÍNUO (best_efforts) é maior que o da média
+    da corrida, ele ancora — captura o teto que a média dilui."""
+
+    history = _history(_run(10, 6.0), _run(8, 6.1), _run(6, 6.2))
+
+    with patch(_STORE) as store:
+
+        store.return_value.max_vdot.return_value = 42.0
+
+        model = PaceModelBuilder.build(history, _RunnerWithId())
+
+    assert model.vdot == 42.0
+
+
+def test_best_effort_floor_never_lowers_the_anchor():
+    """Um best-effort MENOR que a média nunca rebaixa o VDOT."""
+
+    history = _history(_run(10, 5.0), _run(8, 5.2), _run(6, 5.1))
+
+    with patch(_STORE) as store:
+
+        store.return_value.max_vdot.return_value = 30.0
+
+        model = PaceModelBuilder.build(history, _RunnerWithId())
+
+    assert model.vdot > 30.0
 
 
 def test_walks_do_not_anchor_the_model():

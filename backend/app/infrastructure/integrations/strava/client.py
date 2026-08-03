@@ -187,6 +187,27 @@ class StravaClient:
             data
         )
 
+    async def get_activity_best_efforts(
+        self,
+        activity_id: int,
+    ) -> list[dict]:
+        """Os 'melhores esforços' contínuos que o Strava calcula por corrida
+        (400m/1k/1milha/5k/10k mais rápidos) — a fonte do esforço SUSTENTADO
+        que a média da corrida esconde. Lista vazia se o detalhe não trouxer."""
+
+        access_token = await self._get_access_token()
+
+        async with httpx.AsyncClient(timeout=15) as client:
+
+            response = await client.get(
+                f"{self.BASE_URL}/activities/{activity_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+
+        response.raise_for_status()
+
+        return response.json().get("best_efforts") or []
+
     async def get_activity_streams(
         self,
         activity_id: int,
