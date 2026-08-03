@@ -66,6 +66,14 @@ class PaceModelBuilder:
 
         vdot = PaceModelBuilder._best_vdot(history)
 
+        # ÂNCORA CONTÍNUA: o VDOT do melhor esforço SUSTENTADO (best_efforts do
+        # Strava, atualizados no domingo) é mais fiel que a média da corrida —
+        # captura o tempo/tiro que a média dilui. Quando existe e é maior, ele
+        # ancora (nunca rebaixa). Ver [[project_modelo_pace_vdot]].
+        vdot = PaceModelBuilder._higher(
+            vdot, PaceModelBuilder._best_effort_floor(runner)
+        )
+
         if vdot is None:
 
             return PaceModelBuilder._fallback(runner)
@@ -73,6 +81,36 @@ class PaceModelBuilder:
         return PaceModelBuilder._from_vdot(vdot, paces)
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _best_effort_floor(runner: RunnerProfile | None) -> float | None:
+        """Marca-d'água do VDOT contínuo do atleta (best_efforts do Strava).
+        Best-effort: sem store/sem dado → None e o modelo segue pela média."""
+
+        profile = getattr(runner, "id", None) if runner else None
+
+        if not profile:
+
+            return None
+
+        try:
+
+            from app.infrastructure.persistence.best_effort_vdot_store import (
+                BestEffortVdotStore,
+            )
+
+            return BestEffortVdotStore().max_vdot(profile)
+
+        except Exception:
+
+            return None
+
+    @staticmethod
+    def _higher(a: float | None, b: float | None) -> float | None:
+
+        values = [v for v in (a, b) if v is not None]
+
+        return max(values) if values else None
 
     @staticmethod
     def _real_run_paces(history: TrainingHistory) -> list[float]:
