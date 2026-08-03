@@ -33,7 +33,8 @@ class HelpMenu:
                 "💪 Seu corpo e sua forma",
                 '• "Como está meu corpo?" — recuperação e carga',
                 '• "Como está meu sono?" — média, tendência e regularidade',
-                '• "Estou evoluindo?" — sua forma ao longo das semanas',
+                '• "Estou evoluindo?" ou "meu progresso" — sua forma agora e o '
+                "quanto você já evoluiu (você vs você)",
                 '• "Quais minhas zonas de pace?" — seus ritmos de treino',
                 '• "Como estou?" — o retrato completo (corpo + forma)',
                 "",
