@@ -7,6 +7,9 @@ from app.application.coach.intelligence.body_reading_service import (
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
+from app.application.coach.intelligence.progress_report import (
+    ProgressReport,
+)
 from app.application.coach.intelligence.sleep_reading_service import (
     SleepReadingService,
 )
@@ -152,11 +155,21 @@ class OnDemandAnswers:
         if intent == ChatIntent.FITNESS_TREND:
 
             # eixo "estou evoluindo?": veredito COMBINADO (EF + VO₂máx +
-            # FC-repouso + arco longo). None (nenhum sinal com lastro) cai no
-            # Gemini, que responde com naturalidade a partir do contexto.
+            # FC-repouso) da tendência recente...
             evolution = FitnessReadingService.read_evolution(profile)
 
-            return FitnessEvolutionWriter.write(evolution, runner.name)
+            evo_msg = FitnessEvolutionWriter.write(evolution, runner.name)
+
+            # ...+ o VOCÊ vs VOCÊ de arco LONGO (meses): de onde você veio.
+            # Torna a evolução visível mesmo pra quem não tem EF com lastro.
+            progress = ProgressReport.build(profile)
+
+            if progress:
+
+                return f"{evo_msg}\n\n{progress}" if evo_msg else progress
+
+            # None (nenhum sinal) cai no Gemini, que responde com naturalidade
+            return evo_msg
 
         if intent == ChatIntent.STATE_PORTRAIT:
 
