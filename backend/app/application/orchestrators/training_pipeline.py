@@ -52,6 +52,15 @@ class TrainingPipeline:
         coach_analysis = result["analysis"]
 
         # --------------------------------------------------
+        # Auto-calibração: registra o ERRO de previsão de pace (prescrito ×
+        # sustentado nos tiros) desta atividade — o coach mede o próprio erro
+        # pra ajustar o alvo ao que o atleta aguenta. Best-effort, dedup por
+        # atividade; nunca derruba a análise.
+        # --------------------------------------------------
+
+        TrainingPipeline._record_pace_calibration(profile, coach_context)
+
+        # --------------------------------------------------
         # Mensagem do coach
         # --------------------------------------------------
 
@@ -140,3 +149,39 @@ class TrainingPipeline:
             "message": message,
 
         }
+
+    @staticmethod
+    def _record_pace_calibration(profile: str, coach_context) -> None:
+        """Extrai o erro de pace dos tiros deste treino e guarda pra
+        auto-calibração. Best-effort — nunca derruba a análise."""
+
+        try:
+
+            comparison = coach_context.block_comparison
+
+            if comparison is None:
+
+                return
+
+            from app.application.history.pace_calibration_analyzer import (
+                PaceCalibrationAnalyzer,
+            )
+            from app.infrastructure.persistence.pace_calibration_store import (
+                PaceCalibrationStore,
+            )
+
+            deltas = PaceCalibrationAnalyzer.deltas_from_blocks(
+                comparison.blocks
+            )
+
+            if deltas:
+
+                PaceCalibrationStore().record(
+                    profile,
+                    coach_context.executed.activity.id,
+                    deltas,
+                )
+
+        except Exception as e:
+
+            print(f"Calibração de pace falhou p/ '{profile}': {e}")
