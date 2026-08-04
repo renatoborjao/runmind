@@ -446,6 +446,49 @@ def test_ai_plan_objective_is_kept_when_it_adds_value():
     assert "Do treinador:" not in lines
 
 
+def test_planned_lines_by_time_shows_minutes_not_zero_km():
+    """Bug do Renato: rodagem de 50 min (sem km prescrito) saía como
+    "0.0 km" no bloco Planejado. Treino POR TEMPO mostra minutos."""
+
+    from tests.coach.factories import make_planned_session
+
+    planned = make_planned_session(
+        planned_distance_km=None,
+        planned_duration_minutes=50,
+    )
+
+    lines = CoachWriter._planned_lines(planned)
+
+    assert "50 min" in lines
+    assert "0.0 km" not in lines
+
+
+def test_next_training_by_time_shows_duration():
+    """Próximo treino por tempo mostra Duração, não omite (nem 'Distância')."""
+
+    from app.application.coach.models.next_training import NextTraining
+
+    nt = NextTraining(
+        day="Thursday",
+        workout_type="Rodagem leve",
+        objective="-",
+        distance_km=0,
+        duration_minutes=50,
+        pace="-",
+        heart_rate="-",
+        warmup="-",
+        main_set="-",
+        cooldown="-",
+        shoes="-",
+        notes="-",
+    )
+
+    lines = CoachWriter._render_next_training(nt)
+
+    assert "Duração: 50 min" in lines
+    assert not any(line.startswith("Distância:") for line in lines)
+
+
 def test_greeting_uses_runner_name():
 
     context = make_context()

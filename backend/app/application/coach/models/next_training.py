@@ -31,3 +31,7 @@ class NextTraining:
 
     # data (calendário) da sessão — mostrada junto do dia da semana
     session_date: date | None = None
+
+    # treino POR TEMPO (rodagem de "50 min" sem km prescrito): quando existe,
+    # o feedback mostra "Duração" no lugar de "Distância".
+    duration_minutes: int | None = None
