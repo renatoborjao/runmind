@@ -112,7 +112,19 @@ class CoachWriter:
             )
         )
 
-        lines.append(f"{(planned.planned_distance_km or 0):.1f} km")
+        # distância OU duração (treino POR TEMPO): sem isto, uma rodagem de
+        # "50 min" (sem km prescrito) saía como "0.0 km" no feedback.
+        if planned.planned_distance_km:
+
+            lines.append(f"{planned.planned_distance_km:.1f} km")
+
+        elif planned.planned_duration_minutes:
+
+            lines.append(f"{planned.planned_duration_minutes} min")
+
+        else:
+
+            lines.append("0.0 km")
 
         return lines
 
@@ -433,6 +445,12 @@ class CoachWriter:
 
             lines.append(
                 f"Distância: {next_training.distance_km:.1f} km",
+            )
+
+        elif next_training.duration_minutes:
+
+            lines.append(
+                f"Duração: {next_training.duration_minutes} min",
             )
 
         if next_training.pace != "-":

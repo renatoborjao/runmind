@@ -25,6 +25,7 @@ class PlanningIntelligence:
             workout_type=planned.workout_type,
             objective=planned.objective,
             distance_km=planned.planned_distance_km or 0,
+            duration_minutes=planned.planned_duration_minutes,
             pace=PlanningIntelligence._format_pace(planned),
             heart_rate="-",
             warmup="-",
