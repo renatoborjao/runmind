@@ -1,7 +1,4 @@
 from app.application.coach.conversation.rpe_flow import RpeFlow
-from app.application.coach.intelligence.form_coach_detector import (
-    FormCoachDetector,
-)
 from app.application.coach.intelligence.personal_record_detector import (
     PersonalRecordDetector,
 )
@@ -101,23 +98,9 @@ class TrainingCompletedEvent:
 
             print(f"Falha na celebração de recorde: {e}")
 
-        # Coaching de FORMA: quando a cadência está claramente baixa, manda UMA
-        # dica acionável (uma vez por atleta). Não mexe no plano; best-effort.
-        try:
-
-            form_tip = FormCoachDetector.after_feedback(
-                profile,
-                runner,
-                result["activity"],
-            )
-
-            if form_tip:
-
-                await CoachOutbox.send(runner, form_tip)
-
-        except Exception as e:
-
-            print(f"Falha no coaching de forma: {e}")
+        # Coaching de FORMA (cadência): agora é um LOOP guiado pela evolução no
+        # resumo de domingo (CadenceProgressNotifier) — acompanha, reconhece
+        # progresso e celebra o alvo, em vez de uma dica solta por corrida.
 
         # Debrief de prova: se ESTE treino foi a prova-alvo (data + distância),
         # manda a análise especial do dia (resultado vs meta) e consome a data.

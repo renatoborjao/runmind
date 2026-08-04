@@ -158,6 +158,12 @@ class WeeklyReviewNotifier:
             profile, runner, history,
         )
 
+        # loop de CADÊNCIA: acompanha a evolução da forma e reage (dica inicial,
+        # progresso, alvo batido ou um re-cutução se travar). Best-effort.
+        await WeeklyReviewNotifier._notify_cadence_progress(
+            profile, runner, history,
+        )
+
         # e, silenciosamente, o cérebro coach APRENDE com a semana que fechou
         # (nada é enviado ao atleta — modo observação; ver [[project]]).
         await WeeklyReviewNotifier._distill_learnings(
@@ -202,6 +208,28 @@ class WeeklyReviewNotifier:
         except Exception as e:
 
             print(f"Falha no aviso de pace de '{profile}': {e}")
+
+    @staticmethod
+    async def _notify_cadence_progress(profile, runner, history) -> None:
+        """Loop de cadência: dica inicial / progresso / alvo batido / um
+        re-cutução se travar. Best-effort: falhar aqui nunca derruba o resumo
+        (que já foi enviado)."""
+
+        try:
+
+            from app.application.coach.intelligence.cadence_progress_notifier import (  # noqa: E501
+                CadenceProgressNotifier,
+            )
+
+            message = CadenceProgressNotifier.check(profile, runner, history)
+
+            if message:
+
+                await CoachOutbox.send(runner, message)
+
+        except Exception as e:
+
+            print(f"Falha no loop de cadência de '{profile}': {e}")
 
     @staticmethod
     async def _distill_learnings(profile, runner, history) -> None:
