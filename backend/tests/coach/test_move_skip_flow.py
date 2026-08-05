@@ -22,8 +22,14 @@ MODULE = "app.application.coach.conversation.move_skip_flow"
         ("vou precisar reprogramar meu longao para amanhã, domingo", True),
         ("preciso alterar o longao para domingo", True),
         ("muda o treino de terça pra quinta", True),
+        # bug do Renato: verbo e objeto separados na frase caíam no Gemini
+        ("vou precisar mudar meu treino de amanhã para sexta-feira", True),
+        ("dá pra trocar minha corrida de sábado pra domingo?", True),
         ("como foi meu último treino?", False),
         ("mudei de ideia sobre a prova", False),
+        # verbo de mover MAS sem objeto de treino → não é move (segue pro fluxo
+        # de objetivo/chat); não pode ser roubado pelo portão alargado
+        ("quero mudar meu objetivo pra 21k", False),
         ("bom dia!", False),
     ],
 )
