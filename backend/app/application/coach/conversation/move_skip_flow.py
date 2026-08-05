@@ -36,6 +36,24 @@ _SKIP_CUES = [
     "cancela o treino", "nao rola treinar",
 ]
 
+# verbo de mover + objeto de treino, mesmo SEPARADOS na frase ("mudar meu
+# treino de amanhã para sexta"): os cues acima são contíguos e não pegavam
+# isso — o pedido caía no Gemini (que não aplica). O par verbo+objeto abre o
+# portão; o MoveSkipEngine confirma se é move de verdade (dia válido + destino
+# livre) e devolve None caso contrário, então falso positivo só custa 1 chamada
+# e a mensagem segue pro fluxo certo (aversão/negociação/chat). Bug do Renato.
+_MOVE_VERBS = [
+    "muda", "mudar", "troca", "trocar", "passa", "passar", "move", "mover",
+    "adia", "adiar", "remarca", "remarcar", "antecipa", "antecipar",
+    "reprograma", "reprogramar", "joga", "jogar", "empurra", "empurrar",
+    "altera", "alterar", "remaneja", "remanejar",
+]
+
+_TRAINING_NOUNS = [
+    "treino", "treininho", "corrida", "corridinha", "rodagem", "rodagens",
+    "longao", "sessao",
+]
+
 _RUNNING_KINDS = {"run", "walk", "run_walk"}
 
 
@@ -150,7 +168,19 @@ class MoveSkipFlow:
 
         norm = MoveSkipFlow._normalize(text)
 
-        return any(cue in norm for cue in _MOVE_CUES + _SKIP_CUES)
+        if any(cue in norm for cue in _MOVE_CUES + _SKIP_CUES):
+
+            return True
+
+        # verbo de mover + objeto de treino, ainda que distantes na frase
+        # ("mudar meu treino de amanhã para sexta")
+        has_verb = any(
+            re.search(rf"\b{verb}", norm) for verb in _MOVE_VERBS
+        )
+
+        has_noun = any(noun in norm for noun in _TRAINING_NOUNS)
+
+        return has_verb and has_noun
 
     @staticmethod
     def _normalize(text: str) -> str:
