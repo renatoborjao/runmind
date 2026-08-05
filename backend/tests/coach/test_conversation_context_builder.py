@@ -172,6 +172,34 @@ def test_build_anchors_today_date():
     assert "datas do plano" in text
 
 
+def test_week_calendar_resolves_every_weekday_and_marks_past():
+    """Bug do Renato: pediu 'amanhã→sexta' (numa quarta) e o coach propôs
+    'terça' (dia que já passou). O calendário resolve TODO dia com data e
+    marca o que já passou, pra a IA nunca chutar nem propor dia vencido."""
+
+    # quarta-feira
+    cal = ConversationContextBuilder._week_calendar(date(2026, 8, 5))
+
+    # o dia pedido ("sexta") vem resolvido com a data certa
+    assert "sexta-feira 07/08" in cal
+    # terça já passou nesta semana — marcada, pra não ser proposta
+    assert "terça-feira 04/08 (já passou)" in cal
+    # hoje e amanhã marcados
+    assert "quarta-feira 05/08 ← HOJE" in cal
+    assert "quinta-feira 06/08 ← amanhã" in cal
+    # a próxima semana também entra (pra "sexta que vem")
+    assert "Próxima semana:" in cal
+    assert "sexta-feira 14/08" in cal
+
+
+def test_week_calendar_present_in_facts():
+
+    text = asyncio.run(_build_with_mocks(history_activities=[], sessions=[]))
+
+    assert "CALENDÁRIO" in text
+    assert "NUNCA proponha um dia que JÁ PASSOU" in text
+
+
 def test_build_includes_full_week_plan_when_sessions_exist():
 
     session = PlannedSession(

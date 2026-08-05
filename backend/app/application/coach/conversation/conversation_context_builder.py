@@ -95,7 +95,13 @@ class ConversationContextBuilder:
             f"- HOJE é {_date_line(today)}.\n"
             f"- AMANHÃ é {_date_line(tomorrow)}.\n"
             f"- ONTEM foi {_date_line(yesterday)}.\n"
-            "As datas do plano mais abaixo são o CRONOGRAMA da semana — elas "
+            # calendário resolvido: sem isto, quando o atleta cita um dia
+            # QUALQUER ("sexta", "terça que vem"), a IA tinha que calcular a
+            # data sozinha e às vezes pescava um dia do CRONOGRAMA do plano —
+            # bug real do Renato (pediu "amanhã→sexta", o coach propôs "terça",
+            # dia que já tinha passado). Agora todo dia da semana vem resolvido.
+            + ConversationContextBuilder._week_calendar(today)
+            + "As datas do plano mais abaixo são o CRONOGRAMA da semana — elas "
             "NÃO são 'hoje'. Para 'hoje/amanhã/ontem/esta semana' use SÓ as três "
             "linhas acima; JAMAIS deduza o dia atual a partir das datas do "
             "plano.\n"
@@ -203,6 +209,54 @@ class ConversationContextBuilder:
             )
 
         return facts
+
+    @staticmethod
+    def _week_calendar(today) -> str:
+        """Calendário RESOLVIDO da semana atual + a próxima (dia da semana →
+        data), marcando HOJE/amanhã/ontem e o que JÁ PASSOU. A IA não calcula
+        data nenhuma — lê daqui. Fecha o buraco de quando o atleta cita um dia
+        qualquer ('sexta', 'terça que vem') e a IA chutava/pescava do plano."""
+
+        monday = today - timedelta(days=today.weekday())
+
+        lines = [
+            "CALENDÁRIO (use estas datas para QUALQUER dia da semana citado; "
+            "NUNCA proponha um dia que JÁ PASSOU):",
+        ]
+
+        for offset in range(14):
+
+            day = monday + timedelta(days=offset)
+
+            if offset == 0:
+
+                lines.append("Esta semana:")
+
+            elif offset == 7:
+
+                lines.append("Próxima semana:")
+
+            label = weekday_label(weekday_name(day))
+
+            if day == today:
+
+                mark = " ← HOJE"
+
+            elif day == today + timedelta(days=1):
+
+                mark = " ← amanhã"
+
+            elif day < today:
+
+                mark = " (já passou)"
+
+            else:
+
+                mark = ""
+
+            lines.append(f"- {label} {day.strftime('%d/%m')}{mark}")
+
+        return "\n".join(lines) + "\n"
 
     # estado do corpo (veredito) traduzido pro coach de conversa
     _BODY_STATE_PT = {
