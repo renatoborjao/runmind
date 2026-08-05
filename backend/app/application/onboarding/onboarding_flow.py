@@ -1280,7 +1280,30 @@ class OnboardingFlow:
                 "fica marcado):"
             )
 
-        return f"{header}\n\n{sessions_text}"
+        plan_text = f"{header}\n\n{sessions_text}"
+
+        # Leitura de boas-vindas: se o Strava já veio no cadastro, o coach
+        # mostra que ESTUDOU o histórico (ritmo real, forma, evolução) antes
+        # do plano — a 1ª impressão que converte. Uma vez por atleta (trava
+        # compartilhada com o late-connector). Best-effort: nunca derruba o
+        # plano; sem histórico suficiente, simplesmente não aparece.
+        try:
+
+            from app.application.coach.intelligence.welcome_reading import (
+                WelcomeReading,
+            )
+
+            reading = WelcomeReading.once(slug, runner, history)
+
+            if reading:
+
+                plan_text = f"{reading}\n\n{plan_text}"
+
+        except Exception as e:
+
+            print(f"Falha na leitura de boas-vindas de '{slug}': {e}")
+
+        return plan_text
 
     # ==========================================================
     # Auxiliares

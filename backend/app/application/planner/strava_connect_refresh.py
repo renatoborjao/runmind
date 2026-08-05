@@ -25,6 +25,7 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import today_local
+from app.domain.entities.training_history import TrainingHistory
 from app.domain.entities.training_plan import TrainingPlan
 from app.infrastructure.integrations.garmin.garmin_offer_store import (
     GarminOfferStore,
@@ -94,6 +95,33 @@ class StravaConnectRefresh:
         )
 
         message = StravaConnectRefresh._message(runner.name, plan)
+
+        # Leitura de boas-vindas: o coach mostra que ESTUDOU o histórico (ritmo
+        # real, forma, evolução) antes de entregar o plano — a 1ª impressão que
+        # converte. Uma vez por atleta (trava compartilhada com o onboarding).
+        # Best-effort: falha aqui nunca derruba o plano.
+        try:
+
+            from app.application.coach.intelligence.welcome_reading import (
+                WelcomeReading,
+            )
+            from app.infrastructure.persistence.activity_archive_repository import (  # noqa: E501
+                ActivityArchiveRepository,
+            )
+
+            history = TrainingHistory(
+                activities=ActivityArchiveRepository().load_activities(profile)
+            )
+
+            reading = WelcomeReading.once(profile, runner, history)
+
+            if reading:
+
+                message = f"{reading}\n\n{message}"
+
+        except Exception as e:
+
+            print(f"Falha na leitura de boas-vindas de '{profile}': {e}")
 
         # Tem Garmin conectado? oferece mandar pro relógio — mesmo fluxo do
         # plano de domingo (marca a oferta pendente pra entender o "SIM").
