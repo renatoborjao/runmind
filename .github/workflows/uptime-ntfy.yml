@@ -7,7 +7,11 @@ name: Uptime check -> ntfy
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # a cada ~10 min (o cron do GitHub pode atrasar/pular sob carga)
+    - cron: "*/30 * * * *"   # a cada ~30 min. O GitHub estrangula/cancela crons
+                             # agendados sob carga (na prática saíam de 1-2h e
+                             # às vezes cancelavam o job na fila, gerando e-mail
+                             # de "falha" falso). Menos runs = menos ruído; o
+                             # UptimeRobot (5 min) é o vigia externo mais apertado.
   workflow_dispatch:          # permite rodar manual (Actions -> Run workflow)
     inputs:
       test_alert:
