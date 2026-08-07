@@ -50,6 +50,16 @@ class PlanPreferenceDetector:
 
             return None
 
+        # MOVE de uma sessão específica NÃO é preferência durável de dia — deixa
+        # o MoveSkipFlow cuidar (cirúrgico + relógio). Sem isto, "mudar meu
+        # treino DE domingo PARA amanhã" pescava "domingo" (o dia de ORIGEM) e
+        # respondia "quer incluir domingo nos seus dias?" — o oposto do pedido
+        # (bug recorrente do Renato). Move se tem alvo relativo (amanhã/hoje) ou
+        # origem→destino entre dois dias diferentes ("de sábado pra domingo").
+        if PlanPreferenceDetector._looks_like_move(norm):
+
+            return None
+
         for pt_day, internal in _WEEKDAYS_PT.items():
 
             if re.search(rf"\b{pt_day}\b", norm):
@@ -57,6 +67,30 @@ class PlanPreferenceDetector:
                 return PlanPreference(long_run_day=internal)
 
         return None
+
+    # alvos relativos de UMA ocorrência — nunca são preferência durável de dia
+    _RELATIVE_TARGETS = (
+        "para amanha", "pra amanha", "para hoje", "pra hoje",
+        "para depois de amanha", "pra depois de amanha",
+    )
+
+    @staticmethod
+    def _looks_like_move(norm: str) -> bool:
+        """True quando a frase move UMA sessão (não fixa um dia de longão):
+        alvo relativo (amanhã/hoje) OU origem→destino entre dias diferentes."""
+
+        if any(target in norm for target in PlanPreferenceDetector._RELATIVE_TARGETS):
+
+            return True
+
+        days = "|".join(_WEEKDAYS_PT)  # segunda|terca|...|domingo
+
+        match = re.search(
+            rf"\bde ({days})\b.*\b(?:para|pra) ({days})\b",
+            norm,
+        )
+
+        return bool(match) and match.group(1) != match.group(2)
 
     @staticmethod
     def _normalize(text: str) -> str:
