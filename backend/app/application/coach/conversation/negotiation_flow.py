@@ -47,6 +47,7 @@ class NegotiationFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
+        force: bool = False,
     ) -> str | None:
 
         # treinador humano: Ritmind só acompanha, não remonta o plano dele
@@ -54,7 +55,9 @@ class NegotiationFlow:
 
             return None
 
-        if not NegotiationFlow._looks_like_negotiation(incoming_text):
+        # force=True: o roteador de IA já classificou como ajuste de carga —
+        # pula o portão (o NegotiationEngine ainda decide adjust:false se não for).
+        if not force and not NegotiationFlow._looks_like_negotiation(incoming_text):
 
             return None
 

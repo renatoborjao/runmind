@@ -60,9 +60,14 @@ class OneOffWorkoutFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
+        force: bool = False,
     ) -> str | None:
 
-        if not OneOffWorkoutDetector.looks_like_request(incoming_text):
+        # force=True: o roteador de IA já classificou como pedido de treino
+        # avulso — pula o portão por palavra-chave.
+        if not force and not OneOffWorkoutDetector.looks_like_request(
+            incoming_text
+        ):
 
             return None
 

@@ -67,6 +67,7 @@ class MoveSkipFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
+        force: bool = False,
     ) -> str | None:
 
         # treinador humano: Ritmind não reestrutura o plano dele
@@ -74,7 +75,9 @@ class MoveSkipFlow:
 
             return None
 
-        if not MoveSkipFlow._looks_like_move_or_skip(incoming_text):
+        # force=True: o roteador de IA já classificou como move/skip — pula o
+        # portão por palavra-chave (o MoveSkipEngine ainda valida o pedido).
+        if not force and not MoveSkipFlow._looks_like_move_or_skip(incoming_text):
 
             return None
 
