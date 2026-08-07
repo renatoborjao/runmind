@@ -30,6 +30,9 @@ class PlanPreference:
     long_run_day: str
 
 
+__all__ = ["PlanPreference", "PlanPreferenceDetector"]
+
+
 class PlanPreferenceDetector:
     """Detecta, de forma determinística, o pedido do atleta de fixar o
     longão num dia ("domingo eu gosto de longão, pode manter"). v1 cobre
