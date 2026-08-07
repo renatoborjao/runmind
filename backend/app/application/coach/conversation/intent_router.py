@@ -152,6 +152,13 @@ _MUTATION_PATTERNS = [
     r"\bao inves d",
     r"\bfazer o (dele|dela|treino dele|treino dela)\b",
     r"\bfazer outro treino\b",
+    # pedido de AGIR sobre o plano (aplicar/atualizar/sincronizar/mandar pro
+    # relógio) NÃO pode virar recital do plano — "atualizar o plano e enviar o
+    # treino pro relógio" casava WEEKLY_PLAN e recitava o plano VELHO. Some com
+    # o card passivo e deixa seguir pros fluxos de ação. Bug real do Renato.
+    r"\b(atualiza|atualizar|atualize|aplica|aplicar|aplique|sincroniza|"
+    r"sincronizar)\b",
+    r"\brel[oó]gio\b",
 ]
 
 # os cards passivos que só recitam a agenda — os únicos que a mutação silencia
