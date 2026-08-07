@@ -59,8 +59,10 @@ AÇÕES possíveis (escolha UMA, a que melhor traduz o PEDIDO PRINCIPAL):
 - "move": quer FAZER um treino que já existe em OUTRO dia (tem origem e destino,
   ex.: "muda meu treino de domingo pra amanhã", "passa o de terça pra quarta").
 - "skip": NÃO vai fazer um treino (pular/faltar/cancelar um dia).
-- "adjust": quer a CARGA/volume da semana diferente (mais leve, mais pesado,
-  menos km, mais rodagens) — sem ser um dia específico.
+- "adjust": quer a CARGA/intensidade/tipo de um treino ou da semana diferente
+  (mais leve, mais pesado, "num ritmo moderado", "deixa livre pra só somar km",
+  menos km, mais rodagens). Vale mesmo quando o treino é de um dia específico
+  (ex.: "deixa o longão num ritmo confortável").
 - "aversion": não gosta de um TIPO de treino (tiro, longão, intervalado) e quer
   evitar/trocar o TIPO.
 - "preference": quer FIXAR de forma DURÁVEL o dia do longão ("prefiro/gosto do
@@ -74,7 +76,12 @@ AÇÕES possíveis (escolha UMA, a que melhor traduz o PEDIDO PRINCIPAL):
 REGRAS:
 - "mudar meu treino DE <dia> PARA <outro dia/amanhã/hoje>" é SEMPRE "move", nunca
   "preference" — o dia citado no "de" é a ORIGEM, não uma preferência.
-- Na dúvida entre uma mutação e conversa, prefira "none" (o chat cuida).
+- Se a mensagem PROPÕE uma mudança no treino/plano — MESMO em forma de pergunta
+  ou pedindo opinião ("quer deixar num ritmo moderado?", "dá pra deixar livre?",
+  "e se eu fizer só rodagem?", "oq vc acha de mover pra sábado?") — classifique a
+  MUDANÇA (adjust/move/etc.), NUNCA "none". O atleta está pedindo pra mudar.
+- "none" é SÓ pra conversa/pergunta SEM pedido de mudança: dúvida técnica, relato,
+  desabafo, elogio, ou pergunta analítica ("como foi meu treino", "meus paces").
 
 Responda APENAS JSON:
 {{"action": "move", "long_run_day": null}}

@@ -23,6 +23,10 @@ _CONFIRM = [
     "perfeito", "aceito", "concordo", "combinado", "ok", "okay", "blz",
     "beleza", "vamos", "valeu", "otimo", "show", "faz isso", "faz",
     "quero sim", "gostei", "aprovado",
+    # confirmar aplicando/sincronizando ("certo, atualiza o plano e manda pro
+    # relógio") — no contexto de uma proposta pendente é um SIM
+    "certo", "atualiza", "atualizar", "atualize", "sincroniza", "sincronizar",
+    "confirma", "confirmar", "confirmo", "pode atualizar", "pode aplicar",
 ]
 
 # "para" NÃO entra aqui: quase sempre é a PREPOSIÇÃO ("digo para semana que

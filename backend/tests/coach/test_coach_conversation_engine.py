@@ -75,7 +75,7 @@ def test_reply_propagates_failure_so_caller_can_fall_back():
 
 def test_system_prompt_contains_non_negotiable_guardrails():
 
-    assert "NUNCA decide" in SYSTEM_PROMPT_TEMPLATE
+    assert "NÃO aplica mudança de plano" in SYSTEM_PROMPT_TEMPLATE
     assert "NUNCA dá conselho médico" in SYSTEM_PROMPT_TEMPLATE
     assert "NUNCA inventa números" in SYSTEM_PROMPT_TEMPLATE
     assert "NUNCA afirma ter executado" in SYSTEM_PROMPT_TEMPLATE
