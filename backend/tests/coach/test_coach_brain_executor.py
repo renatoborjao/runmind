@@ -152,6 +152,98 @@ def test_apply_pending_applies_and_offers_watch():
     repo.clear.assert_called_once_with("renato")
 
 
+def test_apply_pending_uses_coach_voice_when_present():
+    """O 'sim' sai na voz do coach (decision.say), não num fixo robótico."""
+
+    decision = BrainDecision(say="Fechou, tá ajustado! 🔥", on_pending="apply")
+
+    reply, _ = _run(
+        decision,
+        pending=_pending(),
+        extra_patches=[
+            patch(f"{M}.PlanChangeApplier.apply", return_value=_plan()),
+            patch(f"{M}.watch_update_offer", return_value="\n\n⌚ Quer no relógio?"),
+        ],
+    )
+
+    assert reply.startswith("Fechou, tá ajustado! 🔥")
+    assert "relógio" in reply
+
+
+def test_routine_preference_persists_to_memory():
+    """Pedido durável de rotina => o cérebro roteia pro motor de preferência,
+    que grava na memória evolutiva. Antes isso era engolido como conversa."""
+
+    decision = BrainDecision(
+        say="Fechado, monto os próximos assim! 👍",
+        action=BrainAction("routine", "week", None, "treinos de semana até 50 min"),
+    )
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            patch(
+                "app.application.coach.conversation.training_preference_flow."
+                "TrainingPreferenceFlow.apply_preference",
+                new=AsyncMock(return_value="Anotado: dias de semana até ~50 min. 👍"),
+            ),
+        ],
+    )
+
+    assert reply == "Anotado: dias de semana até ~50 min. 👍"
+    repo.save.assert_not_called()  # rotina vira memória, não proposta pendente
+
+
+def test_compound_move_and_adjust_builds_single_proposal():
+    """'passa o longão pra sábado e deixa livre' = UMA proposta: move + ajuste
+    do conteúdo da sessão movida (a ressalva do composto, fechada)."""
+
+    decision = BrainDecision(
+        say="Movo pra sábado e deixo livre — posso aplicar?",
+        action=BrainAction(
+            "move", "single_session", "Saturday", "passa pra sábado",
+            content_change="livre, sem pace, só somar km",
+        ),
+    )
+
+    request = MoveSkipRequest(
+        action="move", day="Sunday", target_day="Saturday",
+        message="Movo teu longão de domingo pra sábado. Posso aplicar?",
+    )
+
+    negotiation = MagicMock()
+    negotiation.operations = [{"action": "replace", "day": "Saturday", "session": {}}]
+    negotiation.message = "Deixei o de sábado livre, sem pace."
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            _plan_patch(),
+            patch(f"{M}.MoveSkipEngine.propose", new=AsyncMock(return_value=request)),
+            patch(
+                f"{M}.MoveSkipFlow._operations",
+                return_value=[
+                    {"action": "drop", "day": "Sunday"},
+                    {"action": "replace", "day": "Saturday", "session": {}},
+                ],
+            ),
+            patch(f"{M}.NegotiationEngine.propose", new=AsyncMock(return_value=negotiation)),
+            patch(f"{M}.PlanChangeApplier._apply_operations"),
+            patch(
+                f"{M}.WeeklyPlanMessageFormatter.session_lines",
+                return_value=["sábado — Longão livre"],
+            ),
+        ],
+    )
+
+    repo.save.assert_called_once()
+    saved = repo.save.call_args.args[1]
+    # operações combinadas: move (drop origem + replace destino) + ajuste do destino
+    assert {"action": "drop", "day": "Sunday"} in saved.operations
+    assert saved.operations[-1] == negotiation.operations[0]
+    assert "Como fica" in reply
+
+
 def test_reject_pending_clears_without_applying():
 
     decision = BrainDecision(say="Tranquilo, deixo como está. 👍", on_pending="reject")

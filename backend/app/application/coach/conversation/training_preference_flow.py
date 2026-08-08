@@ -61,6 +61,22 @@ class TrainingPreferenceFlow:
 
             return None
 
+        return await TrainingPreferenceFlow.apply_preference(
+            profile, runner, incoming_text,
+        )
+
+    @staticmethod
+    async def apply_preference(
+        profile: str,
+        runner: RunnerProfile,
+        incoming_text: str,
+    ) -> str | None:
+        """Núcleo SEM o portão de palavra-chave: destila a preferência durável
+        pra memória evolutiva e confirma. Usado pelo cérebro do coach (que já
+        decidiu que é rotina durável) e pelo handle() determinístico (fallback,
+        atrás do portão barato). Devolve None se a IA concluir que não é
+        durável (aí o turno segue). Ver [[project_roteador_acao_ia]]."""
+
         current_memories = RunnerMemoryRepository().active(profile)
 
         recent_turns = ConversationRepository().recent_turns(profile)
