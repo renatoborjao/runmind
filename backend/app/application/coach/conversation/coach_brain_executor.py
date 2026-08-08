@@ -90,14 +90,14 @@ class CoachBrainExecutor:
         if pending is not None and decision.on_pending:
 
             return await CoachBrainExecutor._resolve_pending(
-                profile, runner, decision, pending, repo,
+                profile, runner, decision, pending, repo, incoming_text,
             )
 
         # 2) pedido de MUDANÇA no plano
         if decision.action is not None:
 
             applied = await CoachBrainExecutor._act(
-                profile, runner, decision.action, repo,
+                profile, runner, decision, repo, incoming_text,
             )
 
             if applied is not None:
@@ -124,7 +124,7 @@ class CoachBrainExecutor:
 
     @staticmethod
     async def _resolve_pending(
-        profile, runner, decision: BrainDecision, pending, repo,
+        profile, runner, decision: BrainDecision, pending, repo, incoming_text,
     ) -> str | None:
 
         if decision.on_pending == "apply":
@@ -140,7 +140,9 @@ class CoachBrainExecutor:
                     "Me diz de novo o que quer ajustar que eu remonto. 💪"
                 )
 
-            return "Feito! Ajustei seu plano. 💪" + watch_update_offer(profile)
+            confirm = decision.say or "Feito! Ajustei seu plano. 💪"
+
+            return confirm + watch_update_offer(profile)
 
         if decision.on_pending == "reject":
 
@@ -157,7 +159,7 @@ class CoachBrainExecutor:
         if decision.action is not None:
 
             applied = await CoachBrainExecutor._act(
-                profile, runner, decision.action, repo,
+                profile, runner, decision, repo, incoming_text,
             )
 
             if applied is not None:
@@ -170,14 +172,21 @@ class CoachBrainExecutor:
 
     @staticmethod
     async def _act(
-        profile, runner, action: BrainAction, repo,
+        profile, runner, decision: BrainDecision, repo, incoming_text,
     ) -> str | None:
-        """Concretiza a ação: as que mudam o plano viram PROPOSTA (pedem 'sim');
-        objetivo/preferência os appliers já aplicam. None se não deu."""
+        """Concretiza a ação: mudanças da semana viram PROPOSTA (pedem 'sim');
+        rotina durável vira MEMÓRIA; objetivo/preferência os appliers aplicam.
+        None se não deu."""
+
+        action = decision.action
 
         if action.type in _PROPOSAL_ACTIONS:
 
-            return await CoachBrainExecutor._propose(profile, runner, action, repo)
+            return await CoachBrainExecutor._propose(profile, runner, decision, repo)
+
+        if action.type == "routine":
+
+            return await CoachBrainExecutor._routine(profile, runner, incoming_text)
 
         if action.type == "goal":
 
@@ -196,11 +205,29 @@ class CoachBrainExecutor:
         return None
 
     @staticmethod
+    async def _routine(profile, runner, incoming_text) -> str | None:
+        """Preferência DURÁVEL de rotina: destila pra memória evolutiva (que já
+        alimenta a geração do plano) via o motor especialista. None se a IA
+        concluir que não é durável (cai na fala do coach)."""
+
+        from app.application.coach.conversation.training_preference_flow import (
+            TrainingPreferenceFlow,
+        )
+
+        return await TrainingPreferenceFlow.apply_preference(
+            profile, runner, incoming_text,
+        )
+
+    @staticmethod
     async def _propose(
-        profile, runner, action: BrainAction, repo,
+        profile, runner, decision: BrainDecision, repo,
     ) -> str | None:
         """Monta a proposta (move/skip via MoveSkipEngine; adjust/simplify via
-        NegotiationEngine) COM ESCOPO, guarda pendente e devolve o preview."""
+        NegotiationEngine) COM ESCOPO, guarda pendente e devolve o preview.
+        Pedido COMPOSTO (mover de dia E mudar o conteúdo) vira UMA proposta só:
+        move + ajuste da sessão movida."""
+
+        action = decision.action
 
         _, plan = await CurrentPlanProvider.for_profile(profile)
 
@@ -228,6 +255,21 @@ class CoachBrainExecutor:
 
             message, kind = request.message, request.action
 
+            # composto: mover E mudar o conteúdo do treino movido, numa tacada
+            if (
+                action.type == "move"
+                and action.content_change
+                and request.target_day
+            ):
+
+                combined = await CoachBrainExecutor._move_and_adjust(
+                    runner, plan, operations, request, action.content_change,
+                )
+
+                if combined is not None:
+
+                    operations, message = combined
+
         else:  # adjust | simplify
 
             negotiation = await NegotiationEngine.propose(
@@ -240,17 +282,8 @@ class CoachBrainExecutor:
 
             operations, kind = negotiation.operations, "negotiation"
 
-            preview_plan = copy.deepcopy(plan)
-
-            PlanChangeApplier._apply_operations(preview_plan, operations)
-
-            revised = "\n".join(
-                WeeklyPlanMessageFormatter.session_lines(preview_plan)
-            ).strip()
-
-            message = (
-                f"{negotiation.message}\n\n📋 Como fica:\n\n{revised}\n\n"
-                "Posso aplicar? (responde *sim* ou *não*)"
+            message = CoachBrainExecutor._revised_message(
+                plan, operations, negotiation.message,
             )
 
         repo.save(
@@ -265,6 +298,70 @@ class CoachBrainExecutor:
         )
 
         return message
+
+    @staticmethod
+    async def _move_and_adjust(
+        runner, plan, move_ops: list[dict], request, content_change: str,
+    ) -> tuple[list[dict], str] | None:
+        """Composto: sobre o plano JÁ movido, ajusta o CONTEÚDO da sessão que
+        mudou de dia (escopo = o dia de destino) e devolve (operações
+        combinadas, preview). None se o ajuste não vingar — aí o chamador segue
+        só com o move."""
+
+        post_move = copy.deepcopy(plan)
+
+        PlanChangeApplier._apply_operations(post_move, move_ops)
+
+        adjust_text = CoachBrainExecutor._action_text(
+            BrainAction(
+                type="adjust",
+                scope="single_session",
+                target_day=request.target_day,
+                instruction=content_change,
+            )
+        )
+
+        negotiation = await NegotiationEngine.propose(
+            runner, post_move, adjust_text,
+        )
+
+        if negotiation is None:
+
+            return None
+
+        # move (tira do dia de origem, põe no destino) + ajuste do conteúdo no
+        # destino, aplicados em sequência: o último replace do destino vence
+        operations = move_ops + negotiation.operations
+
+        from app.core.weekdays import weekday_label
+
+        lead = (
+            f"Movo teu treino de {weekday_label(request.day)} pra "
+            f"{weekday_label(request.target_day)} e já ajusto o conteúdo. "
+            f"{negotiation.message}"
+        )
+
+        return operations, CoachBrainExecutor._revised_message(
+            plan, operations, lead,
+        )
+
+    @staticmethod
+    def _revised_message(plan, operations: list[dict], lead: str) -> str:
+        """Aplica as operações num plano-espelho e monta o preview padrão
+        ('como fica' + pedido de confirmação) — sem tocar no plano real."""
+
+        preview_plan = copy.deepcopy(plan)
+
+        PlanChangeApplier._apply_operations(preview_plan, operations)
+
+        revised = "\n".join(
+            WeeklyPlanMessageFormatter.session_lines(preview_plan)
+        ).strip()
+
+        return (
+            f"{lead}\n\n📋 Como fica:\n\n{revised}\n\n"
+            "Posso aplicar? (responde *sim* ou *não*)"
+        )
 
     @staticmethod
     async def _preference(profile, runner, action: BrainAction) -> str | None:

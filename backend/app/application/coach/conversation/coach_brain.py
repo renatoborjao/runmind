@@ -25,10 +25,16 @@ from dataclasses import dataclass
 from google.genai import types
 
 from app.core.config import get_settings
+from app.core.weekdays import WEEKDAYS
 from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
 )
+
+# dias válidos em minúsculo -> forma canônica ("saturday" -> "Saturday"), pra
+# blindar o casing que o Gemini varia (ora "Sunday", ora "saturday") antes de
+# chegar aos appliers/engines, que esperam o inglês canônico.
+_CANON_DAY = {name.lower(): name for name in WEEKDAYS.values()}
 
 # cartões EXATOS que o coach pode escolher pra responder (o dado sai
 # determinístico, o coach só decide QUAL mostrar). Espelham os ChatIntent.
@@ -37,7 +43,9 @@ _CARDS = {
     "paces", "sleep", "race", "portrait", "help",
 }
 
-_ACTION_TYPES = {"move", "skip", "adjust", "simplify", "goal", "preference"}
+_ACTION_TYPES = {
+    "move", "skip", "adjust", "simplify", "routine", "goal", "preference",
+}
 
 _SCOPES = {"single_session", "week"}
 
@@ -59,10 +67,12 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
-  "action": null | {{"type": <move|skip|adjust|simplify|goal|preference>,
+  "action": null | {{"type": <move|skip|adjust|simplify|routine|goal|preference>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
-                     "instruction": "o que mudar, em 1 frase"}},
+                     "instruction": "o que mudar, em 1 frase",
+                     "content_change": <se ALÉM de mover o dia ele também quer o \
+treino diferente, o que muda no CONTEÚDO | null>}},
   "on_pending": null | <apply|reject|refine>}}
 
 COMO ESCOLHER:
@@ -72,16 +82,26 @@ ajuda): preencha "answer_card" com o cartão certo — o sistema renderiza o dad
 EXATO. Ainda escreva um "say" curto na sua voz introduzindo (ex.: "Bora ver teu \
 plano 👇"). "qual o treino de amanhã?" = next_training; "meu plano da semana" = \
 weekly_plan; "meus paces/zonas" = paces; "como tá meu corpo" = body.
-- Pedido de MUDAR o plano (mover de dia, pular, deixar mais leve/livre, \
-simplificar pro relógio, trocar tipo, mudar objetivo, fixar dia do longão): \
-preencha "action". ESCOPO é sagrado — se o atleta aponta UMA sessão ("o de \
-amanhã", "só o longão"), scope="single_session" e target_day daquele dia; se \
-fala da semana, scope="week". NUNCA mexa em mais do que ele pediu. Se ele muda o \
-DIA de um treino (de X pra Y), o type é "move" (o target_day é o DESTINO) — \
-mesmo que ele também peça pra deixar o treino diferente; o ajuste do conteúdo \
-vem depois. Deixar mais leve/livre/sem pace SEM trocar de dia = "simplify" ou \
-"adjust". NÃO aplique agora — o sistema monta a proposta e pergunta "posso \
-aplicar?". No "say", reconheça o pedido.
+- Pedido de MUDAR o plano SÓ DESTA SEMANA (mover de dia, pular, deixar mais \
+leve/livre, simplificar pro relógio, trocar tipo, mudar objetivo, fixar dia do \
+longão): preencha "action". ESCOPO é sagrado — se o atleta aponta UMA sessão \
+("o de amanhã", "só o longão"), scope="single_session" e target_day daquele \
+dia; se fala da semana, scope="week". NUNCA mexa em mais do que ele pediu. Se \
+ele muda o DIA de um treino (de X pra Y), o type é "move" e o target_day é o \
+DESTINO. Se ALÉM de mudar o dia ele também quer o treino diferente ("passa o \
+longão pra sábado e deixa livre pra somar km"), continua type="move" + \
+target_day=destino E preencha "content_change" com o que muda no conteúdo — o \
+sistema faz as duas coisas numa proposta só. Deixar mais leve/livre/sem pace \
+SEM trocar de dia = "simplify" ou "adjust". NÃO aplique agora — o sistema monta \
+a proposta e pergunta "posso aplicar?". No "say", reconheça o pedido.
+- Pedido DURÁVEL de rotina, pra valer DAQUI PRA FRENTE e não só nesta semana \
+("a partir da próxima, treinos de semana em até 50 min", "fim de semana sempre \
+sem pressa", "de agora em diante deixa terça mais curta"): type="routine". Isso \
+vira uma PREFERÊNCIA na memória do atleta que molda os PRÓXIMOS planos — NÃO \
+mexe na semana atual. Só use "routine" quando houver horizonte/durabilidade ("a \
+partir de", "sempre", "toda semana", "de agora em diante", "no geral"); um \
+pedido pra mexer só na semana de agora é "adjust"/"simplify", não "routine". No \
+"say", uma confirmação curta de que entendeu e vai montar os próximos assim.
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \
@@ -115,6 +135,11 @@ class BrainAction:
     target_day: str | None
 
     instruction: str
+
+    # quando o pedido é composto (mover de dia E mudar o conteúdo do treino),
+    # carrega o que muda no CONTEÚDO — o executor faz as duas coisas numa
+    # proposta só. None quando é só mover (ou qualquer outra ação).
+    content_change: str | None = None
 
 
 @dataclass(slots=True)
@@ -271,9 +296,20 @@ class CoachBrain:
 
             target_day = None
 
+        else:
+
+            target_day = _CANON_DAY.get(target_day.strip().lower(), target_day)
+
+        content_change = raw.get("content_change")
+
+        if not isinstance(content_change, str) or not content_change.strip():
+
+            content_change = None
+
         return BrainAction(
             type=action_type,
             scope=scope,
             target_day=target_day,
             instruction=str(raw.get("instruction") or "").strip(),
+            content_change=content_change,
         )
