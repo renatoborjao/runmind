@@ -139,7 +139,9 @@ class CoachConversationEvent:
 
             try:
 
-                reply_text = ProposalFlow.resolve(profile, incoming_text)
+                reply_text = await ProposalFlow.resolve(
+                    profile, runner, incoming_text
+                )
 
                 used_deterministic = reply_text is not None
 

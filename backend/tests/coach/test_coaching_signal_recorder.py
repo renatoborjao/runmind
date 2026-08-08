@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from app.application.coach.conversation.proposal_flow import ProposalFlow
@@ -94,7 +95,7 @@ def test_accepting_a_proposal_records_source_a_signal(tmp_path, monkeypatch):
         f"{PF}.PlanChangeApplier", applier
     ):
 
-        ProposalFlow.resolve("renato", "pode aplicar")
+        asyncio.run(ProposalFlow.resolve("renato", MagicMock(), "pode aplicar"))
 
     signals = CoachingSignalRecorder.load("renato")
 
@@ -120,7 +121,9 @@ def test_recorder_failure_never_breaks_apply(tmp_path, monkeypatch):
         f"{PF}.PlanChangeApplier", applier
     ), patch.object(CoachingSignalRecorder, "record", boom):
 
-        reply = ProposalFlow.resolve("renato", "pode aplicar")
+        reply = asyncio.run(
+            ProposalFlow.resolve("renato", MagicMock(), "pode aplicar")
+        )
 
     applier.apply.assert_called_once()
     assert "Ajustei" in reply
