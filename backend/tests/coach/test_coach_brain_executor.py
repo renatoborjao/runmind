@@ -1,0 +1,201 @@
+"""Validação OFFLINE do executor do cérebro do coach — o cérebro é MOCKADO
+(decisão fixa) e a gente verifica que cada decisão aciona a 'mão' certa. Cobre
+os casos reais que quebraram ao vivo (mover com escopo, aplicar, refinar,
+cartão exato, conversa). Ver [[project_roteador_acao_ia]]."""
+
+import asyncio
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from app.application.coach.conversation.coach_brain import (
+    BrainAction,
+    BrainDecision,
+)
+from app.application.coach.conversation.coach_brain_executor import (
+    CoachBrainExecutor,
+)
+from app.application.coach.planning.move_skip_engine import MoveSkipRequest
+from app.domain.entities.plan_proposal import PlanProposal
+from tests.coach.factories import make_runner
+
+M = "app.application.coach.conversation.coach_brain_executor"
+
+
+def _pending() -> PlanProposal:
+    return PlanProposal(
+        kind="negotiation",
+        week_start="2026-08-04",
+        preview="Proposta anterior. Posso aplicar?",
+        created_at="2026-08-08T20:00:00",
+        operations=[{"action": "drop", "day": "Tuesday"}],
+    )
+
+
+def _plan() -> MagicMock:
+    plan = MagicMock()
+    plan.sessions = [MagicMock()]
+    plan.source = "ritmind"
+    plan.week_start = date(2026, 8, 4)
+    return plan
+
+
+def _plan_patch():
+    return patch(
+        f"{M}.CurrentPlanProvider.for_profile",
+        new=AsyncMock(return_value=(make_runner(), _plan())),
+    )
+
+
+def _run(decision, pending=None, extra_patches=()):
+    """Roda o executor com contexto/repo/cérebro mockados. Devolve (reply, repo)."""
+
+    repo = MagicMock()
+    repo.load.return_value = pending
+
+    ctx = [
+        patch(f"{M}.ConversationContextBuilder.build", new=AsyncMock(return_value="FATOS")),
+        patch(f"{M}.PlanProposalRepository", return_value=repo),
+        patch(f"{M}.CoachBrain.decide", new=AsyncMock(return_value=decision)),
+        *extra_patches,
+    ]
+
+    for c in ctx:
+        c.start()
+
+    try:
+        reply = asyncio.run(
+            CoachBrainExecutor.handle("renato", make_runner(), "mensagem")
+        )
+    finally:
+        for c in reversed(ctx):
+            c.stop()
+
+    return reply, repo
+
+
+def test_none_decision_falls_back():
+    """Cérebro indeciso/fora do ar => None (cai na cascata determinística)."""
+
+    reply, _ = _run(None)
+
+    assert reply is None
+
+
+def test_chat_only_returns_coach_voice():
+
+    reply, repo = _run(BrainDecision(say="Bora, tá voando! 👊"))
+
+    assert reply == "Bora, tá voando! 👊"
+    repo.save.assert_not_called()
+
+
+def test_answer_card_renders_exact_and_frames_with_voice():
+
+    decision = BrainDecision(say="Teu plano 👇", answer_card="weekly_plan")
+
+    reply, _ = _run(
+        decision,
+        extra_patches=[
+            patch(f"{M}.OnDemandAnswers.answer", new=AsyncMock(return_value="PLANO EXATO")),
+        ],
+    )
+
+    assert reply == "Teu plano 👇\n\nPLANO EXATO"
+
+
+def test_move_action_builds_scoped_proposal_and_saves_pending():
+
+    decision = BrainDecision(
+        say="Movo teu longão pra amanhã — posso aplicar?",
+        action=BrainAction("move", "single_session", "Saturday", "mover pra amanhã"),
+    )
+
+    request = MoveSkipRequest(
+        action="move", day="Sunday", target_day="Saturday",
+        message="Movo teu longão de domingo pra sábado. Posso aplicar?",
+    )
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            _plan_patch(),
+            patch(f"{M}.MoveSkipEngine.propose", new=AsyncMock(return_value=request)),
+            patch(
+                f"{M}.MoveSkipFlow._operations",
+                return_value=[{"action": "drop", "day": "Sunday"}],
+            ),
+        ],
+    )
+
+    assert reply == request.message
+    repo.save.assert_called_once()
+    saved = repo.save.call_args.args[1]
+    assert saved.kind == "move"
+    assert saved.operations  # candidato calculado e guardado pro "sim"
+
+
+def test_apply_pending_applies_and_offers_watch():
+
+    decision = BrainDecision(say="", on_pending="apply")
+
+    reply, repo = _run(
+        decision,
+        pending=_pending(),
+        extra_patches=[
+            patch(f"{M}.PlanChangeApplier.apply", return_value=_plan()),
+            patch(f"{M}.watch_update_offer", return_value="\n\n⌚ Quer no relógio?"),
+        ],
+    )
+
+    assert "Ajustei" in reply
+    assert "relógio" in reply
+    repo.clear.assert_called_once_with("renato")
+
+
+def test_reject_pending_clears_without_applying():
+
+    decision = BrainDecision(say="Tranquilo, deixo como está. 👍", on_pending="reject")
+
+    reply, repo = _run(decision, pending=_pending())
+
+    assert "deixo como está" in reply
+    repo.clear.assert_called_once_with("renato")
+
+
+def test_refine_discards_old_and_reproposes_scoped():
+    """Bug do Renato: correção de escopo não descarta — re-propõe só a sessão
+    apontada. Cérebro devolve on_pending=refine + ação corrigida."""
+
+    decision = BrainDecision(
+        say="Ah, só o de amanhã então!",
+        on_pending="refine",
+        action=BrainAction("simplify", "single_session", "Saturday", "ritmo livre, sem pace"),
+    )
+
+    negotiation = MagicMock()
+    negotiation.operations = [{"action": "replace", "day": "Saturday", "session": {}}]
+    negotiation.message = "Deixei só o de amanhã livre."
+
+    reply, repo = _run(
+        decision,
+        pending=_pending(),
+        extra_patches=[
+            _plan_patch(),
+            patch(
+                f"{M}.NegotiationEngine.propose",
+                new=AsyncMock(return_value=negotiation),
+            ),
+            patch(f"{M}.PlanChangeApplier._apply_operations"),
+            patch(
+                f"{M}.WeeklyPlanMessageFormatter.session_lines",
+                return_value=["sábado — Longão livre"],
+            ),
+        ],
+    )
+
+    # a proposta velha foi descartada e uma NOVA foi montada + guardada
+    repo.clear.assert_called_once_with("renato")
+    repo.save.assert_called_once()
+    saved = repo.save.call_args.args[1]
+    assert saved.operations == negotiation.operations
+    assert "Deixei só o de amanhã" in reply

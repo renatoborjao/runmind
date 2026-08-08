@@ -53,6 +53,9 @@ Decida:
      o trade-off (nunca só obedeça, nunca só recuse).
    - Mantenha os MESMOS dias/frequência do atleta (não adicione nem remova dias
      sem ele pedir). Ancore os paces na meta.
+   - ESCOPO: se a mensagem apontar UMA sessão ("só o treino de sábado", "o de
+     amanhã", "só o longão"), mude SÓ ela — as OUTRAS ficam EXATAMENTE iguais.
+     Só ajuste o conjunto se ele falar da semana/geral.
    - {time_rule}
 3) Devolva a SEMANA INTEIRA já ajustada (todas as sessões de corrida dos dias
    dele), mesmo as que não mudaram.
