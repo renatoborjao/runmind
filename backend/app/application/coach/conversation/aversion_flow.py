@@ -38,7 +38,6 @@ class AversionFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
-        force: bool = False,
     ) -> str | None:
         """Devolve o preview da proposta (mensagem pro atleta) se detectou e
         montou uma troca; None caso contrário (a conversa segue normal)."""
@@ -48,9 +47,7 @@ class AversionFlow:
 
             return None
 
-        # force=True: o roteador de IA já classificou como aversão de tipo —
-        # pula o portão por palavra-chave.
-        if not force and not AversionFlow._looks_like_aversion(incoming_text):
+        if not AversionFlow._looks_like_aversion(incoming_text):
 
             return None
 
@@ -75,7 +72,6 @@ class AversionFlow:
             operations=[
                 {"action": "replace", "day": swap.day, "session": swap.session},
             ],
-            source_text=incoming_text,
         )
 
         PlanProposalRepository().save(profile, proposal)

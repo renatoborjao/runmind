@@ -435,26 +435,3 @@ def test_mudei_de_ideia_nao_e_mutacao():
         IntentRouter.detect("mudei de ideia, qual meu treino de hoje?")
         == ChatIntent.NEXT_TRAINING
     )
-
-
-def test_apply_and_sync_request_is_not_a_plan_recital():
-    """Bug do Renato: 'atualizar o plano e enviar o treino pro relógio' casava
-    WEEKLY_PLAN e recitava o plano VELHO. Pedido de AGIR não vira recital —
-    devolve None pra seguir pros fluxos de ação."""
-
-    assert (
-        IntentRouter.detect(
-            "consegue atualizar o plano e enviar o treino pro relogio?"
-        )
-        is None
-    )
-    assert IntentRouter.detect("manda esse treino pro relógio") is None
-
-
-def test_pure_plan_question_still_recites():
-    """Sem verbo de ação, 'qual meu plano da semana' segue recitando."""
-
-    assert (
-        IntentRouter.detect("qual meu plano da semana?")
-        == ChatIntent.WEEKLY_PLAN
-    )

@@ -30,8 +30,3 @@ class PlanProposal:
     created_at: str
 
     operations: list[dict] = field(default_factory=list)
-
-    # mensagem ORIGINAL do atleta que gerou a proposta — usada pra RE-PROPOR
-    # quando ele corrige/refina ("não é a semana, é o de amanhã"): o refino
-    # combina o pedido original + a correção, sem perder a intenção inicial
-    source_text: str = ""

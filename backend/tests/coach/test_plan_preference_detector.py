@@ -50,37 +50,3 @@ def test_no_long_run_mention_is_not_a_preference():
         PlanPreferenceDetector.detect("prefiro treinar de manhã no domingo")
         is None
     )
-
-
-def test_move_of_a_session_is_not_a_long_run_preference():
-    """Bug recorrente do Renato: 'mudar meu treino DE domingo PARA amanhã'
-    (mesmo mencionando longão) é um MOVE, não preferência de dia — não pode
-    pescar o dia de ORIGEM e responder 'quer incluir domingo nos seus dias?'.
-    Deve devolver None pra o MoveSkipFlow cuidar."""
-
-    assert (
-        PlanPreferenceDetector.detect(
-            "vou precisar mudar meu treino de domingo para amanhã, vai ser um "
-            "longão pra dar quilometragem"
-        )
-        is None
-    )
-
-
-def test_weekday_to_weekday_move_is_not_a_preference():
-    """Origem→destino explícito entre dias = move, não preferência."""
-
-    assert (
-        PlanPreferenceDetector.detect("muda o longão de sábado pra domingo")
-        is None
-    )
-
-
-def test_long_run_of_a_day_stays_a_preference():
-    """Guarda não pode over-fire: 'prefiro o longão de domingo' é preferência
-    (um dia só, sem destino) — 'de domingo' aqui NÃO é origem de move."""
-
-    pref = PlanPreferenceDetector.detect("prefiro o longão de domingo")
-
-    assert pref is not None
-    assert pref.long_run_day == "Sunday"

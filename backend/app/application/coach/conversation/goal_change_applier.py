@@ -49,19 +49,15 @@ class GoalChangeApplier:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
-        force: bool = False,
     ) -> str | None:
 
         pending_repo = PendingGoalRepository()
 
         pending = pending_repo.is_pending(profile)
 
-        # sem pendente e sem cheiro de troca de meta: não é comigo. force=True:
-        # o roteador de IA já classificou como troca de objetivo — pula o portão.
-        if (
-            not force
-            and not pending
-            and not GoalChangeDetector.looks_like_goal_change(incoming_text)
+        # sem pendente e sem cheiro de troca de meta: não é comigo
+        if not pending and not GoalChangeDetector.looks_like_goal_change(
+            incoming_text
         ):
 
             return None

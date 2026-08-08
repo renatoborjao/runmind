@@ -27,14 +27,13 @@ class ProposalFlow:
     Roda ANTES dos outros handlers — o 'sim' é resposta à proposta."""
 
     @staticmethod
-    async def resolve(
+    def resolve(
         profile: str,
-        runner,
         incoming_text: str,
     ) -> str | None:
-        """Resolve a proposta pendente: aceite aplica, recusa descarta,
-        CORREÇÃO re-propõe (não descarta), e mudança de assunto deixa seguir.
-        None se não havia proposta ou caducou."""
+        """Devolve a resposta ao atleta se resolveu a proposta; None se não
+        havia proposta, ela caducou, ou a mensagem não é um sim/não claro
+        (aí a conversa segue e a proposta continua pendente)."""
 
         repo = PlanProposalRepository()
 
@@ -64,72 +63,9 @@ class ProposalFlow:
                 "Tranquilo, deixo como está. 👍 Qualquer hora a gente ajusta."
             )
 
-        if reply == ProposalReply.REFINE:
-
-            return await ProposalFlow._refine(
-                profile, runner, proposal, incoming_text, repo
-            )
-
-        # mudou de assunto: mantém a proposta pendente e deixa a conversa seguir
+        # não é sim nem não claro (contraproposta / mudou de assunto):
+        # mantém a proposta pendente e deixa a conversa seguir
         return None
-
-    @staticmethod
-    async def _refine(profile, runner, proposal, correction, repo) -> str | None:
-        """O atleta corrigiu a proposta ("não é a semana, é o de amanhã"). NÃO
-        descarta cegamente: re-propõe combinando o pedido ORIGINAL + a correção,
-        pelo mesmo fluxo que gerou a proposta. Assim o refino mantém a intenção
-        e ajusta o escopo. Bug real do Renato (correção virava 'não')."""
-
-        original = (proposal.source_text or "").strip()
-
-        combined = (
-            f"{original} (correção do atleta: {correction})"
-            if original
-            else correction
-        )
-
-        # a proposta velha morre; o fluxo re-rodado grava a nova
-        repo.clear(profile)
-
-        # importa aqui pra evitar ciclo de import
-        from app.application.coach.conversation.aversion_flow import (
-            AversionFlow,
-        )
-        from app.application.coach.conversation.move_skip_flow import (
-            MoveSkipFlow,
-        )
-        from app.application.coach.conversation.negotiation_flow import (
-            NegotiationFlow,
-        )
-
-        if proposal.kind in ("move", "skip"):
-
-            new_message = await MoveSkipFlow.handle(
-                profile, runner, combined, force=True
-            )
-
-        elif proposal.kind == "aversion":
-
-            new_message = await AversionFlow.handle(
-                profile, runner, combined, force=True
-            )
-
-        else:
-
-            new_message = await NegotiationFlow.handle(
-                profile, runner, combined, force=True
-            )
-
-        if new_message:
-
-            return new_message
-
-        # não deu pra remontar com a correção: honesto, sem fingir
-        return (
-            "Beleza, não vou aplicar a versão anterior. Me diz de forma "
-            "direta o que você quer mudar (ex.: 'deixa só o treino de amanhã "
-            "num ritmo leve') que eu remonto. 💪"
-        )
 
     @staticmethod
     def _apply(profile, proposal, repo) -> str:

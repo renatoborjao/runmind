@@ -68,8 +68,8 @@ def test_reject_wins_when_message_mixes_both():
 )
 def test_qualified_yes_is_not_an_automatic_apply(text):
 
-    # aceite com ressalva é contraproposta -> REFINE (re-propõe), não aplica
-    assert ProposalReplyDetector.detect(text) == ProposalReply.REFINE
+    # aceite com ressalva é contraproposta -> não aplica sozinho
+    assert ProposalReplyDetector.detect(text) == ProposalReply.UNCLEAR
 
 
 @pytest.mark.parametrize(
@@ -93,36 +93,4 @@ def test_cue_inside_a_word_does_not_trigger():
     # palavra inteira conta
     assert ProposalReplyDetector.detect("simples assim") == (
         ProposalReply.UNCLEAR
-    )
-
-
-def test_confirm_by_apply_and_sync_is_a_yes():
-    """Bug do Renato: 'certo, atualiza o plano e manda pro relógio' não era
-    lido como sim — a proposta ficava pendente. Confirmar aplicando conta."""
-
-    assert (
-        ProposalReplyDetector.detect(
-            "certo, atualiza o plano e manda pro relogio"
-        )
-        == ProposalReply.CONFIRM
-    )
-    assert ProposalReplyDetector.detect("pode confirmar") == ProposalReply.CONFIRM
-
-
-def test_certo_with_adversative_is_a_refine():
-    """'certo, mas prefiro quarta' é contraproposta — REFINE (re-propõe)."""
-
-    assert (
-        ProposalReplyDetector.detect("certo, mas prefiro quarta")
-        == ProposalReply.REFINE
-    )
-
-
-def test_scope_correction_is_a_refine_not_a_reject():
-    """Bug do Renato: 'não é o da semana, é o de amanhã' virava REJECT e o
-    coach jogava tudo fora. É correção de escopo — REFINE."""
-
-    assert (
-        ProposalReplyDetector.detect("cara, não é o da semana, é o de amanhã!")
-        == ProposalReply.REFINE
     )

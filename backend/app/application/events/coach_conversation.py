@@ -1,7 +1,4 @@
 from app.application.coach.conversation.aversion_flow import AversionFlow
-from app.application.coach.conversation.coach_action_router import (
-    CoachActionRouter,
-)
 from app.application.coach.conversation.coach_conversation_engine import (
     CoachConversationEngine,
 )
@@ -29,7 +26,6 @@ from app.application.coach.conversation.plan_preference_applier import (
     PlanPreferenceApplier,
 )
 from app.application.coach.conversation.plan_preference_detector import (
-    PlanPreference,
     PlanPreferenceDetector,
 )
 from app.application.coach.conversation.proposal_flow import ProposalFlow
@@ -139,9 +135,7 @@ class CoachConversationEvent:
 
             try:
 
-                reply_text = await ProposalFlow.resolve(
-                    profile, runner, incoming_text
-                )
+                reply_text = ProposalFlow.resolve(profile, incoming_text)
 
                 used_deterministic = reply_text is not None
 
@@ -204,35 +198,6 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha no fluxo Garmin de '{profile}': {e}")
-
-                reply_text = None
-
-        # ROTEADOR DE AÇÃO POR IA: lê a mensagem INTEIRA e decide QUAL mutação o
-        # atleta pediu (mover/pular/ajustar/aversão/preferência/objetivo/avulso)
-        # — interação real, não caça-palavra (bug recorrente: "mudar meu treino
-        # DE domingo PARA amanhã" caía em "preferência de longão no domingo"). Só
-        # entra quando NÃO é pergunta analítica conhecida (pré-filtro grátis do
-        # IntentRouter — mantém o escopo "só mutações" e o custo baixo). Se a IA
-        # falhar/vier torta, a cascata determinística abaixo assume (nunca regride).
-        if reply_text is None and IntentRouter.detect(incoming_text) is None:
-
-            try:
-
-                decision = await CoachActionRouter.classify(
-                    runner, incoming_text
-                )
-
-                if decision is not None and decision.action != "none":
-
-                    reply_text = await CoachConversationEvent._dispatch_action(
-                        profile, runner, incoming_text, decision,
-                    )
-
-                    used_deterministic = reply_text is not None
-
-            except Exception as e:
-
-                print(f"Falha no roteador de ação de '{profile}': {e}")
 
                 reply_text = None
 
@@ -524,61 +489,6 @@ class CoachConversationEvent:
             print(f"Falha ao capturar check-in de '{profile}': {e}")
 
         return reply_text
-
-    @staticmethod
-    async def _dispatch_action(
-        profile,
-        runner,
-        incoming_text: str,
-        decision,
-    ) -> str | None:
-        """Despacha a ação classificada pelo roteador de IA pro fluxo/engine
-        que já existe, PULANDO o portão por palavra-chave (force=True) — o
-        engine de cada fluxo ainda faz a extração fina e propõe pro 'sim'.
-        Devolve None se o fluxo não conseguir concretizar (aí a cascata
-        determinística abaixo assume)."""
-
-        action = decision.action
-
-        if action in ("move", "skip"):
-
-            return await MoveSkipFlow.handle(
-                profile, runner, incoming_text, force=True
-            )
-
-        if action == "adjust":
-
-            return await NegotiationFlow.handle(
-                profile, runner, incoming_text, force=True
-            )
-
-        if action == "aversion":
-
-            return await AversionFlow.handle(
-                profile, runner, incoming_text, force=True
-            )
-
-        if action == "one_off":
-
-            return await OneOffWorkoutFlow.handle(
-                profile, runner, incoming_text, force=True
-            )
-
-        if action == "goal":
-
-            return await GoalChangeApplier.handle(
-                profile, runner, incoming_text, force=True
-            )
-
-        if action == "preference" and decision.long_run_day:
-
-            return await PlanPreferenceApplier.apply(
-                profile,
-                runner,
-                PlanPreference(long_run_day=decision.long_run_day),
-            )
-
-        return None
 
     @staticmethod
     async def _update_summary(
