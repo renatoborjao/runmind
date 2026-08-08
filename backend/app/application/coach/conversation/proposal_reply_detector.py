@@ -9,8 +9,12 @@ class ProposalReply(str, Enum):
 
     REJECT = "REJECT"
 
-    # não é um sim nem um não claros (ex.: contraproposta "prefiro quarta",
-    # ou mudança de assunto) — quem chama decide o que fazer
+    # o atleta está CORRIGINDO/refinando a proposta, não aceitando nem
+    # recusando ("não é a semana, é o de amanhã", "sim, mas deixa 12km",
+    # "prefiro quarta"). NÃO descarta — o coach re-propõe com a correção.
+    REFINE = "REFINE"
+
+    # não é sim, não, nem correção clara (mudou de assunto) — quem chama decide
     UNCLEAR = "UNCLEAR"
 
 
@@ -46,6 +50,16 @@ _ADVERSATIVE = [
     "entretanto",
 ]
 
+# o atleta está CORRIGINDO o escopo/conteúdo da proposta (não recusando):
+# "não é a semana, é o de amanhã", "na verdade só o longão", "quis dizer...".
+# Trata como REFINE — re-propõe, não descarta. Bug real do Renato: "não é o
+# da semana, é o de amanhã" era lido como "não" e o coach jogava tudo fora.
+_CORRECTION = [
+    "na verdade", "quis dizer", "queria dizer", "nao e o", "nao e a",
+    "nao e isso", "nao era", "nao e esse", "nao e essa", "e o de", "e a de",
+    "so o", "so a", "apenas o", "apenas a",
+]
+
 
 class ProposalReplyDetector:
 
@@ -60,13 +74,22 @@ class ProposalReplyDetector:
 
         adversative = ProposalReplyDetector._has_any(norm, _ADVERSATIVE)
 
-        # recusa clara ganha sempre (inclusive "nao, mas...")
+        correction = ProposalReplyDetector._has_any(norm, _CORRECTION)
+
+        # CORREÇÃO/contraproposta ganha antes de tudo: "não é a semana, é o de
+        # amanhã" / "sim, mas 12km" — não é recusa nem aceite, é refino. O
+        # coach re-propõe (não descarta).
+        if correction or adversative:
+
+            return ProposalReply.REFINE
+
+        # recusa clara (sem correção): "não", "deixa", "esquece"
         if rejects:
 
             return ProposalReply.REJECT
 
-        # aceite só se for limpo: "sim, mas..." é contraproposta, não aplica
-        if confirms and not adversative:
+        # aceite limpo
+        if confirms:
 
             return ProposalReply.CONFIRM
 

@@ -102,6 +102,7 @@ class NegotiationFlow:
             preview=message,
             created_at=now_local().isoformat(),
             operations=negotiation.operations,
+            source_text=incoming_text,
         )
 
         PlanProposalRepository().save(profile, proposal)

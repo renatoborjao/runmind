@@ -75,6 +75,7 @@ class AversionFlow:
             operations=[
                 {"action": "replace", "day": swap.day, "session": swap.session},
             ],
+            source_text=incoming_text,
         )
 
         PlanProposalRepository().save(profile, proposal)

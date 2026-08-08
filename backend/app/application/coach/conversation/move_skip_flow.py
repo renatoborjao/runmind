@@ -109,6 +109,7 @@ class MoveSkipFlow:
                 preview=request.message,
                 created_at=now_local().isoformat(),
                 operations=operations,
+                source_text=incoming_text,
             ),
         )
 
