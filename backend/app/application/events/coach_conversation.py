@@ -1,4 +1,7 @@
 from app.application.coach.conversation.aversion_flow import AversionFlow
+from app.application.coach.conversation.coach_brain_executor import (
+    CoachBrainExecutor,
+)
 from app.application.coach.conversation.coach_conversation_engine import (
     CoachConversationEngine,
 )
@@ -57,6 +60,7 @@ from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
 from app.core.clock import use_athlete_timezone
+from app.core.config import get_settings
 from app.infrastructure.persistence.conversation_repository import (
     ConversationRepository,
 )
@@ -131,7 +135,9 @@ class CoachConversationEvent:
 
         # Resposta a uma proposta pendente ("sim/não" a uma troca que o coach
         # ofereceu): resolve ANTES de tudo — o "sim" é resposta à proposta.
-        if reply_text is None:
+        # Com o cérebro do coach ligado, é ELE quem interpreta a resposta à
+        # pendência (aplicar/recusar/refinar) — então pula este detector.
+        if reply_text is None and not get_settings().coach_brain_active_for(profile):
 
             try:
 
@@ -198,6 +204,28 @@ class CoachConversationEvent:
             except Exception as e:
 
                 print(f"Falha no fluxo Garmin de '{profile}': {e}")
+
+                reply_text = None
+
+        # CÉREBRO DO COACH (atrás da flag): UM coach só, com o quadro completo,
+        # decide e responde na própria voz — proposta pendente (aplicar/recusar/
+        # refinar), mudança no plano COM ESCOPO, cartão exato ou conversa. None
+        # (IA fora do ar/indecisa) => cai na cascata determinística abaixo, que
+        # segue sendo o caminho estável. Ver [[project_roteador_acao_ia]].
+        if reply_text is None and get_settings().coach_brain_active_for(profile):
+
+            try:
+
+                reply_text = await CoachBrainExecutor.handle(
+                    profile,
+                    runner,
+                    incoming_text,
+                    conversation_history=history,
+                )
+
+            except Exception as e:
+
+                print(f"Falha no cérebro do coach de '{profile}': {e}")
 
                 reply_text = None
 

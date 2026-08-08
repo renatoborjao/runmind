@@ -199,6 +199,35 @@ class Settings(BaseSettings):
     # (CAUTION/GREEN).
     readiness_alerts_enabled: bool = False
 
+    # Cérebro do coach na conversa: UM coach só, sempre respondendo, com o
+    # quadro completo do atleta — decide (responder/propor mudança/aplicar) numa
+    # chamada estruturada e as "mãos" determinísticas executam. Fica DESLIGADA
+    # até validar OFFLINE contra os prints reais + canário no perfil do Renato;
+    # com a flag OFF, roda a cascata determinística estável de sempre (fallback).
+    # Ver [[project_roteador_acao_ia]] e [[feedback_nao_tapar_sol_com_peneira]].
+    coach_brain_enabled: bool = False
+
+    # Canário: quando não-vazio, o cérebro roda SÓ pra estes perfis (ex.:
+    # "renato2"), mesmo com coach_brain_enabled=true. Vazio = todos os perfis
+    # (quando a flag global estiver ligada). Perfis separados por vírgula.
+    coach_brain_profiles: str = ""
+
+    @property
+    def coach_brain_profile_list(self) -> list[str]:
+
+        return [p.strip() for p in self.coach_brain_profiles.split(",") if p.strip()]
+
+    def coach_brain_active_for(self, profile: str) -> bool:
+        """O cérebro atende este perfil? (flag global + allowlist de canário)."""
+
+        if not self.coach_brain_enabled:
+
+            return False
+
+        allow = self.coach_brain_profile_list
+
+        return not allow or profile in allow
+
     @property
     def cors_origin_list(self) -> list[str]:
 
