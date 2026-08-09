@@ -91,6 +91,31 @@ async def runner_memory(profile: str):
         )
 
 
+@router.get("/brain/{profile}")
+async def coach_brain_log(profile: str, limit: int = 40):
+    """Decisões recentes do cérebro do coach (modo observação): o que ele
+    decidiu por mensagem — ação/escopo/dia/cartão/pendência + trecho da fala,
+    e quando caiu no fallback. Pra acompanhar semana a semana e pegar deriva
+    antes de virar print ruim. Mais recentes primeiro."""
+
+    try:
+
+        from app.infrastructure.persistence.coach_brain_log_repository import (
+            CoachBrainLogRepository,
+        )
+
+        entries = CoachBrainLogRepository().load(profile)
+
+        return list(reversed(entries[-limit:]))
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
 @router.get("/learnings/{profile}")
 async def coach_learnings(profile: str):
     """O que o cérebro coach aprendeu observando o atleta — janela de

@@ -32,7 +32,7 @@ O QUE JÁ EXISTE NA SEMANA DELE (não repita à toa, COMPLEMENTE):
 
 RETRATO REAL DO ATLETA (histórico e evolução — a base da sua decisão):
 {portrait}
-
+{athlete_context}
 Monte UM treino só pra o dia alvo, como treinador de verdade:
 - ANCORE tudo no retrato real (volume, paces, evolução) — nada genérico.
 - COMPLEMENTE a semana: não empilhe dois dias fortes coladinhos; se ele já \
@@ -95,6 +95,7 @@ class OneOffWorkoutEngine:
         target_label: str,
         portrait: str,
         week_context: str,
+        athlete_context: str = "",
     ) -> OneOffWorkout | None:
 
         settings = get_settings()
@@ -105,6 +106,7 @@ class OneOffWorkoutEngine:
             target_label=target_label,
             week_context=week_context or "(nada registrado nesta semana)",
             portrait=portrait or "(sem retrato disponível)",
+            athlete_context=OneOffWorkoutEngine._context_block(athlete_context),
             menu=WORKOUT_MENU,
             phase=PHASE_EMPHASIS,
             time_rule=TIME_OR_DISTANCE_RULE,
@@ -119,6 +121,23 @@ class OneOffWorkoutEngine:
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
             parse=lambda raw: OneOffWorkoutEngine._parse(raw, target_day),
+        )
+
+    @staticmethod
+    def _context_block(athlete_context: str) -> str:
+        """Quadro completo (corpo/recuperação/memória/estado atual) que o cérebro
+        viu — complementa o retrato pra o treino avulso considerar TAMBÉM como o
+        atleta está AGORA. Vazio (fallback determinístico) => sem bloco."""
+
+        context = (athlete_context or "").strip()
+
+        if not context:
+
+            return ""
+
+        return (
+            "\nCOMO O ATLETA ESTÁ AGORA (corpo, recuperação, memória, estado — "
+            "considere ao dosar):\n" + context + "\n"
         )
 
     @staticmethod
