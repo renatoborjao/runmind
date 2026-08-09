@@ -66,3 +66,35 @@ def test_race_date_none_without_race_or_invalid():
     assert BuildTrainingGoal.execute(
         make_runner(race_date="agosto"),
     ).race_date is None
+
+
+def test_race_label_names_the_race_not_the_aspiration():
+    """race_label descreve a PROVA (distância), separado do objetivo de fundo
+    (name). É o que impede 'polimento pra 21km' numa prova de 10k."""
+
+    goal = BuildTrainingGoal.execute(
+        make_runner(
+            goal="correr 21 km, buscar saúde/evolução",
+            target_race="10 km",
+            race_date="2026-08-23",
+        )
+    )
+
+    assert goal.race_label == "10 km"
+    # o objetivo de fundo (name) segue sendo a aspiração — NÃO a prova
+    assert "21 km" in goal.name
+
+
+def test_race_label_named_distances():
+
+    from app.domain.entities.training_goal import TrainingGoal
+
+    def label(km):
+        return TrainingGoal(
+            name="x", distance_km=km, target_time=None, race_date=None,
+        ).race_label
+
+    assert label(21.0975) == "meia maratona"
+    assert label(42.195) == "maratona"
+    assert label(5.0) == "5 km"
+    assert label(10.5) == "10.5 km"

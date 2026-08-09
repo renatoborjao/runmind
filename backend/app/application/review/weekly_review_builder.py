@@ -117,6 +117,10 @@ class WeeklyReviewBuilder:
 
         return {
             "name": goal.name,
+            # rótulo da PROVA (distância), separado do objetivo de fundo (name)
+            # — senão a narrativa diz "faltam 2 semanas pro seu 21km" quando a
+            # prova é um 10k (bug do Renato).
+            "race_label": goal.race_label,
             "target_time": goal.target_time,
             "race_date": goal.race_date.isoformat() if goal.race_date else None,
             "weeks_to_race": weeks_to_race,

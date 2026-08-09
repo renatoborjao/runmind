@@ -517,10 +517,11 @@ class ConversationContextBuilder:
             f", alvo {goal.target_time}" if goal.target_time else ""
         )
 
-        # a META já aparece no cabeçalho ("Meta: ..."); aqui só ancoramos a
-        # DATA-alvo, sem repetir a frase inteira da meta como "nome da prova"
+        # a META de fundo já aparece no cabeçalho ("Meta: ..."); aqui é a PROVA
+        # concreta (distância + data), NÃO a meta. Rotular a data como "da meta"
+        # fundia a prova de 10k com o objetivo de 21km (bug do Renato).
         return (
-            f"Data-alvo da meta: "
+            f"Próxima prova: {goal.race_label} em "
             f"{goal.race_date.strftime('%d/%m/%Y')} "
             f"(daqui a {weeks} semanas{target})\n"
         )

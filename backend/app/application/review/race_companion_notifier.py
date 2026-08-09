@@ -133,7 +133,10 @@ class RaceCompanionNotifier:
         touch: str,
     ) -> str | None:
 
-        race = goal.name or f"{goal.distance_km:.0f} km"
+        # a PROVA pela distância (10k), NUNCA o goal.name (aspiração de fundo
+        # tipo "correr 21 km, buscar saúde..."), que trocava a prova pela meta
+        # e fazia o coach dizer "polimento pra 21km" na prova de 10k.
+        race = goal.race_label
 
         if touch == "taper":
 
@@ -144,7 +147,7 @@ class RaceCompanionNotifier:
                 return None
 
             return (
-                f"Você entrou na reta de *polimento* pra {race} 🎯\n\n"
+                f"Você entrou na reta de *polimento* pra sua prova de {race} 🎯\n\n"
                 "A partir de agora eu reduzo o volume DE PROPÓSITO — o corpo "
                 "consolida todo o trabalho das últimas semanas. Se as pernas "
                 "coçarem pra correr mais, ótimo sinal: é energia sendo guardada "
@@ -158,7 +161,7 @@ class RaceCompanionNotifier:
             extra = f"\n\n{pace_line}" if pace_line else ""
 
             return (
-                f"É a *semana da sua prova*! 🔥 {race} tá logo ali.\n\n"
+                f"É a *semana da sua prova*! 🔥 Sua prova de {race} tá logo ali.\n\n"
                 "Semana de afiar, não de ganhar forma — o trabalho pesado já "
                 "foi feito. Foco em dormir bem, comer direito e chegar leve."
                 f"{extra}\n\n"
@@ -170,7 +173,7 @@ class RaceCompanionNotifier:
             extra = f"\n\n{pace_line}" if pace_line else ""
 
             return (
-                f"Amanhã é o *dia*! 🙌 Reta final pra {race}.\n\n"
+                f"Amanhã é o *dia*! 🙌 Reta final pra sua prova de {race}.\n\n"
                 "Hoje: hidrate bem desde já, coma o que seu corpo conhece "
                 "(nada novo!), separe roupa/tênis/número à noite e durma o que "
                 "der — a noite que mais conta é a de 2 dias atrás, então relaxa "

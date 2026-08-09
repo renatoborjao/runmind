@@ -670,12 +670,11 @@ def test_race_summary_includes_countdown_and_target():
         reference_date=date(2026, 7, 3),
     )
 
-    # a meta já aparece no cabeçalho; a linha da prova só ancora a DATA-alvo
-    # (não repete a frase da meta como nome de prova)
-    assert "Data-alvo da meta: 15/08/2026" in line
+    # a meta de fundo já aparece no cabeçalho; esta linha é a PROVA concreta
+    # (distância + data), não a meta — nunca conflar prova com objetivo de fundo
+    assert "Próxima prova: 10 km em 15/08/2026" in line
     assert "10 km Sub 50" not in line
     assert "daqui a 6 semanas" in line
-    assert "alvo 00:50:00" in line
     assert "alvo 00:50:00" in line
 
 

@@ -197,11 +197,13 @@ class WeeklyReviewNarrativeWriter:
 
             weeks = goal.get("weeks_to_race")
 
+            race_label = goal.get("race_label") or "prova"
+
             target = (
                 f", alvo {goal['target_time']}" if goal.get("target_time") else ""
             )
 
-            faltam = f" — faltam {weeks} semanas pra prova" if weeks is not None else ""
+            faltam = f", faltam {weeks} semanas" if weeks is not None else ""
 
             predicted = goal.get("predicted_time")
 
@@ -211,7 +213,12 @@ class WeeklyReviewNarrativeWriter:
                 else ""
             )
 
-            return f"Objetivo (PROVA/MARCA): {name}{target}{faltam}.{previsao}"
+            # separa a PROVA (distância + contagem) do OBJETIVO de fundo (name):
+            # a prova de 10k não é "a meta de 21km em 2 semanas".
+            return (
+                f"Próxima prova: {race_label}{target}{faltam}. "
+                f"Objetivo de fundo: {name}.{previsao}"
+            )
 
         return (
             f"Objetivo (SEM prova — saúde/evolução): {name}. "
