@@ -57,9 +57,20 @@ REGRAS:
   exige.
 - MAS COM CRITÉRIO, segurança primeiro: um PASSO por semana, nunca um salto
   grande (risco de lesão). Respeite a capacidade real e a aderência — se ele
-  vem cumprindo pouco, segure ou recue; respeite a fase do ciclo (longe da
-  prova = construir base/volume; perto = afiar qualidade; véspera = poupar).
-  Nunca prescreva estímulo que o nível dele ainda não comporta.
+  vem cumprindo pouco, segure ou recue (ver PERIODIZAÇÃO abaixo). Nunca
+  prescreva estímulo que o nível dele ainda não comporta.
+- PERIODIZAÇÃO — a decisão é SUA, de treinador, ancorada na PROVA real (está no
+  retrato como "Prova-âncora", com distância e semanas até ela). NÃO existe
+  regra fixa de calendário; você raciocina:
+    * COM prova: o polimento/afiação é PROPORCIONAL à DISTÂNCIA. Prova CURTA
+      (5k/10k) pede afiação CURTA — tipicamente só a ÚLTIMA semana; então a ~2
+      semanas de um 10k você AINDA constrói/mantém volume e qualidade, NÃO corta
+      cedo. Meia/maratona pedem polimento mais LONGO (~2-3 semanas). Longe da
+      prova, construa base/volume; só poupe de verdade na véspera.
+    * SEM prova (objetivo de fundo sem data): progrida SEMANA A SEMANA rumo ao
+      objetivo, sem reduzir volume à toa. Só recue por motivo REAL — lesão/dor,
+      pedido do atleta, ou sobrecarga clara (recuperação pontual). Nada de
+      "semana leve" sem razão.
 - 1º plano (sem aderência registrada): comece perto do volume atual, MAS já com
   leve inclinação de evolução e a ESTRUTURA que a meta pede (ex.: se a meta é
   de tempo, inclua um treino no ritmo-alvo). O atleta veio pra MELHORAR, não
@@ -120,6 +131,7 @@ REGRAS:
 Responda APENAS com JSON (o exemplo abaixo é só de FORMATO — NÃO é template pra
 copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedade):
 {{"weekly_objective": "objetivo/foco curto da semana",
+  "phase": "BUILD",
   "sessions": [
     {{"day": "Tuesday", "kind": "run", "workout_type": "Velocidade",
       "distance_km": 9.0, "pace_min": "4:45", "pace_max": "4:50",
@@ -140,6 +152,12 @@ copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedad
       ],
       "purpose": "aumentar o ritmo de prova"}}
   ]}}
+
+"phase" é a SUA decisão de periodização desta semana (ver PERIODIZAÇÃO):
+"BASE" (construir, longe da prova), "BUILD" (qualidade/progressão — padrão e o
+caso SEM prova), "PEAK" (afiação perto da prova), "TAPER" (poupar na semana da
+prova). Coerente com as sessões que você montou — não marque TAPER e mande um
+volumão, nem BUILD e corte tudo.
 
 Cada sessão é uma corrida/caminhada com distance_km, paces, structure (texto),
 steps (estruturado) e purpose. kind: "run" (corrida) ou "walk"/"run_walk"
@@ -249,10 +267,19 @@ class CoachPlanEngine:
             1,
         )
 
+        # a periodização é decisão do COACH (não de um engine rígido): usamos a
+        # fase que ELE marcou; "IA" (não marcou) sinaliza pro chamador cair no
+        # PhaseEngine como fallback. Ver [[feedback_tudo_dinamico]].
+        phase = str(data.get("phase", "")).strip().upper()
+
+        if phase not in {"BASE", "BUILD", "PEAK", "TAPER"}:
+
+            phase = "IA"
+
         return TrainingPlan(
             athlete_name=runner_name,
             objective=objective,
-            phase="IA",
+            phase=phase,
             weekly_volume=weekly_volume,
             running_days=running_days,
             week_start=week_start,

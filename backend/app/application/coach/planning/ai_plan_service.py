@@ -106,11 +106,13 @@ class AIPlanService:
                 context=context,
             )
 
-            # Fase real do ciclo (ancorada na prova): a IA não sabe "que
-            # semana do macrociclo é esta", então marca "IA" ao montar; aqui
-            # gravamos a fase calculada (BASE/BUILD/PICO/TAPER) pra a mensagem
-            # do plano mostrar "📈 Fase" igual ao caminho determinístico.
-            plan.phase = PhaseEngine.execute(goal, week_start)
+            # A periodização é decisão do COACH (ele vê a prova/distância no
+            # retrato e marca a fase coerente com o plano que montou). Só caímos
+            # no PhaseEngine determinístico se ele NÃO marcou (phase="IA") — aí é
+            # rede, não regra. Ver [[feedback_tudo_dinamico]].
+            if plan.phase == "IA":
+
+                plan.phase = PhaseEngine.execute(goal, week_start)
 
             repository.save(profile, plan)
 
