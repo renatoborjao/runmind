@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.coach.writer.ai_analysis_writer import (
     AIAnalysisWriter,
@@ -37,6 +37,58 @@ def _structure(**overrides) -> WorkoutStructure:
     defaults.update(overrides)
 
     return WorkoutStructure(**defaults)
+
+
+def test_athlete_memory_facts_bring_long_term_context():
+    """A análise NÃO pode olhar só o treino de hoje: puxa evolução da forma +
+    memória evolutiva + aprendizados do coach (LEI base-histórico)."""
+
+    with (
+        patch(
+            "app.application.coach.intelligence.fitness_reading_service."
+            "FitnessReadingService.read_evolution",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.application.coach.writer.fitness_evolution_writer."
+            "FitnessEvolutionWriter.line",
+            return_value="forma subindo há 3 semanas",
+        ),
+        patch(
+            "app.application.coach.memory.runner_memory_service."
+            "RunnerMemoryService.render",
+            return_value="Memória: prefere treinar de manhã",
+        ),
+        patch("app.core.config.get_settings") as gs,
+        patch(
+            "app.application.coach.memory.coach_learning_service."
+            "CoachLearningService.render",
+            return_value="Aprendi: responde bem a tiros curtos",
+        ),
+    ):
+
+        gs.return_value.coach_learning_inject_enabled = True
+
+        out = AIAnalysisWriter._athlete_memory_facts("renato")
+
+    assert "QUEM É O ATLETA NO LONGO PRAZO" in out
+    assert "forma subindo há 3 semanas" in out
+    assert "prefere treinar de manhã" in out
+    assert "tiros curtos" in out
+
+
+def test_athlete_memory_facts_best_effort_never_raises():
+    """Uma fonte que explode não pode derrubar a análise — best-effort."""
+
+    with patch(
+        "app.application.coach.memory.runner_memory_service."
+        "RunnerMemoryService.render",
+        side_effect=Exception("boom"),
+    ):
+
+        out = AIAnalysisWriter._athlete_memory_facts("perfil_inexistente_xyz")
+
+    assert isinstance(out, str)  # não levanta; no máximo volta vazio
 
 
 def _write(context=None, **patch_kwargs):

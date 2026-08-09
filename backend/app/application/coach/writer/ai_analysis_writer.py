@@ -113,6 +113,11 @@ perdida, é a condição do dia — e aponte o ajuste (priorizar sono/recuperaç
 Se ele foi BEM apesar de um contexto ruim, RECONHEÇA a resiliência. NUNCA \
 invente causa que não esteja nos fatos; se o desempenho foi normal/bom, não \
 force desculpa nenhuma.
+- LONGO PRAZO (quem é o atleta): se houver "QUEM É O ATLETA NO LONGO PRAZO", \
+use pra PERSONALIZAR — conecte este treino à trajetória/evolução dele, respeite \
+o que ele já te contou (memória) e o que você aprendeu que funciona ou não pra \
+ele. Você não é um robô olhando só hoje: é o treinador que acompanha esse \
+atleta há tempo. Nunca contrarie esses fatos nem invente além deles.
 - Tom de treinador de verdade: direto, humano, encorajador e útil. Fale com \
 "você". Português do Brasil.
 - 2 a {max_bullets} frases curtas, cada uma um ponto. Sem emojis, sem títulos.
@@ -396,7 +401,93 @@ class AIAnalysisWriter:
 
             lines.append(day_context)
 
+        # QUEM É O ATLETA NO LONGO PRAZO: memória evolutiva + aprendizados do
+        # coach + trajetória da forma. Sem isto a análise olha só o treino de
+        # hoje + passado recente e "esquece" quem o atleta é — vira robô. LEI:
+        # [[feedback_base_historico_sempre]]. Mesmas fontes do plano/chat.
+        memory_facts = AIAnalysisWriter._athlete_memory_facts(runner.id)
+
+        if memory_facts:
+
+            lines.append(memory_facts)
+
         return "\n".join(lines)
+
+    @staticmethod
+    def _athlete_memory_facts(profile: str) -> str:
+        """Contexto de LONGO PRAZO do atleta pra a análise: evolução da forma,
+        memória evolutiva (preferências/histórico que ele contou) e o que o
+        coach APRENDEU sobre ele. Best-effort — cada peça que falhar não entra;
+        nunca derruba a análise. Espelha ConversationContextBuilder."""
+
+        lines: list[str] = []
+
+        try:
+
+            from app.application.coach.intelligence.fitness_reading_service import (  # noqa: E501
+                FitnessReadingService,
+            )
+            from app.application.coach.writer.fitness_evolution_writer import (
+                FitnessEvolutionWriter,
+            )
+
+            evo = FitnessEvolutionWriter.line(
+                FitnessReadingService.read_evolution(profile)
+            )
+
+            if evo:
+
+                lines.append(f"Evolução da forma: {evo}")
+
+        except Exception as e:
+
+            print(f"Análise (evolução) falhou p/ '{profile}': {e}")
+
+        try:
+
+            from app.application.coach.memory.runner_memory_service import (
+                RunnerMemoryService,
+            )
+
+            memory = RunnerMemoryService.render(profile)
+
+            if memory:
+
+                lines.append(memory)
+
+        except Exception as e:
+
+            print(f"Análise (memória) falhou p/ '{profile}': {e}")
+
+        try:
+
+            from app.core.config import get_settings
+
+            if get_settings().coach_learning_inject_enabled:
+
+                from app.application.coach.memory.coach_learning_service import (
+                    CoachLearningService,
+                )
+
+                learnings = CoachLearningService.render(profile)
+
+                if learnings:
+
+                    lines.append(learnings)
+
+        except Exception as e:
+
+            print(f"Análise (aprendizados) falhou p/ '{profile}': {e}")
+
+        if not lines:
+
+            return ""
+
+        return (
+            "QUEM É O ATLETA NO LONGO PRAZO (você o acompanha há tempo — "
+            "considere ao analisar, não olhe só o treino de hoje):\n"
+            + "\n".join(lines)
+        )
 
     # sensação do atleta (directWorkoutFeel do Garmin, 0-100 em passos de 25)
     _FEEL_WORDS = {
