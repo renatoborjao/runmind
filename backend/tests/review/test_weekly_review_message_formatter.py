@@ -303,6 +303,42 @@ def test_adherence_section_shows_only_last_four_weeks():
     assert "• Últimas 4 semanas: 3/3 · 3/3 · 3/3 · 3/3 (100%)" in message
 
 
+def test_adherence_rising_suppressed_when_series_is_perfect():
+    """Bug do Renato: série exibida toda 3/3 NÃO pode dizer 'cumprindo mais que
+    antes' — contradiz o que ele vê (é teto/estável, não crescente). O streak
+    acima já celebra; a linha vira redundante e sem nexo."""
+
+    from app.domain.entities.adherence_report import ADHERENCE_RISING
+
+    report = _adherence_report([(3, 3)] * 4, trend=ADHERENCE_RISING)
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence_history=report),
+    )
+
+    assert "cumprindo mais que nas semanas anteriores" not in message
+
+
+def test_adherence_rising_shown_when_series_actually_climbs():
+    """Quando a série EXIBIDA sobe de verdade (1/3 → 3/3), aí sim faz sentido
+    dizer que vem cumprindo mais."""
+
+    from app.domain.entities.adherence_report import ADHERENCE_RISING
+
+    report = _adherence_report(
+        [(1, 3), (2, 3), (2, 3), (3, 3)],
+        trend=ADHERENCE_RISING,
+    )
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(adherence_history=report),
+    )
+
+    assert "cumprindo mais que nas semanas anteriores" in message
+
+
 def test_adherence_section_comments_falling_trend():
 
     from app.domain.entities.adherence_report import ADHERENCE_FALLING

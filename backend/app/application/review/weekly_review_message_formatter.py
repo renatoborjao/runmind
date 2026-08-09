@@ -265,7 +265,18 @@ class WeeklyReviewMessageFormatter:
 
         lines.append(f"• Últimas {len(shown)} semanas: {series}{rate}")
 
-        if report.trend == ADHERENCE_RISING:
+        # "vem cumprindo MAIS" só faz sentido se a série EXIBIDA sobe de verdade.
+        # Quando as semanas mostradas estão no teto (todas cumpridas) ou iguais,
+        # dizer "mais que antes" contradiz o que o atleta vê (3/3·3/3·3/3·3/3) —
+        # a linha do streak acima já celebra. Suprime (fim da redundância + do
+        # sem-nexo). Bug do Renato.
+        shown_perfect = all(
+            week.done >= week.planned for week in shown if week.planned
+        )
+
+        shown_flat = len({(week.done, week.planned) for week in shown}) == 1
+
+        if report.trend == ADHERENCE_RISING and not (shown_perfect or shown_flat):
 
             lines.append(
                 "• Você vem cumprindo mais que nas semanas anteriores 👏"
