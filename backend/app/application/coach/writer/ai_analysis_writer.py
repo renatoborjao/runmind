@@ -113,6 +113,10 @@ perdida, é a condição do dia — e aponte o ajuste (priorizar sono/recuperaç
 Se ele foi BEM apesar de um contexto ruim, RECONHEÇA a resiliência. NUNCA \
 invente causa que não esteja nos fatos; se o desempenho foi normal/bom, não \
 force desculpa nenhuma.
+- DORES/LESÕES: se houver "DORES/LESÕES", leve SEMPRE em conta — NUNCA cobre \
+desempenho, ritmo ou volume ignorando uma dor ou lesão declarada. Reconheça, \
+priorize recuperação e, se for dor, oriente cautela (e procurar profissional se \
+persistir). Jamais mande "forçar" ou "compensar" em cima de dor.
 - LONGO PRAZO (quem é o atleta): se houver "QUEM É O ATLETA NO LONGO PRAZO", \
 use pra PERSONALIZAR — conecte este treino à trajetória/evolução dele, respeite \
 o que ele já te contou (memória) e o que você aprendeu que funciona ou não pra \
@@ -401,6 +405,16 @@ class AIAnalysisWriter:
 
             lines.append(day_context)
 
+        # DORES/LESÕES: limitações declaradas + check-in de dor recente. A
+        # análise JAMAIS pode comentar um treino ignorando que o atleta está
+        # lesionado ou relatou dor — é o que separa coach de robô. LEI:
+        # [[feedback_base_historico_sempre]].
+        pain_facts = AIAnalysisWriter._pain_facts(runner.id, runner.injuries)
+
+        if pain_facts:
+
+            lines.append(pain_facts)
+
         # QUEM É O ATLETA NO LONGO PRAZO: memória evolutiva + aprendizados do
         # coach + trajetória da forma. Sem isto a análise olha só o treino de
         # hoje + passado recente e "esquece" quem o atleta é — vira robô. LEI:
@@ -412,6 +426,55 @@ class AIAnalysisWriter:
             lines.append(memory_facts)
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _pain_facts(profile: str, injuries: list[str]) -> str:
+        """Dores/lesões do atleta: limitações declaradas (perfil) + check-in de
+        dor recente. A análise tem que considerar SEMPRE — nunca cobrar
+        desempenho/volume em cima de dor ou lesão. Best-effort — nunca derruba."""
+
+        lines: list[str] = []
+
+        if injuries:
+
+            lines.append(
+                "Lesões/limitações declaradas: " + ", ".join(injuries)
+            )
+
+        try:
+
+            from app.core.clock import today_local
+            from app.infrastructure.persistence.checkin_repository import (
+                CheckinRepository,
+            )
+
+            checkin = CheckinRepository().latest_recent(
+                profile, today_local().isoformat()
+            )
+
+            if checkin is not None and (checkin.soreness or 0) >= 2:
+
+                note = (checkin.note or "").strip()
+
+                detail = f": {note}" if note else ""
+
+                lines.append(
+                    f"Dor/desconforto relatado recentemente "
+                    f"(nível {checkin.soreness}){detail}"
+                )
+
+        except Exception as e:
+
+            print(f"Dores p/ análise falharam p/ '{profile}': {e}")
+
+        if not lines:
+
+            return ""
+
+        return (
+            "DORES/LESÕES (considere SEMPRE — NUNCA cobre desempenho/volume "
+            "ignorando dor ou lesão):\n" + "\n".join(lines)
+        )
 
     @staticmethod
     def _athlete_memory_facts(profile: str) -> str:
