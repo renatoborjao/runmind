@@ -133,3 +133,42 @@ def test_force_regenerates_by_ai_even_with_cached_plan():
     coach.generate.assert_awaited_once()
     wps.get_or_generate.assert_not_called()
     assert plan.source == "runmind"
+
+
+def test_fill_time_based_km_estimates_and_counts_all_types():
+    """Sessão por TEMPO ganha km estimado (duração ÷ pace) e o volume da semana
+    passa a contar TODOS os tipos, não só os por distância."""
+
+    from app.domain.entities.planned_session import PlannedSession
+
+    tempo = PlannedSession(
+        day="Tuesday", workout_type="Tempo", objective="",
+        planned_distance_km=None, planned_duration_minutes=40,
+        target_pace_min="5:00", target_pace_max="5:00",  # 5 min/km => 8 km
+    )
+    livre = PlannedSession(
+        day="Thursday", workout_type="Livre", objective="",
+        planned_distance_km=None, planned_duration_minutes=45,
+        target_pace_min=None, target_pace_max=None,  # sem pace -> usa easy
+    )
+    longao = PlannedSession(
+        day="Sunday", workout_type="Longão", objective="",
+        planned_distance_km=12.0, planned_duration_minutes=None,
+        target_pace_min="6:00", target_pace_max="6:30",
+    )
+
+    plan = TrainingPlan(
+        athlete_name="Renato", objective="10k", phase="BUILD",
+        weekly_volume=12.0, running_days=["Tuesday", "Thursday", "Sunday"],
+        week_start=WEEK, sessions=[tempo, livre, longao],
+    )
+
+    metrics = MagicMock(easy_pace_min=6.0, easy_pace_max=7.0)  # mid 6.5 min/km
+
+    AIPlanService._fill_time_based_km(plan, metrics)
+
+    assert tempo.estimated_distance_km == 8.0            # 40 / 5.0
+    assert livre.estimated_distance_km == round(45 / 6.5, 1)  # fallback easy
+    assert longao.estimated_distance_km is None          # já tem km planejado
+    # volume conta os 3 (8 + ~6.9 + 12), não só o longão de 12
+    assert plan.weekly_volume > 25

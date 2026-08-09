@@ -328,11 +328,18 @@ class WeeklyPlanMessageFormatter:
 
             if done_days is not None:
 
-                mark = (
-                    "✅ (feito)"
-                    if session.day in done_days
-                    else "❌ (não feito)"
-                )
+                if session.day in done_days:
+
+                    # km REAL corrido (todos os tipos) — "45 min → 6,2 km"
+                    km = session.executed_distance_km
+
+                    extra = f" · {km:.1f} km" if km else ""
+
+                    mark = f"✅ (feito){extra}"
+
+                else:
+
+                    mark = "❌ (não feito)"
 
             else:
 

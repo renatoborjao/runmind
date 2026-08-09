@@ -111,6 +111,9 @@ class OnDemandAnswers:
                 history.activities,
             )
 
+            # km REAL corrido por sessão feita (todos os tipos): "✅ feito · X km"
+            WeeklyPlanMatcher.hydrate_executed(plan, history.activities)
+
             return WeeklyPlanMessageFormatter.week_plan_message(
                 runner.name,
                 plan,

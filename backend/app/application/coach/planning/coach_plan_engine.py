@@ -262,8 +262,10 @@ class CoachPlanEngine:
 
         running_days = [s.day for s in sessions if s.kind == "run"]
 
+        # volume com o km EFETIVO (distância, ou estimativa de tempo quando o
+        # AIPlanService a preenche depois) — conta todos os tipos.
         weekly_volume = round(
-            sum(s.planned_distance_km or 0 for s in sessions),
+            sum(s.effective_distance_km or 0 for s in sessions),
             1,
         )
 

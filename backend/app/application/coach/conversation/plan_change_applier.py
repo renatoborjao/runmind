@@ -100,9 +100,11 @@ class PlanChangeApplier:
             if session.kind == "run"
         ]
 
+        # km EFETIVO (distância, ou estimativa de tempo) — volume conta todos
+        # os tipos, inclusive sessões por tempo.
         plan.weekly_volume = round(
             sum(
-                session.planned_distance_km or 0
+                session.effective_distance_km or 0
                 for session in plan.sessions
             ),
             1,

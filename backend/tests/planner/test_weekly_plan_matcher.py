@@ -276,3 +276,43 @@ def test_distance_fallback_is_chronological_not_by_id():
         WeeklyPlanMatcher.match(plan, activities, easy_later).planned_distance_km
         == 4.0
     )
+
+
+def test_hydrate_executed_fills_real_km_including_time_based():
+    """O km REAL do treino casado é gravado na sessão (todos os tipos),
+    inclusive por tempo — pra o '✅ feito' mostrar quanto foi corrido."""
+
+    # sessão por TEMPO (sem km planejado): terça 45 min
+    time_session = PlannedSession(
+        day="Tuesday", workout_type="Rodagem", objective="",
+        planned_distance_km=None, planned_duration_minutes=45,
+        target_pace_min="6:30", target_pace_max="7:00",
+    )
+    dist_session = _session("Thursday", 8.0)
+
+    plan = _plan([time_session, dist_session])
+
+    # terça (offset 1) correu 6.2 km; quinta (offset 3) 8.1 km
+    activities = [_run(1, 6.2, "a1"), _run(3, 8.1, "a2")]
+
+    WeeklyPlanMatcher.hydrate_executed(plan, activities)
+
+    assert time_session.executed_distance_km == 6.2
+    assert dist_session.executed_distance_km == 8.1
+
+
+def test_effective_distance_km_prefers_planned_then_estimate():
+
+    s = PlannedSession(
+        day="Tuesday", workout_type="Rodagem", objective="",
+        planned_distance_km=None, planned_duration_minutes=45,
+        target_pace_min=None, target_pace_max=None,
+    )
+
+    assert s.effective_distance_km is None  # sem km e sem estimativa ainda
+
+    s.estimated_distance_km = 6.5
+    assert s.effective_distance_km == 6.5   # cai na estimativa
+
+    s.planned_distance_km = 8.0
+    assert s.effective_distance_km == 8.0   # distância planejada tem prioridade
