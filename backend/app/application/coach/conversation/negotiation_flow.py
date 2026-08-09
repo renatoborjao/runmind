@@ -47,6 +47,7 @@ class NegotiationFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
+        athlete_context: str = "",
     ) -> str | None:
 
         # treinador humano: Ritmind só acompanha, não remonta o plano dele
@@ -68,6 +69,7 @@ class NegotiationFlow:
             runner,
             plan,
             incoming_text,
+            athlete_context=athlete_context,
         )
 
         # a IA concluiu que não era um pedido de ajuste claro

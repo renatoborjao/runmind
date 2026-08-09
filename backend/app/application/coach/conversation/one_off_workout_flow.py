@@ -60,13 +60,16 @@ class OneOffWorkoutFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
+        athlete_context: str = "",
     ) -> str | None:
 
         if not OneOffWorkoutDetector.looks_like_request(incoming_text):
 
             return None
 
-        return await OneOffWorkoutFlow.build_for(profile, runner, incoming_text)
+        return await OneOffWorkoutFlow.build_for(
+            profile, runner, incoming_text, athlete_context=athlete_context,
+        )
 
     @staticmethod
     async def build_for(
