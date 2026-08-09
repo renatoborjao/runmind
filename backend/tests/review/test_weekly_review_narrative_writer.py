@@ -62,14 +62,16 @@ def test_facts_frame_a_race_goal():
     facts = WeeklyReviewNarrativeWriter._facts(
         "Renato",
         _review({
-            "name": "10 km sub-50", "has_race": True,
-            "weeks_to_race": 5, "target_time": "00:50:00",
+            "name": "correr 21 km com saúde", "has_race": True,
+            "race_label": "10 km", "weeks_to_race": 5, "target_time": "00:50:00",
         }),
     )
 
-    assert "PROVA/MARCA" in facts
+    # a PROVA (10k) é distinta do OBJETIVO de fundo (21km) — não conflar
+    assert "Próxima prova: 10 km" in facts
     assert "faltam 5 semanas" in facts
     assert "alvo 00:50:00" in facts
+    assert "Objetivo de fundo: correr 21 km com saúde" in facts
 
 
 def test_facts_include_predicted_time_when_present():

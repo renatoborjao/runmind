@@ -73,6 +73,30 @@ def test_message_taper_only_for_our_athletes():
     assert external is None
 
 
+def test_message_uses_race_distance_not_goal_aspiration():
+    """Bug real do Renato: a prova (10k) era rotulada com o OBJETIVO de fundo
+    (goal.name = 'correr 21 km, buscar saúde...') → 'polimento pra 21km'. Tem
+    que citar a PROVA (10 km), nunca a aspiração."""
+
+    runner = make_runner(external_coach=False)
+
+    goal = TrainingGoal(
+        name="correr 21 km, buscar saúde/evolução e correr mais rápido",
+        distance_km=10.0, target_time=None, race_date=date(2026, 8, 23),
+    )
+
+    with patch.object(
+        RaceCompanionNotifier, "_pace_line", new=AsyncMock(return_value=None)
+    ):
+        msg = asyncio.run(
+            RaceCompanionNotifier._message("p", runner, goal, "taper")
+        )
+
+    assert "10 km" in msg
+    assert "21 km" not in msg
+    assert "saúde" not in msg  # a aspiração não vaza como nome da prova
+
+
 def test_message_race_day_is_energizing():
 
     msg = _message("race_day")

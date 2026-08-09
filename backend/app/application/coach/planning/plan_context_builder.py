@@ -192,18 +192,23 @@ class PlanContextBuilder:
 
         if goal.race_date is None:
 
-            return f"Meta: {goal.name} (sem prova marcada)."
+            return f"Objetivo do atleta: {goal.name} (sem prova marcada)."
 
         target = f", alvo {goal.target_time}" if goal.target_time else ""
 
         race = (
-            f" — {weeks_to_race} semanas até a prova"
+            f" ({weeks_to_race} semanas até ela)"
             if weeks_to_race is not None
             else ""
         )
 
+        # separa o OBJETIVO de fundo (aspiração, ex.: 21km/saúde, sem data) da
+        # PROVA-âncora concreta (ex.: 10k em 23/08) — periodize PRA A PROVA, mas
+        # sem confundir a distância dela com a meta de fundo. Bug do Renato: a
+        # prova de 10k virava "meta de 21km em 2 semanas".
         return (
-            f"Meta: {goal.name} em "
+            f"Objetivo de fundo do atleta: {goal.name}.\n"
+            f"Prova-âncora (periodize pra ela): {goal.race_label} em "
             f"{goal.race_date.strftime('%d/%m/%Y')}{target}{race}."
         )
 
