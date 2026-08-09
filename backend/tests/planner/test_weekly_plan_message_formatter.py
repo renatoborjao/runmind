@@ -475,3 +475,27 @@ def test_week_plan_empty_plan_is_friendly():
     )
 
     assert "ainda não há um plano" in text
+
+
+def test_done_session_shows_executed_km_for_time_based():
+    """'✅ (feito)' mostra o km REAL corrido, inclusive numa sessão por tempo:
+    '45 min → 6.2 km'."""
+
+    tue = _session(
+        "Tuesday", "Rodagem", None,
+        planned_duration_minutes=45,
+        executed_distance_km=6.2,
+    )
+
+    plan = _plan([tue])  # week_start 20/07; terça = 21/07
+
+    lines = WeeklyPlanMessageFormatter.session_lines(
+        plan,
+        reference_date=date(2026, 7, 26),   # domingo, terça já passou
+        done_days={"Tuesday"},
+    )
+
+    text = "\n".join(lines)
+
+    assert "45 min" in text            # cabeçalho por tempo
+    assert "✅ (feito) · 6.2 km" in text  # km executado no feito

@@ -28,6 +28,17 @@ class PlannedSession:
 
     adjustment_reason: str | None = None
 
+    # km ESTIMADO de uma sessão por tempo (duração ÷ pace), preenchido na
+    # geração do plano — pra o volume contar TODOS os tipos, não só os por
+    # distância (treino "45 min" deixava de somar km). None quando é por
+    # distância (usa planned_distance_km) ou quando não dá pra estimar.
+    estimated_distance_km: float | None = None
+
+    # km REAL executado nesta sessão (do treino que casou no histórico) —
+    # preenchido na leitura, pra o "✅ feito" mostrar "45 min → 6,2 km" em
+    # QUALQUER tipo. None = ainda não feito / sem treino casado.
+    executed_distance_km: float | None = None
+
     # Estrutura de intervalos para run/walk (caminhada/trote). Quando
     # presente, a sessão é medida em tempo, não em km. Ex:
     #   {"warmup_min": 5, "trot_sec": 60, "walk_sec": 180,
@@ -63,3 +74,15 @@ class PlannedSession:
     #   conteúdo empurrado: se o treino muda, o fingerprint muda e a
     #   reconciliação desagenda o antigo e empurra o novo).
     garmin: dict | None = None
+
+    @property
+    def effective_distance_km(self) -> float | None:
+        """km da sessão pra CONTABILIDADE de volume — vale pra TODOS os tipos:
+        a distância planejada quando há; senão a estimativa (duração ÷ pace)
+        guardada pra sessão por tempo. None só quando não dá pra saber."""
+
+        if self.planned_distance_km:
+
+            return self.planned_distance_km
+
+        return self.estimated_distance_km

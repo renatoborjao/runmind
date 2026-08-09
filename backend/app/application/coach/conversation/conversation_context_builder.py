@@ -602,6 +602,10 @@ class ConversationContextBuilder:
             history.activities,
         )
 
+        # km REAL corrido em cada sessão feita (todos os tipos) — o "✅ feito"
+        # mostra "45 min → 6,2 km".
+        WeeklyPlanMatcher.hydrate_executed(plan, history.activities)
+
         today = today_local()
 
         # plano de uma semana já encerrada (ex.: treinador externo que ainda

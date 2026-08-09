@@ -69,6 +69,39 @@ class WeeklyPlanMatcher:
         }
 
     @staticmethod
+    def hydrate_executed(
+        plan: TrainingPlan,
+        activities: list[Activity],
+    ) -> None:
+        """Preenche `session.executed_distance_km` com o km REAL do treino que
+        casou (todos os tipos) — pra o '✅ feito' mostrar quanto foi corrido,
+        inclusive em sessão por tempo. Soma se houver +1 treino no dia."""
+
+        if not plan.sessions:
+
+            return
+
+        assignments = WeeklyPlanMatcher._assign_week(plan, activities)
+
+        by_id = {activity.id: activity for activity in activities}
+
+        for activity_id, session in assignments.items():
+
+            if session is None:
+
+                continue
+
+            activity = by_id.get(activity_id)
+
+            if activity is None:
+
+                continue
+
+            done = (session.executed_distance_km or 0) + activity.distance / 1000
+
+            session.executed_distance_km = round(done, 1)
+
+    @staticmethod
     def _assign_week(
         plan: TrainingPlan,
         activities: list[Activity],

@@ -114,6 +114,10 @@ class AIPlanService:
 
                 plan.phase = PhaseEngine.execute(goal, week_start)
 
+            # km estimado das sessões por TEMPO (duração ÷ pace) + volume real
+            # da semana contando TODOS os tipos (não só os por distância).
+            AIPlanService._fill_time_based_km(plan, metrics)
+
             repository.save(profile, plan)
 
             return plan
@@ -447,6 +451,48 @@ class AIPlanService:
         )
 
         return past[-limit:]
+
+    @staticmethod
+    def _fill_time_based_km(plan, metrics) -> None:
+        """Estima o km de cada sessão por TEMPO (duração ÷ pace) e recomputa o
+        volume da semana com o km EFETIVO — pra o volume/meta contar TODOS os
+        tipos, não só os por distância. Pace da sessão; se não houver, cai no
+        pace fácil real do atleta. Best-effort: falhar aqui nunca quebra o plano."""
+
+        from app.application.planner.pace_formatter import PaceFormatter
+
+        easy_mid = None
+
+        if metrics.easy_pace_min and metrics.easy_pace_max:
+
+            easy_mid = (metrics.easy_pace_min + metrics.easy_pace_max) / 2
+
+        for session in plan.sessions:
+
+            if session.planned_distance_km or not session.planned_duration_minutes:
+
+                continue
+
+            paces = [
+                p
+                for p in (
+                    PaceFormatter.to_minutes(session.target_pace_min),
+                    PaceFormatter.to_minutes(session.target_pace_max),
+                )
+                if p
+            ]
+
+            pace_mid = sum(paces) / len(paces) if paces else easy_mid
+
+            if pace_mid:
+
+                session.estimated_distance_km = round(
+                    session.planned_duration_minutes / pace_mid, 1
+                )
+
+        plan.weekly_volume = round(
+            sum(s.effective_distance_km or 0 for s in plan.sessions), 1
+        )
 
     @staticmethod
     def _weeks_to_race(goal: TrainingGoal, week_start: date) -> int | None:
