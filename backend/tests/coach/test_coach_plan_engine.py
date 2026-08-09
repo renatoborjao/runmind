@@ -54,6 +54,29 @@ def _generate(response):
         )
 
 
+def test_coach_owns_the_phase():
+    """A periodização é decisão do COACH: a fase que ele marca no JSON vale."""
+
+    raw = (
+        '{"weekly_objective": "construir", "phase": "BUILD", "sessions": '
+        '[{"day": "Tuesday", "kind": "run", "workout_type": "Rodagem", '
+        '"distance_km": 8, "pace_min": "6:00", "pace_max": "6:30", '
+        '"structure": "8 km leve", "purpose": "base"}]}'
+    )
+
+    plan = _generate(raw)
+
+    assert plan.phase == "BUILD"
+
+
+def test_missing_or_invalid_phase_defers_to_fallback():
+    """Sem fase válida => 'IA' (o chamador cai no PhaseEngine como rede)."""
+
+    plan = _generate(RENATO_PLAN_JSON)  # fixture não tem "phase"
+
+    assert plan.phase == "IA"
+
+
 def test_parses_only_the_running_sessions():
 
     plan = _generate(RENATO_PLAN_JSON)
