@@ -26,6 +26,7 @@ class PlanContextBuilder:
         last_plan: TrainingPlan | None,
         memory: str,
         weeks_to_race: int | None,
+        days_to_race: int | None = None,
         executed: str = "",
         run_walk: bool = False,
         adherence_report: AdherenceReport | None = None,
@@ -37,7 +38,9 @@ class PlanContextBuilder:
 
         lines = [f"Atleta: {runner.name}"]
 
-        lines.append(PlanContextBuilder._goal_line(goal, weeks_to_race))
+        lines.append(
+            PlanContextBuilder._goal_line(goal, weeks_to_race, days_to_race)
+        )
 
         # iniciante que começa correndo-caminhando: os dados do onboarding
         # (peso/altura/capacidade) guiam a IA a montar caminhada + run/walk
@@ -188,7 +191,11 @@ class PlanContextBuilder:
         return "".join(parts)
 
     @staticmethod
-    def _goal_line(goal: TrainingGoal, weeks_to_race: int | None) -> str:
+    def _goal_line(
+        goal: TrainingGoal,
+        weeks_to_race: int | None,
+        days_to_race: int | None = None,
+    ) -> str:
 
         if goal.race_date is None:
 
@@ -196,11 +203,20 @@ class PlanContextBuilder:
 
         target = f", alvo {goal.target_time}" if goal.target_time else ""
 
-        race = (
-            f" ({weeks_to_race} semanas até ela)"
-            if weeks_to_race is not None
-            else ""
-        )
+        # contador em DIAS (preciso): perto da prova, o piso de semanas engana
+        # (13 dias virava "1 semana" e o coach afiava cedo). Semanas só como
+        # referência grosseira quando ainda falta muito.
+        if days_to_race is not None:
+
+            race = f" (faltam {days_to_race} dias)"
+
+        elif weeks_to_race is not None:
+
+            race = f" ({weeks_to_race} semanas até ela)"
+
+        else:
+
+            race = ""
 
         # separa o OBJETIVO de fundo (aspiração, ex.: 21km/saúde, sem data) da
         # PROVA-âncora concreta (ex.: 10k em 23/08) — periodize PRA A PROVA, mas

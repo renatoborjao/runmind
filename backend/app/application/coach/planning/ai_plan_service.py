@@ -185,6 +185,15 @@ class AIPlanService:
 
         weeks_to_race = AIPlanService._weeks_to_race(goal, week_start)
 
+        # dias EXATOS até a prova — perto dela, "1 vs 2 semanas" (piso de //7)
+        # muda a decisão de taper (13 dias de um 10k virava "1 semana" e o coach
+        # afiava cedo demais). O coach decide a periodização; damos o número certo.
+        days_to_race = (
+            (goal.race_date - week_start).days
+            if goal.race_date and goal.race_date > week_start
+            else None
+        )
+
         executed = ExecutedWeekSummary.build(
             last_week_plan,
             history.activities,
@@ -225,6 +234,7 @@ class AIPlanService:
             executed=executed,
             memory=memory,
             weeks_to_race=weeks_to_race,
+            days_to_race=days_to_race,
             run_walk=run_walk,
             adherence_report=adherence_report,
             learnings=learnings,

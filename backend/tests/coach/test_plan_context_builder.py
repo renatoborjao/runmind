@@ -103,3 +103,27 @@ def test_no_pattern_adds_no_line():
     assert "deixa pra trás" not in _context_with_report(AdherenceReport())
 
     assert "deixa pra trás" not in _context_with_report(None)
+
+
+def test_goal_line_counts_days_not_floored_weeks():
+    """13 dias até a prova é ~2 semanas — mostrar 'faltam 13 dias', não
+    '1 semana' (o piso de //7 enganava o coach a afiar cedo). Bug do Renato.
+    Além disso, prova (10k) e objetivo de fundo (21km) ficam separados."""
+
+    from datetime import date
+
+    goal = TrainingGoal(
+        name="correr 21 km, buscar saúde",
+        distance_km=10.0,
+        target_time=None,
+        race_date=date(2026, 8, 23),
+    )
+
+    line = PlanContextBuilder._goal_line(
+        goal, weeks_to_race=1, days_to_race=13,
+    )
+
+    assert "faltam 13 dias" in line
+    assert "1 semana" not in line
+    assert "Prova-âncora" in line and "10 km" in line
+    assert "Objetivo de fundo" in line
