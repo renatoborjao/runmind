@@ -82,6 +82,8 @@ class CoachBrainExecutor:
             conversation_history=conversation_history,
         )
 
+        CoachBrainExecutor._log(profile, incoming_text, pending, decision)
+
         if decision is None:
 
             return None
@@ -91,13 +93,14 @@ class CoachBrainExecutor:
 
             return await CoachBrainExecutor._resolve_pending(
                 profile, runner, decision, pending, repo, incoming_text,
+                context_facts,
             )
 
         # 2) pedido de MUDANÇA no plano
         if decision.action is not None:
 
             applied = await CoachBrainExecutor._act(
-                profile, runner, decision, repo, incoming_text,
+                profile, runner, decision, repo, incoming_text, context_facts,
             )
 
             if applied is not None:
@@ -125,6 +128,7 @@ class CoachBrainExecutor:
     @staticmethod
     async def _resolve_pending(
         profile, runner, decision: BrainDecision, pending, repo, incoming_text,
+        context_facts="",
     ) -> str | None:
 
         if decision.on_pending == "apply":
@@ -159,7 +163,7 @@ class CoachBrainExecutor:
         if decision.action is not None:
 
             applied = await CoachBrainExecutor._act(
-                profile, runner, decision, repo, incoming_text,
+                profile, runner, decision, repo, incoming_text, context_facts,
             )
 
             if applied is not None:
@@ -173,6 +177,7 @@ class CoachBrainExecutor:
     @staticmethod
     async def _act(
         profile, runner, decision: BrainDecision, repo, incoming_text,
+        context_facts="",
     ) -> str | None:
         """Concretiza a ação: mudanças da semana viram PROPOSTA (pedem 'sim');
         rotina durável vira MEMÓRIA; objetivo/preferência os appliers aplicam.
@@ -182,7 +187,15 @@ class CoachBrainExecutor:
 
         if action.type in _PROPOSAL_ACTIONS:
 
-            return await CoachBrainExecutor._propose(profile, runner, decision, repo)
+            return await CoachBrainExecutor._propose(
+                profile, runner, decision, repo, context_facts,
+            )
+
+        if action.type == "one_off":
+
+            return await CoachBrainExecutor._one_off(
+                profile, runner, incoming_text, context_facts,
+            )
 
         if action.type == "routine":
 
@@ -219,13 +232,29 @@ class CoachBrainExecutor:
         )
 
     @staticmethod
+    async def _one_off(profile, runner, incoming_text, context_facts="") -> str | None:
+        """Treino AVULSO pra um dia que o plano não cobre ("monta um treino pra
+        domingo") — monta UMA sessão ancorada no histórico/evolução do atleta e
+        oferece o relógio. Roteia pro fluxo especialista SEM o portão de
+        palavra-chave (o cérebro já reconheceu). None se não deu (cai na fala)."""
+
+        from app.application.coach.conversation.one_off_workout_flow import (
+            OneOffWorkoutFlow,
+        )
+
+        return await OneOffWorkoutFlow.build_for(
+            profile, runner, incoming_text, athlete_context=context_facts,
+        )
+
+    @staticmethod
     async def _propose(
-        profile, runner, decision: BrainDecision, repo,
+        profile, runner, decision: BrainDecision, repo, context_facts="",
     ) -> str | None:
         """Monta a proposta (move/skip via MoveSkipEngine; adjust/simplify via
         NegotiationEngine) COM ESCOPO, guarda pendente e devolve o preview.
         Pedido COMPOSTO (mover de dia E mudar o conteúdo) vira UMA proposta só:
-        move + ajuste da sessão movida."""
+        move + ajuste da sessão movida. O ajuste passa pela base completa do
+        atleta (context_facts) — nunca no vácuo."""
 
         action = decision.action
 
@@ -264,6 +293,7 @@ class CoachBrainExecutor:
 
                 combined = await CoachBrainExecutor._move_and_adjust(
                     runner, plan, operations, request, action.content_change,
+                    context_facts,
                 )
 
                 if combined is not None:
@@ -273,7 +303,7 @@ class CoachBrainExecutor:
         else:  # adjust | simplify
 
             negotiation = await NegotiationEngine.propose(
-                runner, plan, request_text,
+                runner, plan, request_text, athlete_context=context_facts,
             )
 
             if negotiation is None:
@@ -302,6 +332,7 @@ class CoachBrainExecutor:
     @staticmethod
     async def _move_and_adjust(
         runner, plan, move_ops: list[dict], request, content_change: str,
+        context_facts="",
     ) -> tuple[list[dict], str] | None:
         """Composto: sobre o plano JÁ movido, ajusta o CONTEÚDO da sessão que
         mudou de dia (escopo = o dia de destino) e devolve (operações
@@ -322,7 +353,7 @@ class CoachBrainExecutor:
         )
 
         negotiation = await NegotiationEngine.propose(
-            runner, post_move, adjust_text,
+            runner, post_move, adjust_text, athlete_context=context_facts,
         )
 
         if negotiation is None:
@@ -395,6 +426,50 @@ class CoachBrainExecutor:
             parts.append(f"(só o treino de {weekday_label(action.target_day)})")
 
         return " ".join(parts).strip()
+
+    @staticmethod
+    def _log(profile, incoming_text, pending, decision) -> None:
+        """Registra a decisão do cérebro (modo observação). Best-effort: falhar
+        aqui NUNCA pode derrubar a conversa."""
+
+        try:
+
+            from app.core.clock import now_local
+            from app.infrastructure.persistence.coach_brain_log_repository import (
+                CoachBrainLogRepository,
+            )
+
+            entry = {
+                "ts": now_local().isoformat(timespec="seconds"),
+                "incoming": (incoming_text or "")[:200],
+                "pending": pending is not None,
+                "fallback": decision is None,
+            }
+
+            if decision is not None:
+
+                entry["say"] = (decision.say or "")[:200]
+
+                entry["card"] = decision.answer_card
+
+                entry["on_pending"] = decision.on_pending
+
+                if decision.action is not None:
+
+                    a = decision.action
+
+                    entry["action"] = {
+                        "type": a.type,
+                        "scope": a.scope,
+                        "target_day": a.target_day,
+                        "content_change": a.content_change,
+                    }
+
+            CoachBrainLogRepository().record(profile, entry)
+
+        except Exception as e:
+
+            print(f"Log do cérebro falhou p/ '{profile}': {e}")
 
     @staticmethod
     async def _render_card(card: str, profile, runner) -> str | None:

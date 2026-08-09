@@ -194,6 +194,62 @@ def test_routine_preference_persists_to_memory():
     repo.save.assert_not_called()  # rotina vira memória, não proposta pendente
 
 
+def test_one_off_routes_to_flow():
+    """'monta um treino pra domingo' => cérebro roteia pro fluxo do avulso
+    (dia que o plano não cobre). Antes o cérebro não tinha essa mão."""
+
+    decision = BrainDecision(
+        say="Bora, monto teu treino de domingo! 🏃",
+        action=BrainAction("one_off", "single_session", "Sunday", "treino pra domingo"),
+    )
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.build_for",
+                new=AsyncMock(return_value="Montei teu treino de domingo 👇 ..."),
+            ),
+        ],
+    )
+
+    assert reply == "Montei teu treino de domingo 👇 ..."
+    repo.save.assert_not_called()  # o fluxo do avulso grava por conta própria
+
+
+def test_negotiation_receives_full_athlete_context():
+    """O princípio: o ajuste NUNCA é no vácuo — o NegotiationEngine recebe a
+    base completa do atleta (o mesmo context_facts que o cérebro viu)."""
+
+    decision = BrainDecision(
+        say="Deixo mais leve, posso aplicar?",
+        action=BrainAction("adjust", "week", None, "deixa a semana mais leve"),
+    )
+
+    negotiation = MagicMock()
+    negotiation.operations = [{"action": "replace", "day": "Tuesday", "session": {}}]
+    negotiation.message = "Aliviei a semana."
+
+    propose = AsyncMock(return_value=negotiation)
+
+    _run(
+        decision,
+        extra_patches=[
+            _plan_patch(),
+            patch(f"{M}.NegotiationEngine.propose", new=propose),
+            patch(f"{M}.PlanChangeApplier._apply_operations"),
+            patch(
+                f"{M}.WeeklyPlanMessageFormatter.session_lines",
+                return_value=["terça — leve"],
+            ),
+        ],
+    )
+
+    # o context builder mockado devolve "FATOS" — tem que chegar no engine
+    assert propose.call_args.kwargs.get("athlete_context") == "FATOS"
+
+
 def test_compound_move_and_adjust_builds_single_proposal():
     """'passa o longão pra sábado e deixa livre' = UMA proposta: move + ajuste
     do conteúdo da sessão movida (a ressalva do composto, fechada)."""

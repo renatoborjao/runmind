@@ -44,7 +44,8 @@ _CARDS = {
 }
 
 _ACTION_TYPES = {
-    "move", "skip", "adjust", "simplify", "routine", "goal", "preference",
+    "move", "skip", "adjust", "simplify", "one_off", "routine", "goal",
+    "preference",
 }
 
 _SCOPES = {"single_session", "week"}
@@ -67,7 +68,8 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
-  "action": null | {{"type": <move|skip|adjust|simplify|routine|goal|preference>,
+  "action": null | {{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
+preference>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
@@ -94,6 +96,11 @@ target_day=destino E preencha "content_change" com o que muda no conteúdo — o
 sistema faz as duas coisas numa proposta só. Deixar mais leve/livre/sem pace \
 SEM trocar de dia = "simplify" ou "adjust". NÃO aplique agora — o sistema monta \
 a proposta e pergunta "posso aplicar?". No "say", reconheça o pedido.
+- Pedido pra MONTAR um treino NOVO num dia que o plano NÃO cobre ("monta um \
+treino pra domingo", "quero um treino pra hoje", "me dá um treino pra amanhã" \
+num dia sem treino): type="one_off" + target_day. É montar do zero, não mover \
+nem ajustar uma sessão existente. No "say", reconheça (o sistema monta a sessão \
+ancorada no histórico e oferece o relógio).
 - Pedido DURÁVEL de rotina, pra valer DAQUI PRA FRENTE e não só nesta semana \
 ("a partir da próxima, treinos de semana em até 50 min", "fim de semana sempre \
 sem pressa", "de agora em diante deixa terça mais curta"): type="routine". Isso \

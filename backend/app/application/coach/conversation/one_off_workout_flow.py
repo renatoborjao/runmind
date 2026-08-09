@@ -66,6 +66,20 @@ class OneOffWorkoutFlow:
 
             return None
 
+        return await OneOffWorkoutFlow.build_for(profile, runner, incoming_text)
+
+    @staticmethod
+    async def build_for(
+        profile: str,
+        runner: RunnerProfile,
+        incoming_text: str,
+        athlete_context: str = "",
+    ) -> str | None:
+        """Núcleo SEM o portão de palavra-chave: resolve o dia, monta a sessão
+        avulsa ancorada no histórico + estado atual do atleta e oferece o
+        relógio. Usado pelo cérebro do coach (que já reconheceu o pedido) e pelo
+        handle() determinístico (fallback). Ver [[project_roteador_acao_ia]]."""
+
         today = today_local()
 
         target_date = OneOffWorkoutDetector.resolve_target_date(
@@ -136,6 +150,7 @@ class OneOffWorkoutFlow:
             target_label=target_label,
             portrait=portrait,
             week_context=week_context,
+            athlete_context=athlete_context,
         )
 
         # IA não produziu treino utilizável: deixa a conversa seguir (o chat

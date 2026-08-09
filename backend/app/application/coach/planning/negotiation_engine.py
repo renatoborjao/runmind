@@ -34,7 +34,7 @@ PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 {runner_name} mandou uma mensagem que PODE ser um pedido pra AJUSTAR o plano \
 da semana (deixar mais leve/pesado, mais rodagens, menos intensidade, mudar a \
 carga/distribuição...). Meta dele: {objective}.
-
+{athlete_context}
 PLANO DESTA SEMANA (dias de corrida — respeite a MESMA frequência/dias):
 {sessions}
 
@@ -56,6 +56,12 @@ Decida:
    - ESCOPO: se a mensagem apontar UMA sessão ("só o treino de sábado", "o de
      amanhã", "só o longão"), mude SÓ ela — as OUTRAS ficam EXATAMENTE iguais.
      Só ajuste o conjunto se ele falar da semana/geral.
+   - QUADRO DO ATLETA: se houver bloco "QUADRO COMPLETO DO ATLETA" acima,
+     ajuste À LUZ DELE — você é o treinador que acompanha esse atleta há tempo,
+     não um robô montando treino no vácuo. Se ele está sobrecarregado / com
+     risco de lesão / recuperação caindo, NÃO empurre carga; se está fresco e
+     evoluindo, dá pra puxar. Considere o que já funcionou pra ele (memória) e
+     a trajetória — cada ajuste tem que fazer sentido pra ESSE atleta.
    - {time_rule}
 3) Devolva a SEMANA INTEIRA já ajustada (todas as sessões de corrida dos dias
    dele), mesmo as que não mudaram.
@@ -103,6 +109,7 @@ class NegotiationEngine:
         runner: RunnerProfile,
         plan: TrainingPlan,
         incoming_text: str,
+        athlete_context: str = "",
     ) -> Negotiation | None:
 
         settings = get_settings()
@@ -110,6 +117,7 @@ class NegotiationEngine:
         prompt = PROMPT_TEMPLATE.format(
             runner_name=runner.name,
             objective=plan.objective or runner.goal,
+            athlete_context=NegotiationEngine._context_block(athlete_context),
             sessions=NegotiationEngine._render_sessions(plan),
             message=incoming_text.replace('"', "'"),
             time_rule=TIME_OR_DISTANCE_RULE,
@@ -126,6 +134,24 @@ class NegotiationEngine:
                 ),
             ),
             parse=lambda raw: NegotiationEngine._parse(raw, plan),
+        )
+
+    @staticmethod
+    def _context_block(athlete_context: str) -> str:
+        """A base completa do atleta (corpo, evolução, memória, histórico) que o
+        cérebro já viu, pra o ajuste NÃO ser no vácuo. Vazio (fallback
+        determinístico, que não tem o contexto) => sem bloco, comportamento de
+        antes. Ver [[project_roteador_acao_ia]] e o valor 'conversa viva'."""
+
+        context = (athlete_context or "").strip()
+
+        if not context:
+
+            return ""
+
+        return (
+            "\nQUADRO COMPLETO DO ATLETA (você é o TREINADOR que acompanha esse "
+            "atleta — considere SEMPRE ao ajustar):\n" + context + "\n"
         )
 
     @staticmethod
