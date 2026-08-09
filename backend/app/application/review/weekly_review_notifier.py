@@ -119,6 +119,7 @@ class WeeklyReviewNotifier:
         narrative = await WeeklyReviewNarrativeWriter.write(
             runner.name,
             review,
+            profile=profile,
         )
 
         message = WeeklyReviewMessageFormatter.format(

@@ -480,76 +480,19 @@ class AIAnalysisWriter:
     def _athlete_memory_facts(profile: str) -> str:
         """Contexto de LONGO PRAZO do atleta pra a análise: evolução da forma,
         memória evolutiva (preferências/histórico que ele contou) e o que o
-        coach APRENDEU sobre ele. Best-effort — cada peça que falhar não entra;
-        nunca derruba a análise. Espelha ConversationContextBuilder."""
+        coach APRENDEU sobre ele. Fonte única no AthleteLongTermBrief (mesmo
+        bloco usado no chat e nas mensagens proativas)."""
 
-        lines: list[str] = []
+        from app.application.coach.context.athlete_brief import (
+            AthleteLongTermBrief,
+        )
 
-        try:
-
-            from app.application.coach.intelligence.fitness_reading_service import (  # noqa: E501
-                FitnessReadingService,
-            )
-            from app.application.coach.writer.fitness_evolution_writer import (
-                FitnessEvolutionWriter,
-            )
-
-            evo = FitnessEvolutionWriter.line(
-                FitnessReadingService.read_evolution(profile)
-            )
-
-            if evo:
-
-                lines.append(f"Evolução da forma: {evo}")
-
-        except Exception as e:
-
-            print(f"Análise (evolução) falhou p/ '{profile}': {e}")
-
-        try:
-
-            from app.application.coach.memory.runner_memory_service import (
-                RunnerMemoryService,
-            )
-
-            memory = RunnerMemoryService.render(profile)
-
-            if memory:
-
-                lines.append(memory)
-
-        except Exception as e:
-
-            print(f"Análise (memória) falhou p/ '{profile}': {e}")
-
-        try:
-
-            from app.core.config import get_settings
-
-            if get_settings().coach_learning_inject_enabled:
-
-                from app.application.coach.memory.coach_learning_service import (
-                    CoachLearningService,
-                )
-
-                learnings = CoachLearningService.render(profile)
-
-                if learnings:
-
-                    lines.append(learnings)
-
-        except Exception as e:
-
-            print(f"Análise (aprendizados) falhou p/ '{profile}': {e}")
-
-        if not lines:
-
-            return ""
-
-        return (
-            "QUEM É O ATLETA NO LONGO PRAZO (você o acompanha há tempo — "
-            "considere ao analisar, não olhe só o treino de hoje):\n"
-            + "\n".join(lines)
+        return AthleteLongTermBrief.render(
+            profile,
+            header=(
+                "QUEM É O ATLETA NO LONGO PRAZO (você o acompanha há tempo — "
+                "considere ao analisar, não olhe só o treino de hoje):"
+            ),
         )
 
     # sensação do atleta (directWorkoutFeel do Garmin, 0-100 em passos de 25)

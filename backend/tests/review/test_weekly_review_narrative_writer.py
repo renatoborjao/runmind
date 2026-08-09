@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from app.application.review.weekly_review_narrative_writer import (
     WeeklyReviewNarrativeWriter,
 )
@@ -24,6 +26,33 @@ def _review(goal: dict) -> dict:
         "adherence": {"planned": 3, "done": 3},
         "longest_km": 12.0,
     }
+
+
+def test_facts_include_long_term_brief_when_profile_given():
+    """A leitura da semana fala com quem o atleta é: quando há profile, injeta o
+    brief de longo prazo (memória/aprendizados/evolução). LEI base-histórico."""
+
+    with patch(
+        "app.application.coach.context.athlete_brief."
+        "AthleteLongTermBrief.render",
+        return_value="QUEM É O ATLETA NO LONGO PRAZO:\nMemória: prefere rua",
+    ):
+
+        facts = WeeklyReviewNarrativeWriter._facts(
+            "Renato", _review({"name": "saúde"}), profile="renato",
+        )
+
+    assert "QUEM É O ATLETA NO LONGO PRAZO" in facts
+    assert "prefere rua" in facts
+
+
+def test_facts_omit_brief_without_profile():
+    """Sem profile (compatibilidade), nenhum brief é puxado — comportamento
+    de antes."""
+
+    facts = WeeklyReviewNarrativeWriter._facts("Renato", _review({"name": "saúde"}))
+
+    assert "QUEM É O ATLETA NO LONGO PRAZO" not in facts
 
 
 def test_facts_frame_a_race_goal():
