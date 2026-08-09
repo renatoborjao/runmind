@@ -100,13 +100,17 @@ def test_format_shows_race_goal_countdown():
     message = WeeklyReviewMessageFormatter.format(
         "Renato",
         _review(goal={
-            "name": "10 km sub-50", "has_race": True,
-            "weeks_to_race": 5, "target_time": "00:50:00",
+            "name": "correr 21 km com saúde", "has_race": True,
+            "race_label": "10 km", "weeks_to_race": 5, "target_time": "00:50:00",
         }),
     )
 
-    assert "🎯 Rumo à meta" in message
-    assert "• 10 km sub-50 — faltam 5 semanas, alvo 00:50:00" in message
+    # a PROVA (10k) leva a contagem; o objetivo de fundo (21km) vem à parte
+    assert "🎯 Rumo à prova" in message
+    assert "• 10 km — faltam 5 semanas, alvo 00:50:00" in message
+    assert "• Objetivo de fundo: correr 21 km com saúde" in message
+    # a contagem NÃO cola no objetivo de fundo (o bug do Renato)
+    assert "correr 21 km com saúde — faltam" not in message
 
 
 def test_format_shows_predicted_race_time_faster_than_target():

@@ -315,6 +315,10 @@ class WeeklyReviewMessageFormatter:
 
             weeks = goal.get("weeks_to_race")
 
+            # a PROVA pela distância (10k), NUNCA o objetivo de fundo (name):
+            # colar "faltam 2 semanas" no 21km sem data era o bug do Renato.
+            race_label = goal.get("race_label") or "prova"
+
             target = (
                 f", alvo {goal['target_time']}"
                 if goal.get("target_time")
@@ -327,7 +331,7 @@ class WeeklyReviewMessageFormatter:
                 else ""
             )
 
-            lines = ["🎯 Rumo à meta", f"• {name}{faltam}{target}"]
+            lines = ["🎯 Rumo à prova", f"• {race_label}{faltam}{target}"]
 
             predicted_line = PredictedTimeLineFormatter.line(
                 goal.get("predicted_time"),
@@ -337,6 +341,9 @@ class WeeklyReviewMessageFormatter:
             if predicted_line:
 
                 lines.append(predicted_line)
+
+            # objetivo de FUNDO (aspiração, SEM contagem) — separado da prova
+            lines.append(f"• Objetivo de fundo: {name}")
 
             return lines
 
