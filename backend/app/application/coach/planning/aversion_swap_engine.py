@@ -22,7 +22,7 @@ MAX_OUTPUT_TOKENS = 1400
 PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 {runner_name} mandou uma mensagem que PODE ser um pedido pra evitar/trocar um \
 tipo de treino da semana dele. Meta: {objective}.
-
+{athlete_context}
 PLANO DESTA SEMANA (dias de corrida):
 {sessions}
 
@@ -42,7 +42,9 @@ Decida:
    - "medo" (insegurança): proponha uma versão mais gentil do MESMO estímulo
      (dose menor), não remova.
 3) Monte a sessão SUBSTITUTA no mesmo dia e mesma modalidade, ancorada nos
-   paces da meta.
+   paces da meta E no quadro do atleta (se houver bloco "QUADRO COMPLETO DO
+   ATLETA" acima: dose pela recuperação/risco/evolução dele, não no vácuo —
+   você é o treinador que acompanha esse atleta).
 
 Responda APENAS JSON:
 {{"found": true,
@@ -97,6 +99,7 @@ class AversionSwapEngine:
         runner: RunnerProfile,
         plan: TrainingPlan,
         incoming_text: str,
+        athlete_context: str = "",
     ) -> AversionSwap | None:
 
         settings = get_settings()
@@ -104,6 +107,7 @@ class AversionSwapEngine:
         prompt = PROMPT_TEMPLATE.format(
             runner_name=runner.name,
             objective=plan.objective or runner.goal,
+            athlete_context=AversionSwapEngine._context_block(athlete_context),
             sessions=AversionSwapEngine._render_sessions(plan),
             message=incoming_text.replace('"', "'"),
         )
@@ -117,6 +121,23 @@ class AversionSwapEngine:
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
             parse=lambda raw: AversionSwapEngine._parse(raw, plan),
+        )
+
+    @staticmethod
+    def _context_block(athlete_context: str) -> str:
+        """A base completa do atleta (corpo, evolução, memória, histórico) pra a
+        troca NÃO ser no vácuo. Vazio => sem bloco (comportamento de antes).
+        Ver [[feedback_base_historico_sempre]]."""
+
+        context = (athlete_context or "").strip()
+
+        if not context:
+
+            return ""
+
+        return (
+            "\nQUADRO COMPLETO DO ATLETA (você é o TREINADOR que acompanha esse "
+            "atleta — considere SEMPRE ao trocar o treino):\n" + context + "\n"
         )
 
     @staticmethod

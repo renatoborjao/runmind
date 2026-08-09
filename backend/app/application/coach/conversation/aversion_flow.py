@@ -38,9 +38,12 @@ class AversionFlow:
         profile: str,
         runner: RunnerProfile,
         incoming_text: str,
+        athlete_context: str = "",
     ) -> str | None:
         """Devolve o preview da proposta (mensagem pro atleta) se detectou e
-        montou uma troca; None caso contrário (a conversa segue normal)."""
+        montou uma troca; None caso contrário (a conversa segue normal). O
+        athlete_context (base completa, montada UMA vez pela conversa) chega ao
+        engine pra a troca nunca ser no vácuo — ver [[feedback_base_historico_sempre]]."""
 
         # treinador humano: Ritmind só acompanha o plano dele, não mexe
         if runner.external_coach:
@@ -57,7 +60,9 @@ class AversionFlow:
 
             return None
 
-        swap = await AversionSwapEngine.propose(runner, plan, incoming_text)
+        swap = await AversionSwapEngine.propose(
+            runner, plan, incoming_text, athlete_context=athlete_context,
+        )
 
         # a IA concluiu que não era um pedido de troca claro
         if swap is None:

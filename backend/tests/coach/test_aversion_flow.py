@@ -1,6 +1,6 @@
 import asyncio
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -67,10 +67,15 @@ def test_handle_proposes_and_stores_the_pending_proposal():
         engine.propose = AsyncMock(return_value=_swap())
 
         reply = asyncio.run(
-            AversionFlow.handle("renato", runner, "não curto tiro na pista")
+            AversionFlow.handle(
+                "renato", runner, "não curto tiro na pista",
+                athlete_context="FATOS",
+            )
         )
 
     assert "Aplico?" in reply
+    # a base completa do atleta chega no engine (nunca decide no vácuo)
+    assert engine.propose.call_args.kwargs.get("athlete_context") == "FATOS"
 
     saved = repo_cls.return_value.save.call_args.args[1]
     assert saved.kind == "aversion"

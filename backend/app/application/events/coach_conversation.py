@@ -333,6 +333,28 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # BASE COMPLETA DO ATLETA, montada UMA vez e compartilhada por todos os
+        # motores de fallback abaixo (avulso/aversão/negociação/chat) — nenhum
+        # decide no vácuo (LEI: [[feedback_base_historico_sempre]]). Best-effort:
+        # se falhar, segue "" (os engines aceitam vazio). Só monta quando a
+        # cascata chegou até aqui sem resposta (não paga em quem já respondeu).
+        fallback_context = ""
+
+        if reply_text is None:
+
+            try:
+
+                fallback_context = await ConversationContextBuilder.build(
+                    profile,
+                    incoming_text=incoming_text,
+                )
+
+            except Exception as e:
+
+                print(f"Contexto de fallback falhou p/ '{profile}': {e}")
+
+                fallback_context = ""
+
         # Pedido pra MONTAR um treino avulso ("monta um treino pra domingo"):
         # o nosso coach monta uma sessão pro dia que o plano não cobre (típico
         # do atleta de treinador externo) — ancorada nos dados/evolução dele.
@@ -344,6 +366,7 @@ class CoachConversationEvent:
                     profile,
                     runner,
                     incoming_text,
+                    athlete_context=fallback_context,
                 )
 
                 used_deterministic = reply_text is not None
@@ -384,6 +407,7 @@ class CoachConversationEvent:
                     profile,
                     runner,
                     incoming_text,
+                    athlete_context=fallback_context,
                 )
 
                 used_deterministic = reply_text is not None
@@ -406,6 +430,7 @@ class CoachConversationEvent:
                     profile,
                     runner,
                     incoming_text,
+                    athlete_context=fallback_context,
                 )
 
                 used_deterministic = reply_text is not None
@@ -422,9 +447,13 @@ class CoachConversationEvent:
 
             try:
 
-                context_facts = await ConversationContextBuilder.build(
-                    profile,
-                    incoming_text=incoming_text,
+                # reusa a base já montada acima (uma vez só); só remonta se por
+                # algum motivo veio vazia
+                context_facts = fallback_context or await (
+                    ConversationContextBuilder.build(
+                        profile,
+                        incoming_text=incoming_text,
+                    )
                 )
 
                 reply_text = await CoachConversationEngine.reply(
