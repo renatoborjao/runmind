@@ -39,6 +39,9 @@ evolução sustentável — NÃO cobre pace de prova nem meta de tempo. Se houve
 MAIS DE UM objetivo, contemple todos com equilíbrio.
 - Comente o que ESTES números mostram (volume, pace, tendência, consistência, \
 aderência ao plano) — nada de frase genérica que serviria pra qualquer semana.
+- Se houver "QUEM É O ATLETA NO LONGO PRAZO", personalize com isso — conecte a \
+semana à trajetória/evolução dele e respeite o que ele já contou (memória) e o \
+que você aprendeu que funciona pra ele. Nunca contrarie esses fatos.
 - Seja honesto: reconheça o que foi bem E aponte com leveza o que dá pra \
 melhorar, sempre construtivo. Sem bronca.
 - Tom de treinador de verdade: direto, humano, encorajador. Fale com "você". \
@@ -56,11 +59,14 @@ class WeeklyReviewNarrativeWriter:
     async def write(
         runner_name: str,
         review: dict,
+        profile: str | None = None,
     ) -> list[str] | None:
 
         try:
 
-            facts = WeeklyReviewNarrativeWriter._facts(runner_name, review)
+            facts = WeeklyReviewNarrativeWriter._facts(
+                runner_name, review, profile,
+            )
 
             settings = get_settings()
 
@@ -108,7 +114,7 @@ class WeeklyReviewNarrativeWriter:
         return lines or None
 
     @staticmethod
-    def _facts(runner_name: str, review: dict) -> str:
+    def _facts(runner_name: str, review: dict, profile: str | None = None) -> str:
 
         comparison = review["comparison"]
 
@@ -164,6 +170,21 @@ class WeeklyReviewNarrativeWriter:
             lines.append(f"Maior treino da semana: {review['longest_km']:.1f} km")
 
         lines.append(f"Consistência recente: {review.get('consistency', 0):.0f}%")
+
+        # quem é o atleta no longo prazo (memória + aprendizados + evolução) —
+        # a leitura da semana fala com quem ELE é, não genérico. LEI
+        # [[feedback_base_historico_sempre]]. Best-effort (vazio se sem lastro).
+        if profile:
+
+            from app.application.coach.context.athlete_brief import (
+                AthleteLongTermBrief,
+            )
+
+            brief = AthleteLongTermBrief.render(profile)
+
+            if brief:
+
+                lines.append(brief)
 
         return "\n".join(line for line in lines if line)
 
