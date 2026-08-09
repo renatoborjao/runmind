@@ -100,13 +100,31 @@ async def coach_brain_log(profile: str, limit: int = 40):
 
     try:
 
+        from app.infrastructure.persistence.coach_brain_health_repository import (
+            CoachBrainHealthRepository,
+        )
         from app.infrastructure.persistence.coach_brain_log_repository import (
             CoachBrainLogRepository,
         )
 
         entries = CoachBrainLogRepository().load(profile)
 
-        return list(reversed(entries[-limit:]))
+        # saúde GLOBAL do cérebro (taxa de fallback na janela rolante) — o sinal
+        # que o vigia usa pra alertar; exposto aqui pra inspeção manual também
+        health = CoachBrainHealthRepository().load()
+
+        window = health.get("window", [])
+
+        fallback_rate = round(sum(window) / len(window), 3) if window else 0.0
+
+        return {
+            "health": {
+                "fallback_rate": fallback_rate,
+                "sample": len(window),
+                "alerted": bool(health.get("alerted", False)),
+            },
+            "recent": list(reversed(entries[-limit:])),
+        }
 
     except Exception as e:
 

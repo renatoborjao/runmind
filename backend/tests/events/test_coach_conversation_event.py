@@ -589,3 +589,82 @@ def test_intent_without_deterministic_answer_falls_back_to_gemini():
 
     # caiu no Gemini: memória volta a ser processada
     mock_extraction.extract.assert_awaited_once()
+
+
+def test_brain_active_skips_deterministic_mutation_flows():
+    """Enxugamento (#1): com o cérebro ATIVO, a cascata NÃO roda mais os fluxos
+    de mutação em paralelo (o cérebro já os cobre). Mesmo quando o cérebro
+    devolve None (fallback), os motores de mutação ficam PULADOS — sobra só a
+    sobrevivência sem-Gemini (cartões + chat). Ver [[project_roteador_acao_ia]]."""
+
+    runner = make_runner(name="Renato", phone="+5511975658679")
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as load,
+        patch(f"{MODULE}.ConversationContextBuilder") as ctx,
+        patch(f"{MODULE}.ConversationRepository") as repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as engine,
+        patch(f"{MODULE}.NotificationService") as notif,
+        patch(f"{MODULE}.RunnerMemoryRepository") as mem_repo,
+        patch(f"{MODULE}.MemoryExtractionEngine") as extraction,
+        patch(f"{MODULE}.RunnerMemoryService"),
+        patch(f"{MODULE}.get_settings") as settings,
+        patch(f"{MODULE}.CoachBrainExecutor") as brain,
+        # pré-cérebro: devolvem None pra a conversa chegar até o cérebro
+        patch(f"{MODULE}.RpeFlow") as rpe,
+        patch(f"{MODULE}.VoicePreferenceFlow") as voice,
+        patch(f"{MODULE}.GarminSync") as garmin,
+        # motores de mutação que DEVEM ser pulados com o cérebro ativo
+        patch(f"{MODULE}.OneOffWorkoutFlow") as oneoff,
+        patch(f"{MODULE}.MoveSkipFlow") as move,
+        patch(f"{MODULE}.AversionFlow") as aversion,
+        patch(f"{MODULE}.NegotiationFlow") as nego,
+        patch(f"{MODULE}.GoalChangeApplier") as goal,
+        patch(f"{MODULE}.TrainingPreferenceFlow") as trainpref,
+        patch(f"{MODULE}.PlanPreferenceDetector") as planpref,
+        # sobrevivência que CONTINUA rodando mesmo com o cérebro ativo
+        patch(f"{MODULE}.IntentRouter") as intent,
+    ):
+
+        load.execute.return_value = runner
+        ctx.build = AsyncMock(return_value="FATOS")
+
+        repo = MagicMock()
+        repo.recent_turns.return_value = []
+        repo_cls.return_value = repo
+
+        settings.return_value.coach_brain_active_for.return_value = True
+
+        brain.handle = AsyncMock(return_value=None)  # cérebro punta -> fallback
+
+        rpe.resolve.return_value = None
+        voice.handle.return_value = None
+        garmin.handle_reply = AsyncMock(return_value=None)
+        oneoff.resolve_watch_reply = AsyncMock(return_value=None)
+
+        intent.detect.return_value = None  # não é analítico
+        engine.reply = AsyncMock(return_value="resposta do chat")
+        notif.send = AsyncMock()
+        mem_repo.return_value.active.return_value = []
+        extraction.extract = AsyncMock(return_value={"add": [], "archive": []})
+
+        reply = asyncio.run(
+            CoachConversationEvent.execute(
+                profile="renato",
+                incoming_text="joga o treino pra quarta e deixa leve",
+                sender_name="Renato",
+            )
+        )
+
+    # cérebro ativo => motores de mutação NÃO rodam (fim do double-path)
+    move.handle.assert_not_called()
+    nego.handle.assert_not_called()
+    aversion.handle.assert_not_called()
+    oneoff.handle.assert_not_called()
+    goal.handle.assert_not_called()
+    trainpref.handle.assert_not_called()
+    planpref.detect.assert_not_called()
+
+    # mas a sobrevivência sem-Gemini CONTINUA: cartões determinísticos + chat
+    intent.detect.assert_called_once()
+    assert reply == "resposta do chat"

@@ -84,6 +84,15 @@ class CoachBrainExecutor:
 
         CoachBrainExecutor._log(profile, incoming_text, pending, decision)
 
+        # vigia de saúde: mede a taxa de fallback (cérebro devolvendo None) numa
+        # janela rolante e alerta o dono se estourar — observabilidade ativa,
+        # best-effort (nunca derruba a resposta). Ver [[project_roteador_acao_ia]].
+        from app.application.monitoring.coach_brain_monitor import (
+            CoachBrainMonitor,
+        )
+
+        await CoachBrainMonitor.record(fallback=decision is None)
+
         if decision is None:
 
             return None
