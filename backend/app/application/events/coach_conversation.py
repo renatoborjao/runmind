@@ -207,12 +207,22 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # O cérebro está ativo pra este perfil? Além de escolher o caminho, isso
+        # faz a cascata abaixo PULAR os fluxos de MUTAÇÃO que o cérebro já cobre
+        # (mover/pular/ajustar/avulso/aversão/rotina/objetivo/preferência) —
+        # eles não rodam mais em paralelo com o cérebro (fim do double-maintenance
+        # e do risco de os dois divergirem). Ficam só como REDE pro modo brain-OFF
+        # (kill switch). O que continua SEMPRE, mesmo com o cérebro ligado, é a
+        # sobrevivência sem-Gemini: cartões analíticos determinísticos
+        # (IntentRouter/OnDemandAnswers) + o chat final. Ver [[project_roteador_acao_ia]].
+        brain_active = get_settings().coach_brain_active_for(profile)
+
         # CÉREBRO DO COACH (atrás da flag): UM coach só, com o quadro completo,
         # decide e responde na própria voz — proposta pendente (aplicar/recusar/
         # refinar), mudança no plano COM ESCOPO, cartão exato ou conversa. None
         # (IA fora do ar/indecisa) => cai na cascata determinística abaixo, que
         # segue sendo o caminho estável. Ver [[project_roteador_acao_ia]].
-        if reply_text is None and get_settings().coach_brain_active_for(profile):
+        if reply_text is None and brain_active:
 
             try:
 
@@ -230,10 +240,11 @@ class CoachConversationEvent:
                 reply_text = None
 
         # Pedido de mudança no plano ("longão no domingo") é aplicado de
-        # verdade e na hora — determinístico, sem passar pelo Gemini.
+        # verdade e na hora — determinístico, sem passar pelo Gemini. Só quando
+        # o cérebro está OFF (ele já cobre isso com escopo/base completa).
         preference = (
             PlanPreferenceDetector.detect(incoming_text)
-            if reply_text is None
+            if reply_text is None and not brain_active
             else None
         )
 
@@ -261,7 +272,8 @@ class CoachConversationEvent:
         # Pedido de trocar o OBJETIVO/meta ("quero mudar minha meta pra
         # sub-45", "meu objetivo agora é saúde"): aplicado de verdade e na
         # hora, igual preferência de plano — sem passar pelo Gemini de chat.
-        if reply_text is None:
+        # Só com o cérebro OFF (ele já cobre via ação "goal").
+        if reply_text is None and not brain_active:
 
             try:
 
@@ -286,7 +298,8 @@ class CoachConversationEvent:
         # PLANO os treinos de semana durem até 50 min" não pode virar o card de
         # "mostrar meu plano" (o portão exige sinal de durabilidade, então
         # "qual meu plano?" puro segue pro IntentRouter normalmente).
-        if reply_text is None:
+        # Só com o cérebro OFF (ele já cobre via ação "routine").
+        if reply_text is None and not brain_active:
 
             try:
 
@@ -358,7 +371,8 @@ class CoachConversationEvent:
         # Pedido pra MONTAR um treino avulso ("monta um treino pra domingo"):
         # o nosso coach monta uma sessão pro dia que o plano não cobre (típico
         # do atleta de treinador externo) — ancorada nos dados/evolução dele.
-        if reply_text is None:
+        # Só com o cérebro OFF (ele já cobre via ação "one_off").
+        if reply_text is None and not brain_active:
 
             try:
 
@@ -379,7 +393,8 @@ class CoachConversationEvent:
 
         # Pedido de mover/pular treino ("joga pra quarta" / "não treino hoje"):
         # o coach PROPÕE a mudança no plano e guarda pro "sim".
-        if reply_text is None:
+        # Só com o cérebro OFF (ele já cobre via ações "move"/"skip").
+        if reply_text is None and not brain_active:
 
             try:
 
@@ -399,7 +414,8 @@ class CoachConversationEvent:
 
         # Pedido de trocar/evitar um tipo de treino ("não curto tiro"): o
         # coach PROPÕE uma adaptação (mantendo o estímulo) e guarda pro "sim".
-        if reply_text is None:
+        # Só com o cérebro OFF (ele já cobre via ações "adjust"/"simplify").
+        if reply_text is None and not brain_active:
 
             try:
 
@@ -422,7 +438,8 @@ class CoachConversationEvent:
         # remonta a semana com critério (segura o essencial da meta), mostra a
         # versão revisada e guarda pro 'sim'. Depois da aversão (tipo) e do
         # mover/pular (dia) — pega o que sobra.
-        if reply_text is None:
+        # Só com o cérebro OFF (ele já cobre via ações "adjust"/"simplify").
+        if reply_text is None and not brain_active:
 
             try:
 
