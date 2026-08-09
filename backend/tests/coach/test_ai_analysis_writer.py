@@ -91,6 +91,55 @@ def test_athlete_memory_facts_best_effort_never_raises():
     assert isinstance(out, str)  # não levanta; no máximo volta vazio
 
 
+def test_pain_facts_bring_injuries_and_recent_soreness():
+    """A análise tem que ver dores/lesões: limitações declaradas + check-in de
+    dor recente — nunca cobra treino ignorando dor (LEI base-histórico)."""
+
+    checkin = MagicMock(soreness=3, note="dor no joelho direito")
+
+    with patch(
+        "app.infrastructure.persistence.checkin_repository."
+        "CheckinRepository.latest_recent",
+        return_value=checkin,
+    ):
+
+        out = AIAnalysisWriter._pain_facts(
+            "renato", ["tendinite no joelho"]
+        )
+
+    assert "DORES/LESÕES" in out
+    assert "tendinite no joelho" in out
+    assert "joelho direito" in out
+    assert "nível 3" in out
+
+
+def test_pain_facts_empty_when_no_injury_and_no_soreness():
+
+    with patch(
+        "app.infrastructure.persistence.checkin_repository."
+        "CheckinRepository.latest_recent",
+        return_value=None,
+    ):
+
+        out = AIAnalysisWriter._pain_facts("renato", [])
+
+    assert out == ""
+
+
+def test_pain_facts_best_effort_never_raises():
+
+    with patch(
+        "app.infrastructure.persistence.checkin_repository."
+        "CheckinRepository.latest_recent",
+        side_effect=Exception("boom"),
+    ):
+
+        # lesão declarada ainda entra; o check-in que explodiu não derruba
+        out = AIAnalysisWriter._pain_facts("renato", ["dor lombar"])
+
+    assert "dor lombar" in out
+
+
 def _write(context=None, **patch_kwargs):
 
     with patch(GEN_TEXT, new=AsyncMock(**patch_kwargs)):
