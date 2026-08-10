@@ -423,6 +423,46 @@ def test_streams_from_details_parallel_arrays():
     assert streams["distance"] == [100, 110]
 
 
+def test_streams_include_elapsed_time_single_source():
+    """O tempo decorrido entra no stream (âncora contínua de VDOT) e vem de UMA
+    fonte só, mesmo se o device expõe mais de uma chave de tempo — sem misturar
+    duas séries na mesma chave."""
+
+    details = {
+        "metricDescriptors": [
+            {"metricsIndex": 0, "key": "sumDistance"},
+            {"metricsIndex": 1, "key": "sumDuration"},
+            {"metricsIndex": 2, "key": "sumElapsedDuration"},
+        ],
+        "activityDetailMetrics": [
+            {"metrics": [0, 0, 0]},
+            {"metrics": [100, 30, 31]},
+        ],
+    }
+
+    streams = GarminActivitySource._streams(details)
+
+    # preferência: sumDuration (não a sumElapsedDuration), UMA série
+    assert streams["time"] == [0, 30]
+    assert streams["distance"] == [0, 100]
+
+
+def test_streams_time_absent_when_no_time_key():
+    """Sem chave de tempo, o stream simplesmente não tem 'time' (a âncora
+    contínua fica quieta em vez de supor 1s)."""
+
+    details = {
+        "metricDescriptors": [
+            {"metricsIndex": 0, "key": "sumDistance"},
+        ],
+        "activityDetailMetrics": [{"metrics": [0]}, {"metrics": [100]}],
+    }
+
+    streams = GarminActivitySource._streams(details)
+
+    assert "time" not in streams
+
+
 def test_km_splits_computed_from_stream_not_laps():
     """Parciais por km saem do STREAM (distância + velocidade + FC), em
     baldes de 1 km — não das lapDTOs (que num treino estruturado são voltas
