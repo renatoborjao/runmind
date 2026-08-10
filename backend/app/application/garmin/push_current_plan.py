@@ -8,14 +8,15 @@ chamar de novo NÃO duplica — só empurra o que falta ou mudou."""
 
 from datetime import date
 
+from app.application.garmin.garmin_push import sweep_orphan_workouts
 from app.application.garmin.garmin_reconciler import GarminReconciler
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
 )
 from app.core.clock import today_local
-from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
+from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.persistence.pushed_plan_store import PushedPlanStore
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
@@ -58,5 +59,16 @@ async def push_current_plan(
 
     # snapshot do que ficou no relógio agora — base da próxima reconciliação
     PushedPlanStore.save(profile, plan)
+
+    # VARREDURA: apaga treinos NOSSOS órfãos (semanas/rebrand passados) que a
+    # reconciliação por snapshot não pegou — mantém só os do plano atual. Os
+    # avulsos ficam (estão no plano). Best-effort, nunca derruba o push.
+    keep_ids = {
+        session.garmin["workout_id"]
+        for session in plan.sessions
+        if session.garmin and session.garmin.get("workout_id")
+    }
+
+    sweep_orphan_workouts(profile, keep_ids, garmin)
 
     return runner, plan, results

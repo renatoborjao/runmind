@@ -57,3 +57,38 @@ def test_remove_session_deletes_template_which_cascades():
     garmin.unschedule_workout.assert_not_called()
     assert out["ok"] is True
     assert out["workout_id"] == 111
+
+
+def test_sweep_removes_our_orphans_keeps_plan_and_athlete_workouts():
+    """Varredura: apaga só treinos NOSSOS fora do plano atual. Preserva os do
+    plano (keep_ids), os avulsos (estão no plano) e o que o ATLETA criou."""
+
+    from app.application.garmin.garmin_push import sweep_orphan_workouts
+
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = [
+        {"workoutId": 1, "workoutName": "Ritmind · Tempo Run 7.5km"},   # plano
+        {"workoutId": 2, "workoutName": "Ritmind · Longão 14.0km"},     # plano
+        {"workoutId": 3, "workoutName": "Ritmind · Fartlek 8.0km"},     # órfão nosso
+        {"workoutId": 4, "workoutName": "RunMind · Longão 13.5km"},     # órfão (rebrand)
+        {"workoutId": 5, "workoutName": "Meu treino pessoal"},          # do atleta
+    ]
+
+    removed = sweep_orphan_workouts("renato2", keep_ids={1, 2}, garmin=garmin)
+
+    assert removed == [3, 4]                       # só os órfãos nossos
+    deleted = [c.args[0] for c in garmin.delete_workout.call_args_list]
+    assert deleted == [3, 4]
+    assert 1 not in deleted and 2 not in deleted   # plano preservado
+    assert 5 not in deleted                         # treino do atleta preservado
+
+
+def test_sweep_best_effort_never_raises():
+
+    from app.application.garmin.garmin_push import sweep_orphan_workouts
+
+    garmin = MagicMock()
+    garmin.get_workouts.side_effect = Exception("garmin fora do ar")
+
+    # não levanta — best-effort
+    assert sweep_orphan_workouts("renato2", keep_ids=set(), garmin=garmin) == []
