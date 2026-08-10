@@ -18,6 +18,9 @@ from app.application.review.monthly_recap_notifier import (
 from app.application.review.race_companion_notifier import (
     RaceCompanionNotifier,
 )
+from app.application.review.reengagement_notifier import (
+    ReengagementNotifier,
+)
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
 from app.application.strava.strava_activity_catchup import (
     StravaActivityCatchup,
@@ -183,6 +186,19 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="race_companion",
+    )
+
+    # Re-engajamento — 17h local (gate no ReengagementNotifier): quando o
+    # atleta some (sem treino NEM conversa há tempo demais pro padrão dele), o
+    # coach vai atrás, acolhe e convida a retomar. UM toque por episódio de
+    # silêncio (dedup por episódio) — nunca vira spam. Silencioso pra quem está
+    # em dia. Ver [[project_ideias_produto]].
+    _scheduler.add_job(
+        ReengagementNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="reengagement_notification",
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã
