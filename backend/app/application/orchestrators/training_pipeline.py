@@ -61,6 +61,16 @@ class TrainingPipeline:
         TrainingPipeline._record_pace_calibration(profile, coach_context)
 
         # --------------------------------------------------
+        # Âncora contínua de VDOT (nativa do Garmin): extrai o MELHOR esforço
+        # sustentado de dentro deste treino a partir dos streams (distância +
+        # tempo) e sobe o teto de capacidade — sem depender do Strava e sem
+        # esperar prova. Watermark (só sobe). Best-effort; nunca derruba a
+        # análise. Ver [[project_modelo_pace_vdot]].
+        # --------------------------------------------------
+
+        TrainingPipeline._record_best_effort(profile, coach_context)
+
+        # --------------------------------------------------
         # Mensagem do coach
         # --------------------------------------------------
 
@@ -185,3 +195,44 @@ class TrainingPipeline:
         except Exception as e:
 
             print(f"Calibração de pace falhou p/ '{profile}': {e}")
+
+    @staticmethod
+    def _record_best_effort(profile: str, coach_context) -> None:
+        """Extrai o melhor esforço CONTÍNUO deste treino (streams do Garmin) e
+        sobe a marca-d'água do VDOT contínuo. Só age quando há stream de
+        distância+tempo (caminho Garmin); o Strava segue pelo BestEffortRefresh
+        de domingo. Best-effort — nunca derruba a análise."""
+
+        try:
+
+            activity = coach_context.executed.activity
+
+            streams = (getattr(activity, "raw", None) or {}).get("_streams") or {}
+
+            distance = streams.get("distance") or []
+
+            time = streams.get("time") or []
+
+            if not distance or not time:
+
+                return
+
+            from app.application.history.best_effort_extractor import (
+                BestEffortExtractor,
+            )
+            from app.application.history.best_effort_vdot import BestEffortVdot
+            from app.infrastructure.persistence.best_effort_vdot_store import (
+                BestEffortVdotStore,
+            )
+
+            efforts = BestEffortExtractor.efforts(distance, time)
+
+            vdot = BestEffortVdot.from_efforts(efforts)
+
+            if vdot is not None:
+
+                BestEffortVdotStore().update(profile, activity.id, vdot)
+
+        except Exception as e:
+
+            print(f"Âncora contínua (Garmin) falhou p/ '{profile}': {e}")

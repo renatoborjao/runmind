@@ -495,7 +495,18 @@ class GarminActivitySource:
 
                 index[desc.get("metricsIndex")] = wanted[key]
 
-        streams: dict[str, list] = {v: [] for v in wanted.values()}
+        # tempo decorrido (s) — UMA fonte só (o Garmin varia a chave), sem
+        # interleave de duas séries na mesma chave. É o eixo que a âncora
+        # contínua de VDOT usa pra medir a janela mais rápida (nunca supõe 1s).
+        time_idx = GarminActivitySource._time_index(descriptors)
+
+        if time_idx is not None:
+
+            index[time_idx] = "time"
+
+        streams: dict[str, list] = {
+            v: [] for v in (*wanted.values(), "time")
+        }
 
         for row in rows:
 
@@ -509,6 +520,25 @@ class GarminActivitySource:
 
         # remove streams vazios
         return {k: v for k, v in streams.items() if v}
+
+    # chaves de tempo decorrido do Garmin, por ordem de preferência (o formato
+    # varia por device/versão). sumDuration = segundos desde o início.
+    _TIME_KEYS = ("sumDuration", "sumElapsedDuration", "sumMovingDuration")
+
+    @staticmethod
+    def _time_index(descriptors: list) -> int | None:
+        """metricsIndex da PRIMEIRA chave de tempo disponível (uma só) — pra o
+        stream de tempo ter uma fonte única e não misturar duas séries."""
+
+        for pref in GarminActivitySource._TIME_KEYS:
+
+            for desc in descriptors:
+
+                if (desc.get("key") or desc.get("metricsKey")) == pref:
+
+                    return desc.get("metricsIndex")
+
+        return None
 
     @staticmethod
     def _laps(splits: dict) -> list[dict]:
