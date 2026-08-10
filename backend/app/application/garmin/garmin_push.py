@@ -126,6 +126,58 @@ def remove_session(profile: str, record: dict, garmin=None) -> dict:
     return {"ok": True, "workout_id": workout_id}
 
 
+# prefixos dos treinos que NÓS criamos no Garmin (marca atual + a antiga, do
+# rebrand RunMind→Ritmind) — a varredura só mexe no que é nosso, nunca no que o
+# atleta criou por conta, nem no histórico de atividades.
+OUR_WORKOUT_PREFIXES = ("Ritmind ·", "RunMind ·")
+
+
+def sweep_orphan_workouts(
+    profile: str,
+    keep_ids: set,
+    garmin=None,
+) -> list:
+    """Apaga da BIBLIOTECA do Garmin os treinos NOSSOS que não estão no plano
+    atual (`keep_ids`) — evita o acúmulo de órfãos de semanas/rebrand passados
+    quando a reconciliação por snapshot perde o elo. Seguro: só toca em treinos
+    com o nosso prefixo (não nos do atleta) e NUNCA no histórico de atividades
+    (delete_workout só apaga o template/agendamento). Os avulsos ficam — vivem
+    dentro da semana, logo estão no plano e em keep_ids. Best-effort: falhar
+    aqui nunca derruba o push."""
+
+    garmin = garmin or GarminClient.connect(profile)
+
+    removed = []
+
+    try:
+
+        for workout in garmin.get_workouts(0, 100):
+
+            workout_id = workout.get("workoutId")
+
+            name = workout.get("workoutName") or ""
+
+            if workout_id in keep_ids or not name.startswith(OUR_WORKOUT_PREFIXES):
+
+                continue
+
+            try:
+
+                garmin.delete_workout(workout_id)
+
+                removed.append(workout_id)
+
+            except Exception as e:  # noqa: BLE001 — varredura best-effort
+
+                print(f"Sweep: falha ao apagar {workout_id} ({name}): {e}")
+
+    except Exception as e:  # noqa: BLE001 — varredura best-effort
+
+        print(f"Sweep de órfãos falhou p/ '{profile}': {e}")
+
+    return removed
+
+
 def push_week(
     profile: str,
     sessions_with_dates: list[tuple[PlannedSession, date]],
