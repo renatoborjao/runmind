@@ -300,6 +300,64 @@ def test_compound_move_and_adjust_builds_single_proposal():
     assert "Como fica" in reply
 
 
+def test_two_moves_in_one_message_build_single_combined_proposal():
+    """O bug do Renato: 'troca terça pra quarta E quinta pra sexta' — DUAS
+    trocas numa mensagem viram UMA proposta com as operações das DUAS (nenhuma
+    fica de fora). Cada move é calculado sobre o plano já com o anterior."""
+
+    decision = BrainDecision(
+        say="Movo terça pra quarta e quinta pra sexta — posso aplicar?",
+        actions=[
+            BrainAction("move", "single_session", "Wednesday", "terça pra quarta"),
+            BrainAction("move", "single_session", "Friday", "quinta pra sexta"),
+        ],
+    )
+
+    req1 = MoveSkipRequest(
+        action="move", day="Tuesday", target_day="Wednesday",
+        message="Movo teu treino de terça pra quarta.",
+    )
+    req2 = MoveSkipRequest(
+        action="move", day="Thursday", target_day="Friday",
+        message="Movo teu treino de quinta pra sexta.",
+    )
+
+    ops1 = [
+        {"action": "drop", "day": "Tuesday"},
+        {"action": "replace", "day": "Wednesday", "session": {}},
+    ]
+    ops2 = [
+        {"action": "drop", "day": "Thursday"},
+        {"action": "replace", "day": "Friday", "session": {}},
+    ]
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            _plan_patch(),
+            patch(
+                f"{M}.MoveSkipEngine.propose",
+                new=AsyncMock(side_effect=[req1, req2]),
+            ),
+            patch(f"{M}.MoveSkipFlow._operations", side_effect=[ops1, ops2]),
+            patch(f"{M}.PlanChangeApplier._apply_operations"),
+            patch(
+                f"{M}.WeeklyPlanMessageFormatter.session_lines",
+                return_value=["quarta — Intervalado", "sexta — Rodagem"],
+            ),
+        ],
+    )
+
+    repo.save.assert_called_once()
+    saved = repo.save.call_args.args[1]
+
+    # as operações das DUAS trocas estão na proposta (nenhuma ficou de fora)
+    assert {"action": "drop", "day": "Tuesday"} in saved.operations
+    assert {"action": "drop", "day": "Thursday"} in saved.operations
+    assert saved.operations == ops1 + ops2
+    assert "Como fica" in reply
+
+
 def test_reject_pending_clears_without_applying():
 
     decision = BrainDecision(say="Tranquilo, deixo como está. 👍", on_pending="reject")

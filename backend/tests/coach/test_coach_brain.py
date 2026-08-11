@@ -32,6 +32,7 @@ def test_parse_invalid_card_dropped():
 
 
 def test_parse_action_with_scope():
+    """Compat: o `action` singular antigo ainda é aceito (vira 1 item)."""
 
     d = _parse({
         "say": "Movo teu longão pra amanhã, ritmo leve — posso aplicar?",
@@ -41,25 +42,60 @@ def test_parse_action_with_scope():
         },
     })
 
-    assert d.action.type == "simplify"
-    assert d.action.scope == "single_session"
-    assert d.action.target_day == "Saturday"
-    assert "livre" in d.action.instruction
+    assert len(d.all_actions) == 1
+    a = d.all_actions[0]
+    assert a.type == "simplify"
+    assert a.scope == "single_session"
+    assert a.target_day == "Saturday"
+    assert "livre" in a.instruction
 
 
-def test_parse_action_defaults_scope_when_invalid():
+def test_parse_defaults_scope_when_invalid():
 
-    d = _parse({"say": "ok", "action": {"type": "move", "scope": "xpto"}})
+    d = _parse({"say": "ok", "actions": [{"type": "move", "scope": "xpto"}]})
 
-    assert d.action.scope == "single_session"  # default seguro
-    assert d.action.target_day is None
+    assert d.all_actions[0].scope == "single_session"  # default seguro
+    assert d.all_actions[0].target_day is None
 
 
 def test_parse_action_invalid_type_dropped():
 
-    d = _parse({"say": "ok", "action": {"type": "banana"}})
+    d = _parse({"say": "ok", "actions": [{"type": "banana"}]})
 
-    assert d.action is None
+    assert d.all_actions == []
+
+
+def test_parse_multiple_actions_kept_in_order():
+    """O pente do bug: DUAS trocas numa mensagem viram DUAS ações, na ordem."""
+
+    d = _parse({
+        "say": "Movo terça pra quarta e quinta pra sexta — posso aplicar?",
+        "actions": [
+            {"type": "move", "scope": "single_session",
+             "target_day": "Wednesday", "instruction": "terça pra quarta"},
+            {"type": "move", "scope": "single_session",
+             "target_day": "Friday", "instruction": "quinta pra sexta"},
+        ],
+    })
+
+    assert len(d.all_actions) == 2
+    assert d.all_actions[0].target_day == "Wednesday"
+    assert d.all_actions[1].target_day == "Friday"
+
+
+def test_parse_invalid_items_filtered_from_list():
+
+    d = _parse({
+        "say": "ok",
+        "actions": [
+            {"type": "move", "target_day": "Wednesday"},
+            {"type": "banana"},
+            "lixo",
+        ],
+    })
+
+    assert len(d.all_actions) == 1
+    assert d.all_actions[0].target_day == "Wednesday"
 
 
 def test_parse_on_pending():

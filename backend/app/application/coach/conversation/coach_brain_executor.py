@@ -105,11 +105,12 @@ class CoachBrainExecutor:
                 context_facts,
             )
 
-        # 2) pedido de MUDANÇA no plano
-        if decision.action is not None:
+        # 2) pedido(s) de MUDANÇA no plano — uma OU VÁRIAS numa proposta só
+        if decision.all_actions:
 
-            applied = await CoachBrainExecutor._act(
-                profile, runner, decision, repo, incoming_text, context_facts,
+            applied = await CoachBrainExecutor._act_all(
+                profile, runner, decision.all_actions, repo, incoming_text,
+                context_facts,
             )
 
             if applied is not None:
@@ -169,10 +170,11 @@ class CoachBrainExecutor:
         # corrigida do cérebro, com o escopo certo)
         repo.clear(profile)
 
-        if decision.action is not None:
+        if decision.all_actions:
 
-            applied = await CoachBrainExecutor._act(
-                profile, runner, decision, repo, incoming_text, context_facts,
+            applied = await CoachBrainExecutor._act_all(
+                profile, runner, decision.all_actions, repo, incoming_text,
+                context_facts,
             )
 
             if applied is not None:
@@ -184,20 +186,40 @@ class CoachBrainExecutor:
         )
 
     @staticmethod
-    async def _act(
-        profile, runner, decision: BrainDecision, repo, incoming_text,
+    async def _act_all(
+        profile, runner, actions: list[BrainAction], repo, incoming_text,
         context_facts="",
     ) -> str | None:
-        """Concretiza a ação: mudanças da semana viram PROPOSTA (pedem 'sim');
+        """Executa a(s) ação(ões). DUAS+ mudanças de plano na mesma mensagem
+        (ex.: "troca terça pra quarta E quinta pra sexta") viram UMA proposta
+        combinada — nenhuma troca fica de fora (o bug do Renato). Uma ação (ou
+        mistura rara com rotina/objetivo) segue o caminho de sempre."""
+
+        proposal = [a for a in actions if a.type in _PROPOSAL_ACTIONS]
+
+        if len(actions) >= 2 and len(proposal) == len(actions):
+
+            return await CoachBrainExecutor._propose_multi(
+                profile, runner, actions, repo, context_facts,
+            )
+
+        return await CoachBrainExecutor._act(
+            profile, runner, actions[0], repo, incoming_text, context_facts,
+        )
+
+    @staticmethod
+    async def _act(
+        profile, runner, action: BrainAction, repo, incoming_text,
+        context_facts="",
+    ) -> str | None:
+        """Concretiza UMA ação: mudança da semana vira PROPOSTA (pede 'sim');
         rotina durável vira MEMÓRIA; objetivo/preferência os appliers aplicam.
         None se não deu."""
-
-        action = decision.action
 
         if action.type in _PROPOSAL_ACTIONS:
 
             return await CoachBrainExecutor._propose(
-                profile, runner, decision, repo, context_facts,
+                profile, runner, action, repo, context_facts,
             )
 
         if action.type == "one_off":
@@ -257,15 +279,13 @@ class CoachBrainExecutor:
 
     @staticmethod
     async def _propose(
-        profile, runner, decision: BrainDecision, repo, context_facts="",
+        profile, runner, action: BrainAction, repo, context_facts="",
     ) -> str | None:
         """Monta a proposta (move/skip via MoveSkipEngine; adjust/simplify via
         NegotiationEngine) COM ESCOPO, guarda pendente e devolve o preview.
         Pedido COMPOSTO (mover de dia E mudar o conteúdo) vira UMA proposta só:
         move + ajuste da sessão movida. O ajuste passa pela base completa do
         atleta (context_facts) — nunca no vácuo."""
-
-        action = decision.action
 
         _, plan = await CurrentPlanProvider.for_profile(profile)
 
@@ -337,6 +357,153 @@ class CoachBrainExecutor:
         )
 
         return message
+
+    @staticmethod
+    async def _propose_multi(
+        profile, runner, actions: list[BrainAction], repo, context_facts="",
+    ) -> str | None:
+        """VÁRIAS mudanças da mesma mensagem numa proposta ÚNICA. Cada ação é
+        calculada sobre o plano JÁ com as anteriores aplicadas (um plano-espelho
+        que evolui) — então a 2ª troca enxerga a 1ª e o descanso entre elas fica
+        certo. Junta todas as operações, monta UM 'como fica' e guarda UMA
+        pendente. None se nenhuma vingou (cai na fala do coach)."""
+
+        _, plan = await CurrentPlanProvider.for_profile(profile)
+
+        if not plan.sessions or plan.source == "externo":
+
+            return None
+
+        mirror = copy.deepcopy(plan)
+
+        all_ops: list[dict] = []
+
+        leads: list[str] = []
+
+        for action in actions:
+
+            result = await CoachBrainExecutor._ops_for_action(
+                runner, mirror, action, context_facts,
+            )
+
+            if result is None:
+
+                continue
+
+            ops, lead = result
+
+            if not ops:
+
+                continue
+
+            PlanChangeApplier._apply_operations(mirror, ops)
+
+            all_ops.extend(ops)
+
+            if lead:
+
+                leads.append(lead)
+
+        if not all_ops:
+
+            return None
+
+        message = CoachBrainExecutor._revised_message(
+            plan, all_ops, CoachBrainExecutor._join_leads(runner.name, leads),
+        )
+
+        repo.save(
+            profile,
+            PlanProposal(
+                kind="multi",
+                week_start=plan.week_start.isoformat(),
+                preview=message,
+                created_at=now_local().isoformat(),
+                operations=all_ops,
+            ),
+        )
+
+        return message
+
+    @staticmethod
+    async def _ops_for_action(
+        runner, plan, action: BrainAction, context_facts="",
+    ) -> tuple[list[dict], str] | None:
+        """Operações + um LEAD curto de UMA ação sobre `plan` (o espelho já
+        evoluído). Move/skip via MoveSkipEngine (com composto move+conteúdo);
+        adjust/simplify via NegotiationEngine. None se a ação não vingou."""
+
+        request_text = CoachBrainExecutor._action_text(action)
+
+        if action.type in ("move", "skip"):
+
+            request = await MoveSkipEngine.propose(
+                runner, plan, request_text, today_local(),
+            )
+
+            if request is None:
+
+                return None
+
+            operations = MoveSkipFlow._operations(plan, request)
+
+            if not operations:
+
+                return None
+
+            if (
+                action.type == "move"
+                and action.content_change
+                and request.target_day
+            ):
+
+                combined = await CoachBrainExecutor._move_and_adjust(
+                    runner, plan, operations, request, action.content_change,
+                    context_facts,
+                )
+
+                if combined is not None:
+
+                    operations, _ = combined
+
+                    return operations, CoachBrainExecutor._move_lead(
+                        request, adjusted=True,
+                    )
+
+            return operations, CoachBrainExecutor._move_lead(request)
+
+        negotiation = await NegotiationEngine.propose(
+            runner, plan, request_text, athlete_context=context_facts,
+        )
+
+        if negotiation is None:
+
+            return None
+
+        return negotiation.operations, negotiation.message
+
+    @staticmethod
+    def _move_lead(request, adjusted: bool = False) -> str:
+        """Frase curta de UMA troca/pulo pro cabeçalho da proposta combinada."""
+
+        from app.core.weekdays import weekday_label
+
+        if request.action == "skip":
+
+            return f"tiro o de {weekday_label(request.day)}"
+
+        base = f"{weekday_label(request.day)} → {weekday_label(request.target_day)}"
+
+        return f"{base} (conteúdo ajustado)" if adjusted else base
+
+    @staticmethod
+    def _join_leads(name: str, leads: list[str]) -> str:
+
+        if not leads:
+
+            return f"Beleza, {name}! Ajustando teus treinos:"
+
+        return f"Beleza, {name}! Ajustando: {'; '.join(leads)}."
 
     @staticmethod
     async def _move_and_adjust(
@@ -463,16 +630,17 @@ class CoachBrainExecutor:
 
                 entry["on_pending"] = decision.on_pending
 
-                if decision.action is not None:
+                if decision.all_actions:
 
-                    a = decision.action
-
-                    entry["action"] = {
-                        "type": a.type,
-                        "scope": a.scope,
-                        "target_day": a.target_day,
-                        "content_change": a.content_change,
-                    }
+                    entry["actions"] = [
+                        {
+                            "type": a.type,
+                            "scope": a.scope,
+                            "target_day": a.target_day,
+                            "content_change": a.content_change,
+                        }
+                        for a in decision.all_actions
+                    ]
 
             CoachBrainLogRepository().record(profile, entry)
 
