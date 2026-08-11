@@ -20,7 +20,7 @@ Blindagem ([[feedback_ia_json_blindada]]): saída estruturada + generate_json
 (as "mãos"): o cérebro NUNCA finge que aplicou/mandou pro relógio."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from google.genai import types
 
@@ -68,13 +68,13 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
-  "action": null | {{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
+  "actions": [] | [{{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
 preference>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
                      "content_change": <se ALÉM de mover o dia ele também quer o \
-treino diferente, o que muda no CONTEÚDO | null>}},
+treino diferente, o que muda no CONTEÚDO | null>}}, ...],
   "on_pending": null | <apply|reject|refine>}}
 
 COMO ESCOLHER:
@@ -86,7 +86,7 @@ plano 👇"). "qual o treino de amanhã?" = next_training; "meu plano da semana"
 weekly_plan; "meus paces/zonas" = paces; "como tá meu corpo" = body.
 - Pedido de MUDAR o plano SÓ DESTA SEMANA (mover de dia, pular, deixar mais \
 leve/livre, simplificar pro relógio, trocar tipo, mudar objetivo, fixar dia do \
-longão): preencha "action". ESCOPO é sagrado — se o atleta aponta UMA sessão \
+longão): coloque em "actions". ESCOPO é sagrado — se o atleta aponta UMA sessão \
 ("o de amanhã", "só o longão"), scope="single_session" e target_day daquele \
 dia; se fala da semana, scope="week". NUNCA mexa em mais do que ele pediu. Se \
 ele muda o DIA de um treino (de X pra Y), o type é "move" e o target_day é o \
@@ -96,6 +96,13 @@ target_day=destino E preencha "content_change" com o que muda no conteúdo — o
 sistema faz as duas coisas numa proposta só. Deixar mais leve/livre/sem pace \
 SEM trocar de dia = "simplify" ou "adjust". NÃO aplique agora — o sistema monta \
 a proposta e pergunta "posso aplicar?". No "say", reconheça o pedido.
+- MAIS DE UMA MUDANÇA na mesma mensagem: coloque CADA uma como um item \
+SEPARADO em "actions". Ex.: "troca meu treino de terça pra quarta E o de quinta \
+pra sexta" = DOIS itens move (um por troca, cada um com seu target_day). \
+"deixa terça mais leve e move quinta pra sexta" = um "adjust"/"simplify" de \
+terça + um "move" de quinta. O sistema aplica TODAS numa proposta só. Uma \
+mudança = lista de 1 item; nenhuma mudança de plano = []. NUNCA deixe uma \
+mudança pedida de fora da lista — se o atleta citou duas, "actions" tem duas.
 - Pedido pra MONTAR um treino NOVO num dia que o plano NÃO cobre ("monta um \
 treino pra domingo", "quero um treino pra hoje", "me dá um treino pra amanhã" \
 num dia sem treino): type="one_off" + target_day. É montar do zero, não mover \
@@ -112,7 +119,7 @@ pedido pra mexer só na semana de agora é "adjust"/"simplify", não "routine". 
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \
-preencha TAMBÉM "action" com a versão corrigida (escopo certo).
+preencha TAMBÉM "actions" com a versão corrigida (escopo certo).
 - Senão, é conversa/relato/dúvida: responda no "say", com o que você sabe do \
 atleta. Só isso.
 
@@ -156,9 +163,23 @@ class BrainDecision:
 
     answer_card: str | None = None
 
+    # ação ÚNICA (compat com chamadas antigas/testes que passam `action=`); o
+    # caminho vivo usa a LISTA `actions` (pedido pode ter várias mudanças).
     action: BrainAction | None = None
 
+    actions: list[BrainAction] = field(default_factory=list)
+
     on_pending: str | None = None
+
+    @property
+    def all_actions(self) -> list[BrainAction]:
+        """As ações a executar — a lista quando há; senão a única (compat)."""
+
+        if self.actions:
+
+            return self.actions
+
+        return [self.action] if self.action else []
 
 
 class CoachBrain:
@@ -263,20 +284,47 @@ class CoachBrain:
 
             on_pending = None
 
-        action = CoachBrain._parse_action(data.get("action"))
+        actions = CoachBrain._parse_actions(data)
 
         # precisa de ALGO acionável: uma fala, um cartão, uma ação ou um
         # veredito de pendência — senão não dá pra responder (cai no fallback)
-        if not (say or card or action or on_pending):
+        if not (say or card or actions or on_pending):
 
             return None
 
         return BrainDecision(
             say=say,
             answer_card=card,
-            action=action,
+            actions=actions,
             on_pending=on_pending,
         )
+
+    @staticmethod
+    def _parse_actions(data: dict) -> list[BrainAction]:
+        """Lê a LISTA de ações. Aceita o `actions` novo (lista) e, por
+        robustez, o `action` singular antigo (o Gemini pode hesitar) — cada um
+        vira BrainAction; itens inválidos são descartados."""
+
+        raw = data.get("actions")
+
+        items = raw if isinstance(raw, list) else []
+
+        # compat: modelo ainda pode mandar "action" singular
+        if not items and data.get("action") is not None:
+
+            items = [data.get("action")]
+
+        parsed = []
+
+        for item in items:
+
+            action = CoachBrain._parse_action(item)
+
+            if action is not None:
+
+                parsed.append(action)
+
+        return parsed
 
     @staticmethod
     def _parse_action(raw) -> BrainAction | None:
