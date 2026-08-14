@@ -102,8 +102,47 @@ class CheckinRepository:
             soreness=(
                 new.soreness if new.soreness is not None else old.soreness
             ),
+            # doença é sinal "pega ou não pega" — uma vez sinalizado no dia,
+            # permanece (um segundo relato sem doença não apaga a gripe)
+            illness=new.illness or old.illness,
             note=new.note or old.note,
         )
+
+    def recent_illness(
+        self, profile: str, today: str, within_days: int = 4
+    ) -> DailyCheckin | None:
+        """O relato de DOENÇA mais recente dentro dos últimos `within_days` —
+        janela maior que a do estado geral (gripe/resfriado dura dias). None se
+        não há doença recente. É o que segura o 'pode puxar' de um atleta que
+        avisou que está doente."""
+
+        from datetime import date, timedelta
+
+        try:
+
+            cutoff = date.fromisoformat(today) - timedelta(days=within_days)
+
+        except ValueError:
+
+            return None
+
+        for checkin in reversed(self.load(profile)):
+
+            if not checkin.illness:
+
+                continue
+
+            try:
+
+                if date.fromisoformat(checkin.day) >= cutoff:
+
+                    return checkin
+
+            except ValueError:
+
+                continue
+
+        return None
 
     def _save(self, profile: str, checkins: list[DailyCheckin]) -> None:
 

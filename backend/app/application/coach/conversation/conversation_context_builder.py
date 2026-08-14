@@ -303,6 +303,25 @@ class ConversationContextBuilder:
 
             print(f"Estado (evolução) falhou p/ '{profile}': {e}")
 
+        # estado SUBJETIVO recente que o atleta RELATOU (doença/dor/energia/
+        # sono) — o coach precisa saber disso ao conversar, não só ao gerar o
+        # plano (antes só ia pro plano). Doença aparece em destaque.
+        try:
+
+            from app.application.coach.intelligence.checkin_service import (
+                CheckinService,
+            )
+
+            checkin_line = CheckinService.render_recent(profile)
+
+            if checkin_line:
+
+                lines.append(f"- {checkin_line}")
+
+        except Exception as e:
+
+            print(f"Estado (check-in) falhou p/ '{profile}': {e}")
+
         try:
 
             from app.application.coach.intelligence.body_reading_service import (

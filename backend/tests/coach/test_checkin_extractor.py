@@ -22,6 +22,15 @@ def test_detector_ignores_unrelated_messages():
     assert not CheckinDetector.mentions_state("valeu, coach 💪")
 
 
+def test_detector_catches_illness():
+    """O gap do Renato: 'tô gripado' precisa disparar a captura."""
+
+    assert CheckinDetector.mentions_state("tô gripado hoje")
+    assert CheckinDetector.mentions_state("acordei com febre")
+    assert CheckinDetector.mentions_state("peguei um resfriado")
+    assert CheckinDetector.mentions_state("tô doente, uma virose")
+
+
 # ---------------- extractor parse (validação) ----------------
 
 
@@ -35,6 +44,18 @@ def test_parse_keeps_only_valid_scales():
     assert data["sleep_quality"] == 5
     assert data["soreness"] is None      # 9 fora de 1-5 -> descartado
     assert data["note"] == "perna"
+    assert data["illness"] is False      # ausente -> false
+
+
+def test_parse_captures_illness_flag():
+
+    data = CheckinExtractor._parse(
+        '{"energy": null, "sleep_quality": null, "soreness": null, '
+        '"illness": true, "note": "gripe com dor de garganta"}'
+    )
+
+    assert data["illness"] is True
+    assert data["note"] == "gripe com dor de garganta"
 
 
 def test_parse_rejects_booleans_and_garbage():
