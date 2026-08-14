@@ -796,6 +796,11 @@ def test_athlete_state_is_best_effort_when_everything_fails():
             "SleepReadingService",
             side_effect=Exception("boom"),
         ),
+        patch(
+            "app.application.coach.intelligence.checkin_service."
+            "CheckinService.render_recent",
+            side_effect=Exception("boom"),
+        ),
         patch("app.core.config.get_settings", side_effect=Exception("boom")),
     ):
 
