@@ -45,6 +45,22 @@ def test_regenerativo_e_trote_leve_nao_sao_exigentes():
     )
 
 
+def test_rodagem_PUXADA_segue_exigente():
+    """O Renato lembrou: existe rodagem puxada. O fix da colisão 'por tempo' NÃO
+    pode chapar toda rodagem como leve — progressiva/forte/em ritmo é exigente."""
+
+    assert BodyConductEngine.is_demanding(
+        _session("Friday", "Rodagem Progressiva", 10.0)
+    )
+    assert BodyConductEngine.is_demanding(
+        _session("Friday", "Rodagem em Ritmo Forte", 8.0)
+    )
+    # e uma rodagem progressiva medida POR TEMPO também segue exigente
+    assert BodyConductEngine.is_demanding(
+        _session("Friday", "Rodagem Progressiva por Tempo", 8.0)
+    )
+
+
 def test_treinos_de_qualidade_seguem_exigentes():
     """A correção do 'easy manda' não pode amortecer os treinos que SÃO puxados."""
 
