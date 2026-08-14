@@ -15,14 +15,20 @@ depois, quando o Renato aprovar os alertas no diário. Ver
 from app.application.coach.intelligence.readiness_service import (
     ReadinessService,
 )
+from app.core.clock import today_local
 from app.core.config import get_settings
 from app.domain.entities.readiness_verdict import (
     READINESS_CAUTION,
     READINESS_GREEN,
     ReadinessVerdict,
 )
+from app.infrastructure.persistence.checkin_repository import CheckinRepository
+from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 
 _ALERT_TIERS = frozenset({READINESS_CAUTION, READINESS_GREEN})
+
+# quantos dias uma doença relatada continua segurando o "pode puxar"
+_ILLNESS_WINDOW = 4
 
 
 class ReadinessNotifier:
@@ -43,12 +49,44 @@ class ReadinessNotifier:
 
             return None
 
+        # DOENÇA MANDA: se o atleta avisou que está gripado/resfriado/febril nos
+        # últimos dias, isso SUPRIME qualquer "pode puxar" (mesmo com o corpo
+        # lendo verde no relógio — o vírus não aparece no HRV). Acolhe e orienta
+        # a recuperar; UMA vez por episódio (dedup pela data do relato).
+        ill = CheckinRepository().recent_illness(
+            profile, today_local().isoformat(), _ILLNESS_WINDOW
+        )
+
+        if ill is not None:
+
+            if DispatchGuard.already_sent("readiness_illness", profile, ill.day):
+
+                return None
+
+            DispatchGuard.mark("readiness_illness", profile, ill.day)
+
+            return ReadinessNotifier._illness_message()
+
         # só a lacuna (CAUTION/GREEN) e só quando o estado VIROU (would_notify)
         if verdict.tier not in _ALERT_TIERS or not entry.would_notify:
 
             return None
 
         return ReadinessNotifier._message(verdict)
+
+    @staticmethod
+    def _illness_message() -> str:
+        """Conduta quando o atleta está doente: descanso, sem esforço. Cuidado
+        de gente — não é conselho médico; se piorar, procurar um profissional."""
+
+        return (
+            "Bom dia! Vi que você não está 100% (gripe/resfriado). Corpo "
+            "combatendo infecção + treino puxado não combinam — o esforço pode "
+            "arrastar a recuperação. Hoje o melhor treino é DESCANSAR. 🛌\n\n"
+            "Quando os sintomas passarem (e sem febre), a gente volta com um "
+            "trote bem leve e retoma o ritmo com calma. Se piorar ou bater "
+            "febre, procura um médico, tá? Melhoras! 🤎"
+        )
 
     @staticmethod
     def _message(verdict: ReadinessVerdict) -> str:
@@ -81,8 +119,8 @@ class ReadinessNotifier:
         )
 
         return (
-            f"{abertura}. Se hoje é dia de treino forte, pode ir com "
-            "confiança — o momento está a favor. 🚀"
+            f"{abertura} — e hoje o treino pede intensidade. Pode ir com "
+            "confiança, o momento está a favor. 🚀"
         )
 
     @staticmethod

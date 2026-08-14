@@ -88,3 +88,50 @@ def test_latest_recent_none_when_empty_state(tmp_path):
     repo.record("renato", _checkin(TODAY, note=""))
 
     assert repo.latest_recent("renato", TODAY.isoformat()) is None
+
+
+def test_recent_illness_holds_for_a_few_days(tmp_path):
+    """Doença dura dias: um relato de 3 dias atrás ainda segura o 'pode puxar'."""
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY - timedelta(days=3), illness=True,
+                                   note="gripe"))
+
+    ill = repo.recent_illness("renato", TODAY.isoformat())
+
+    assert ill is not None
+    assert ill.illness is True
+
+
+def test_recent_illness_expires_after_window(tmp_path):
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY - timedelta(days=6), illness=True))
+
+    assert repo.recent_illness("renato", TODAY.isoformat()) is None
+
+
+def test_recent_illness_ignores_non_illness_checkins(tmp_path):
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY, soreness=4, note="perna"))
+
+    assert repo.recent_illness("renato", TODAY.isoformat()) is None
+
+
+def test_merge_keeps_illness_flag(tmp_path):
+    """Relatou gripe de manhã; à tarde fala de sono — a gripe NÃO se apaga."""
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY, illness=True, note="gripado"))
+    repo.record("renato", _checkin(TODAY, sleep_quality=2))
+
+    stored = repo.load("renato")
+
+    assert len(stored) == 1
+    assert stored[0].illness is True
+    assert stored[0].sleep_quality == 2

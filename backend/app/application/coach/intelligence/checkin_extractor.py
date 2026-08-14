@@ -20,13 +20,17 @@ from app.infrastructure.integrations.gemini.client import (
 
 MAX_OUTPUT_TOKENS = 200
 
-# portão: só chama o Gemini se a mensagem cheira a relato de sensação/sono/dor
+# portão: só chama o Gemini se a mensagem cheira a relato de sensação/sono/dor/
+# doença
 _STATE_HINTS = (
     "dormi", "sono", "sonolen", "cansad", "cansaco", "exaust", "detonad",
     "zerad", "acabad", "moid", "inteir", "disposi", "disposicao", "energia",
     "energiz", "animad", "fadiga", "descansad", "descanso", "dor", "dolorid",
     "doendo", "doi ", "lesa", "lesio", "desconforto", "pesad", "leve hoje",
     "acordei", "me sinto", "to me sentindo", "tou me sentindo", "estou me sentindo",
+    # doença: gripe/resfriado/febre/virose/mal-estar
+    "gripe", "gripad", "resfriad", "febre", "febril", "doente", "doenca",
+    "virose", "viral", "mal estar", "mal-estar", "indispost", "enjoo", "nausea",
 )
 
 
@@ -60,19 +64,26 @@ respeito.
 MENSAGEM: {incoming_text}
 
 Responda APENAS com JSON:
-{{"energy": 1-5 ou null, "sleep_quality": 1-5 ou null, "soreness": 1-5 ou null, "note": "..."}}
+{{"energy": 1-5 ou null, "sleep_quality": 1-5 ou null, "soreness": 1-5 ou null,
+  "illness": true/false, "note": "..."}}
 
 ESCALAS (1-5):
 - energy: 1=exausto/sem energia, 3=normal, 5=cheio de energia/disposto
 - sleep_quality: 1=dormiu muito mal, 3=ok, 5=dormiu ótimo
 - soreness: 1=nenhuma dor, 3=leve, 5=muita dor/desconforto (MAIOR = pior)
-- note: só se houver detalhe útil (ex.: "dor na panturrilha direita"); senão ""
+- illness: true SÓ se o atleta diz estar DOENTE — gripe, resfriado, febre, \
+virose, dor de garganta com mal-estar, enjoo/náusea de doença. Uma dor \
+muscular/articular de treino NÃO é doença (isso é soreness). Senão false.
+- note: só se houver detalhe útil (ex.: "dor na panturrilha direita", "gripado \
+com dor de garganta"); senão ""
 
 REGRAS:
-- Preencha SÓ o que a mensagem indicar; o resto é null. Não invente.
+- Preencha SÓ o que a mensagem indicar; o resto é null/false. Não invente.
 - "dormi mal"→sleep_quality baixo; "tô detonado/zerado/acabado"→energy baixo; \
-"perna/joelho doendo"→soreness alto + note; "acordei inteiro/disposto"→energy alto.
-- Se a mensagem NÃO fala de sono/energia/dor/sensação, devolva tudo null e note "".
+"perna/joelho doendo"→soreness alto + note; "acordei inteiro/disposto"→energy alto; \
+"tô gripado/com febre/resfriado"→illness true + note.
+- Se a mensagem NÃO fala de sono/energia/dor/doença/sensação, devolva tudo \
+null, illness false e note "".
 """
 
 
@@ -114,6 +125,7 @@ class CheckinExtractor:
             energy=data.get("energy"),
             sleep_quality=data.get("sleep_quality"),
             soreness=data.get("soreness"),
+            illness=data.get("illness", False),
             note=data.get("note") or "",
         )
 
@@ -140,6 +152,7 @@ class CheckinExtractor:
             "energy": CheckinExtractor._scale(data.get("energy")),
             "sleep_quality": CheckinExtractor._scale(data.get("sleep_quality")),
             "soreness": CheckinExtractor._scale(data.get("soreness")),
+            "illness": data.get("illness") is True,
             "note": data.get("note") if isinstance(data.get("note"), str) else "",
         }
 

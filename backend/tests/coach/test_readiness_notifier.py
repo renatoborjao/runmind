@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -31,18 +32,25 @@ def _entry(tier, would_notify=True) -> ReadinessDiaryEntry:
     )
 
 
-def _block(tier, *, flag, would_notify=True):
+def _block(tier, *, flag, would_notify=True, illness=None, already_sent=False):
     """Roda block() com tudo mockado; devolve a mensagem (ou None)."""
 
     with (
         patch(f"{MOD}.ReadinessService") as svc,
         patch(f"{MOD}.get_settings",
               return_value=SimpleNamespace(readiness_alerts_enabled=flag)),
+        patch(f"{MOD}.CheckinRepository") as repo_cls,
+        patch(f"{MOD}.DispatchGuard") as guard,
+        patch(f"{MOD}.today_local", return_value=date(2026, 8, 14)),
     ):
 
         svc.evaluate = AsyncMock(
             return_value=(_verdict(tier), _entry(tier, would_notify))
         )
+
+        repo_cls.return_value.recent_illness.return_value = illness
+
+        guard.already_sent.return_value = already_sent
 
         result = asyncio.run(ReadinessNotifier.block("renato2"))
 
@@ -103,6 +111,34 @@ def test_message_caution_sem_sinais_ainda_humano():
     msg = ReadinessNotifier._message(v)
 
     assert "recuperação" in msg.lower()
+
+
+def test_doenca_suprime_puxar_e_manda_cuidado():
+    """O bug real: atleta gripado + corpo verde no relógio -> NÃO manda puxar;
+    manda mensagem de descanso/cuidado. A doença manda sobre o HRV."""
+
+    ill = SimpleNamespace(day="2026-08-13")
+
+    msg = _block(READINESS_GREEN, flag=True, illness=ill)
+
+    assert msg is not None
+    assert "DESCANSAR" in msg
+    assert "puxar" not in msg.lower()
+    assert "confiança" not in msg.lower()
+
+
+def test_doenca_um_toque_por_episodio():
+    """Já falou nesse episódio de doença -> não repete todo dia."""
+
+    ill = SimpleNamespace(day="2026-08-13")
+
+    assert _block(READINESS_GREEN, flag=True, illness=ill, already_sent=True) is None
+
+
+def test_sem_doenca_segue_fluxo_normal():
+    """Sem doença recente, o verde de dia puxado sai normalmente."""
+
+    assert _block(READINESS_GREEN, flag=True, illness=None) is not None
 
 
 def test_message_green_cita_positivo():

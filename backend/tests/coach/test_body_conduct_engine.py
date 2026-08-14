@@ -23,6 +23,39 @@ def _plan(sessions) -> TrainingPlan:
     )
 
 
+# ------------------- is_demanding (exigência) -------------------
+
+
+def test_rodagem_por_tempo_nao_e_exigente():
+    """O bug do Renato: 'Rodagem por Tempo' é rodagem LEVE medida por duração —
+    o 'tempo' (de 'por tempo') não pode fazer virar treino puxado."""
+
+    assert not BodyConductEngine.is_demanding(
+        _session("Friday", "Rodagem por Tempo", 8.0)
+    )
+
+
+def test_regenerativo_e_trote_leve_nao_sao_exigentes():
+
+    assert not BodyConductEngine.is_demanding(
+        _session("Monday", "Corrida Regenerativa", 6.0)
+    )
+    assert not BodyConductEngine.is_demanding(
+        _session("Monday", "Trote leve", 5.0)
+    )
+
+
+def test_treinos_de_qualidade_seguem_exigentes():
+    """A correção do 'easy manda' não pode amortecer os treinos que SÃO puxados."""
+
+    for wtype in (
+        "Intervalado de Limiar", "Longão com Blocos de Ritmo",
+        "Tiros de VO2", "Fartlek", "Progressivo",
+    ):
+
+        assert BodyConductEngine.is_demanding(_session("Wednesday", wtype, 8.0))
+
+
 # ------------------- next_demanding_session -------------------
 
 

@@ -17,12 +17,17 @@ class DailyCheckin:
     energy: int | None = None
     sleep_quality: int | None = None
     soreness: int | None = None
+    illness: bool = False          # relatou estar doente (gripe/febre/resfriado)
     note: str = ""                 # ex.: "dor na panturrilha direita"
 
     @property
     def has_data(self) -> bool:
 
-        return any(
-            v is not None
-            for v in (self.energy, self.sleep_quality, self.soreness)
-        ) or bool(self.note)
+        return (
+            any(
+                v is not None
+                for v in (self.energy, self.sleep_quality, self.soreness)
+            )
+            or self.illness
+            or bool(self.note)
+        )

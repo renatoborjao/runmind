@@ -64,6 +64,11 @@ class CheckinService:
 
         parts = []
 
+        # doença primeiro — é o sinal mais forte pra dose do dia
+        if checkin.illness:
+
+            parts.append("relatou estar DOENTE (gripe/resfriado/febre)")
+
         if checkin.energy is not None:
 
             parts.append(f"energia {_ENERGY.get(checkin.energy, checkin.energy)}")

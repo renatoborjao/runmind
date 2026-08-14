@@ -42,6 +42,14 @@ _DEMANDING_CUES = (
     "progress", "fartlek", "vo2", "forte", "long",  # longo/longao/longão
 )
 
+# EASY manda: um treino explicitamente leve/regenerativo NUNCA é "exigente",
+# mesmo que o nome carregue um cue ambíguo. Fecha a colisão do "tempo": em PT,
+# "Rodagem por Tempo" é rodagem medida por DURAÇÃO (leve), não um tempo run.
+_EASY_CUES = (
+    "rodagem", "regenerat", "regenera", "recupera", "recovery", "leve",
+    "facil", "solto", "trote", "easy",
+)
+
 PROMPT_TEMPLATE = """Você é o TREINADOR de corrida do Ritmind, cuidando do \
 atleta {runner_name}. AMANHÃ ele tem um treino EXIGENTE e o corpo dele, HOJE \
 (véspera), está pedindo recuperação. Você decide a conduta pelos dados — mas \
@@ -263,6 +271,12 @@ class BodyConductEngine:
     def _is_demanding(session: PlannedSession) -> bool:
 
         norm = BodyConductEngine._normalize(session.workout_type)
+
+        # leve/regenerativo tem prioridade — não deixa o "tempo" de "por tempo"
+        # (duração) fazer uma rodagem virar treino puxado
+        if any(cue in norm for cue in _EASY_CUES):
+
+            return False
 
         return any(cue in norm for cue in _DEMANDING_CUES)
 
