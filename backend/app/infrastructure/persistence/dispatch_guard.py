@@ -40,6 +40,13 @@ class DispatchGuard:
         return DispatchGuard._load(kind).get(profile) == period_key
 
     @staticmethod
+    def last_key(kind: str, profile: str) -> str | None:
+        """Último period_key marcado pra este atleta (ou None) — pra dedup por
+        JANELA (ex.: 'não repetir nos próximos N dias'), não só por igualdade."""
+
+        return DispatchGuard._load(kind).get(profile)
+
+    @staticmethod
     def mark(kind: str, profile: str, period_key: str) -> None:
 
         _STORAGE.mkdir(parents=True, exist_ok=True)

@@ -3,6 +3,7 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from app.application.history.acute_strain_analyzer import StrainVerdict
 from app.application.review.readiness_notifier import ReadinessNotifier
 from app.domain.entities.readiness_diary_entry import ReadinessDiaryEntry
 from app.domain.entities.readiness_verdict import (
@@ -32,8 +33,16 @@ def _entry(tier, would_notify=True) -> ReadinessDiaryEntry:
     )
 
 
-def _block(tier, *, flag, would_notify=True, illness=None, already_sent=False):
+def _block(
+    tier, *, flag, would_notify=True, illness=None, already_sent=False,
+    strained=False, strain_last_key=None,
+):
     """Roda block() com tudo mockado; devolve a mensagem (ou None)."""
+
+    strain = StrainVerdict(
+        is_strained=strained, rhr_recent=63, rhr_baseline=55,
+        hrv_recent=51, hrv_baseline=60,
+    )
 
     with (
         patch(f"{MOD}.ReadinessService") as svc,
@@ -41,6 +50,8 @@ def _block(tier, *, flag, would_notify=True, illness=None, already_sent=False):
               return_value=SimpleNamespace(readiness_alerts_enabled=flag)),
         patch(f"{MOD}.CheckinRepository") as repo_cls,
         patch(f"{MOD}.DispatchGuard") as guard,
+        patch(f"{MOD}.GarminHealthRepository"),
+        patch(f"{MOD}.AcuteStrainAnalyzer") as strain_cls,
         patch(f"{MOD}.today_local", return_value=date(2026, 8, 14)),
     ):
 
@@ -51,6 +62,10 @@ def _block(tier, *, flag, would_notify=True, illness=None, already_sent=False):
         repo_cls.return_value.recent_illness.return_value = illness
 
         guard.already_sent.return_value = already_sent
+
+        guard.last_key.return_value = strain_last_key
+
+        strain_cls.detect.return_value = strain
 
         result = asyncio.run(ReadinessNotifier.block("renato2"))
 
@@ -139,6 +154,47 @@ def test_sem_doenca_segue_fluxo_normal():
     """Sem doença recente, o verde de dia puxado sai normalmente."""
 
     assert _block(READINESS_GREEN, flag=True, illness=None) is not None
+
+
+def test_estresse_agudo_alerta_e_suprime_puxar():
+    """RHR↑ + HRV↓ vs base -> alerta de estresse fisiológico, sem 'pode puxar'."""
+
+    msg = _block(READINESS_GREEN, flag=True, strained=True)
+
+    assert msg is not None
+    assert "estresse fisiológico" in msg
+    assert "pegar leve" in msg
+    assert "confiança" not in msg.lower()
+
+
+def test_estresse_agudo_respeita_cooldown():
+    """Já alertou há 2 dias (< cooldown) -> não repete; e não libera o verde."""
+
+    msg = _block(
+        READINESS_GREEN, flag=True, strained=True, strain_last_key="2026-08-12",
+    )
+
+    assert msg is None
+
+
+def test_estresse_agudo_fora_do_cooldown_alerta_de_novo():
+
+    msg = _block(
+        READINESS_GREEN, flag=True, strained=True, strain_last_key="2026-08-01",
+    )
+
+    assert msg is not None
+    assert "estresse fisiológico" in msg
+
+
+def test_doenca_tem_prioridade_sobre_estresse():
+    """Doença relatada manda mais que o sinal fisiológico — vem a de doença."""
+
+    ill = SimpleNamespace(day="2026-08-13")
+
+    msg = _block(READINESS_GREEN, flag=True, illness=ill, strained=True)
+
+    assert "DESCANSAR" in msg  # mensagem de doença, não a de estresse
 
 
 def test_message_green_cita_positivo():
