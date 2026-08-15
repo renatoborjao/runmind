@@ -12,8 +12,14 @@ O texto é determinístico (custo zero, previsível). Dá pra trocar por Gemini
 depois, quando o Renato aprovar os alertas no diário. Ver
 [[project_analise_corpo_garmin]]."""
 
+from datetime import date
+
 from app.application.coach.intelligence.readiness_service import (
     ReadinessService,
+)
+from app.application.history.acute_strain_analyzer import (
+    AcuteStrainAnalyzer,
+    StrainVerdict,
 )
 from app.core.clock import today_local
 from app.core.config import get_settings
@@ -24,11 +30,18 @@ from app.domain.entities.readiness_verdict import (
 )
 from app.infrastructure.persistence.checkin_repository import CheckinRepository
 from app.infrastructure.persistence.dispatch_guard import DispatchGuard
+from app.infrastructure.persistence.garmin_health_repository import (
+    GarminHealthRepository,
+)
 
 _ALERT_TIERS = frozenset({READINESS_CAUTION, READINESS_GREEN})
 
 # quantos dias uma doença relatada continua segurando o "pode puxar"
 _ILLNESS_WINDOW = 4
+
+# alerta de estresse fisiológico agudo: no máximo 1 a cada N dias (orientar,
+# não repetir — o padrão costuma persistir alguns dias)
+_STRAIN_COOLDOWN = 5
 
 
 class ReadinessNotifier:
@@ -67,12 +80,65 @@ class ReadinessNotifier:
 
             return ReadinessNotifier._illness_message()
 
+        # ESTRESSE FISIOLÓGICO AGUDO: FC-repouso saltou + HRV caiu vs a base do
+        # atleta (padrão de overreaching / pré-doença). Também SUPRIME o "pode
+        # puxar" e orienta pegar leve — 1x a cada _STRAIN_COOLDOWN dias.
+        strain = AcuteStrainAnalyzer.detect(GarminHealthRepository().load(profile))
+
+        if strain.is_strained:
+
+            if ReadinessNotifier._in_cooldown(
+                DispatchGuard.last_key("readiness_strain", profile),
+                today_local(),
+            ):
+
+                return None  # em cooldown: cala, mas NÃO libera o "pode puxar"
+
+            DispatchGuard.mark(
+                "readiness_strain", profile, today_local().isoformat()
+            )
+
+            return ReadinessNotifier._strain_message(strain)
+
         # só a lacuna (CAUTION/GREEN) e só quando o estado VIROU (would_notify)
         if verdict.tier not in _ALERT_TIERS or not entry.would_notify:
 
             return None
 
         return ReadinessNotifier._message(verdict)
+
+    @staticmethod
+    def _in_cooldown(last_key: str | None, today: date) -> bool:
+        """True se o alerta de estresse já saiu nos últimos _STRAIN_COOLDOWN
+        dias (não repete). Chave inválida/ausente = fora de cooldown."""
+
+        if not last_key:
+
+            return False
+
+        try:
+
+            return (today - date.fromisoformat(last_key)).days < _STRAIN_COOLDOWN
+
+        except ValueError:
+
+            return False
+
+    @staticmethod
+    def _strain_message(v: StrainVerdict) -> str:
+        """Orientação quando o corpo dá sinal agudo (RHR↑ + HRV↓). Cita os
+        números; acolhe e orienta — não diagnostica. Se vier sintoma, médico."""
+
+        return (
+            "Bom dia! Teu corpo tá dando um sinal de estresse fisiológico "
+            f"incomum: a FC de repouso subiu (~{v.rhr_recent:.0f} vs teu normal "
+            f"~{v.rhr_baseline:.0f} bpm) e o HRV caiu abaixo do teu padrão "
+            f"(~{v.hrv_recent:.0f} vs ~{v.hrv_baseline:.0f}). Isso costuma "
+            "aparecer quando o corpo tá lidando com algo — carga acumulada, "
+            "sono curto ou o começo de uma gripe. Hoje vale pegar leve, "
+            "caprichar no sono e na hidratação. Se vier sintoma (garganta, "
+            "febre, moleza), descansa e procura um médico se precisar. 🤎"
+        )
 
     @staticmethod
     def _illness_message() -> str:
