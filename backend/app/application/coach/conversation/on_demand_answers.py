@@ -185,24 +185,34 @@ class OnDemandAnswers:
 
         if intent == ChatIntent.RACE_STRATEGY:
 
+            from app.application.review.goal_projection_writer import (
+                GoalProjectionWriter,
+            )
+
             goal = BuildTrainingGoal.execute(runner)
 
             history = await LoadTrainingHistory.execute(profile=profile)
 
             metrics = MetricsResolver.resolve(runner, history)
 
-            message = RaceStrategyEngine.build(runner.name, goal, metrics)
+            # NORTE primeiro: projeção "rumo à meta" (no nível atual + gap),
+            # depois a estratégia de pace. Cada um é opcional.
+            projection = GoalProjectionWriter.write(runner.name, goal, history)
+
+            strategy = RaceStrategyEngine.build(runner.name, goal, metrics)
+
+            parts = [p for p in (projection, strategy) if p]
+
+            if parts:
+
+                return "\n\n".join(parts)
 
             # sem distância/tempo e sem forma pra estimar: pede o alvo
-            if message is None:
-
-                return (
-                    "Bora montar sua estratégia de prova! 🏁 Me diz a "
-                    "distância e um tempo-alvo (ex.: '10 km em 50 min') que "
-                    "eu te passo o pace e os splits."
-                )
-
-            return message
+            return (
+                "Bora montar sua estratégia de prova! 🏁 Me diz a "
+                "distância e um tempo-alvo (ex.: '10 km em 50 min') que "
+                "eu te passo o pace e os splits."
+            )
 
         if intent == ChatIntent.PACE_ZONES:
 
