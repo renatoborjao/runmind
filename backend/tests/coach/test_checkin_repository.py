@@ -122,6 +122,38 @@ def test_recent_illness_ignores_non_illness_checkins(tmp_path):
     assert repo.recent_illness("renato", TODAY.isoformat()) is None
 
 
+def test_recent_concern_catches_illness_and_pain(tmp_path):
+    """A queixa a acompanhar = doença OU dor moderada+ (não dor leve)."""
+
+    repo = _repo(tmp_path)
+
+    repo.record("ana", _checkin(TODAY - timedelta(days=2), illness=True))
+    assert repo.recent_concern("ana", TODAY.isoformat()) is not None
+
+    repo.record("bia", _checkin(TODAY - timedelta(days=2), soreness=4,
+                                note="joelho"))
+    c = repo.recent_concern("bia", TODAY.isoformat())
+    assert c is not None and c.note == "joelho"
+
+
+def test_recent_concern_ignores_light_soreness(tmp_path):
+
+    repo = _repo(tmp_path)
+
+    repo.record("ana", _checkin(TODAY - timedelta(days=1), soreness=2))
+
+    assert repo.recent_concern("ana", TODAY.isoformat()) is None
+
+
+def test_recent_concern_expires(tmp_path):
+
+    repo = _repo(tmp_path)
+
+    repo.record("ana", _checkin(TODAY - timedelta(days=9), illness=True))
+
+    assert repo.recent_concern("ana", TODAY.isoformat()) is None
+
+
 def test_merge_keeps_illness_flag(tmp_path):
     """Relatou gripe de manhã; à tarde fala de sono — a gripe NÃO se apaga."""
 
