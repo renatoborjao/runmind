@@ -147,6 +147,14 @@ def sweep_orphan_workouts(
 
     garmin = garmin or GarminClient.connect(profile)
 
+    # workouts PROTEGIDOS (prova/avulso empurrado fora do plano) nunca são
+    # varridos — senão o push de domingo apagaria o treino de prova futuro.
+    from app.infrastructure.persistence.protected_workout_store import (
+        ProtectedWorkoutStore,
+    )
+
+    keep = set(keep_ids) | ProtectedWorkoutStore().ids(profile)
+
     removed = []
 
     try:
@@ -157,7 +165,7 @@ def sweep_orphan_workouts(
 
             name = workout.get("workoutName") or ""
 
-            if workout_id in keep_ids or not name.startswith(OUR_WORKOUT_PREFIXES):
+            if workout_id in keep or not name.startswith(OUR_WORKOUT_PREFIXES):
 
                 continue
 

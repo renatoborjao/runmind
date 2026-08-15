@@ -83,6 +83,31 @@ def test_sweep_removes_our_orphans_keeps_plan_and_athlete_workouts():
     assert 5 not in deleted                         # treino do atleta preservado
 
 
+def test_sweep_preserves_protected_workouts():
+    """Treino de prova/avulso PROTEGIDO (fora do plano) não é varrido."""
+
+    from app.application.garmin.garmin_push import sweep_orphan_workouts
+
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = [
+        {"workoutId": 1, "workoutName": "Ritmind · Tempo Run 7.5km"},  # plano
+        {"workoutId": 7, "workoutName": "Ritmind · Prova 10.0km"},     # protegido
+        {"workoutId": 9, "workoutName": "Ritmind · Fartlek 8.0km"},    # órfão
+    ]
+
+    with patch(
+        "app.infrastructure.persistence.protected_workout_store."
+        "ProtectedWorkoutStore"
+    ) as store:
+
+        store.return_value.ids.return_value = {7}
+
+        removed = sweep_orphan_workouts("renato2", keep_ids={1}, garmin=garmin)
+
+    assert removed == [9]           # só o órfão
+    assert 7 not in removed         # prova protegida sobrevive
+
+
 def test_sweep_best_effort_never_raises():
 
     from app.application.garmin.garmin_push import sweep_orphan_workouts
