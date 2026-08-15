@@ -22,6 +22,9 @@ from app.application.review.reengagement_notifier import (
     ReengagementNotifier,
 )
 from app.application.review.weekly_review_notifier import WeeklyReviewNotifier
+from app.application.review.wellbeing_followup_notifier import (
+    WellbeingFollowUpNotifier,
+)
 from app.application.strava.strava_activity_catchup import (
     StravaActivityCatchup,
 )
@@ -199,6 +202,17 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="reengagement_notification",
+    )
+
+    # Acompanhamento de bem-estar — 12h local (gate no notifier): dias depois de
+    # o atleta relatar gripe/dor, o coach VOLTA pra perguntar como está. UM
+    # toque por episódio (dedup). Silencioso quando não há queixa recente.
+    _scheduler.add_job(
+        WellbeingFollowUpNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="wellbeing_followup",
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã

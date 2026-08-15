@@ -13,6 +13,9 @@ from app.domain.entities.daily_checkin import DailyCheckin
 # quantos check-ins guardar (histórico curto basta; o valor é o estado recente)
 _MAX = 60
 
+# dor a partir da qual vale ACOMPANHAR depois (moderada pra cima; 1-2 é ruído)
+_CONCERN_SORENESS = 3
+
 
 class CheckinRepository:
 
@@ -82,6 +85,46 @@ class CheckinRepository:
             return None
 
         return last if last.has_data else None
+
+    def recent_concern(
+        self, profile: str, today: str, within_days: int = 6
+    ) -> DailyCheckin | None:
+        """A QUEIXA mais recente (doença OU dor moderada+) nos últimos
+        `within_days` — o que o coach deve ACOMPANHAR depois ("como está a
+        gripe/dor?"). None se não há queixa recente."""
+
+        from datetime import date, timedelta
+
+        try:
+
+            cutoff = date.fromisoformat(today) - timedelta(days=within_days)
+
+        except ValueError:
+
+            return None
+
+        for checkin in reversed(self.load(profile)):
+
+            is_concern = checkin.illness or (
+                checkin.soreness is not None
+                and checkin.soreness >= _CONCERN_SORENESS
+            )
+
+            if not is_concern:
+
+                continue
+
+            try:
+
+                if date.fromisoformat(checkin.day) >= cutoff:
+
+                    return checkin
+
+            except ValueError:
+
+                continue
+
+        return None
 
     # ------------------------------------------------------------------
 

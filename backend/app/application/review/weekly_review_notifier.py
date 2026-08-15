@@ -148,6 +148,10 @@ class WeeklyReviewNotifier:
         # acima já cobre o dedup.
         await WeeklyReviewNotifier._send_state_portrait(profile, runner)
 
+        # e o NORTE: "rumo à meta" — no nível atual, quanto sairia a distância
+        # da meta e o que falta pro alvo (vale mesmo sem data de prova).
+        await WeeklyReviewNotifier._send_goal_projection(profile, runner, history)
+
         # atualiza a ÂNCORA CONTÍNUA do VDOT (best_efforts do Strava das corridas
         # novas) ANTES de checar o progresso de pace — pra o floor estar fresco.
         await WeeklyReviewNotifier._refresh_best_efforts(profile)
@@ -269,6 +273,44 @@ class WeeklyReviewNotifier:
         except Exception as e:
 
             print(f"Falha ao destilar aprendizados de '{profile}': {e}")
+
+    @staticmethod
+    async def _send_goal_projection(profile: str, runner, history) -> None:
+        """'Rumo à meta' pós-resumo: projeção no nível atual + gap pro alvo.
+        Best-effort: falhar aqui nunca derruba o resumo (que já foi enviado).
+        None (sem distância-meta / sem âncora) → não envia."""
+
+        try:
+
+            from app.application.review.goal_projection_writer import (
+                GoalProjectionWriter,
+            )
+            from app.application.use_cases.build_training_goal import (
+                BuildTrainingGoal,
+            )
+            from app.core.clock import today_local
+
+            goal = BuildTrainingGoal.execute(runner)
+
+            weeks = None
+
+            if goal.race_date and goal.race_date > today_local():
+
+                weeks = (goal.race_date - today_local()).days // 7
+
+            message = GoalProjectionWriter.write(
+                runner.name, goal, history, weeks_to_race=weeks,
+            )
+
+            if message is None:
+
+                return
+
+            await CoachOutbox.send(runner, message)
+
+        except Exception as e:
+
+            print(f"Projeção de meta falhou p/ '{profile}': {e}")
 
     @staticmethod
     async def _send_state_portrait(profile: str, runner) -> None:

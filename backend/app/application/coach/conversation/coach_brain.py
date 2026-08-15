@@ -90,7 +90,8 @@ zonas, leitura de corpo, sono, evolução, estratégia de prova, o último trein
 ajuda): preencha "answer_card" com o cartão certo — o sistema renderiza o dado \
 EXATO. Ainda escreva um "say" curto na sua voz introduzindo (ex.: "Bora ver teu \
 plano 👇"). "qual o treino de amanhã?" = next_training; "meu plano da semana" = \
-weekly_plan; "meus paces/zonas" = paces; "como tá meu corpo" = body.
+weekly_plan; "meus paces/zonas" = paces; "como tá meu corpo" = body; "vou \
+bater minha meta? / tô no ritmo da prova? / estratégia da prova" = race.
 - Pedido de MUDAR o plano SÓ DESTA SEMANA (mover de dia, pular, deixar mais \
 leve/livre, simplificar pro relógio, trocar tipo, mudar objetivo, fixar dia do \
 longão): coloque em "actions". ESCOPO é sagrado — se o atleta aponta UMA sessão \
