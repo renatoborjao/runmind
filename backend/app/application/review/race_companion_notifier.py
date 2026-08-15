@@ -160,13 +160,30 @@ class RaceCompanionNotifier:
 
             extra = f"\n\n{pace_line}" if pace_line else ""
 
-            return (
+            base = (
                 f"É a *semana da sua prova*! 🔥 Sua prova de {race} tá logo ali.\n\n"
                 "Semana de afiar, não de ganhar forma — o trabalho pesado já "
                 "foi feito. Foco em dormir bem, comer direito e chegar leve."
                 f"{extra}\n\n"
                 "Quer revisar a estratégia completa? Manda 'como corro a prova'."
             )
+
+            # oferta proativa: mandar a prova como treino guiado pro relógio.
+            # Arma o pendente pra o "sim" empurrar (só quem dá pra empurrar).
+            from app.application.coach.conversation.race_workout_flow import (
+                RaceWorkoutFlow,
+            )
+            from app.infrastructure.integrations.garmin.race_workout_offer_store import (  # noqa: E501
+                RaceWorkoutOfferStore,
+            )
+
+            if RaceWorkoutFlow.eligible(profile, runner):
+
+                RaceWorkoutOfferStore.set_pending(profile)
+
+                base += RaceWorkoutFlow.offer_text()
+
+            return base
 
         if touch == "eve":
 

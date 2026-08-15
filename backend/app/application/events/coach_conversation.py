@@ -167,6 +167,31 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # "SIM" pra oferta de mandar a PROVA como treino guiado pro relógio
+        # (oferecida pelo companheiro na semana da prova) — empurra o treino de
+        # prova protegido, antes dos outros syncs.
+        if reply_text is None:
+
+            try:
+
+                from app.application.coach.conversation.race_workout_flow import (
+                    RaceWorkoutFlow,
+                )
+
+                reply_text = await RaceWorkoutFlow.resolve_watch_reply(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha no relógio da prova de '{profile}': {e}")
+
+                reply_text = None
+
         # "SIM" pra oferta de mandar o treino AVULSO pro relógio — empurra só
         # a sessão avulsa (push escopado), antes do sync do plano da semana.
         if reply_text is None:
