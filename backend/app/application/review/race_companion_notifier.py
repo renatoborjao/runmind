@@ -103,9 +103,12 @@ class RaceCompanionNotifier:
 
     @staticmethod
     def _touchpoint(profile: str, days_until: int, goal: TrainingGoal) -> str | None:
-        """O marco a disparar hoje: o de MENOR limiar que ainda é >= dias que
-        faltam e que ainda não saiu pra esta prova. Prova no passado ou muito
-        longe -> None."""
+        """O marco de HOJE: o BRACKET em que o atleta está — o de MENOR limiar
+        que ainda comporta os dias que faltam. Dispara só se ainda não saiu; se
+        JÁ saiu, para aqui (None) — NUNCA cai pro marco seguinte, mais distante
+        e fora de hora. Era o bug do Renato: com a 'semana da prova' já enviada,
+        a 4 dias da prova ele caía no 'polimento' (que é de ~2 semanas antes).
+        Prova no passado -> None."""
 
         if days_until < 0:
 
@@ -113,13 +116,15 @@ class RaceCompanionNotifier:
 
         race = goal.race_date.isoformat()
 
-        # _TOUCHPOINTS está do menor limiar (0) pro maior (14): o primeiro que
-        # ainda comporta os dias que faltam E não saiu é o marco de hoje
+        # _TOUCHPOINTS vai do menor limiar (0) pro maior (14): o PRIMEIRO que
+        # comporta os dias que faltam é o bracket de hoje — e o único candidato.
         for threshold, touch in _TOUCHPOINTS:
 
-            if days_until <= threshold and not DispatchGuard.already_sent(
-                _KIND, profile, f"{race}:{touch}"
-            ):
+            if days_until <= threshold:
+
+                if DispatchGuard.already_sent(_KIND, profile, f"{race}:{touch}"):
+
+                    return None
 
                 return touch
 
