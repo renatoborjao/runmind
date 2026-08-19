@@ -1,6 +1,5 @@
 from datetime import date, time
 
-from app.application.coach.intelligence.weather_advisor import WeatherAdvisor
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
@@ -172,16 +171,11 @@ class MorningBriefingNotifier:
 
             if today is not None:
 
+                # o treino já vem COM a linha de clima do dia (uma só,
+                # DailyTrainingNotifier._weather_line: calor rico OU geral).
+                # Não adicionamos outra aqui — antes saíam duas linhas de
+                # calor na mesma mensagem (a queixa do Renato).
                 parts.append(today[1])
-
-                # clima do dia (ANTECIPA): se esquenta, avisa a melhor janela +
-                # segurar o pace + hidratar. Best-effort e só quando é adverso —
-                # dia ameno não gera linha. Só faz sentido tendo treino hoje.
-                weather = await WeatherAdvisor.advice(profile, local.date())
-
-                if weather:
-
-                    parts.append(weather)
 
         # nada a dizer (sem furo, sem alerta, hoje é descanso): silêncio
         if not parts:

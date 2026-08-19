@@ -52,11 +52,19 @@ class RaceWorkoutFlow:
         )
 
     @staticmethod
-    def eligible(profile: str, runner: RunnerProfile) -> bool:
-        """Só oferece quando dá pra empurrar: Garmin conectado e plano nosso
-        (treinador externo recebe pela ferramenta dele)."""
+    def eligible(
+        profile: str, runner: RunnerProfile, race_iso: str | None = None,
+    ) -> bool:
+        """Só oferece quando dá pra empurrar: Garmin conectado, plano nosso
+        (treinador externo recebe pela ferramenta dele) E a prova ainda NÃO
+        foi mandada pro relógio (senão o coach re-ofereceria algo que já está
+        lá — a queixa do Renato)."""
 
         if getattr(runner, "external_coach", False):
+
+            return False
+
+        if race_iso and RaceWorkoutOfferStore.already_sent(profile, race_iso):
 
             return False
 

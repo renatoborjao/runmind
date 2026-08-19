@@ -16,6 +16,9 @@ from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import LoadTrainingHistory
 from app.domain.entities.planned_session import PlannedSession
+from app.infrastructure.integrations.garmin.race_workout_offer_store import (
+    RaceWorkoutOfferStore,
+)
 from app.infrastructure.persistence.protected_workout_store import (
     ProtectedWorkoutStore,
 )
@@ -78,5 +81,8 @@ async def push_race_workout(profile: str) -> dict | None:
     if result.get("ok") and result.get("workout_id"):
 
         ProtectedWorkoutStore().add(profile, result["workout_id"])
+
+        # a prova desta data já está no relógio — o companheiro não re-oferece
+        RaceWorkoutOfferStore.mark_sent(profile, goal.race_date.isoformat())
 
     return result

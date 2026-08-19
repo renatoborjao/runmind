@@ -16,7 +16,9 @@ FORECAST = {
 }
 
 
-def _run_notify_one(history, forecast, session_message="🏃 Treino de hoje"):
+def _run_notify_one(
+    history, forecast, session_message="🏃 Treino de hoje", heat_advice=None,
+):
 
     sent = {}
 
@@ -26,6 +28,12 @@ def _run_notify_one(history, forecast, session_message="🏃 Treino de hoje"):
         patch(f"{MODULE}.LoadTrainingHistory") as mock_history,
         patch(f"{MODULE}.OpenMeteoClient") as mock_weather,
         patch(f"{MODULE}.NotificationService") as mock_notifier,
+        # o aviso RICO de calor é a fonte PRIMÁRIA; mockado (None por padrão)
+        # pra o teste ser hermético e cair na linha geral da previsão do dia
+        patch(
+            f"{MODULE}.HeatWeatherAdvisor.advice",
+            new=AsyncMock(return_value=heat_advice),
+        ),
     ):
 
         mock_provider.for_profile = AsyncMock(
@@ -59,6 +67,7 @@ def _outdoor(day, lat, lng):
 
 def test_reminder_appends_weather_line():
 
+    # dia ameno pro aviso de calor (advice=None) -> cai na linha GERAL
     history = TrainingHistory(activities=[_outdoor(3, -23.5, -46.6)])
 
     sent = _run_notify_one(history, FORECAST)
@@ -66,6 +75,20 @@ def test_reminder_appends_weather_line():
     assert "🏃 Treino de hoje" in sent["message"]
     assert "Clima hoje" in sent["message"]
     assert "33°C" in sent["message"]
+
+
+def test_reminder_prefers_rich_heat_advice_over_general_line():
+
+    # quando esquenta, sai SÓ o aviso rico (janela + afrouxar pace); a linha
+    # geral "Clima hoje" NÃO aparece junto (era a duplicação do briefing)
+    history = TrainingHistory(activities=[_outdoor(3, -23.5, -46.6)])
+
+    rich = "🌡️ Hoje esquenta: sensação de até ~35°, corra cedo e hidrata. 💧"
+
+    sent = _run_notify_one(history, FORECAST, heat_advice=rich)
+
+    assert rich in sent["message"]
+    assert "Clima hoje" not in sent["message"]
 
 
 def test_reminder_without_gps_has_no_weather_line():

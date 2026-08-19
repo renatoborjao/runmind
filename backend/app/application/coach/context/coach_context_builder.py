@@ -54,9 +54,15 @@ class CoachContextBuilder:
 
             next_planned_date=next_planned_date,
 
+            # Comparação EXATA bloco-a-bloco só faz sentido com distância REAL
+            # (GPS). Na esteira o relógio não tem GPS — a distância de cada
+            # volta vem 0/estimada, então o matcher marcaria TODO bloco como
+            # "não completou" (a "análise quebrada" da esteira). Nesse caso
+            # NÃO calculamos o veredito exato: cai no texto livre, onde a IA
+            # narra a execução por bom senso (já ciente de "esteira, estimada").
             block_comparison=(
                 PlannedExecutionMatcher.match(planned, executed.activity)
-                if planned is not None
+                if planned is not None and not executed.indoor
                 else None
             ),
 
