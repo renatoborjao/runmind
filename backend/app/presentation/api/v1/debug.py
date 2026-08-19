@@ -182,6 +182,29 @@ async def proactive_ledger(profile: str, limit: int = 20):
         )
 
 
+@router.get("/proactive-preview/{profile}")
+async def proactive_preview(profile: str):
+    """DRY-RUN (não envia): a sequência de toques de PROVA que ainda vai sair —
+    data, marco, se já saiu e o CONTEÚDO real. É o preview que pega bug de
+    timing (polimento fora de hora, marco pulado) ANTES do atleta ver. Vazio
+    quando não há prova por vir."""
+
+    try:
+
+        from app.application.review.race_companion_notifier import (
+            RaceCompanionNotifier,
+        )
+
+        return {"race_schedule": await RaceCompanionNotifier.preview(profile)}
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
 @router.get("/learnings/{profile}")
 async def coach_learnings(profile: str):
     """O que o cérebro coach aprendeu observando o atleta — janela de

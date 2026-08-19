@@ -66,6 +66,71 @@ def test_touchpoint_none_when_past_or_far():
     assert _touchpoint(20) is None
 
 
+def test_preview_lists_upcoming_touches_with_dates():
+    """Dry-run: a 4 dias da prova, mostra a sequência que AINDA vai sair —
+    semana-da-prova (hoje), jornada (3d), véspera (1d) e dia da prova — cada
+    marco UMA vez, com data e conteúdo montado."""
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as load,
+        patch(f"{MODULE}.BuildTrainingGoal") as build_goal,
+        patch(f"{MODULE}.use_athlete_timezone"),
+        patch(f"{MODULE}.today_local", return_value=date(2026, 8, 19)),
+        patch(f"{MODULE}.DispatchGuard") as guard,
+        patch.object(
+            RaceCompanionNotifier, "_message",
+            new=AsyncMock(side_effect=lambda p, r, g, touch: f"MSG-{touch}"),
+        ),
+    ):
+
+        load.execute.return_value = make_runner(name="Renato")
+        build_goal.execute.return_value = _goal()   # prova 2026-08-23
+        guard.already_sent.return_value = False
+
+        schedule = asyncio.run(RaceCompanionNotifier.preview("renato2"))
+
+    touches = [(row["date"], row["touch"]) for row in schedule]
+
+    assert touches == [
+        ("2026-08-19", "race_week"),
+        ("2026-08-20", "journey"),
+        ("2026-08-22", "eve"),
+        ("2026-08-23", "race_day"),
+    ]
+    assert all(row["will_send"] for row in schedule)
+    assert schedule[1]["preview"] == "MSG-journey"
+
+
+def test_preview_marks_already_sent_without_building():
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as load,
+        patch(f"{MODULE}.BuildTrainingGoal") as build_goal,
+        patch(f"{MODULE}.use_athlete_timezone"),
+        patch(f"{MODULE}.today_local", return_value=date(2026, 8, 19)),
+        patch(f"{MODULE}.DispatchGuard") as guard,
+        patch.object(
+            RaceCompanionNotifier, "_message",
+            new=AsyncMock(side_effect=lambda p, r, g, touch: f"MSG-{touch}"),
+        ),
+    ):
+
+        load.execute.return_value = make_runner(name="Renato")
+        build_goal.execute.return_value = _goal()
+        # semana-da-prova já saiu -> aparece marcada, sem montar conteúdo
+        guard.already_sent.side_effect = (
+            lambda k, p, period: period.endswith(":race_week")
+        )
+
+        schedule = asyncio.run(RaceCompanionNotifier.preview("renato2"))
+
+    race_week = next(r for r in schedule if r["touch"] == "race_week")
+
+    assert race_week["already_sent"] is True
+    assert race_week["will_send"] is False
+    assert race_week["preview"] == ""
+
+
 def _message(touch, runner=None):
     runner = runner or make_runner(external_coach=False)
     with patch.object(
