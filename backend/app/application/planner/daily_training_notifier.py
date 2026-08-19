@@ -1,3 +1,6 @@
+from app.application.coach.intelligence.weather_advisor import (
+    WeatherAdvisor as HeatWeatherAdvisor,
+)
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -11,6 +14,7 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
+from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.integrations.weather.open_meteo_client import (
@@ -93,12 +97,23 @@ class DailyTrainingNotifier:
     async def _weather_line(
         profile: str,
     ) -> str:
-        """Linha de clima pro treino de hoje, da coordenada do último treino
-        outdoor do atleta. Sem GPS (atleta novo/esteira) ou clima fora do ar
-        -> string vazia (o lembrete sai sem a linha, nunca quebra)."""
+        """UMA linha de clima pro treino de hoje. Preferimos o aviso RICO de
+        calor (melhor janela pra correr + quanto afrouxar o pace); em dia
+        ameno/chuva/frio ele volta None e caímos na linha GERAL da previsão do
+        dia. É a ÚNICA fonte de clima da manhã — o briefing NÃO adiciona outra
+        (antes saíam duas linhas de calor na mesma mensagem). Sem GPS (atleta
+        novo/esteira) ou clima fora do ar -> string vazia (sai sem a linha)."""
 
         try:
 
+            # calor: o conselho denso (janela + afrouxar pace + hidratar)
+            rich = await HeatWeatherAdvisor.advice(profile, today_local())
+
+            if rich:
+
+                return rich
+
+            # ameno/chuva/frio: a linha geral da previsão do dia
             history = await LoadTrainingHistory.execute(profile=profile)
 
             coords = DailyTrainingNotifier._latest_coords(history)

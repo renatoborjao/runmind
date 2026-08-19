@@ -177,7 +177,9 @@ class RaceCompanionNotifier:
                 RaceWorkoutOfferStore,
             )
 
-            if RaceWorkoutFlow.eligible(profile, runner):
+            if RaceWorkoutFlow.eligible(
+                profile, runner, goal.race_date.isoformat()
+            ):
 
                 RaceWorkoutOfferStore.set_pending(profile)
 

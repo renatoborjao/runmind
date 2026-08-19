@@ -92,6 +92,12 @@ EXATO. Ainda escreva um "say" curto na sua voz introduzindo (ex.: "Bora ver teu 
 plano 👇"). "qual o treino de amanhã?" = next_training; "meu plano da semana" = \
 weekly_plan; "meus paces/zonas" = paces; "como tá meu corpo" = body; "vou \
 bater minha meta? / tô no ritmo da prova? / estratégia da prova" = race.
+- ADAPTAR/EXECUTAR um treino que o atleta JÁ TEM ("como faço na esteira?", \
+"como executo esse treino?", "adapta pra chuva/rua", "como corro isso?"): \
+responda NO "say" com os blocos JÁ adaptados (cada bloco em sua linha com "•", \
+usando os números exatos do quadro) e deixe "answer_card"=null — ele já tem o \
+treino, o cartão só REPETIRIA a sessão embaixo (paredão). answer_card=\
+next_training é só pra quando ele pergunta QUAL é o treino, não COMO fazê-lo.
 - Pedido de MUDAR o plano SÓ DESTA SEMANA (mover de dia, pular, deixar mais \
 leve/livre, simplificar pro relógio, trocar tipo, mudar objetivo, fixar dia do \
 longão): coloque em "actions". ESCOPO é sagrado — se o atleta aponta UMA sessão \
