@@ -93,8 +93,17 @@ class RaceCompanionNotifier:
         # áudio (arrancada na voz do coach). Semana/polimento seguem só texto.
         emotional = touch in ("race_day", "eve")
 
+        # kind pro governador: dia/véspera são ESSENCIAIS (emocionais, sempre
+        # saem); semana/polimento são EXTRAS informativos (cedem em dia cheio)
+        kind = {
+            "race_day": "race_day",
+            "eve": "race_eve",
+            "race_week": "race_week",
+            "taper": "race_taper",
+        }.get(touch, "race_week")
+
         await CoachOutbox.send(
-            runner, message, voice=emotional, profile=profile,
+            runner, message, voice=emotional, profile=profile, kind=kind,
         )
 
         DispatchGuard.mark(

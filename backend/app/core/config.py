@@ -228,6 +228,42 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # Governador de proativos: portão único por onde passa tudo que o coach
+    # INICIA (briefing, review, prova, re-engajamento, recap, empurrões). Dá
+    # diário unificado + teto diário (isentando os essenciais) + dedup entre
+    # fontes — ataca a família de bugs de proativo repetido/fora de hora/
+    # empilhado. OFF = passthrough (comportamento de hoje, sem diário).
+    # Ver [[project_governador_proativos]].
+    proactive_governor_enabled: bool = False
+
+    # Canário: quando não-vazio, o governador atua SÓ nestes perfis (ex.:
+    # "renato2"), mesmo com a flag global ligada. Vazio = todos.
+    proactive_governor_profiles: str = ""
+
+    # Teto de mensagens PROATIVAS não-essenciais por atleta/dia (essenciais —
+    # análise pós-treino, dia da prova, recorde — são ISENTOS). Renato: 2/dia.
+    proactive_daily_budget: int = 2
+
+    @property
+    def proactive_governor_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.proactive_governor_profiles.split(",")
+            if p.strip()
+        ]
+
+    def proactive_governor_active_for(self, profile: str) -> bool:
+        """O governador atua neste perfil? (flag global + allowlist de canário)."""
+
+        if not self.proactive_governor_enabled:
+
+            return False
+
+        allow = self.proactive_governor_profile_list
+
+        return not allow or profile in allow
+
     @property
     def cors_origin_list(self) -> list[str]:
 

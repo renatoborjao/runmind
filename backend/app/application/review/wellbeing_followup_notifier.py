@@ -89,7 +89,9 @@ class WellbeingFollowUpNotifier:
 
         message = WellbeingFollowUpNotifier._message(runner.name, concern)
 
-        await CoachOutbox.send(runner, message)
+        await CoachOutbox.send(
+            runner, message, profile=profile, kind="wellbeing_followup",
+        )
 
     @staticmethod
     def _message(name: str, concern) -> str:

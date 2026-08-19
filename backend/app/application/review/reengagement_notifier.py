@@ -97,7 +97,9 @@ class ReengagementNotifier:
         message = await ReengagementWriter.write(profile, facts)
 
         # beat emocional (a mão estendida) — sai em texto + áudio se ele aceita voz
-        await CoachOutbox.send(runner, message, voice=True, profile=profile)
+        await CoachOutbox.send(
+            runner, message, voice=True, profile=profile, kind="reengagement",
+        )
 
     # ------------------------------------------------------------------
 

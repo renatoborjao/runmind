@@ -117,4 +117,6 @@ class MonthlyRecapNotifier:
         await CoachOutbox.send(
             runner,
             message,
+            profile=profile,
+            kind="monthly_recap",
         )

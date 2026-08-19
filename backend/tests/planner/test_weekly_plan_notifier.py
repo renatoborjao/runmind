@@ -220,7 +220,7 @@ def _run_sunday(*, resync_result, should_offer=False):
         mock_garmin_sync.should_offer.return_value = should_offer
         mock_garmin_sync.offer_text.return_value = "\n\n[OFERTA]"
 
-        async def _capture(runner, message):
+        async def _capture(runner, message, **kwargs):
             sent["message"] = message
 
         mock_notification.send = AsyncMock(side_effect=_capture)
@@ -286,7 +286,7 @@ def _run_reminder(plan, external=True):
 
         plan_repo_cls.return_value.load.return_value = plan
 
-        async def _capture(runner, message):
+        async def _capture(runner, message, **kwargs):
             sent["message"] = message
 
         notif.send = AsyncMock(side_effect=_capture)
