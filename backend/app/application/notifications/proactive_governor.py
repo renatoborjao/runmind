@@ -48,6 +48,7 @@ _TIERS = {
     "personal_record": CRITICAL,   # recorde batido
     "race_day": CRITICAL,          # manhã da prova
     "race_eve": CRITICAL,          # véspera
+    "race_journey": CRITICAL,      # recap da jornada (3 dias antes)
     "announcement": CRITICAL,      # informativo do dono (broadcast)
     # ESSENCIAIS — âncoras agendadas esperadas (sempre saem, isentas do teto)
     "morning_briefing": HIGH,

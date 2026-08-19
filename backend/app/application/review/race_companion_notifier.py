@@ -34,6 +34,7 @@ RACE_HOUR = 7
 _TOUCHPOINTS = [
     (0, "race_day"),
     (1, "eve"),
+    (3, "journey"),
     (7, "race_week"),
     (14, "taper"),
 ]
@@ -89,15 +90,16 @@ class RaceCompanionNotifier:
 
             return
 
-        # dia da prova e véspera são os toques EMOCIONAIS: saem em texto +
-        # áudio (arrancada na voz do coach). Semana/polimento seguem só texto.
-        emotional = touch in ("race_day", "eve")
+        # dia da prova, véspera e jornada são os toques EMOCIONAIS: saem em
+        # texto + áudio (arrancada na voz do coach). Semana/polimento só texto.
+        emotional = touch in ("race_day", "eve", "journey")
 
-        # kind pro governador: dia/véspera são ESSENCIAIS (emocionais, sempre
-        # saem); semana/polimento são EXTRAS informativos (cedem em dia cheio)
+        # kind pro governador: dia/véspera/jornada são ESSENCIAIS (emocionais,
+        # sempre saem); semana/polimento são EXTRAS informativos (cedem no cheio)
         kind = {
             "race_day": "race_day",
             "eve": "race_eve",
+            "journey": "race_journey",
             "race_week": "race_week",
             "taper": "race_taper",
         }.get(touch, "race_week")
@@ -168,6 +170,14 @@ class RaceCompanionNotifier:
                 "pro dia. Menos é mais agora. Confia no processo. 💪"
             )
 
+        # jornada até a prova (3 dias antes): o retrospecto emocional "olha o
+        # caminho que você fez". Conteúdo próprio (não usa a linha de pace).
+        if touch == "journey":
+
+            return await RaceCompanionNotifier._journey_message(
+                profile, runner, goal,
+            )
+
         pace_line = await RaceCompanionNotifier._pace_line(profile, runner, goal)
 
         if touch == "race_week":
@@ -223,6 +233,36 @@ class RaceCompanionNotifier:
             "vai buscar na segunda. Você treinou pra isso — agora é só correr "
             f"o que já é seu.{extra}\n\nBoa prova! Vai com tudo. 🚀"
         )
+
+    @staticmethod
+    async def _journey_message(profile: str, runner, goal: TrainingGoal) -> str | None:
+        """A recap da JORNADA até a prova (retrospecto emocional). Best-effort:
+        sem histórico/sem dá pra montar, volta None (o toque não sai)."""
+
+        try:
+
+            from app.application.review.race_journey_builder import (
+                RaceJourneyBuilder,
+            )
+            from app.application.review.race_journey_message_formatter import (
+                RaceJourneyMessageFormatter,
+            )
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            journey = RaceJourneyBuilder.build(runner, history, goal)
+
+            if journey is None:
+
+                return None
+
+            return RaceJourneyMessageFormatter.format(runner.name, journey)
+
+        except Exception as e:
+
+            print(f"Recap da jornada falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     async def _pace_line(profile: str, runner, goal: TrainingGoal) -> str | None:

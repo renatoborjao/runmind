@@ -35,16 +35,18 @@ def test_touchpoint_picks_the_right_marker():
     assert _touchpoint(14) == "taper"
     assert _touchpoint(10) == "taper"
     assert _touchpoint(7) == "race_week"
-    assert _touchpoint(3) == "race_week"
+    assert _touchpoint(5) == "race_week"
+    assert _touchpoint(3) == "journey"
+    assert _touchpoint(2) == "journey"
     assert _touchpoint(1) == "eve"
     assert _touchpoint(0) == "race_day"
 
 
 def test_touchpoint_skips_already_sent():
-    """Cadastrou a prova em cima da hora (3 dias): o taper foi perdido, pega
+    """Cadastrou a prova em cima da hora (5 dias): o taper foi perdido, pega
     o marco atual (semana da prova)."""
 
-    assert _touchpoint(3, sent=("taper",)) == "race_week"
+    assert _touchpoint(5, sent=("taper",)) == "race_week"
 
 
 def test_touchpoint_does_not_fall_through_to_farther_marker():
