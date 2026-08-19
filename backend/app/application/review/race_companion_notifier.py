@@ -6,6 +6,8 @@ Roda de hora em hora; cada atleta é avaliado no horário local, e cada toque sa
 UMA vez (dedup por prova+toque). Silencioso quando não há prova marcada ou o dia
 não bate um marco. Ver [[project_ideias_produto]]."""
 
+from datetime import timedelta
+
 from app.application.coach.planning.race_strategy_engine import (
     RaceStrategyEngine,
 )
@@ -140,6 +142,72 @@ class RaceCompanionNotifier:
                 return touch
 
         return None
+
+    @staticmethod
+    async def preview(profile: str) -> list[dict]:
+        """PREVIEW (dry-run, NÃO envia): a sequência de toques de prova que
+        AINDA vai sair — data, marco, se já saiu e o CONTEÚDO real montado. É a
+        observabilidade que pega bug de timing (tipo o polimento fora de hora)
+        ANTES do atleta ver. Vazio quando não há prova por vir."""
+
+        runner = LoadRunnerProfile.execute(profile)
+
+        use_athlete_timezone(runner.timezone)
+
+        goal = BuildTrainingGoal.execute(runner)
+
+        if goal.race_date is None or goal.race_date < today_local():
+
+            return []
+
+        race = goal.race_date.isoformat()
+
+        out: list[dict] = []
+
+        scheduled: set[str] = set()
+
+        day = today_local()
+
+        while day <= goal.race_date:
+
+            days_until = (goal.race_date - day).days
+
+            # o bracket daquele dia (menor limiar que comporta os dias)
+            touch = next(
+                (t for threshold, t in _TOUCHPOINTS if days_until <= threshold),
+                None,
+            )
+
+            if touch and touch not in scheduled:
+
+                scheduled.add(touch)
+
+                already = DispatchGuard.already_sent(
+                    _KIND, profile, f"{race}:{touch}"
+                )
+
+                message = (
+                    None
+                    if already
+                    else await RaceCompanionNotifier._message(
+                        profile, runner, goal, touch,
+                    )
+                )
+
+                out.append(
+                    {
+                        "date": day.isoformat(),
+                        "days_until": days_until,
+                        "touch": touch,
+                        "already_sent": already,
+                        "will_send": bool(message),
+                        "preview": (message or "")[:240],
+                    }
+                )
+
+            day += timedelta(days=1)
+
+        return out
 
     @staticmethod
     async def _message(
