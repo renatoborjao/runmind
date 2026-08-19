@@ -79,7 +79,7 @@ def test_one_failure_does_not_block_the_rest():
 
         mock_guard.already_sent.return_value = False
 
-        async def send(runner, msg):
+        async def send(runner, msg, **kwargs):
 
             if runner.name == "b":
 

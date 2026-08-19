@@ -157,6 +157,8 @@ class WeeklyPlanNotifier:
         await CoachOutbox.send(
             runner,
             message,
+            profile=profile,
+            kind="weekly_plan",
         )
 
     @staticmethod
@@ -204,6 +206,8 @@ class WeeklyPlanNotifier:
                 await CoachOutbox.send(
                     runner,
                     WeeklyPlanNotifier._reminder_text(runner.name),
+                    profile=profile,
+                    kind="weekly_plan",
                 )
 
                 DispatchGuard.mark("external_reminder", profile, period)
@@ -262,4 +266,6 @@ class WeeklyPlanNotifier:
         await CoachOutbox.send(
             runner,
             message,
+            profile=profile,
+            kind="weekly_plan",
         )

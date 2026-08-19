@@ -64,7 +64,9 @@ class AnnouncementBroadcaster:
 
                     continue
 
-                await CoachOutbox.send(runner, text)
+                await CoachOutbox.send(
+                    runner, text, profile=profile, kind="announcement",
+                )
 
                 # marca só APÓS enviar com sucesso (falha não vira "já enviado")
                 DispatchGuard.mark(_KIND, profile, announcement_id)

@@ -185,7 +185,9 @@ class MorningBriefingNotifier:
         # "bom dia" do despertar sai só em TEXTO: é a mensagem diária mais
         # longa (furo + corpo + treino), e um áudio disso todo dia cansa. A
         # voz fica reservada pros beats curtos que emocionam (prova, recorde).
-        await CoachOutbox.send(runner, "\n\n".join(parts))
+        await CoachOutbox.send(
+            runner, "\n\n".join(parts), profile=profile, kind="morning_briefing",
+        )
 
     @staticmethod
     def _night_data_ready(profile: str, day: date) -> bool:

@@ -49,10 +49,13 @@ class TrainingCompletedEvent:
             print(f"Falha ao preparar RPE de '{profile}': {e}")
 
         # CoachOutbox: envia E registra no outbox (pra o coach lembrar da
-        # análise quando o atleta comentar depois no chat)
+        # análise quando o atleta comentar depois no chat). ESSENCIAL: ele
+        # acabou de correr — a análise sempre sai (isenta do teto do governador).
         await CoachOutbox.send(
             runner,
             message,
+            profile=profile,
+            kind="feedback",
         )
 
         # Detector proativo de aversão (Fatia 2): depois do feedback, se está
@@ -92,6 +95,7 @@ class TrainingCompletedEvent:
                 # recorde batido é beat emocional: sai em texto + áudio
                 await CoachOutbox.send(
                     runner, celebration, voice=True, profile=profile,
+                    kind="personal_record",
                 )
 
         except Exception as e:
@@ -119,6 +123,7 @@ class TrainingCompletedEvent:
                 # "você conseguiu / cruzou": beat emocional em texto + áudio
                 await CoachOutbox.send(
                     runner, debrief, voice=True, profile=profile,
+                    kind="race_debrief",
                 )
 
         except Exception as e:

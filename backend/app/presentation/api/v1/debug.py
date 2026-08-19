@@ -134,6 +134,54 @@ async def coach_brain_log(profile: str, limit: int = 40):
         )
 
 
+@router.get("/proactive/{profile}")
+async def proactive_ledger(profile: str, limit: int = 20):
+    """Diário do GOVERNADOR de proativos: o que o coach INICIOU (tipo/tier/dia/
+    hora) — a visão unificada que faltava pra pegar proativo repetido/fora de
+    hora/empilhado ANTES de o atleta ver. Mostra as entradas recentes, as de
+    HOJE e quanto do teto diário de EXTRAS já foi usado. Mais recentes primeiro."""
+
+    try:
+
+        from app.application.notifications.proactive_governor import HIGH
+        from app.core.clock import today_local
+        from app.core.config import get_settings
+        from app.infrastructure.persistence.proactive_ledger_repository import (
+            ProactiveLedgerRepository,
+        )
+
+        settings = get_settings()
+
+        ledger = ProactiveLedgerRepository()
+
+        day = today_local().isoformat()
+
+        today = ledger.today(profile, day)
+
+        extras_used = sum(1 for e in today if e.get("tier", HIGH) < HIGH)
+
+        return {
+            "governor_active": settings.proactive_governor_active_for(profile),
+            "daily_budget": settings.proactive_daily_budget,
+            "today": {
+                "day": day,
+                "sent": [e.get("kind") for e in today],
+                "extras_used": extras_used,
+                "extras_left": max(
+                    0, settings.proactive_daily_budget - extras_used
+                ),
+            },
+            "recent": list(reversed(ledger.recent(profile, limit))),
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
 @router.get("/learnings/{profile}")
 async def coach_learnings(profile: str):
     """O que o cérebro coach aprendeu observando o atleta — janela de

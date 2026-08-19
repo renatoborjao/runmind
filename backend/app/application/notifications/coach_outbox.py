@@ -8,6 +8,8 @@ from app.application.coach.voice.coach_voice import CoachVoice
 from app.application.notifications.notification_service import (
     NotificationService,
 )
+from app.application.notifications.proactive_governor import ProactiveGovernor
+from app.core.config import get_settings
 from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.integrations.telegram.telegram_text import (
     to_plain_text,
@@ -28,11 +30,33 @@ class CoachOutbox:
         message: str,
         voice: bool = False,
         profile: str | None = None,
+        kind: str | None = None,
     ) -> None:
         """Envia a mensagem automática do coach e registra no outbox. Com
         `voice=True` (beats emocionais: dia da prova, recorde, bom dia),
         emenda uma nota de ÁUDIO — best-effort e só se o atleta não tiver
-        pedido só texto. `profile` é a chave da preferência de voz."""
+        pedido só texto. `profile` é a chave da preferência de voz.
+
+        `kind` (ex.: "morning_briefing", "reengagement") liga o GOVERNADOR de
+        proativos: com a flag ligada pro perfil, o portão decide se pode sair
+        (teto diário + isenção dos essenciais + dedup). Sem `kind` ou flag OFF,
+        segue igual a hoje. Ver [[ProactiveGovernor]]."""
+
+        governed = bool(kind) and profile is not None and (
+            get_settings().proactive_governor_active_for(profile)
+        )
+
+        if governed:
+
+            ok, reason = ProactiveGovernor.admit(
+                profile, kind, message, get_settings().proactive_daily_budget,
+            )
+
+            if not ok:
+
+                print(f"[governador] {kind} suprimido p/ '{profile}': {reason}")
+
+                return
 
         await NotificationService.send(runner, message)
 
@@ -57,3 +81,9 @@ class CoachOutbox:
             print(
                 f"Falha ao registrar mensagem do coach ({runner.id}): {e}"
             )
+
+        # diário do governador (só quando ele está atuando pro perfil): registra
+        # o envio pra o teto/dedup do dia enxergarem este toque
+        if governed:
+
+            ProactiveGovernor.record(profile, kind, message)

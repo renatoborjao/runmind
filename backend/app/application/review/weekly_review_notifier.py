@@ -141,6 +141,8 @@ class WeeklyReviewNotifier:
         await CoachOutbox.send(
             runner,
             message,
+            profile=profile,
+            kind="weekly_review",
         )
 
         # logo depois, o RETRATO ÚNICO "como você está" (corpo & carga + forma
@@ -208,7 +210,9 @@ class WeeklyReviewNotifier:
 
             if message:
 
-                await CoachOutbox.send(runner, message)
+                await CoachOutbox.send(
+                    runner, message, profile=profile, kind="pace_progress",
+                )
 
         except Exception as e:
 
@@ -230,7 +234,9 @@ class WeeklyReviewNotifier:
 
             if message:
 
-                await CoachOutbox.send(runner, message)
+                await CoachOutbox.send(
+                    runner, message, profile=profile, kind="cadence_progress",
+                )
 
         except Exception as e:
 
@@ -306,7 +312,9 @@ class WeeklyReviewNotifier:
 
                 return
 
-            await CoachOutbox.send(runner, message)
+            await CoachOutbox.send(
+                runner, message, profile=profile, kind="goal_projection",
+            )
 
         except Exception as e:
 
@@ -331,7 +339,9 @@ class WeeklyReviewNotifier:
 
                 return
 
-            await CoachOutbox.send(runner, message)
+            await CoachOutbox.send(
+                runner, message, profile=profile, kind="state_portrait",
+            )
 
         except Exception as e:
 
