@@ -47,6 +47,17 @@ def test_touchpoint_skips_already_sent():
     assert _touchpoint(3, sent=("taper",)) == "race_week"
 
 
+def test_touchpoint_does_not_fall_through_to_farther_marker():
+    """Bug do Renato (recebeu o 'polimento' a 4 dias da prova): com a 'semana
+    da prova' JÁ enviada, o bracket de hoje (4-7 dias = race_week) não deve cair
+    pro marco seguinte (taper, de ~2 semanas antes). Já saiu -> None, silêncio."""
+
+    assert _touchpoint(4, sent=("race_week",)) is None
+    assert _touchpoint(6, sent=("race_week",)) is None
+    # e o taper NÃO re-dispara depois do seu bracket, mesmo que nada mais tenha saído
+    assert _touchpoint(5, sent=("taper", "race_week")) is None
+
+
 def test_touchpoint_none_when_past_or_far():
 
     assert _touchpoint(-1) is None
