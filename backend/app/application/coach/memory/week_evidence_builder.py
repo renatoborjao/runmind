@@ -293,14 +293,30 @@ class WeekEvidenceBuilder:
 
         return WeekEvidenceBuilder._pace_vs_target(session, activity)
 
+    # nomes de tipo que denunciam treino ESTRUTURADO (tiros/variação): num
+    # treino assim a média do esforço TODO inclui aquecimento/recuperação e NÃO
+    # serve pra julgar o alvo dos tiros — sem a comparação bloco-a-bloco, melhor
+    # não dizer nada do que dar um veredito de pace enganoso.
+    _STRUCTURED_HINTS = (
+        "interval", "tiro", "fartlek", "limiar", "série", "serie",
+        "repeti", "vo2", "800", "400", "1000", "600", "200",
+    )
+
     @staticmethod
     def _is_structured(session) -> bool:
-        """A sessão tem tiros/repetições? (aí a média do treino todo não vale
-        pra julgar o alvo)."""
+        """A sessão tem tiros/repetições? Detecta pelos PASSOS (repeat/interval)
+        E pelo NOME do tipo (um 'Intervalado de Limiar' sem passos gravados
+        ainda é estruturado)."""
 
-        return any(
+        has_repeat_steps = any(
             getattr(s, "is_repeat", False) or getattr(s, "kind", "") == "interval"
             for s in (getattr(session, "steps", None) or [])
+        )
+
+        name = (getattr(session, "workout_type", "") or "").lower()
+
+        return has_repeat_steps or any(
+            hint in name for hint in WeekEvidenceBuilder._STRUCTURED_HINTS
         )
 
     @staticmethod

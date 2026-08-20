@@ -62,14 +62,38 @@ def test_pace_vs_target_on_target_slower_faster():
 def test_is_structured_detects_repeats():
 
     structured = SimpleNamespace(
-        steps=[SimpleNamespace(is_repeat=True, kind="repeat")]
+        steps=[SimpleNamespace(is_repeat=True, kind="repeat")],
+        workout_type="Tiros",
     )
     continuous = SimpleNamespace(
-        steps=[SimpleNamespace(is_repeat=False, kind="run")]
+        steps=[SimpleNamespace(is_repeat=False, kind="run")],
+        workout_type="Rodagem Leve",
     )
 
     assert WeekEvidenceBuilder._is_structured(structured) is True
     assert WeekEvidenceBuilder._is_structured(continuous) is False
+
+
+def test_is_structured_detects_by_type_name_without_steps():
+    """'Intervalado de Limiar' sem passos gravados ainda é estruturado — não
+    pode cair no pace médio (que engana num treino de tiros)."""
+
+    session = SimpleNamespace(steps=[], workout_type="Intervalado de Limiar")
+
+    assert WeekEvidenceBuilder._is_structured(session) is True
+
+
+def test_quality_line_skips_structured_when_no_block_data():
+    """Estruturado SEM comparação bloco-a-bloco -> "" (não chuta por pace)."""
+
+    session = SimpleNamespace(
+        target_pace_min="5:25", target_pace_max="5:30",
+        steps=[], workout_type="Intervalado de Limiar",
+    )
+
+    with patch(f"{MOD}.PlannedExecutionMatcher.match", return_value=None):
+
+        assert WeekEvidenceBuilder._quality_line(session, _act(6.0)) == ""
 
 
 def test_quality_line_uses_block_comparison_for_structured():
