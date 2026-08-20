@@ -33,6 +33,83 @@ from app.domain.entities.training_load import TrainingLoad
 MOD = "app.application.coach.memory.week_evidence_builder"
 
 
+# --- qualidade de execução por tipo (o aprofundamento da memória) ---
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def _act(pace_min_km: float):
+    """Activity com pace médio = pace_min_km (min/km)."""
+
+    speed = 1000 / (pace_min_km * 60)  # m/s
+
+    return SimpleNamespace(average_speed=speed)
+
+
+def test_pace_vs_target_on_target_slower_faster():
+
+    session = SimpleNamespace(target_pace_min="5:00", target_pace_max="5:10")
+
+    assert WeekEvidenceBuilder._pace_vs_target(session, _act(5.083)) == "no alvo"
+
+    slower = WeekEvidenceBuilder._pace_vs_target(session, _act(5.42))
+    assert "LENTO" in slower and "15s/km" in slower
+
+    faster = WeekEvidenceBuilder._pace_vs_target(session, _act(4.83))
+    assert "rápido" in faster
+
+
+def test_is_structured_detects_repeats():
+
+    structured = SimpleNamespace(
+        steps=[SimpleNamespace(is_repeat=True, kind="repeat")]
+    )
+    continuous = SimpleNamespace(
+        steps=[SimpleNamespace(is_repeat=False, kind="run")]
+    )
+
+    assert WeekEvidenceBuilder._is_structured(structured) is True
+    assert WeekEvidenceBuilder._is_structured(continuous) is False
+
+
+def test_quality_line_uses_block_comparison_for_structured():
+
+    session = SimpleNamespace(
+        target_pace_min="5:25", target_pace_max="5:30",
+        steps=[SimpleNamespace(is_repeat=True, kind="repeat")],
+    )
+
+    comparison = SimpleNamespace(
+        blocks=[
+            SimpleNamespace(within_target=True),
+            SimpleNamespace(within_target=True),
+            SimpleNamespace(within_target=False),
+        ],
+        missing=[],
+    )
+
+    with patch(f"{MOD}.PlannedExecutionMatcher.match", return_value=comparison):
+
+        line = WeekEvidenceBuilder._quality_line(session, _act(5.3))
+
+    assert line == "2/3 blocos no alvo"
+
+
+def test_quality_line_falls_back_to_pace_for_continuous():
+
+    session = SimpleNamespace(
+        target_pace_min="6:00", target_pace_max="6:10",
+        steps=[SimpleNamespace(is_repeat=False, kind="run")],
+    )
+
+    # sem estrutura pra bloco (match None) -> pace-vs-alvo do contínuo
+    with patch(f"{MOD}.PlannedExecutionMatcher.match", return_value=None):
+
+        line = WeekEvidenceBuilder._quality_line(session, _act(6.05))
+
+    assert line == "no alvo"
+
+
 def _history():
 
     h = MagicMock()
