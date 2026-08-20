@@ -43,9 +43,12 @@ Categorias de aprendizado:
 - resposta: como o corpo dele responde ao estímulo — INCLUSIVE resposta BOA
   (recupera bem, tolera tal carga/ACWR), a resposta ao TREINO ao longo do tempo
   (evolui/estagna na forma aeróbica, responde ao estímulo de qualidade), como
-  ele PERCEBE o esforço (RPE alto/baixo pro que a FC media diz) e traço
-  ESTRUTURAL que persiste mesmo em semana verde (ex.: sono cronicamente curto
-  mesmo com o corpo equilibrado)
+  ele EXECUTA cada TIPO de treino vs o prescrito quando isso vira PADRÃO em
+  semanas diferentes (ex.: bate os tiros no alvo mas afrouxa os tempos; longão
+  sempre completo e no ritmo; sai rápido demais nas rodagens) — a resposta ao
+  estímulo POR TIPO, que personaliza o plano; como ele PERCEBE o esforço (RPE
+  alto/baixo pro que a FC media diz) e traço ESTRUTURAL que persiste mesmo em
+  semana verde (ex.: sono cronicamente curto mesmo com o corpo equilibrado)
 
 Responda APENAS com JSON:
 {{"add": [{{"category": "...", "content": "..."}}],

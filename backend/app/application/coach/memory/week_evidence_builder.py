@@ -16,6 +16,10 @@ from app.application.coach.planning.executed_week_summary import (
     ExecutedWeekSummary,
 )
 from app.application.history.adherence_analyzer import AdherenceAnalyzer
+from app.application.history.planned_execution_matcher import (
+    PlannedExecutionMatcher,
+)
+from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.core.clock import today_local
 from app.core.weekdays import weekday_label, weekday_name
 from app.domain.entities.adherence_report import (
@@ -73,6 +77,17 @@ class WeekEvidenceBuilder:
         if adherence:
 
             parts.append(adherence)
+
+        # QUALIDADE de execução por tipo — não só se cumpriu (aderência), mas
+        # se BATEU o prescrito: tiros no alvo? afrouxou o tempo? longão no
+        # ritmo? É o sinal que ensina a RESPOSTA a cada tipo de estímulo (o que
+        # personaliza o plano de verdade), reaproveitando a comparação
+        # bloco-a-bloco da análise + pace-vs-alvo dos contínuos.
+        quality = WeekEvidenceBuilder._execution_quality(closing, history)
+
+        if quality:
+
+            parts.append(quality)
 
         corrections = WeekEvidenceBuilder._corrections(profile)
 
@@ -174,26 +189,170 @@ class WeekEvidenceBuilder:
         if report.missed_day:
 
             lines.append(
-                "Mais fura no dia %s (%d de %d vezes que foi prescrito)."
-                % (
-                    weekday_label(report.missed_day.label),
-                    report.missed_day.count,
-                    report.missed_day.opportunities,
-                )
+                f"Mais fura no dia {weekday_label(report.missed_day.label)} "
+                f"({report.missed_day.count} de "
+                f"{report.missed_day.opportunities} vezes que foi prescrito)."
             )
 
         if report.missed_type:
 
             lines.append(
-                "Mais fura o treino de %s (%d de %d)."
-                % (
-                    report.missed_type.label,
-                    report.missed_type.count,
-                    report.missed_type.opportunities,
-                )
+                f"Mais fura o treino de {report.missed_type.label} "
+                f"({report.missed_type.count} de "
+                f"{report.missed_type.opportunities})."
             )
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _execution_quality(closing, history) -> str:
+        """Quão BEM cada tipo foi executado vs o prescrito (não só se cumpriu).
+        Estruturado (tiros/fartlek) → comparação bloco-a-bloco (X/Y no alvo);
+        contínuo (rodagem/tempo/longão) → pace médio vs faixa-alvo. É o sinal
+        que ensina 'responde a X / afrouxa Y'. Best-effort e silencioso quando
+        não dá pra comparar (sem plano/estrutura/dado)."""
+
+        if closing is None or not closing.sessions:
+
+            return ""
+
+        week_start = closing.week_start
+
+        week_end = week_start + timedelta(days=6)
+
+        week_acts = sorted(
+            (
+                a
+                for a in history.activities
+                if week_start <= a.start_date.date() <= week_end
+            ),
+            key=lambda a: a.start_date,
+        )
+
+        if not week_acts:
+
+            return ""
+
+        lines = []
+
+        for activity in week_acts:
+
+            session = WeeklyPlanMatcher.match(closing, week_acts, activity)
+
+            if session is None:
+
+                continue
+
+            verdict = WeekEvidenceBuilder._quality_line(session, activity)
+
+            if verdict:
+
+                lines.append(
+                    f"- {weekday_label(session.day)} "
+                    f"({session.workout_type}): {verdict}"
+                )
+
+        if not lines:
+
+            return ""
+
+        return (
+            "Qualidade de execução vs prescrito (bateu os alvos por tipo?):\n"
+            + "\n".join(lines)
+        )
+
+    @staticmethod
+    def _quality_line(session, activity) -> str:
+        """Veredito de UMA sessão: bloco-a-bloco (estruturado) ou pace-vs-alvo
+        (contínuo). "" quando não dá pra comparar."""
+
+        # 1) estruturado com voltas rotuladas no relógio → bloco-a-bloco
+        comparison = PlannedExecutionMatcher.match(session, activity)
+
+        if comparison and comparison.blocks:
+
+            graded = [b for b in comparison.blocks if b.within_target is not None]
+
+            if graded:
+
+                on = sum(1 for b in graded if b.within_target)
+
+                tail = (
+                    f"; não completou: {', '.join(comparison.missing)}"
+                    if comparison.missing
+                    else ""
+                )
+
+                return f"{on}/{len(graded)} blocos no alvo{tail}"
+
+        # 2) contínuo → pace médio vs faixa-alvo. NÃO pra estruturado (a média
+        # dilui os tiros e engana).
+        if WeekEvidenceBuilder._is_structured(session):
+
+            return ""
+
+        return WeekEvidenceBuilder._pace_vs_target(session, activity)
+
+    @staticmethod
+    def _is_structured(session) -> bool:
+        """A sessão tem tiros/repetições? (aí a média do treino todo não vale
+        pra julgar o alvo)."""
+
+        return any(
+            getattr(s, "is_repeat", False) or getattr(s, "kind", "") == "interval"
+            for s in (getattr(session, "steps", None) or [])
+        )
+
+    @staticmethod
+    def _pace_vs_target(session, activity) -> str:
+        """Pace médio do treino vs a faixa-alvo prescrita. "" sem alvo/sem
+        velocidade."""
+
+        vals = [
+            p
+            for p in (
+                WeekEvidenceBuilder._pace_minutes(session.target_pace_min),
+                WeekEvidenceBuilder._pace_minutes(session.target_pace_max),
+            )
+            if p
+        ]
+
+        if not vals or not activity.average_speed or activity.average_speed <= 0:
+
+            return ""
+
+        lo, hi = min(vals), max(vals)
+
+        executed = (1000 / activity.average_speed) / 60  # min/km
+
+        # 3s de folga (ruído de GPS/aquecimento embutido na média)
+        if lo - 0.05 <= executed <= hi + 0.05:
+
+            return "no alvo"
+
+        if executed > hi:
+
+            return f"~{round((executed - hi) * 60)}s/km mais LENTO que o alvo"
+
+        return f"~{round((lo - executed) * 60)}s/km mais rápido que o alvo"
+
+    @staticmethod
+    def _pace_minutes(value) -> float | None:
+        """'M:SS' -> minutos (float). Formato inválido/None -> None."""
+
+        if not value or not isinstance(value, str):
+
+            return None
+
+        try:
+
+            minutes, seconds = value.strip().split(":")
+
+            return int(minutes) + int(seconds) / 60
+
+        except (ValueError, AttributeError):
+
+            return None
 
     @staticmethod
     def _corrections(profile) -> str:
