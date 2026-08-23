@@ -11,8 +11,9 @@ from app.application.planner.daily_training_notifier import (
 )
 from app.application.planner.missed_workout_flow import MissedWorkoutFlow
 from app.application.review.readiness_notifier import ReadinessNotifier
+from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
-from app.core.clock import now_in, use_athlete_timezone
+from app.core.clock import now_in, today_local, use_athlete_timezone
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.integrations.garmin.garmin_health_source import (
     GarminHealthSource,
@@ -84,6 +85,13 @@ class MorningBriefingNotifier:
 
         # fora da janela da manhã não faz nada (barato o resto do dia)
         if not (WINDOW_START <= local.time() <= WINDOW_END):
+
+            return
+
+        # o dia da PROVA é do companheiro de prova (o "É HOJE! 🏁"): o briefing
+        # de rotina CEDE o dia — nada de tratar a prova-alvo como "mais um
+        # treino" com clima "boas pra treinar". Era a queixa do Renato.
+        if MorningBriefingNotifier._is_race_day(runner):
 
             return
 
@@ -188,6 +196,21 @@ class MorningBriefingNotifier:
         await CoachOutbox.send(
             runner, "\n\n".join(parts), profile=profile, kind="morning_briefing",
         )
+
+    @staticmethod
+    def _is_race_day(runner) -> bool:
+        """Hoje é o dia da prova-alvo do atleta? Best-effort: qualquer falha ao
+        montar o objetivo NÃO cala o briefing (volta False)."""
+
+        try:
+
+            goal = BuildTrainingGoal.execute(runner)
+
+            return goal.race_date is not None and goal.race_date == today_local()
+
+        except Exception:
+
+            return False
 
     @staticmethod
     def _night_data_ready(profile: str, day: date) -> bool:

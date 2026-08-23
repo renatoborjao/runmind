@@ -26,9 +26,16 @@ from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
 
-# hora local em que os toques de prova saem (manhã calma; a manhã da prova
-# idealmente cedo — v1 usa a mesma hora, best-effort)
+# hora local em que os toques de prova saem (manhã calma): véspera, semana,
+# jornada e polimento saem às 7h, sem pressa.
 RACE_HOUR = 7
+
+# a manhã da PROVA é diferente: o "É HOJE! 🏁" tem que ser a PRIMEIRA coisa do
+# dia — o atleta acorda pra correr, às vezes antes do sol. Sai numa janela cedo
+# (primeiro tique de hora a partir das 5h), NUNCA só às 7h (tarde demais pra
+# quem já está indo pra largada). Era a queixa do Renato na manhã da prova.
+RACE_DAY_HOUR = 5
+RACE_DAY_LAST_HOUR = 12
 
 # marcos (dias que faltam) -> id do toque. Ordem do mais próximo ao mais longe:
 # escolhemos o marco de menor limiar que ainda é >= dias que faltam (assim, se
@@ -68,10 +75,6 @@ class RaceCompanionNotifier:
 
         local = now_in(runner.timezone)
 
-        if local.hour != RACE_HOUR:
-
-            return
-
         goal = BuildTrainingGoal.execute(runner)
 
         if goal.race_date is None:
@@ -79,6 +82,18 @@ class RaceCompanionNotifier:
             return
 
         days_until = (goal.race_date - today_local()).days
+
+        # A manhã da PROVA sai CEDO (janela a partir das 5h) — é a primeira
+        # coisa do dia. Os demais toques saem às 7h, sem pressa.
+        if days_until == 0:
+
+            if not (RACE_DAY_HOUR <= local.hour < RACE_DAY_LAST_HOUR):
+
+                return
+
+        elif local.hour != RACE_HOUR:
+
+            return
 
         touch = RaceCompanionNotifier._touchpoint(profile, days_until, goal)
 
