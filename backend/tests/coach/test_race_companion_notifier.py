@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date
+from datetime import date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 from app.application.review.race_companion_notifier import (
@@ -129,6 +129,80 @@ def test_preview_marks_already_sent_without_building():
     assert race_week["already_sent"] is True
     assert race_week["will_send"] is False
     assert race_week["preview"] == ""
+
+
+# --- gate de hora no _notify_one: a manhã da prova sai CEDO ---
+
+
+def _run_notify(hour, days_until=0, sent=()):
+    """Roda _notify_one com relógio na `hour` local e a prova a `days_until`
+    dias. Devolve o mock de CoachOutbox.send pra checar se (e o quê) saiu."""
+
+    race = date(2026, 8, 23)
+    today = race - timedelta(days=days_until)
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as load,
+        patch(f"{MODULE}.BuildTrainingGoal") as build_goal,
+        patch(f"{MODULE}.use_athlete_timezone"),
+        patch(
+            f"{MODULE}.now_in",
+            return_value=datetime(today.year, today.month, today.day, hour, 0),
+        ),
+        patch(f"{MODULE}.today_local", return_value=today),
+        patch(f"{MODULE}.DispatchGuard") as guard,
+        patch(f"{MODULE}.CoachOutbox") as outbox,
+        patch.object(
+            RaceCompanionNotifier, "_message",
+            new=AsyncMock(side_effect=lambda p, r, g, touch: f"MSG-{touch}"),
+        ),
+    ):
+
+        load.execute.return_value = make_runner(name="Renato")
+        build_goal.execute.return_value = _goal(race)
+        guard.already_sent.side_effect = (
+            lambda k, p, period: period.split(":")[-1] in sent
+        )
+        outbox.send = AsyncMock()
+
+        asyncio.run(RaceCompanionNotifier._notify_one("renato2"))
+
+        return outbox.send
+
+
+def _sent_touch(send_mock):
+    if not send_mock.await_count:
+        return None
+    return send_mock.await_args.args[1]  # (runner, message, ...)
+
+
+def test_race_day_fires_early_in_the_morning():
+    """A manhã da prova sai CEDO — a partir das 5h, a primeira coisa do dia
+    (a queixa do Renato: o 'É HOJE!' só saía às 7h)."""
+
+    assert _sent_touch(_run_notify(hour=5)) == "MSG-race_day"
+    assert _sent_touch(_run_notify(hour=6)) == "MSG-race_day"
+    assert _sent_touch(_run_notify(hour=7)) == "MSG-race_day"
+
+
+def test_race_day_silent_before_window_and_late():
+
+    assert _run_notify(hour=4).await_count == 0
+    assert _run_notify(hour=12).await_count == 0
+
+
+def test_non_race_day_touch_still_gates_at_seven():
+    """Véspera (e os demais) continuam saindo só às 7h — a janela cedo é só
+    do dia da prova."""
+
+    assert _run_notify(hour=5, days_until=1).await_count == 0
+    assert _sent_touch(_run_notify(hour=7, days_until=1)) == "MSG-eve"
+
+
+def test_race_day_not_resent_if_already_sent():
+    """Já mandamos o 'É HOJE!' num tique anterior (ou manualmente): não repete."""
+
+    assert _run_notify(hour=6, sent=("race_day",)).await_count == 0
 
 
 def _message(touch, runner=None):

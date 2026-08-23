@@ -23,6 +23,7 @@ def _run(
     proposal=None,
     already_sent=False,
     has_garmin=True,
+    is_race_day=False,
 ):
 
     sent = {}
@@ -40,6 +41,10 @@ def _run(
         patch(
             f"{MODULE}.MorningBriefingNotifier._night_data_ready",
             return_value=data_ready,
+        ),
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._is_race_day",
+            return_value=is_race_day,
         ),
     ):
 
@@ -269,3 +274,53 @@ def test_silencio_quando_nao_ha_nada_a_dizer():
     sent = _run(missed=None, today=None, data_ready=True, hour=6)
 
     assert sent == {}
+
+
+def test_dia_da_prova_o_briefing_cede_pro_companheiro():
+    """No dia da prova-alvo o briefing de rotina NÃO fala — quem conduz é o
+    companheiro de prova (o 'É HOJE! 🏁'). Nada de tratar a prova como 'mais um
+    treino' com clima 'boas pra treinar'. Era a queixa do Renato na manhã da
+    prova. Mesmo com furo/corpo/treino prontos, sai silêncio."""
+
+    sent = _run(
+        missed="Furou ontem",
+        today="🏃 Hoje: Prova-Âncora 10K",
+        data_ready=True,
+        readiness="Bom dia! Corpo recuperado.",
+        hour=6,
+        is_race_day=True,
+    )
+
+    assert sent == {}
+
+
+def test_is_race_day_true_only_on_the_race_date():
+    """O helper: True só quando a data da prova é HOJE; sem prova ou fora da
+    data, False (e falha ao montar o goal não cala o briefing)."""
+
+    from datetime import date
+
+    from app.domain.entities.training_goal import TrainingGoal
+
+    def _goal(race_date):
+        return TrainingGoal(
+            name="10k", distance_km=10.0,
+            target_time=None, race_date=race_date,
+        )
+
+    with (
+        patch(f"{MODULE}.BuildTrainingGoal") as build_goal,
+        patch(f"{MODULE}.today_local", return_value=date(2026, 8, 23)),
+    ):
+
+        build_goal.execute.return_value = _goal(date(2026, 8, 23))
+        assert MorningBriefingNotifier._is_race_day(RUNNER) is True
+
+        build_goal.execute.return_value = _goal(date(2026, 8, 24))
+        assert MorningBriefingNotifier._is_race_day(RUNNER) is False
+
+        build_goal.execute.return_value = _goal(None)
+        assert MorningBriefingNotifier._is_race_day(RUNNER) is False
+
+        build_goal.execute.side_effect = RuntimeError("boom")
+        assert MorningBriefingNotifier._is_race_day(RUNNER) is False
