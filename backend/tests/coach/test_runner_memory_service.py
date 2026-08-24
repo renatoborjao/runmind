@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
@@ -86,6 +86,38 @@ def test_process_adds_archives_and_syncs_injuries(tmp_path):
         assert profile["injuries"] == []
 
         assert len(memory_repo.active("renato")) == 1
+
+
+def test_illness_marked_as_lesao_does_not_become_injury(tmp_path):
+    """Rede de segurança: gripe NÃO é lesão. Mesmo que a extração escorregue e
+    marque uma doença passageira como 'lesao', ela não vira 'histórico de lesão'
+    no perfil (queixa do Renato pós-prova). A lesão de verdade entra normal."""
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    with (
+        patch(f"{MODULE}.RunnerMemoryRepository", return_value=memory_repo),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+    ):
+
+        RunnerMemoryService.process(
+            "renato",
+            {
+                "add": [
+                    {"category": "lesao",
+                     "content": "Sintomas de gripe com bastante catarro"},
+                    {"category": "lesao", "content": "Dor no joelho direito"},
+                ],
+                "archive": [],
+            },
+        )
+
+        profile = json.loads(
+            (tmp_path / "renato.json").read_text(encoding="utf-8")
+        )
+
+        # a gripe foi filtrada; a lesão real ficou
+        assert profile["injuries"] == ["Dor no joelho direito"]
 
 
 def test_render_formats_active_memories(tmp_path):

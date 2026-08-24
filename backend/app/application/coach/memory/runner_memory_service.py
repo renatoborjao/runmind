@@ -12,6 +12,18 @@ from app.infrastructure.persistence.runner_profile_repository import (
 
 MAX_MEMORIES_IN_CONTEXT = 15
 
+# Rede de segurança pro campo DURÁVEL `injuries` (liga "histórico de lesão" e
+# sobe o risco de base): mesmo que a extração escorregue e marque uma DOENÇA
+# passageira como "lesao", ela NÃO vira lesão do perfil. Doença é estado de
+# saúde temporário (cuidado pelo acompanhamento de bem-estar), não lesão
+# musculoesquelética. Ver [[project_ideias_produto]] (gripe≠lesão).
+_ILLNESS_HINTS = (
+    "gripe", "resfriad", "virose", "febre", "catarro", "gargant",
+    "tosse", "covid", "sinusite", "rinite", "dengue", "infecç",
+    "indispost", "mal-estar", "mal estar", "náusea", "nausea", "enjoo",
+    "diarre", "vômito", "vomito",
+)
+
 
 class RunnerMemoryService:
 
@@ -173,9 +185,18 @@ class RunnerMemoryService:
             entry.content
             for entry in repo.active(profile)
             if entry.category == "lesao"
+            and not RunnerMemoryService._is_illness(entry.content)
         ]
 
         RunnerProfileRepository().update_injuries(
             profile,
             injuries,
         )
+
+    @staticmethod
+    def _is_illness(content: str) -> bool:
+        """Doença passageira (gripe & cia) — NÃO é lesão do perfil."""
+
+        text = content.lower()
+
+        return any(hint in text for hint in _ILLNESS_HINTS)

@@ -9,6 +9,9 @@ plano. Ver [[project_ideias_produto]]."""
 from app.application.coach.planning.race_strategy_engine import (
     RaceStrategyEngine,
 )
+from app.application.coach.writer.race_narrative_writer import (
+    RaceNarrativeWriter,
+)
 from app.application.planner.pace_formatter import PaceFormatter
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.domain.entities.runner_profile import RunnerProfile
@@ -68,7 +71,13 @@ class RaceDebrief:
         # o planejamento seguinte (o objetivo/goal continua pra a próxima)
         RunnerProfileRepository().update_fields(profile, {"race_date": None})
 
-        return RaceDebrief._message(runner, enriched_activity, goal)
+        # narrativa da IA (o calor): best-effort — se falhar, o relatório sai
+        # só com o veredito + números, nunca quebra
+        narrative = await RaceNarrativeWriter.write(
+            profile, runner, enriched_activity, goal,
+        )
+
+        return RaceDebrief._message(runner, enriched_activity, goal, narrative)
 
     @staticmethod
     def _is_the_race(activity, goal) -> bool:
@@ -84,10 +93,10 @@ class RaceDebrief:
         return near_distance and days_off <= _DATE_TOLERANCE_DAYS
 
     @staticmethod
-    def _message(runner, enriched, goal) -> str:
+    def _message(runner, enriched, goal, narrative: str | None = None) -> str:
         """O RELATÓRIO da prova: veredito (vs meta) + números do dia + parciais
-        km a km. É o que o atleta vê no lugar do feedback de treino comum — a
-        prova não é 'mais um treino'."""
+        km a km + a narrativa da IA (o calor). É o que o atleta vê no lugar do
+        feedback de treino comum — a prova não é 'mais um treino'."""
 
         activity = enriched.activity
 
@@ -105,6 +114,10 @@ class RaceDebrief:
         if splits:
 
             parts.append(splits)
+
+        if narrative:
+
+            parts.append(f"📊 {narrative}")
 
         parts.append(
             "Agora é RECUPERAR: uns dias leves ou de folga, sem culpa — o corpo "
