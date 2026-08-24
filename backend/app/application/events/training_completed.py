@@ -35,47 +35,58 @@ class TrainingCompletedEvent:
 
         runner = result["runner"]
 
-        message = result["message"]
+        # Se ESTE treino é a prova-alvo, o dia é da PROVA: o feedback de treino
+        # comum ("Parabéns pelo treino", "Tipo: Ritmo", "Intensidade: Leve",
+        # RPE pra calibrar carga, "retomamos no próximo plano") NÃO sai — quem
+        # conduz é o debrief de prova, o relatório do dia (mais abaixo). Era a
+        # queixa do Renato: a prova tratada como "mais um treino".
+        is_race = RaceDebrief.is_target_race(runner, result["activity"])
 
-        # sRPE: pergunta o esforço percebido junto do feedback e marca o treino
-        # como pendente de RPE (o número que o atleta responder vira carga
-        # subjetiva). Best-effort — nunca derruba o feedback.
-        try:
+        if not is_race:
 
-            message = TrainingCompletedEvent._ask_rpe(profile, result, message)
+            message = result["message"]
 
-        except Exception as e:
+            # sRPE: pergunta o esforço percebido junto do feedback e marca o
+            # treino como pendente de RPE (o número vira carga subjetiva).
+            # Best-effort — nunca derruba o feedback. (Numa PROVA não faz
+            # sentido perguntar RPE "pra calibrar carga".)
+            try:
 
-            print(f"Falha ao preparar RPE de '{profile}': {e}")
+                message = TrainingCompletedEvent._ask_rpe(profile, result, message)
 
-        # CoachOutbox: envia E registra no outbox (pra o coach lembrar da
-        # análise quando o atleta comentar depois no chat). ESSENCIAL: ele
-        # acabou de correr — a análise sempre sai (isenta do teto do governador).
-        await CoachOutbox.send(
-            runner,
-            message,
-            profile=profile,
-            kind="feedback",
-        )
+            except Exception as e:
 
-        # Detector proativo de aversão (Fatia 2): depois do feedback, se está
-        # virando PADRÃO evitar um estímulo de qualidade, ABRE uma conversa —
-        # nunca muda o plano. Falha aqui jamais derruba o feedback já enviado.
-        try:
+                print(f"Falha ao preparar RPE de '{profile}': {e}")
 
-            nudge = ProactiveAversionDetector.after_feedback(
+            # CoachOutbox: envia E registra no outbox (pra o coach lembrar da
+            # análise quando o atleta comentar depois no chat). ESSENCIAL: ele
+            # acabou de correr — sempre sai (isenta do teto do governador).
+            await CoachOutbox.send(
                 runner,
-                result["planned_session"],
-                result["activity"],
+                message,
+                profile=profile,
+                kind="feedback",
             )
 
-            if nudge:
+            # Detector proativo de aversão (Fatia 2): depois do feedback, se
+            # está virando PADRÃO evitar um estímulo de qualidade, ABRE uma
+            # conversa — nunca muda o plano. (Numa prova não se aplica.) Falha
+            # aqui jamais derruba o feedback já enviado.
+            try:
 
-                await CoachOutbox.send(runner, nudge)
+                nudge = ProactiveAversionDetector.after_feedback(
+                    runner,
+                    result["planned_session"],
+                    result["activity"],
+                )
 
-        except Exception as e:
+                if nudge:
 
-            print(f"Falha no detector proativo de aversão: {e}")
+                    await CoachOutbox.send(runner, nudge)
+
+            except Exception as e:
+
+                print(f"Falha no detector proativo de aversão: {e}")
 
         # Celebração de PR/marcos: reconhece recorde batido (corrida mais
         # longa, treino mais rápido na faixa, km acumulado, semana de maior

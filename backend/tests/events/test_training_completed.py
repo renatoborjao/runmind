@@ -67,6 +67,49 @@ def test_no_celebration_sends_only_the_analysis():
     assert mock_outbox.send.await_count == 1
 
 
+def test_race_day_suppresses_generic_feedback_and_sends_debrief():
+    """Na prova-alvo o feedback de treino comum ("análise do treino") NÃO sai,
+    nem o detector de aversão — quem conduz é o debrief de prova. Era a queixa
+    do Renato: a prova tratada como "mais um treino"."""
+
+    runner = make_runner(name="Renato")
+
+    result = {
+        "runner": runner,
+        "message": "análise do treino",
+        "history": "history-stub",
+        "planned_session": "planned-stub",
+        "activity": "activity-stub",
+    }
+
+    with (
+        patch(f"{MODULE}.TrainingPipeline") as mock_pipeline,
+        patch(f"{MODULE}.CoachOutbox") as mock_outbox,
+        patch(f"{MODULE}.ProactiveAversionDetector") as mock_aversion,
+        patch(f"{MODULE}.PersonalRecordDetector") as mock_records,
+        patch(f"{MODULE}.RaceDebrief") as mock_race,
+    ):
+
+        mock_pipeline.execute = AsyncMock(return_value=result)
+        mock_outbox.send = AsyncMock()
+        mock_records.after_feedback = AsyncMock(return_value=None)
+        mock_race.is_target_race.return_value = True
+        mock_race.after_feedback = AsyncMock(return_value="🏁 VOCÊ CONSEGUIU")
+
+        asyncio.run(TrainingCompletedEvent.execute(profile="renato"))
+
+    sent = [c.args[1] for c in mock_outbox.send.await_args_list]
+    kinds = [c.kwargs.get("kind") for c in mock_outbox.send.await_args_list]
+
+    # o feedback genérico foi CALADO; só o debrief de prova saiu
+    assert "análise do treino" not in sent
+    assert "feedback" not in kinds
+    assert "🏁 VOCÊ CONSEGUIU" in sent
+    assert "race_debrief" in kinds
+    # numa prova não se pergunta aversão
+    mock_aversion.after_feedback.assert_not_called()
+
+
 def test_celebration_failure_does_not_break_the_analysis_send():
 
     runner = make_runner(name="Renato")

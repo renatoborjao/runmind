@@ -28,6 +28,25 @@ def _activity(distance_m=10000.0, moving_sec=2940, day=RACE_DAY):
     )
 
 
+def _rich_activity(day=RACE_DAY):
+    """enriched com FC, cadência e parciais — o relatório completo da prova."""
+    return SimpleNamespace(
+        activity=SimpleNamespace(
+            distance=10030.0,
+            moving_time=3258,  # 54:18
+            start_date=datetime(day.year, day.month, day.day, 8, 0),
+            average_heartrate=146.0,
+            max_heartrate=158.0,
+        ),
+        structure=SimpleNamespace(
+            cadence_spm=170,
+            km_splits=[5.983, 5.433, 5.35, 5.5, 5.233,
+                       5.517, 5.517, 5.433, 5.333, 5.083],
+            km_hr=[134, 142, 149, 144, 147, 151, 152, 145, 144, 152],
+        ),
+    )
+
+
 def _run(runner, enriched):
     with patch(f"{MODULE}.RunnerProfileRepository") as repo_cls:
         repo = MagicMock()
@@ -92,3 +111,50 @@ def test_finish_without_target_still_celebrates():
     assert reply is not None
     assert "CRUZOU" in reply
     repo.update_fields.assert_called_once()
+
+
+def test_report_includes_stats_and_splits():
+    """A prova merece o RELATÓRIO: veredito + números do dia (FC/cadência) +
+    parciais km a km — não é 'mais um treino' sem detalhe."""
+
+    reply, _ = _run(_runner(target_time="00:55:00"), _rich_activity())
+
+    assert reply is not None
+    # veredito: 54:18 <= 55:00 -> bateu
+    assert "BATEU" in reply or "CONSEGUIU" in reply
+    # números do dia
+    assert "10.0 km em *54:18*" in reply
+    assert "pace médio 5:25/km" in reply
+    assert "FC 146/158 bpm" in reply
+    assert "cadência 170 ppm" in reply
+    # parciais km a km
+    assert "⏱️ Parciais por km" in reply
+    assert "km 1: 5:59 min/km · 134 bpm" in reply
+    assert "km 10: 5:05 min/km · 152 bpm" in reply
+
+
+def test_report_without_structure_omits_splits():
+    """Esteira/sem stream: sem parciais, o relatório ainda sai (veredito +
+    tempo), nunca quebra."""
+
+    reply, _ = _run(_runner(), _activity(moving_sec=2880))
+
+    assert reply is not None
+    assert "Parciais" not in reply
+
+
+def _is_target(runner, enriched):
+    with patch(f"{MODULE}.RunnerProfileRepository"):
+        return RaceDebrief.is_target_race(runner, enriched)
+
+
+def test_is_target_race_true_for_the_race():
+
+    assert _is_target(_runner(), _activity()) is True
+
+
+def test_is_target_race_false_when_distance_off_or_no_race():
+
+    assert _is_target(_runner(), _activity(distance_m=5000.0)) is False
+    assert _is_target(_runner(race_date=None), _activity()) is False
+    assert _is_target(_runner(), None) is False
