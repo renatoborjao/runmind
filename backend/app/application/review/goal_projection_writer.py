@@ -46,7 +46,7 @@ class GoalProjectionWriter:
         lines = [
             f"🎯 Rumo à sua meta ({label})",
             "",
-            f"No teu nível atual, teu {label} sairia em ~*{pred['formatted']}*.",
+            f"No teu nível atual, teu tempo seria ~*{pred['formatted']}*.",
         ]
 
         gap = GoalProjectionWriter._gap_line(goal, pred)
