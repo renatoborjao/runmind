@@ -36,6 +36,41 @@ def test_distance_defaults_without_number():
     ).distance_km == 10.0
 
 
+def test_distance_falls_back_to_objective_when_no_race():
+    """Prova cumprida/ausente (target_race=None): a distância segue o OBJETIVO
+    de fundo, não o default. Era a queixa do Renato — bateu o 10k, o objetivo
+    agora é a meia (21 km), e a projeção tem que mirar 21, não seguir no 10."""
+
+    goal = BuildTrainingGoal.execute(
+        make_runner(
+            target_race=None,
+            goal="correr 21 km, buscar saúde/evolução e correr mais rápido",
+        ),
+    )
+
+    assert goal.distance_km == 21.0
+
+
+def test_objective_with_named_half_marathon():
+
+    goal = BuildTrainingGoal.execute(
+        make_runner(target_race=None, goal="quero fazer uma meia maratona"),
+    )
+
+    assert goal.distance_km == 21.0975
+
+
+def test_concrete_race_wins_over_objective():
+    """Com prova concreta marcada, ela manda na distância (o objetivo de fundo
+    só entra quando não há prova)."""
+
+    goal = BuildTrainingGoal.execute(
+        make_runner(target_race="10 km", goal="correr 21 km com saúde"),
+    )
+
+    assert goal.distance_km == 10.0
+
+
 def test_named_distances_without_number():
     """Provas nomeadas sem número viram a distância oficial."""
 

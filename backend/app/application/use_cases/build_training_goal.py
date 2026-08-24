@@ -21,6 +21,7 @@ class BuildTrainingGoal:
             name=runner.goal,
             distance_km=BuildTrainingGoal._distance_km(
                 runner.target_race,
+                runner.goal,
             ),
             target_time=runner.target_time,
             race_date=BuildTrainingGoal._race_date(
@@ -31,15 +32,37 @@ class BuildTrainingGoal:
     @staticmethod
     def _distance_km(
         target_race: str | None,
+        goal_text: str | None = None,
     ) -> float:
         """"10 km" -> 10.0, "21k" -> 21.0, "5,5 km" -> 5.5. Provas nomeadas
-        sem número ("meia maratona", "maratona") viram a distância oficial."""
+        sem número ("meia maratona", "maratona") viram a distância oficial.
 
-        if not target_race:
+        Sem prova concreta (`target_race`), cai no OBJETIVO de fundo (`goal_text`,
+        ex.: "correr 21 km com saúde" -> 21) — assim, quando a prova é cumprida
+        e o alvo concreto é aposentado, a distância segue o objetivo do atleta,
+        não o default. Ver [[project_multiplos_objetivos]]."""
 
-            return DEFAULT_DISTANCE_KM
+        distance = BuildTrainingGoal._parse_distance(target_race)
 
-        lowered = target_race.lower()
+        if distance is not None:
+
+            return distance
+
+        # sem prova concreta: o objetivo de fundo manda (senão, o default)
+        from_goal = BuildTrainingGoal._parse_distance(goal_text)
+
+        return from_goal if from_goal is not None else DEFAULT_DISTANCE_KM
+
+    @staticmethod
+    def _parse_distance(text: str | None) -> float | None:
+        """Distância em km a partir de um texto livre, ou None se não houver
+        pista. "10 km"->10; "meia maratona"->21.0975; "maratona"->42.195."""
+
+        if not text:
+
+            return None
+
+        lowered = text.lower()
 
         # nomeadas sem número explícito (antes do regex, que não acha dígito)
         if "meia" in lowered and "marat" in lowered:
@@ -48,7 +71,7 @@ class BuildTrainingGoal:
 
         match = re.search(
             r"(\d+(?:[.,]\d+)?)",
-            target_race,
+            text,
         )
 
         if match:
@@ -59,7 +82,7 @@ class BuildTrainingGoal:
 
             return 42.195
 
-        return DEFAULT_DISTANCE_KM
+        return None
 
     @staticmethod
     def _race_date(
