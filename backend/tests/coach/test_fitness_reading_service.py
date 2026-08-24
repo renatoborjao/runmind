@@ -1,7 +1,46 @@
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
 from app.application.coach.intelligence.fitness_reading_service import (
     FitnessReadingService,
 )
 from tests.coach.factories import make_activity
+
+MODULE = "app.application.coach.intelligence.fitness_reading_service"
+
+
+def test_without_races_excludes_race_day_from_ef_base():
+    """A PROVA sai da base de eficiência aeróbica (esforço máx com taper/
+    adrenalina distorce a curva de economia). Segue contando pra forma noutros
+    eixos (VDOT/previsão), só não no EF. Decisão do Renato."""
+
+    race_day = make_activity(id=1, start_date=datetime(2026, 8, 23, 8, 0))
+    easy = make_activity(id=2, start_date=datetime(2026, 8, 20, 7, 0))
+
+    repo = MagicMock()
+    repo.load.return_value = [{"date": "2026-08-23"}]
+
+    with patch(f"{MODULE}.RaceResultRepository", return_value=repo):
+
+        result = FitnessReadingService._without_races(
+            "renato2", [race_day, easy],
+        )
+
+    assert [a.id for a in result] == [2]
+
+
+def test_without_races_noop_when_no_race_recorded():
+
+    easy = make_activity(id=2, start_date=datetime(2026, 8, 20, 7, 0))
+
+    repo = MagicMock()
+    repo.load.return_value = []
+
+    with patch(f"{MODULE}.RaceResultRepository", return_value=repo):
+
+        result = FitnessReadingService._without_races("renato2", [easy])
+
+    assert result == [easy]
 
 
 def test_max_hr_prefers_higher_of_observed_and_tanaka():

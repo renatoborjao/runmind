@@ -27,6 +27,9 @@ from app.infrastructure.persistence.activity_archive_repository import (
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
+from app.infrastructure.persistence.race_result_repository import (
+    RaceResultRepository,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -47,7 +50,7 @@ class FitnessReadingService:
         )
 
         return AerobicEfficiencyAnalyzer.analyze(
-            activities,
+            FitnessReadingService._without_races(profile, activities),
             reference_date=reference_date,
             resting_hr=resting_hr,
             max_hr=max_hr,
@@ -66,7 +69,7 @@ class FitnessReadingService:
         )
 
         return FitnessEvolutionAnalyzer.analyze(
-            activities,
+            FitnessReadingService._without_races(profile, activities),
             series,
             reference_date=reference_date,
             resting_hr=resting_hr,
@@ -74,6 +77,40 @@ class FitnessReadingService:
         )
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _without_races(profile: str, activities: list):
+        """Tira as PROVAS da base de EFICIÊNCIA AERÓBICA (o eixo "economia no
+        leve"). Uma prova é esforço MÁXIMO com taper/adrenalina: roda rápido
+        demais pra FC e vira um pico FALSO na curva de economia — parece ganho
+        durável, foi performance de dia de prova. A prova segue contando pra
+        forma onde faz sentido (VDOT/pace, previsão de tempo), só não distorce
+        o EF. Alinha com [[project_pace_so_corrida]]. Best-effort: sem store /
+        falha → base inalterada, nunca derruba a leitura."""
+
+        try:
+
+            race_dates = {
+                r.get("date") for r in RaceResultRepository().load(profile)
+            }
+
+            race_dates.discard(None)
+
+            if not race_dates:
+
+                return activities
+
+            return [
+                a
+                for a in activities
+                if a.start_date.date().isoformat() not in race_dates
+            ]
+
+        except Exception as e:
+
+            print(f"Exclusão de prova do EF falhou p/ '{profile}': {e}")
+
+            return activities
 
     @staticmethod
     def _load(profile: str):
