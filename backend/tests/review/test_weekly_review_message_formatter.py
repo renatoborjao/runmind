@@ -256,7 +256,10 @@ def test_format_highlights_race_of_the_week_and_marks_pace():
     )
 
     assert "🏁 PROVA da semana: 10 km em 54:18 — você BATEU a meta de 00:55:00! 🏆" in message
-    assert "• Pace médio: 5:59 min/km (inclui a prova)" in message
+    assert (
+        "• Pace médio: 5:59 min/km (5:30 min/km na anterior) "
+        "— inclui a prova (esforço máx)"
+    ) in message
 
 
 def test_format_race_highlight_missed_and_no_target():

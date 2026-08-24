@@ -259,14 +259,13 @@ class WeeklyReviewMessageFormatter:
         pelo esforço máximo dela — marca isso pra não ler como pace de treino
         (honestidade; era a dúvida do Renato)."""
 
-        note = " (inclui a prova)" if race else ""
+        note = " — inclui a prova (esforço máx)" if race else ""
 
         return (
             f"• Pace médio: "
-            f"{WeeklyReviewMessageFormatter._pace(current['avg_pace_min_km'])}"
-            f"{note} "
+            f"{WeeklyReviewMessageFormatter._pace(current['avg_pace_min_km'])} "
             f"({WeeklyReviewMessageFormatter._pace(previous['avg_pace_min_km'])} "
-            f"na anterior)"
+            f"na anterior){note}"
         )
 
     @staticmethod
