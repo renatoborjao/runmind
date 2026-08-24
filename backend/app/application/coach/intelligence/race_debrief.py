@@ -72,9 +72,16 @@ class RaceDebrief:
 
         activity = enriched_activity.activity
 
-        # a prova foi cumprida: apaga a data pra não redisparar nem confundir
-        # o planejamento seguinte (o objetivo/goal continua pra a próxima)
-        RunnerProfileRepository().update_fields(profile, {"race_date": None})
+        # a prova foi cumprida: APOSENTA o alvo concreto dela — data, distância
+        # e tempo-alvo da prova (senão a projeção "rumo à meta" fica projetando
+        # uma prova que já aconteceu, com o tempo já batido; era a queixa do
+        # Renato). O OBJETIVO de fundo (goal, ex.: "correr 21 km") continua e
+        # passa a ancorar a distância (BuildTrainingGoal cai no goal). Se o
+        # atleta quiser uma nova prova/tempo, ele marca na conversa.
+        RunnerProfileRepository().update_fields(
+            profile,
+            {"race_date": None, "target_race": None, "target_time": None},
+        )
 
         # registra o RESULTADO (o race_date some, mas o resumo/recap precisa
         # saber que houve PROVA na semana). Best-effort — nunca derruba o debrief.

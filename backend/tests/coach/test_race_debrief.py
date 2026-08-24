@@ -75,8 +75,12 @@ def test_beat_target_celebrates_and_clears_race_date():
     assert reply is not None
     assert "BATEU" in reply or "CONSEGUIU" in reply
     assert "48:00" in reply
-    # consumiu a prova
-    repo.update_fields.assert_called_once_with("renato2", {"race_date": None})
+    # aposenta o alvo concreto da prova cumprida (data + distância + tempo),
+    # pra a projeção não seguir mirando uma prova que já aconteceu
+    repo.update_fields.assert_called_once_with(
+        "renato2",
+        {"race_date": None, "target_race": None, "target_time": None},
+    )
 
 
 def test_near_miss_is_encouraging():
