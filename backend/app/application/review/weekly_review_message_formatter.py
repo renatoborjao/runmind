@@ -69,6 +69,17 @@ class WeeklyReviewMessageFormatter:
             or WeeklyReviewMessageFormatter._fallback_narrative(review)
         )
 
+        # a PROVA da semana é o destaque — garante o reconhecimento mesmo se a
+        # narrativa da IA cair no fallback (era a queixa do Renato: resumo da
+        # semana da prova sem falar UMA palavra da prova)
+        race = review.get("race")
+
+        if race:
+
+            lines.append("")
+
+            lines.append(WeeklyReviewMessageFormatter._race_highlight(race))
+
         lines.append("")
 
         lines.append("📊 Números (esta vs. anterior)")
@@ -90,7 +101,9 @@ class WeeklyReviewMessageFormatter:
         )
 
         lines.append(
-            WeeklyReviewMessageFormatter._pace_line(current, previous)
+            WeeklyReviewMessageFormatter._pace_line(
+                current, previous, race=review.get("race"),
+            )
         )
 
         if review.get("longest_km"):
@@ -144,11 +157,47 @@ class WeeklyReviewMessageFormatter:
 
         lines.append("")
 
-        lines.append(
-            "Semana que vem tem plano novo chegando. Bora! 💪"
-        )
+        # o plano da próxima sai HOJE, logo depois do resumo (não "semana que
+        # vem" — era a queixa do Renato, que recebeu isto no MESMO dia do plano)
+        if review.get("plan_incoming", True):
+
+            lines.append(
+                "Teu plano da próxima semana chega já já. Bora! 💪"
+            )
+
+        else:
+
+            lines.append(
+                "Segue firme na próxima — bora! 💪"
+            )
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _race_highlight(race: dict) -> str:
+        """A linha de destaque da PROVA da semana — o dia mais importante não
+        pode passar em branco no resumo."""
+
+        label = race.get("race_label") or "prova"
+
+        time = race.get("time")
+
+        target = race.get("target_time")
+
+        beat = race.get("beat")
+
+        if beat is True and target:
+
+            return (
+                f"🏁 PROVA da semana: {label} em {time} — "
+                f"você BATEU a meta de {target}! 🏆"
+            )
+
+        if beat is False and target:
+
+            return f"🏁 PROVA da semana: {label} em {time} (meta era {target})."
+
+        return f"🏁 PROVA da semana: {label} em {time} — concluída! 🎉"
 
     @staticmethod
     def _fallback_narrative(review: dict) -> list[str]:
@@ -204,11 +253,18 @@ class WeeklyReviewMessageFormatter:
     def _pace_line(
         current: dict,
         previous: dict,
+        race: dict | None = None,
     ) -> str:
+        """Pace médio da semana. Se houve PROVA na semana, o médio vem PUXADO
+        pelo esforço máximo dela — marca isso pra não ler como pace de treino
+        (honestidade; era a dúvida do Renato)."""
+
+        note = " (inclui a prova)" if race else ""
 
         return (
             f"• Pace médio: "
-            f"{WeeklyReviewMessageFormatter._pace(current['avg_pace_min_km'])} "
+            f"{WeeklyReviewMessageFormatter._pace(current['avg_pace_min_km'])}"
+            f"{note} "
             f"({WeeklyReviewMessageFormatter._pace(previous['avg_pace_min_km'])} "
             f"na anterior)"
         )
