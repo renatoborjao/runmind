@@ -30,6 +30,26 @@ _NEAR_MISS_RATIO = 1.02
 class RaceDebrief:
 
     @staticmethod
+    def is_target_race(runner: RunnerProfile, enriched_activity) -> bool:
+        """ESTA atividade é a prova-alvo? (só leitura — NÃO consome a data).
+        O TrainingCompletedEvent usa isso pra saber que o dia é da PROVA e
+        calar o feedback de treino comum."""
+
+        goal = BuildTrainingGoal.execute(runner)
+
+        if goal.race_date is None or enriched_activity is None:
+
+            return False
+
+        activity = getattr(enriched_activity, "activity", None)
+
+        if activity is None or not activity.moving_time or not activity.distance:
+
+            return False
+
+        return RaceDebrief._is_the_race(activity, goal)
+
+    @staticmethod
     async def after_feedback(
         profile: str,
         runner: RunnerProfile,
@@ -38,27 +58,17 @@ class RaceDebrief:
         """Devolve o debrief se ESTA atividade é a prova-alvo; senão None.
         Consome a prova (apaga a data) quando reconhece."""
 
+        if not RaceDebrief.is_target_race(runner, enriched_activity):
+
+            return None
+
         goal = BuildTrainingGoal.execute(runner)
-
-        if goal.race_date is None or enriched_activity is None:
-
-            return None
-
-        activity = getattr(enriched_activity, "activity", None)
-
-        if activity is None or not activity.moving_time or not activity.distance:
-
-            return None
-
-        if not RaceDebrief._is_the_race(activity, goal):
-
-            return None
 
         # a prova foi cumprida: apaga a data pra não redisparar nem confundir
         # o planejamento seguinte (o objetivo/goal continua pra a próxima)
         RunnerProfileRepository().update_fields(profile, {"race_date": None})
 
-        return RaceDebrief._message(runner, activity, goal)
+        return RaceDebrief._message(runner, enriched_activity, goal)
 
     @staticmethod
     def _is_the_race(activity, goal) -> bool:
@@ -74,7 +84,12 @@ class RaceDebrief:
         return near_distance and days_off <= _DATE_TOLERANCE_DAYS
 
     @staticmethod
-    def _message(runner, activity, goal) -> str:
+    def _message(runner, enriched, goal) -> str:
+        """O RELATÓRIO da prova: veredito (vs meta) + números do dia + parciais
+        km a km. É o que o atleta vê no lugar do feedback de treino comum — a
+        prova não é 'mais um treino'."""
+
+        activity = enriched.activity
 
         distance_km = activity.distance / 1000
         actual_min = activity.moving_time / 60
@@ -83,13 +98,79 @@ class RaceDebrief:
 
         header = RaceDebrief._verdict(runner.name, actual_min, actual, goal)
 
-        return (
-            f"{header}\n\n"
-            f"📊 {distance_km:.1f} km em *{actual}* — pace médio {pace}/km.\n\n"
+        parts = [header, RaceDebrief._stats_line(enriched, distance_km, actual, pace)]
+
+        splits = RaceDebrief._splits_block(enriched)
+
+        if splits:
+
+            parts.append(splits)
+
+        parts.append(
             "Agora é RECUPERAR: uns dias leves ou de folga, sem culpa — o corpo "
             "pede pra assimilar o esforço. Quando bater a vontade da próxima "
             "meta, me fala que a gente traça o caminho. 👊"
         )
+
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _stats_line(enriched, distance_km, actual, pace) -> str:
+        """Uma linha compacta com os números do dia (distância/tempo/pace + FC +
+        cadência quando o relógio deu)."""
+
+        activity = enriched.activity
+
+        line = f"📊 {distance_km:.1f} km em *{actual}* — pace médio {pace}/km"
+
+        avg_hr = getattr(activity, "average_heartrate", None)
+
+        if avg_hr:
+
+            line += f" · FC {int(avg_hr)}"
+
+            max_hr = getattr(activity, "max_heartrate", None)
+
+            if max_hr:
+
+                line += f"/{int(max_hr)}"
+
+            line += " bpm"
+
+        structure = getattr(enriched, "structure", None)
+
+        if structure is not None and getattr(structure, "cadence_spm", None):
+
+            line += f" · cadência {structure.cadence_spm} ppm"
+
+        return f"{line}."
+
+    @staticmethod
+    def _splits_block(enriched) -> str | None:
+        """Parciais km a km (pace + FC), como no relatório de treino — a prova
+        merece os splits também."""
+
+        structure = getattr(enriched, "structure", None)
+
+        if structure is None or not getattr(structure, "km_splits", None):
+
+            return None
+
+        km_hr = getattr(structure, "km_hr", []) or []
+
+        lines = ["⏱️ Parciais por km"]
+
+        for index, split_pace in enumerate(structure.km_splits):
+
+            line = f"km {index + 1}: {PaceFormatter.format(split_pace)} min/km"
+
+            if index < len(km_hr) and km_hr[index]:
+
+                line += f" · {km_hr[index]} bpm"
+
+            lines.append(line)
+
+        return "\n".join(lines)
 
     @staticmethod
     def _verdict(name, actual_min, actual, goal) -> str:
