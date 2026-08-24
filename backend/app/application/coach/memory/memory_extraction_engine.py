@@ -5,13 +5,13 @@ from google.genai import types
 
 from app.core.clock import today_local
 from app.core.config import get_settings
-from app.infrastructure.integrations.gemini.client import (
-    generate_json,
-    repair_json,
-)
 from app.domain.entities.memory_entry import (
     MEMORY_CATEGORIES,
     MemoryEntry,
+)
+from app.infrastructure.integrations.gemini.client import (
+    generate_json,
+    repair_json,
 )
 
 MAX_OUTPUT_TOKENS = 400
@@ -25,7 +25,12 @@ Hoje é {today} (use para resolver datas relativas como "em agosto").
 
 Analise a MENSAGEM NOVA do corredor e decida se ela contém fatos duráveis que
 o coach deve lembrar em conversas futuras. Categorias possíveis:
-- lesao: dor, lesão ou desconforto físico relatado
+- lesao: lesão ou dor MUSCULOESQUELÉTICA que afeta/limita a corrida — joelho,
+  canela (canelite), tornozelo, quadril, coluna, muscular (estiramento),
+  tendão (tendinite), fascite etc. É um LIMITE físico da mecânica de correr.
+  NÃO é doença passageira: gripe, resfriado, virose, febre, dor de garganta,
+  catarro, tosse, covid, sinusite, indisposição — NADA disso é "lesao" (vai em
+  "vida"). Na dúvida entre lesão e doença, NÃO marque como lesao.
 - preferencia: preferências de treino (horário, terreno, tipo de treino...)
 - disponibilidade: viagens, ausências, mudanças de agenda
 - objetivo: mudança de meta ou prova alvo
@@ -33,7 +38,8 @@ o coach deve lembrar em conversas futuras. Categorias possíveis:
   marcos de identidade (voltou depois de lesão, primeira vez sem parar, corre
   pela saúde após um susto, por alguém, pra provar algo, pra aliviar o stress).
   SÓ quando ele REVELA de verdade — nunca invente nem deduza um "porquê".
-- vida: evento de vida relevante ao treino (trabalho puxado, doença, sono...)
+- vida: evento de vida relevante ao treino, INCLUSIVE doença passageira (gripe,
+  resfriado, virose, febre, catarro...), trabalho puxado, sono, stress
 - outro: fato durável que não se encaixa acima
 
 MEMÓRIAS ATIVAS ATUAIS (id — [categoria] conteúdo):

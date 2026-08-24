@@ -1,7 +1,7 @@
 import asyncio
 from datetime import date, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.coach.intelligence.race_debrief import RaceDebrief
 from tests.coach.factories import make_runner
@@ -47,8 +47,14 @@ def _rich_activity(day=RACE_DAY):
     )
 
 
-def _run(runner, enriched):
-    with patch(f"{MODULE}.RunnerProfileRepository") as repo_cls:
+def _run(runner, enriched, narrative=None):
+    with (
+        patch(f"{MODULE}.RunnerProfileRepository") as repo_cls,
+        patch(
+            f"{MODULE}.RaceNarrativeWriter.write",
+            new=AsyncMock(return_value=narrative),
+        ),
+    ):
         repo = MagicMock()
         repo_cls.return_value = repo
         reply = asyncio.run(
@@ -131,6 +137,23 @@ def test_report_includes_stats_and_splits():
     assert "⏱️ Parciais por km" in reply
     assert "km 1: 5:59 min/km · 134 bpm" in reply
     assert "km 10: 5:05 min/km · 152 bpm" in reply
+
+
+def test_report_includes_ai_narrative_when_available():
+    """A narrativa da IA (o calor) entra no relatório quando disponível; sem
+    ela, o relatório sai só com veredito + números (nunca depende dela)."""
+
+    narrative = "Monstro, Renato! Mesmo capengando, cravou o sub-55 no fim."
+
+    reply, _ = _run(_runner(), _rich_activity(), narrative=narrative)
+
+    assert narrative in reply
+
+    # sem narrativa (IA fora do ar): relatório ainda completo, sem quebrar
+    reply_none, _ = _run(_runner(), _rich_activity(), narrative=None)
+
+    assert reply_none is not None
+    assert "Parciais" in reply_none
 
 
 def test_report_without_structure_omits_splits():
