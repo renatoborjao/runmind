@@ -16,6 +16,9 @@ from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 from app.domain.entities.training_plan import TrainingPlan
+from app.infrastructure.persistence.race_result_repository import (
+    RaceResultRepository,
+)
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -82,6 +85,13 @@ class WeeklyReviewBuilder:
                 history,
                 review_week,
             ),
+            # a PROVA que aconteceu nesta semana (se houve) — o destaque do
+            # resumo. Vem do resultado persistido (o race_date já foi consumido
+            # pelo debrief). None quando não houve prova na semana.
+            "race": WeeklyReviewBuilder._race_in_week(runner.id, review_week),
+            # o plano da próxima semana sai logo depois do resumo (mesmo dia) —
+            # só pra quem tem plano NOSSO (treinador externo conduz o dele).
+            "plan_incoming": not runner.external_coach,
         }
 
     @staticmethod
@@ -186,6 +196,33 @@ class WeeklyReviewBuilder:
             if plan.week_start == week:
 
                 return plan
+
+        return None
+
+    @staticmethod
+    def _race_in_week(profile: str, review_week: date) -> dict | None:
+        """O resultado da prova cuja data cai na semana que fechou (por semana
+        ISO). None se não houve prova. Best-effort — nunca derruba o resumo."""
+
+        try:
+
+            week_key = review_week.isocalendar()[:2]
+
+            for result in RaceResultRepository().load(profile):
+
+                raw = result.get("date")
+
+                if not raw:
+
+                    continue
+
+                if date.fromisoformat(raw).isocalendar()[:2] == week_key:
+
+                    return result
+
+        except Exception as e:
+
+            print(f"Detecção de prova na semana falhou p/ '{profile}': {e}")
 
         return None
 

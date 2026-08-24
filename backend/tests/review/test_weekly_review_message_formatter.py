@@ -241,6 +241,56 @@ def test_format_translates_upward_trends():
     assert "• Pace: mais lento (+6.1%)" in message
 
 
+def test_format_highlights_race_of_the_week_and_marks_pace():
+    """Semana da prova: o resumo ABRE reconhecendo a prova (destaque) e marca
+    o pace médio como puxado por ela. Era a queixa do Renato (resumo da semana
+    da prova sem citar a prova)."""
+
+    race = {
+        "race_label": "10 km", "time": "54:18",
+        "target_time": "00:55:00", "beat": True,
+    }
+
+    message = WeeklyReviewMessageFormatter.format(
+        "Renato", _review(race=race),
+    )
+
+    assert "🏁 PROVA da semana: 10 km em 54:18 — você BATEU a meta de 00:55:00! 🏆" in message
+    assert "• Pace médio: 5:59 min/km (inclui a prova)" in message
+
+
+def test_format_race_highlight_missed_and_no_target():
+
+    missed = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(race={"race_label": "10 km", "time": "56:00",
+                      "target_time": "00:55:00", "beat": False}),
+    )
+    assert "🏁 PROVA da semana: 10 km em 56:00 (meta era 00:55:00)." in missed
+
+    no_target = WeeklyReviewMessageFormatter.format(
+        "Renato",
+        _review(race={"race_label": "21 km", "time": "1:58:00",
+                      "target_time": None, "beat": None}),
+    )
+    assert "🏁 PROVA da semana: 21 km em 1:58:00 — concluída! 🎉" in no_target
+
+
+def test_format_plan_line_incoming_vs_external():
+
+    ours = WeeklyReviewMessageFormatter.format(
+        "Renato", _review(plan_incoming=True),
+    )
+    assert "Teu plano da próxima semana chega já já. Bora! 💪" in ours
+    # não diz mais "semana que vem" (o plano chega no MESMO dia)
+    assert "Semana que vem tem plano novo" not in ours
+
+    external = WeeklyReviewMessageFormatter.format(
+        "Renato", _review(plan_incoming=False),
+    )
+    assert "Teu plano da próxima semana chega já já" not in external
+
+
 def _adherence_report(weeks_data, **overrides):
     """Report com uma tupla (done, planned) por semana, antiga -> recente."""
 

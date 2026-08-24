@@ -31,6 +31,9 @@ FATOS DA SEMANA (use SÓ isto, não invente número):
 {facts}
 
 REGRAS:
+- Se houver "DESTAQUE DA SEMANA — PROVA", ela é O ponto alto: ABRA celebrando \
+a prova e o resultado (é o dia mais importante). E NÃO atribua o pace médio da \
+semana a evolução de treino — a prova (esforço máximo) o puxou.
 - FALE A LÍNGUA DO OBJETIVO do atleta (está nos fatos). Se ele mira uma PROVA \
 ou MARCA de tempo, enquadre o progresso rumo a ela: o que evoluiu, quantas \
 semanas faltam, o que ainda precisa apertar. Se o objetivo é SAÚDE/bem-estar/\
@@ -128,6 +131,14 @@ class WeeklyReviewNarrativeWriter:
 
         lines = [f"Atleta: {runner_name}"]
 
+        # a PROVA da semana é o DESTAQUE — vem primeiro pra a IA não ignorar o
+        # dia mais importante (era a queixa do Renato)
+        race_fact = WeeklyReviewNarrativeWriter._race_fact(review.get("race"))
+
+        if race_fact:
+
+            lines.append(race_fact)
+
         lines.append(WeeklyReviewNarrativeWriter._goal_fact(goal))
 
         vol_delta = (
@@ -187,6 +198,43 @@ class WeeklyReviewNarrativeWriter:
                 lines.append(brief)
 
         return "\n".join(line for line in lines if line)
+
+    @staticmethod
+    def _race_fact(race: dict | None) -> str:
+        """A prova da semana como DESTAQUE + a ressalva de que ela puxa o pace
+        médio (pra a IA não ler o médio como evolução de treino)."""
+
+        if not race:
+
+            return ""
+
+        label = race.get("race_label") or "prova"
+
+        time = race.get("time")
+
+        target = race.get("target_time")
+
+        beat = race.get("beat")
+
+        if beat is True:
+
+            outcome = f"BATEU a meta de {target}"
+
+        elif beat is False:
+
+            outcome = f"ficou acima da meta de {target}"
+
+        else:
+
+            outcome = "concluída"
+
+        return (
+            f"DESTAQUE DA SEMANA — PROVA: {label} em {time} ({outcome}). "
+            "CELEBRE isto como o ponto alto da semana. ATENÇÃO: o pace médio da "
+            "semana está PUXADO por esta prova (esforço máximo), NÃO é pace de "
+            "treino — não trate o pace médio como evolução de forma; a evolução "
+            "real está na tendência/EF."
+        )
 
     @staticmethod
     def _goal_fact(goal: dict) -> str:

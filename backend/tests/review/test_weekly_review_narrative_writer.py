@@ -126,6 +126,33 @@ def test_facts_carry_the_numbers():
     assert "Consistência recente: 85%" in facts
 
 
+def test_facts_highlight_race_of_the_week():
+    """Semana com prova: os fatos trazem a prova como DESTAQUE e avisam que o
+    pace médio está puxado por ela (pra a IA não ler como evolução de treino).
+    Era a queixa do Renato."""
+
+    review = _review({"name": "saúde", "has_race": False})
+    review["race"] = {
+        "race_label": "10 km", "time": "54:18",
+        "target_time": "00:55:00", "beat": True,
+    }
+
+    facts = WeeklyReviewNarrativeWriter._facts("Renato", review)
+
+    assert "DESTAQUE DA SEMANA — PROVA: 10 km em 54:18 (BATEU a meta de 00:55:00)" in facts
+    assert "CELEBRE" in facts
+    assert "pace médio da semana está PUXADO" in facts
+
+
+def test_facts_without_race_have_no_highlight():
+
+    facts = WeeklyReviewNarrativeWriter._facts(
+        "Renato", _review({"name": "saúde", "has_race": False}),
+    )
+
+    assert "DESTAQUE DA SEMANA" not in facts
+
+
 def test_parse_valid_and_invalid():
 
     assert WeeklyReviewNarrativeWriter._parse(

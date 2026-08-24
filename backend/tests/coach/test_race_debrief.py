@@ -50,6 +50,7 @@ def _rich_activity(day=RACE_DAY):
 def _run(runner, enriched, narrative=None):
     with (
         patch(f"{MODULE}.RunnerProfileRepository") as repo_cls,
+        patch(f"{MODULE}.RaceResultRepository") as result_cls,
         patch(
             f"{MODULE}.RaceNarrativeWriter.write",
             new=AsyncMock(return_value=narrative),
@@ -57,9 +58,12 @@ def _run(runner, enriched, narrative=None):
     ):
         repo = MagicMock()
         repo_cls.return_value = repo
+        result_repo = MagicMock()
+        result_cls.return_value = result_repo
         reply = asyncio.run(
             RaceDebrief.after_feedback("renato2", runner, enriched)
         )
+        _run.last_result_repo = result_repo
         return reply, repo
 
 
@@ -137,6 +141,25 @@ def test_report_includes_stats_and_splits():
     assert "⏱️ Parciais por km" in reply
     assert "km 1: 5:59 min/km · 134 bpm" in reply
     assert "km 10: 5:05 min/km · 152 bpm" in reply
+
+
+def test_records_race_result_for_the_weekly_review():
+    """Ao reconhecer a prova, o debrief PERSISTE o resultado — é o que deixa o
+    resumo semanal saber que houve prova (o race_date é consumido)."""
+
+    reply, _ = _run(_runner(target_time="00:55:00"), _rich_activity())
+
+    assert reply is not None
+
+    _run.last_result_repo.record.assert_called_once()
+
+    profile_arg, result = _run.last_result_repo.record.call_args.args
+
+    assert profile_arg == "renato2"
+    assert result["date"] == "2026-08-23"
+    assert result["race_label"] == "10 km"
+    assert result["time"] == "54:18"
+    assert result["beat"] is True
 
 
 def test_report_includes_ai_narrative_when_available():

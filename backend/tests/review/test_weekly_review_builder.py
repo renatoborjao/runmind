@@ -122,6 +122,46 @@ def test_build_goal_health_when_no_race():
     assert review["goal"]["predicted_time"] is None
 
 
+def test_build_detects_race_in_the_closing_week():
+    """A prova cuja data cai na semana que fecha vira o 'race' do resumo
+    (destaque). Prova de outra semana não entra. plan_incoming reflete se o
+    plano é nosso (não treinador externo)."""
+
+    from unittest.mock import MagicMock, patch
+
+    runner = make_runner(weekly_training_days=3)
+    history = TrainingHistory(activities=[_run(0, 10000.0, 3300)])
+
+    this_week = {"date": "2026-07-04", "race_label": "10 km",
+                 "time": "54:18", "target_time": "00:55:00", "beat": True}
+    other_week = {"date": "2026-06-20", "race_label": "5 km", "time": "25:00"}
+
+    repo = MagicMock()
+    repo.load.return_value = [other_week, this_week]
+
+    with patch(
+        "app.application.review.weekly_review_builder.RaceResultRepository",
+        return_value=repo,
+    ):
+
+        review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["race"] == this_week
+    assert review["plan_incoming"] is True
+
+
+def test_build_no_race_when_none_in_week():
+
+    runner = make_runner(weekly_training_days=3, external_coach=True)
+    history = TrainingHistory(activities=[_run(0, 10000.0, 3300)])
+
+    review = WeeklyReviewBuilder.build(runner, history, reference_date=REFERENCE)
+
+    assert review["race"] is None
+    # treinador externo: o plano não é nosso
+    assert review["plan_incoming"] is False
+
+
 def test_build_longest_km_of_the_closing_week():
 
     runner = make_runner(weekly_training_days=3)

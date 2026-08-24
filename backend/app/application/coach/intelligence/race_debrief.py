@@ -15,6 +15,9 @@ from app.application.coach.writer.race_narrative_writer import (
 from app.application.planner.pace_formatter import PaceFormatter
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.domain.entities.runner_profile import RunnerProfile
+from app.infrastructure.persistence.race_result_repository import (
+    RaceResultRepository,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -67,9 +70,15 @@ class RaceDebrief:
 
         goal = BuildTrainingGoal.execute(runner)
 
+        activity = enriched_activity.activity
+
         # a prova foi cumprida: apaga a data pra não redisparar nem confundir
         # o planejamento seguinte (o objetivo/goal continua pra a próxima)
         RunnerProfileRepository().update_fields(profile, {"race_date": None})
+
+        # registra o RESULTADO (o race_date some, mas o resumo/recap precisa
+        # saber que houve PROVA na semana). Best-effort — nunca derruba o debrief.
+        RaceDebrief._record_result(profile, activity, goal)
 
         # narrativa da IA (o calor): best-effort — se falhar, o relatório sai
         # só com o veredito + números, nunca quebra
@@ -78,6 +87,37 @@ class RaceDebrief:
         )
 
         return RaceDebrief._message(runner, enriched_activity, goal, narrative)
+
+    @staticmethod
+    def _record_result(profile: str, activity, goal) -> None:
+        """Persiste o resultado da prova pra o resumo/recap saberem que houve
+        prova na semana. Best-effort — falha aqui não derruba o debrief."""
+
+        try:
+
+            distance_km = activity.distance / 1000
+            actual_min = activity.moving_time / 60
+
+            target_min = RaceStrategyEngine._parse_time(goal.target_time)
+
+            beat = None if target_min is None else actual_min <= target_min
+
+            RaceResultRepository().record(
+                profile,
+                {
+                    "date": activity.start_date.date().isoformat(),
+                    "distance_km": round(distance_km, 2),
+                    "race_label": goal.race_label,
+                    "time": RaceDebrief._fmt_duration(actual_min),
+                    "target_time": goal.target_time,
+                    "pace": PaceFormatter.format(actual_min / distance_km),
+                    "beat": beat,
+                },
+            )
+
+        except Exception as e:
+
+            print(f"Registro do resultado da prova falhou p/ '{profile}': {e}")
 
     @staticmethod
     def _is_the_race(activity, goal) -> bool:
