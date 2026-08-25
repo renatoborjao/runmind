@@ -4,6 +4,7 @@ from unittest.mock import patch
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
+from app.domain.entities.memory_entry import MemoryEntry
 from app.infrastructure.persistence.runner_memory_repository import (
     RunnerMemoryRepository,
 )
@@ -118,6 +119,86 @@ def test_illness_marked_as_lesao_does_not_become_injury(tmp_path):
 
         # a gripe foi filtrada; a lesão real ficou
         assert profile["injuries"] == ["Dor no joelho direito"]
+
+
+def test_add_supersedes_near_duplicate(tmp_path):
+    """Fato novo quase-igual SUPERA o antigo (dedup na entrada) — nada de dois
+    'longos aos domingos' na memória."""
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    with (
+        patch(f"{MODULE}.RunnerMemoryRepository", return_value=memory_repo),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+    ):
+
+        RunnerMemoryService.process(
+            "renato",
+            {"add": [{"category": "preferencia",
+                      "content": "Prefere treinos longos aos domingos"}],
+             "archive": []},
+        )
+        RunnerMemoryService.process(
+            "renato",
+            {"add": [{"category": "preferencia",
+                      "content": "Prefere treinos longos aos domingos por causa "
+                                 "dos exames de sábado"}],
+             "archive": []},
+        )
+
+        active = memory_repo.active("renato")
+        conteudos = [e.content for e in active]
+
+    assert len(active) == 1
+    assert "exames" in conteudos[0]  # ficou o mais novo
+
+
+def test_expired_memory_drops_from_active(tmp_path):
+    """Fato com validade vencida não aparece mais (nem no injeta, nem no
+    render)."""
+
+    memory_repo, _ = _patched_repos(tmp_path)
+
+    memory_repo.add("renato", MemoryEntry(
+        id="m-old", category="disponibilidade",
+        content="Trocar treino só nesta semana",
+        source="conversation", created_at="2026-01-01T10:00:00-03:00",
+        expires_at="2026-01-11",
+    ))
+    memory_repo.add("renato", MemoryEntry(
+        id="m-live", category="preferencia", content="Corre na rua",
+        source="conversation", created_at="2026-01-01T10:00:00-03:00",
+    ))
+
+    ids = [e.id for e in memory_repo.active("renato")]
+
+    assert ids == ["m-live"]
+
+
+def test_consolidate_dedups_the_backlog(tmp_path):
+    """Backlog com duplicata antiga: consolidate mantém a MAIS NOVA."""
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    memory_repo.add("renato", MemoryEntry(
+        id="m-1", category="preferencia",
+        content="Deseja que os treinos sejam enviados para o relógio Garmin",
+        source="conversation", created_at="2026-07-12T10:00:00-03:00",
+    ))
+    memory_repo.add("renato", MemoryEntry(
+        id="m-2", category="preferencia",
+        content="Deseja que os treinos sejam enviados para o relógio Garmin "
+                "atualizados",
+        source="conversation", created_at="2026-08-10T10:00:00-03:00",
+    ))
+
+    with patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo):
+
+        RunnerMemoryService.consolidate("renato", memory_repo)
+
+    ids = [e.id for e in memory_repo.active("renato")]
+
+    assert ids == ["m-2"]  # ficou a mais nova
 
 
 def test_render_formats_active_memories(tmp_path):

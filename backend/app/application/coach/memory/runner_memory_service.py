@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.core.clock import now_local
 from app.domain.entities.memory_entry import MemoryEntry
+from app.domain.memory_lifecycle import MemoryLifecycle
 from app.infrastructure.persistence.runner_memory_repository import (
     RunnerMemoryRepository,
 )
@@ -39,23 +40,16 @@ class RunnerMemoryService:
 
         for item in ops.get("add", []):
 
-            repo.add(
-                profile,
-                MemoryEntry(
-                    id=f"m-{uuid4().hex[:8]}",
-                    category=item["category"],
-                    content=item["content"],
-                    source="conversation",
-                    # hora local: a data exibida no contexto ("03/07")
-                    # tem que bater com o dia do corredor
-                    created_at=now_local().isoformat(),
-                ),
-            )
+            RunnerMemoryService._add(repo, profile, item)
 
         repo.archive(
             profile,
             ops.get("archive", []),
         )
+
+        # higiene do backlog: junta quase-duplicatas antigas (o active já deixa
+        # os vencidos caírem) — auto-cura a memória a cada op, sem esperar limpeza
+        RunnerMemoryService.consolidate(profile, repo)
 
         RunnerMemoryService._sync_injuries(
             profile,
@@ -66,6 +60,84 @@ class RunnerMemoryService:
             profile,
             ops.get("race"),
         )
+
+    @staticmethod
+    def _add(repo: RunnerMemoryRepository, profile: str, item: dict) -> None:
+        """Grava um fato novo com VALIDADE (durável ou datada/temporária) e,
+        antes, SUPERA os ativos quase-iguais da mesma categoria (dedup — a
+        frase nova é a mais atual)."""
+
+        category = item["category"]
+        content = item["content"]
+
+        # hora local: a data exibida no contexto ("03/07") bate com o dia dele
+        created_at = now_local().isoformat()
+
+        superseded = [
+            entry.id
+            for entry in repo.active(profile)
+            if entry.category == category
+            and MemoryLifecycle.is_near_duplicate(entry.content, content)
+        ]
+
+        if superseded:
+
+            repo.archive(profile, superseded)
+
+        repo.add(
+            profile,
+            MemoryEntry(
+                id=f"m-{uuid4().hex[:8]}",
+                category=category,
+                content=content,
+                source="conversation",
+                created_at=created_at,
+                expires_at=MemoryLifecycle.expiry_for(
+                    category, content, created_at,
+                ),
+            ),
+        )
+
+    @staticmethod
+    def consolidate(
+        profile: str,
+        repo: RunnerMemoryRepository | None = None,
+    ) -> None:
+        """Higiene do BACKLOG: entre os fatos ativos (o `active` já tirou os
+        vencidos), arquiva as quase-duplicatas mantendo a MAIS NOVA. Idempotente
+        e conservador (mesma categoria, limiar alto) — falso-merge é pior que
+        duplicata. Ver [[MemoryLifecycle]]."""
+
+        repo = repo or RunnerMemoryRepository()
+
+        # ordem cronológica (append) -> o de índice menor é o mais ANTIGO
+        active = repo.active(profile)
+
+        stale: list[str] = []
+
+        for index, entry in enumerate(active):
+
+            if entry.id in stale:
+
+                continue
+
+            for newer in active[index + 1:]:
+
+                if (
+                    entry.category == newer.category
+                    and MemoryLifecycle.is_near_duplicate(
+                        entry.content, newer.content,
+                    )
+                ):
+
+                    # some com o ANTIGO (entry); fica o mais novo (newer)
+                    stale.append(entry.id)
+
+                    break
+
+        if stale:
+
+            repo.archive(profile, stale)
 
     @staticmethod
     def render(
