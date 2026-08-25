@@ -63,19 +63,14 @@ class PlanContextBuilder:
         # outra preferência dinâmica. Ver [[project_longao_dinamico]].
 
         lines.append(
-            "Volume real: ~%.1f km/sem (última %.1f, melhor %.1f), "
-            "tendência %s."
-            % (
-                baseline.weekly_km,
-                baseline.last_week_km,
-                baseline.max_week_km,
-                baseline.trend,
-            )
+            f"Volume real: ~{baseline.weekly_km:.1f} km/sem "
+            f"(última {baseline.last_week_km:.1f}, "
+            f"melhor {baseline.max_week_km:.1f}), tendência {baseline.trend}."
         )
 
         lines.append(
-            "Rodagem típica ~%.1f km; maior treino ~%.1f km."
-            % (baseline.typical_run_km, baseline.longest_km)
+            f"Rodagem típica ~{baseline.typical_run_km:.1f} km; "
+            f"maior treino ~{baseline.longest_km:.1f} km."
         )
 
         lines.append(PlanContextBuilder._paces_line(metrics))
@@ -201,7 +196,14 @@ class PlanContextBuilder:
 
             return f"Objetivo do atleta: {goal.name} (sem prova marcada)."
 
-        target = f", alvo {goal.target_time}" if goal.target_time else ""
+        pace = PlanContextBuilder._goal_pace(goal)
+
+        target = (
+            f", alvo {goal.target_time} (~{pace}/km — use pra os tiros no "
+            f"ritmo-alvo e o SIMULADO)"
+            if goal.target_time and pace
+            else (f", alvo {goal.target_time}" if goal.target_time else "")
+        )
 
         # contador em DIAS (preciso): perto da prova, o piso de semanas engana
         # (13 dias virava "1 semana" e o coach afiava cedo). Semanas só como
@@ -229,16 +231,56 @@ class PlanContextBuilder:
         )
 
     @staticmethod
+    def _goal_pace(goal: TrainingGoal) -> str | None:
+        """Pace-alvo da prova (mm:ss/km) derivado do tempo-alvo — o número
+        exato pra o coach ancorar os tiros no ritmo-alvo E o simulado, sem
+        chutar. None sem tempo-alvo/distância."""
+
+        secs = PlanContextBuilder._time_to_seconds(goal.target_time)
+
+        if secs is None or not goal.distance_km:
+
+            return None
+
+        return PaceFormatter.format((secs / 60) / goal.distance_km)
+
+    @staticmethod
+    def _time_to_seconds(clock: str | None) -> int | None:
+        """"HH:MM:SS" ou "MM:SS" -> segundos. None se não parsear."""
+
+        if not clock:
+
+            return None
+
+        parts = clock.split(":")
+
+        try:
+
+            nums = [int(p) for p in parts]
+
+        except ValueError:
+
+            return None
+
+        if len(nums) == 3:
+
+            return nums[0] * 3600 + nums[1] * 60 + nums[2]
+
+        if len(nums) == 2:
+
+            return nums[0] * 60 + nums[1]
+
+        return None
+
+    @staticmethod
     def _paces_line(metrics: RunnerMetrics) -> str:
 
         return (
-            "Paces reais (min/km): fácil %s–%s, limiar %s, VO2 %s."
-            % (
-                PaceFormatter.format(metrics.easy_pace_min),
-                PaceFormatter.format(metrics.easy_pace_max),
-                PaceFormatter.format(metrics.threshold_pace),
-                PaceFormatter.format(metrics.vo2_pace),
-            )
+            "Paces reais (min/km): "
+            f"fácil {PaceFormatter.format(metrics.easy_pace_min)}–"
+            f"{PaceFormatter.format(metrics.easy_pace_max)}, "
+            f"limiar {PaceFormatter.format(metrics.threshold_pace)}, "
+            f"VO2 {PaceFormatter.format(metrics.vo2_pace)}."
         )
 
     @staticmethod
@@ -275,23 +317,17 @@ class PlanContextBuilder:
         if report.missed_day:
 
             parts.append(
-                "%s (%d de %d vezes que foi prescrita)"
-                % (
-                    weekday_label(report.missed_day.label),
-                    report.missed_day.count,
-                    report.missed_day.opportunities,
-                )
+                f"{weekday_label(report.missed_day.label)} "
+                f"({report.missed_day.count} de "
+                f"{report.missed_day.opportunities} vezes que foi prescrita)"
             )
 
         if report.missed_type:
 
             parts.append(
-                "treino de %s (%d de %d)"
-                % (
-                    report.missed_type.label,
-                    report.missed_type.count,
-                    report.missed_type.opportunities,
-                )
+                f"treino de {report.missed_type.label} "
+                f"({report.missed_type.count} de "
+                f"{report.missed_type.opportunities})"
             )
 
         if not parts:
@@ -310,15 +346,11 @@ class PlanContextBuilder:
     def _last_plan_line(last_plan: TrainingPlan) -> str:
 
         sessions = "; ".join(
-            "%s %s%s"
-            % (
-                weekday_label(s.day),
-                s.workout_type,
-                (
-                    f" {s.planned_distance_km:.0f}km"
-                    if s.planned_distance_km
-                    else ""
-                ),
+            f"{weekday_label(s.day)} {s.workout_type}"
+            + (
+                f" {s.planned_distance_km:.0f}km"
+                if s.planned_distance_km
+                else ""
             )
             for s in last_plan.sessions
         )

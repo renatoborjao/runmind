@@ -67,6 +67,14 @@ REGRAS:
       semanas de um 10k você AINDA constrói/mantém volume e qualidade, NÃO corta
       cedo. Meia/maratona pedem polimento mais LONGO (~2-3 semanas). Longe da
       prova, construa base/volume; só poupe de verdade na véspera.
+    * ENSAIO DA PROVA (simulado/prova-teste) — NÃO ESQUEÇA: no bloco antes da
+      prova (tipicamente ~10-14 dias antes num 5k/10k, ~2-3 semanas numa meia/
+      maratona), encaixe UM simulado — bloco CONTÍNUO no RITMO-ALVO cobrindo um
+      pedação grande da distância (ver o cardápio) — pra o atleta chegar sabendo
+      se sustenta o pace, e não ir "no escuro". É distinto dos tiros no ritmo-
+      alvo (que continuam valendo pra construir). Só quando a semana da vez cai
+      nessa janela e o nível já comporta; NÃO repita toda semana, é um ensaio.
+      Deixe dias leves em volta pra ele chegar recuperado no simulado e na prova.
     * SEM prova (objetivo de fundo sem data): progrida SEMANA A SEMANA rumo ao
       objetivo, sem reduzir volume à toa. Só recue por motivo REAL — lesão/dor,
       pedido do atleta, ou sobrecarga clara (recuperação pontual). Nada de

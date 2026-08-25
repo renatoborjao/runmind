@@ -127,3 +127,42 @@ def test_goal_line_counts_days_not_floored_weeks():
     assert "1 semana" not in line
     assert "Prova-âncora" in line and "10 km" in line
     assert "Objetivo de fundo" in line
+
+
+def test_goal_line_injects_concrete_target_pace():
+    """Com tempo-alvo, o coach recebe o PACE-ALVO exato (00:55:00 em 10k =
+    5:30/km) pra ancorar os tiros no ritmo-alvo E o SIMULADO — sem chutar."""
+
+    from datetime import date
+
+    goal = TrainingGoal(
+        name="10 km sub-55", distance_km=10.0,
+        target_time="00:55:00", race_date=date(2026, 8, 23),
+    )
+
+    line = PlanContextBuilder._goal_line(goal, weeks_to_race=2, days_to_race=13)
+
+    assert "alvo 00:55:00" in line
+    assert "~5:30/km" in line
+    assert "SIMULADO" in line
+
+
+def test_goal_pace_and_time_parsing():
+
+    from datetime import date
+
+    from app.domain.entities.training_goal import TrainingGoal as TG
+
+    assert PlanContextBuilder._time_to_seconds("00:55:00") == 3300
+    assert PlanContextBuilder._time_to_seconds("55:00") == 3300
+    assert PlanContextBuilder._time_to_seconds("agosto") is None
+    assert PlanContextBuilder._time_to_seconds(None) is None
+
+    goal = TG(name="x", distance_km=10.0, target_time="00:55:00",
+              race_date=date(2026, 8, 23))
+    assert PlanContextBuilder._goal_pace(goal) == "5:30"
+
+    # sem tempo-alvo -> sem pace
+    no_target = TG(name="x", distance_km=21.0975, target_time=None,
+                   race_date=date(2026, 9, 1))
+    assert PlanContextBuilder._goal_pace(no_target) is None
