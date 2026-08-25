@@ -106,3 +106,12 @@ def test_distinct_facts_are_not_duplicates():
 
 def test_short_contents_never_merge():
     assert MemoryLifecycle.is_near_duplicate("Fato 0", "Fato 1") is False
+
+
+def test_device_synonym_merges_relogio_and_garmin():
+    """relógio == Garmin (mesmo aparelho): fatos de 'enviar pro relógio' e
+    'enviar pro Garmin' são a mesma coisa."""
+    assert MemoryLifecycle.is_near_duplicate(
+        "Deseja que os treinos sejam enviados para o relógio",
+        "Deseja que os treinos atualizados sejam enviados para o Garmin",
+    ) is True

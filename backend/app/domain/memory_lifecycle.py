@@ -45,6 +45,14 @@ _DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?")
 # limiar de sobreposição (Jaccard de tokens) pra considerar quase-duplicata
 _DEDUP_JACCARD = 0.6
 
+# sinônimos do DOMÍNIO que significam a MESMA coisa — canonizados no token pra o
+# dedup casar "enviar pro relógio" com "enviar pro Garmin" (mesmo aparelho).
+# Mínimo e conservador de propósito (só termos inequívocos).
+_SYNONYMS = {
+    "relogio": "garmin",
+    "watch": "garmin",
+}
+
 # stopwords curtas que não distinguem um fato do outro
 _STOPWORDS = {
     "de", "da", "do", "das", "dos", "a", "o", "as", "os", "e", "em", "no",
@@ -159,7 +167,11 @@ class MemoryLifecycle:
 
         raw = re.findall(r"[a-z0-9]+", norm)
 
-        return {t for t in raw if len(t) > 1 and t not in _STOPWORDS}
+        return {
+            _SYNONYMS.get(t, t)
+            for t in raw
+            if len(t) > 1 and t not in _STOPWORDS
+        }
 
     @staticmethod
     def _normalize(text: str) -> str:
