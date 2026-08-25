@@ -19,13 +19,22 @@ WORKOUT_MENU = """\
       terminar forte (ótimo no longão).
     * Longão: o treino mais longo — constante, progressivo OU com blocos no
       ritmo-alvo (varie a forma dele também).
+    * Simulado / prova-teste: o ENSAIO GERAL da prova — um bloco CONTÍNUO no
+      RITMO-ALVO cobrindo um pedação grande da distância (NÃO a prova inteira),
+      pra o atleta testar se SUSTENTA o pace e treinar o pacing/confiança
+      ("seguro ou quebro?"). É DIFERENTE do tiro: o tiro constrói a capacidade
+      em pedaços; o simulado testa MANTER contínuo. Ex.: pré-10k -> ~6-8 km no
+      pace-alvo; pré-21k -> ~12-16 km com um bloco grande no alvo; pré-5k ->
+      ~3-4 km no alvo. Aquece antes, solta depois.
     * Regenerativo/base: rodagem leve pra absorver a carga."""
 
 # a periodização em uma frase: qual ênfase puxar conforme a distância pra prova
 PHASE_EMPHASIS = (
     "longe da prova / construindo base -> volume, longão, tempo de limiar; "
-    "perto da prova -> afinar no ritmo-alvo (tiros no pace de prova); "
-    "véspera -> poupar"
+    "perto da prova -> afinar no ritmo-alvo (tiros no pace de prova) E encaixar "
+    "UM simulado/prova-teste contínuo no ritmo-alvo como ensaio geral "
+    "(~10-14 dias antes num 5k/10k, ~2-3 semanas numa meia/maratona), com dias "
+    "leves em volta pra chegar recuperado; véspera -> poupar"
 )
 
 # POR TEMPO vs POR DISTÂNCIA — compartilhada pelos 3 motores (plano semanal,
