@@ -30,3 +30,8 @@ class MemoryEntry:
     created_at: str
 
     status: str = "active"
+
+    # quando o fato deixa de valer (ISO date). None = durável (não expira por
+    # tempo). Fatos datados/temporários ("na semana de X") e transitórios
+    # (doença) ganham validade; preferência/objetivo/motivação duram.
+    expires_at: str | None = None

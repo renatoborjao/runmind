@@ -1,8 +1,10 @@
 import json
 from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 
 from app.domain.entities.memory_entry import MemoryEntry
+from app.domain.memory_lifecycle import MemoryLifecycle
 
 
 class RunnerMemoryRepository:
@@ -49,11 +51,18 @@ class RunnerMemoryRepository:
         self,
         profile: str,
     ) -> list[MemoryEntry]:
+        """Fatos VIVOS: não arquivados E não vencidos. A validade sai do
+        expires_at gravado ou, pra dado legado sem ele, é DERIVADA na hora
+        (categoria/conteúdo/data) — assim a higiene vale retroativa, sem
+        migração. Ver [[MemoryLifecycle]]."""
+
+        today = date.today()
 
         return [
             entry
             for entry in self.load(profile)
             if entry.status == "active"
+            and not MemoryLifecycle.is_expired(entry, today)
         ]
 
     def add(
