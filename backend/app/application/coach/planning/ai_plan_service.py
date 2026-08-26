@@ -227,6 +227,10 @@ class AIPlanService:
                 else calibration
             )
 
+        # SUBJETIVO recente (RPE + check-ins): o que ELE SENTIU, fresco, direto
+        # no plano — não só via aprendizado semanal. Ver [[feedback_base_historico_sempre]].
+        subjective = AIPlanService._subjective(profile)
+
         return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
@@ -244,7 +248,90 @@ class AIPlanService:
             learnings=learnings,
             body_directive=body_directive,
             fitness_directive=fitness_directive,
+            subjective=subjective,
         )
+
+    @staticmethod
+    def _subjective(profile: str) -> str:
+        """O SUBJETIVO recente (últimos ~14 dias): RPE dos treinos + check-ins
+        (energia/sono/nota) — o que ELE SENTIU. Fresco, direto no plano (não só
+        via aprendizado semanal). Best-effort: falhar aqui nunca derruba o plano."""
+
+        try:
+
+            from datetime import date as _date
+            from datetime import timedelta
+
+            from app.core.clock import today_local
+            from app.core.weekdays import weekday_label, weekday_name
+            from app.infrastructure.persistence.checkin_repository import (
+                CheckinRepository,
+            )
+            from app.infrastructure.persistence.session_rpe_repository import (
+                SessionRpeRepository,
+            )
+
+            cutoff = today_local() - timedelta(days=14)
+
+            def _lbl(day: str) -> str:
+                return weekday_label(weekday_name(_date.fromisoformat(day)))
+
+            lines: list[str] = []
+
+            for s in sorted(
+                SessionRpeRepository().load_sessions(profile), key=lambda x: x.day
+            ):
+
+                if _date.fromisoformat(s.day) >= cutoff:
+
+                    lines.append(f"- {_lbl(s.day)}: esforço percebido RPE {s.rpe}/10")
+
+            for c in sorted(
+                CheckinRepository().load(profile), key=lambda x: x.day
+            ):
+
+                if not getattr(c, "has_data", False):
+
+                    continue
+
+                if _date.fromisoformat(c.day) < cutoff:
+
+                    continue
+
+                bits = []
+
+                if c.energy is not None:
+
+                    bits.append(f"energia {c.energy}/5")
+
+                if c.sleep_quality is not None:
+
+                    bits.append(f"sono {c.sleep_quality}/5")
+
+                if getattr(c, "note", None):
+
+                    bits.append(f'"{c.note}"')
+
+                if bits:
+
+                    lines.append(f"- {_lbl(c.day)}: {', '.join(bits)}")
+
+            if not lines:
+
+                return ""
+
+            return (
+                "COMO ELE VEM SE SENTINDO (subjetivo recente — o esforço "
+                "PERCEBIDO e a sensação dele; pese JUNTO do corpo/carga: RPE "
+                "alto pro que a carga diz = está sentindo mais, cuidado; RPE "
+                "baixo ou boa energia = sobra pra dosar mais):\n" + "\n".join(lines)
+            )
+
+        except Exception as e:
+
+            print(f"Subjetivo do plano falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _body_directive(profile: str, weeks_to_race: int | None = None) -> str:
