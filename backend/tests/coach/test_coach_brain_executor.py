@@ -46,7 +46,7 @@ def _plan_patch():
     )
 
 
-def _run(decision, pending=None, extra_patches=()):
+def _run(decision, pending=None, extra_patches=(), runner=None):
     """Roda o executor com contexto/repo/cérebro mockados. Devolve (reply, repo)."""
 
     repo = MagicMock()
@@ -64,7 +64,7 @@ def _run(decision, pending=None, extra_patches=()):
 
     try:
         reply = asyncio.run(
-            CoachBrainExecutor.handle("renato", make_runner(), "mensagem")
+            CoachBrainExecutor.handle("renato", runner or make_runner(), "mensagem")
         )
     finally:
         for c in reversed(ctx):
@@ -216,6 +216,74 @@ def test_one_off_routes_to_flow():
 
     assert reply == "Montei teu treino de domingo 👇 ..."
     repo.save.assert_not_called()  # o fluxo do avulso grava por conta própria
+
+
+def test_external_athlete_proposal_routes_to_one_off():
+    """Bug real do Mauricio (externo): o cérebro emitiu 'adjust' pro sábado, mas
+    não editamos plano externo -> _propose devolve None -> ANTES caía na fala
+    vazia ('vou montar...'). Agora MONTA um avulso pro dia da ação (nunca a
+    promessa vazia). E usa o DIA da ação, não o texto atual ('mensagem')."""
+
+    decision = BrainDecision(
+        say="Tô finalizando aqui, dá uma olhada na proposta:",  # a promessa vazia
+        action=BrainAction("adjust", "single_session", "Saturday", "monta um novo"),
+    )
+
+    ext_plan = _plan()
+    ext_plan.source = "externo"
+
+    build_for = AsyncMock(return_value="Montei teu treino de sábado 👇 ...")
+
+    reply, repo = _run(
+        decision,
+        runner=make_runner(external_coach=True),
+        extra_patches=[
+            patch(
+                f"{M}.CurrentPlanProvider.for_profile",
+                new=AsyncMock(
+                    return_value=(make_runner(external_coach=True), ext_plan)
+                ),
+            ),
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.build_for",
+                new=build_for,
+            ),
+        ],
+    )
+
+    assert reply == "Montei teu treino de sábado 👇 ..."
+    assert reply != decision.say  # não é mais a promessa vazia
+    # montou pelo DIA da ação (sábado), não pelo texto atual ("mensagem")
+    assert "sábado" in build_for.call_args.args[2]
+
+
+def test_our_athlete_proposal_that_fails_does_not_one_off():
+    """Atleta NOSSO cuja proposta não vinga NÃO vira avulso — cai na cascata
+    (None), pra não montar treino avulso onde caberia ajustar o plano."""
+
+    decision = BrainDecision(
+        say="hmm", action=BrainAction("adjust", "week", None, "mais leve"),
+    )
+
+    ext_plan = _plan()
+    ext_plan.source = "externo"  # _propose devolve None
+
+    reply, _ = _run(
+        decision,
+        runner=make_runner(external_coach=False),
+        extra_patches=[
+            patch(
+                f"{M}.CurrentPlanProvider.for_profile",
+                new=AsyncMock(
+                    return_value=(make_runner(external_coach=False), ext_plan)
+                ),
+            ),
+        ],
+    )
+
+    # sem plano nosso editável e NÃO externo: cai na fala do coach (não avulso)
+    assert reply == "hmm"
 
 
 def test_negotiation_receives_full_athlete_context():
