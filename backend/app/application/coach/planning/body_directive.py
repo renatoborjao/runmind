@@ -42,20 +42,20 @@ def body_plan_directive(
 
     lim = f" (limitador: {limiter})" if limiter else ""
 
-    persist = ""
-
-    if (
+    persisting = (
         trajectory is not None
         and trajectory.movement == TRAJ_PERSISTING
         and trajectory.alert_streak >= 2
-    ):
+    )
+
+    if state == BODY_STRAINED:
 
         persist = (
             f" E não é de hoje: {trajectory.alert_streak} leituras seguidas em "
             "alerta — o corpo não está assimilando, dá mais peso a isto."
+            if persisting
+            else ""
         )
-
-    if state == BODY_STRAINED:
 
         return (
             "STATUS DO CORPO (você é o COACH — pese isto na dose desta semana; "
@@ -67,8 +67,24 @@ def body_plan_directive(
             "sustenta a evolução — não mantenha a carga cega."
         )
 
+    # RECOVERY_FLAG: a recuperação deu um sinal, mas a CARGA está tranquila.
+    # NÃO é freio automático — o coach pesa contra a CAPACIDADE do atleta. Um
+    # limitador CRÔNICO que ele sustenta (ex.: sono curto com corpo equilibrado)
+    # não pode encolher a dose toda semana, senão ele fica subtreinado pra sempre.
+    recur = (
+        f" Esse sinal se repete ({trajectory.alert_streak} leituras) — confirme "
+        "nos APRENDIZADOS se é o BASELINE dele (que ele sustenta) ou se está "
+        "piorando de verdade."
+        if persisting
+        else ""
+    )
+
     return (
-        "STATUS DO CORPO (você decide a dose): a carga está tranquila, mas a "
-        f"recuperação deu sinal de queda{lim}.{persist} Não corte volume à "
-        "toa, mas evite SUBIR a dose esta semana e favoreça a recuperação."
+        "STATUS DO CORPO (você é o COACH — decide a dose pesando o QUADRO "
+        f"INTEIRO): a carga está tranquila, mas a recuperação deu um sinal{lim}."
+        f"{recur} PESE contra a capacidade dele: se esse limitador é o "
+        "normal/baseline dele (os aprendizados mostram que ele SUSTENTA assim) e "
+        "a carga está tranquila, NÃO trave a progressão por isto — é o normal "
+        "dele, não um alerta. Só segure a subida se a recuperação estiver caindo "
+        "DE VERDADE agora (agudo). Nunca corte volume à toa."
     )
