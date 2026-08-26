@@ -334,6 +334,30 @@ class AIPlanService:
             return ""
 
     @staticmethod
+    def _sleep_performance_directive(profile: str) -> str:
+        """O veredito de SONO × EXECUÇÃO (economia após noites curtas vs
+        normais). Reusa o carregamento da forma (atividades + saúde + FC). Vazio
+        sem lastro. Best-effort."""
+
+        from app.application.coach.intelligence.fitness_reading_service import (
+            FitnessReadingService,
+        )
+        from app.application.history.sleep_performance_analyzer import (
+            SleepPerformanceAnalyzer,
+            sleep_performance_directive,
+        )
+
+        activities, series, resting_hr, max_hr = FitnessReadingService._load(
+            profile
+        )
+
+        reading = SleepPerformanceAnalyzer.assess(
+            activities, series, resting_hr, max_hr
+        )
+
+        return sleep_performance_directive(reading)
+
+    @staticmethod
     def _body_directive(profile: str, weeks_to_race: int | None = None) -> str:
         """Sinais de ESTADO pra a dose: o objetivo (carga à luz da recuperação,
         do Garmin) + o subjetivo (o que o atleta RELATOU sentir). Os dois
@@ -356,6 +380,18 @@ class AIPlanService:
         except Exception as e:
 
             print(f"Diretriz de corpo falhou p/ '{profile}': {e}")
+
+        # SONO × EXECUÇÃO: o sono curto DESTE atleta está prejudicando a entrega
+        # dele, ou ele rende igual? Veredito do dado real (economia após noites
+        # curtas vs normais) — a "sabedoria" de cada caso é um caso, pra o coach
+        # não frear pelo sono quando ele sustenta. Best-effort.
+        try:
+
+            parts.append(AIPlanService._sleep_performance_directive(profile))
+
+        except Exception as e:
+
+            print(f"Diretriz de sono×execução falhou p/ '{profile}': {e}")
 
         # RISCO DE LESÃO precoce: spike de carga (ACWR) + rampa de volume +
         # recuperação caindo + histórico → o coach constrói uma semana mais

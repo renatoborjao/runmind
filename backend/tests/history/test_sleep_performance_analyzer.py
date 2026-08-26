@@ -1,127 +1,115 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 from app.application.history.sleep_performance_analyzer import (
+    SLEEP_HURTS,
+    SLEEP_INSUFFICIENT,
+    SLEEP_SUSTAINS,
     SleepPerformanceAnalyzer,
-    sleep_impact_plan_directive,
+    sleep_performance_directive,
 )
-from app.domain.entities.activity import Activity
-from app.domain.entities.daily_health import DailyHealth
 
-REF = date(2026, 7, 28)
+REF = date(2026, 8, 26)
 
 
-def _run(day: int, speed: float, hr: float = 150.0, km: float = 6.0) -> Activity:
-
-    return Activity(
-        id=day,
-        name="run",
+def _run(day: date, speed: float, hr: float = 150.0):
+    return SimpleNamespace(
+        start_date=datetime(day.year, day.month, day.day, 7, 0),
         sport="Run",
-        start_date=datetime(2026, 7, day, 7, 0),
-        timezone="America/Sao_Paulo",
-        distance=km * 1000,
-        moving_time=int(km * 1000 / speed),
-        elapsed_time=int(km * 1000 / speed),
-        average_speed=speed,
-        max_speed=speed,
+        distance=6000.0,
         average_heartrate=hr,
-        max_heartrate=hr + 20,
-        elevation_gain=0.0,
-        elevation_high=None,
-        elevation_low=None,
-        start_latitude=None,
-        start_longitude=None,
-        end_latitude=None,
-        end_longitude=None,
-        kudos=0,
-        comments=0,
-        suffer_score=None,
-        raw={},
+        average_speed=speed,
+        elevation_gain=None,
+        air_temp_c=None,
     )
 
 
-def _night(day: int, hours: float) -> DailyHealth:
+def _health(day: date, sleep: float):
+    return SimpleNamespace(date=day.isoformat(), sleep_hours=sleep)
 
-    return DailyHealth(date=f"2026-07-{day:02d}", sleep_hours=hours)
+
+def _scenario(short_speed: float, rested_speed: float):
+    """4 corridas após noite curta (5h) + 4 após noite normal (7h)."""
+
+    acts, health = [], []
+
+    for i in range(4):
+        d = REF - timedelta(days=3 + i * 3)          # noites curtas
+        acts.append(_run(d, short_speed))
+        health.append(_health(d, 5.0))
+
+        d2 = REF - timedelta(days=4 + i * 3)          # noites normais
+        acts.append(_run(d2, rested_speed))
+        health.append(_health(d2, 7.0))
+
+    return acts, health
 
 
-def test_finds_pace_cost_of_short_sleep():
-    """Corridas após noites curtas rendem menos no MESMO esforço (EF menor) ->
-    o analisador acha o custo em s/km, com os números do atleta."""
-
-    # bem-dormido: 8h, mais rápido (3.0 m/s a 150 bpm); mal-dormido: 5h, 2.85
-    activities = (
-        [_run(d, 3.0) for d in (20, 21, 22, 23)]
-        + [_run(d, 2.85) for d in (24, 25, 26, 27)]
+def _assess(acts, health):
+    return SleepPerformanceAnalyzer.assess(
+        acts, health, resting_hr=None, max_hr=None, reference_date=REF,
     )
 
-    series = (
-        [_night(d, 8.0) for d in (20, 21, 22, 23)]
-        + [_night(d, 5.0) for d in (24, 25, 26, 27)]
-    )
 
-    impact = SleepPerformanceAnalyzer.analyze(activities, series, REF)
+def test_sustains_when_execution_holds_after_short_nights():
+    """Rende IGUAL com pouco sono (mesma economia) -> SUSTAINS."""
 
-    assert impact.has_finding is True
-    assert impact.pace_cost_sec is not None and impact.pace_cost_sec >= 5
-    assert impact.low_sleep_runs == 4
-    assert impact.rested_runs == 4
+    acts, health = _scenario(short_speed=3.0, rested_speed=3.0)
 
+    reading = _assess(acts, health)
 
-def test_no_finding_when_sleep_does_not_hurt():
-    """Mesmo desempenho dormindo bem ou mal -> sem custo, sem achado."""
+    assert reading.direction == SLEEP_SUSTAINS
+    assert reading.runs_short >= 3 and reading.runs_rested >= 3
+    assert reading.short_sleep_h == 5.0 and reading.rested_sleep_h == 7.0
 
-    activities = [_run(d, 3.0) for d in range(20, 28)]
-
-    series = (
-        [_night(d, 8.0) for d in (20, 21, 22, 23)]
-        + [_night(d, 5.0) for d in (24, 25, 26, 27)]
-    )
-
-    assert SleepPerformanceAnalyzer.analyze(activities, series, REF).has_finding is False
+    directive = sleep_performance_directive(reading)
+    assert "entrega IGUAL" in directive
+    assert "NÃO trave a dose" in directive
 
 
-def test_relative_split_for_chronic_short_sleeper():
-    """Atleta que quase nunca passa de 7h (crônico): sem contraste absoluto,
-    cai no corte RELATIVO (noites mais curtas vs mais longas DELE) e ainda
-    acha o custo — é o cara que MAIS precisa dessa leitura."""
+def test_hurts_when_execution_drops_after_short_nights():
+    """Cai a economia após noites curtas (mais lento na mesma FC) -> HURTS."""
 
-    # todas as noites < 7h: 5h (mais lento) vs 6h (mais rápido)
-    activities = (
-        [_run(d, 2.85) for d in (20, 21, 22, 23)]
-        + [_run(d, 3.0) for d in (24, 25, 26, 27)]
-    )
+    acts, health = _scenario(short_speed=2.7, rested_speed=3.0)
 
-    series = (
-        [_night(d, 5.0) for d in (20, 21, 22, 23)]
-        + [_night(d, 6.0) for d in (24, 25, 26, 27)]
-    )
+    reading = _assess(acts, health)
 
-    impact = SleepPerformanceAnalyzer.analyze(activities, series, REF)
+    assert reading.direction == SLEEP_HURTS
+    assert reading.pace_delta_sec and reading.pace_delta_sec > 0
 
-    assert impact.has_finding is True
-    assert impact.relative is True
-    assert impact.pace_cost_sec >= 5
+    directive = sleep_performance_directive(reading)
+    assert "CAI" in directive
+    assert "segure a intensidade" in directive
 
 
-def test_no_finding_without_enough_runs_per_group():
+def test_insufficient_without_enough_runs():
 
-    activities = [_run(20, 3.0), _run(24, 2.8)]  # 1 por grupo
+    acts, health = [], []
+    for i in range(2):  # só 2 por grupo (< 3)
+        d = REF - timedelta(days=3 + i)
+        acts.append(_run(d, 3.0))
+        health.append(_health(d, 5.0))
+        d2 = REF - timedelta(days=10 + i)
+        acts.append(_run(d2, 3.0))
+        health.append(_health(d2, 7.0))
 
-    series = [_night(20, 8.0), _night(24, 5.0)]
+    assert _assess(acts, health).direction == SLEEP_INSUFFICIENT
+    assert sleep_performance_directive(
+        _assess(acts, health)
+    ) == ""
 
-    impact = SleepPerformanceAnalyzer.analyze(activities, series, REF)
 
-    assert impact.has_finding is False
+def test_insufficient_without_sleep_contrast():
+    """Ele dorme sempre ~6h: 'curto vs normal' não tem contraste real -> não
+    julga (INSUFFICIENT)."""
 
+    acts, health = [], []
+    for i in range(4):
+        d = REF - timedelta(days=3 + i * 3)
+        acts.append(_run(d, 3.0))
+        health.append(_health(d, 5.9))
+        d2 = REF - timedelta(days=4 + i * 3)
+        acts.append(_run(d2, 3.0))
+        health.append(_health(d2, 6.1))
 
-def test_plan_directive_empty_without_finding():
-
-    from app.domain.entities.sleep_impact import SleepImpact
-
-    assert sleep_impact_plan_directive(SleepImpact()) == ""
-
-    directive = sleep_impact_plan_directive(
-        SleepImpact(has_finding=True, pace_cost_sec=15)
-    )
-
-    assert "15s/km" in directive
+    assert _assess(acts, health).direction == SLEEP_INSUFFICIENT
