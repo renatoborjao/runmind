@@ -36,6 +36,9 @@ from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.persistence.plan_proposal_repository import (
     PlanProposalRepository,
 )
+from app.infrastructure.persistence.runner_profile_repository import (
+    RunnerProfileRepository,
+)
 
 # cartão do cérebro -> intent determinístico do OnDemandAnswers
 _CARD_TO_INTENT = {
@@ -263,7 +266,65 @@ class CoachBrainExecutor:
 
             return await CoachBrainExecutor._preference(profile, runner, action)
 
+        if action.type == "coach_switch":
+
+            return await CoachBrainExecutor._coach_switch(profile, runner, action)
+
         return None
+
+    @staticmethod
+    async def _coach_switch(
+        profile, runner: RunnerProfile, action: BrainAction,
+    ) -> str | None:
+        """Troca de TREINADOR, nos dois sentidos. externo→NOSSO: liga o coach do
+        Ritmind e JÁ monta o plano da semana (força a regeneração). nosso→
+        EXTERNO: passa o comando pro treinador humano e explica como mandar o
+        plano dele. No-op se já está no modo pedido (deixa a fala do coach).
+        Ver [[project_treino_avulso]]."""
+
+        to_external = "extern" in (action.instruction or "").lower()
+
+        if to_external:
+
+            if runner.external_coach:
+
+                return None  # já é externo — nada a trocar
+
+            RunnerProfileRepository().update_fields(
+                profile, {"external_coach": True},
+            )
+
+            return (
+                f"Fechado, {runner.name}! A partir de agora quem manda no plano "
+                "é o teu treinador. 👊 Me manda uma foto (ou várias) do treino "
+                "que ele montar, que eu registro, acompanho cada sessão e te dou "
+                "o feedback completo — do jeito que você já conhece. Sigo aqui "
+                "com você. 💪"
+            )
+
+        # externo -> NOSSO coach
+        if not runner.external_coach:
+
+            return None  # já sou eu quem monta
+
+        RunnerProfileRepository().update_fields(
+            profile, {"external_coach": False},
+        )
+
+        # regenera a semana com o NOSSO motor (o flag já está False no disco;
+        # for_profile recarrega o perfil e gera de verdade)
+        _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
+
+        plan_text = WeeklyPlanMessageFormatter.week_plan_message(
+            runner.name, plan,
+        )
+
+        return (
+            f"Que honra, {runner.name}! A partir de agora EU cuido do teu "
+            "treino. 🙌 Vou montar cada semana ancorado no teu histórico, no teu "
+            "corpo e na tua meta — e evoluindo contigo. Bora começar: aqui está "
+            f"teu plano desta semana. 💪\n\n{plan_text}"
+        )
 
     @staticmethod
     async def _routine(profile, runner, incoming_text) -> str | None:

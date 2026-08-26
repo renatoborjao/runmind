@@ -286,6 +286,91 @@ def test_our_athlete_proposal_that_fails_does_not_one_off():
     assert reply == "hmm"
 
 
+def test_coach_switch_external_to_ours_enables_and_builds_plan():
+    """externo → NOSSO coach: liga o flag (external_coach=False) e JÁ monta o
+    plano da semana com o nosso motor."""
+
+    decision = BrainDecision(
+        say="Que honra!",
+        action=BrainAction("coach_switch", "week", None, "ours"),
+    )
+
+    profile_repo = MagicMock()
+
+    reply, _ = _run(
+        decision,
+        runner=make_runner(external_coach=True),
+        extra_patches=[
+            patch(f"{M}.RunnerProfileRepository", return_value=profile_repo),
+            patch(
+                f"{M}.CurrentPlanProvider.for_profile",
+                new=AsyncMock(return_value=(make_runner(), _plan())),
+            ),
+            patch(
+                f"{M}.WeeklyPlanMessageFormatter.week_plan_message",
+                return_value="🏃 PLANO DA SEMANA",
+            ),
+        ],
+    )
+
+    profile_repo.update_fields.assert_called_once_with(
+        "renato", {"external_coach": False},
+    )
+    assert "EU cuido do teu treino" in reply
+    assert "🏃 PLANO DA SEMANA" in reply
+
+
+def test_coach_switch_ours_to_external_hands_off():
+    """NOSSO → externo: liga o flag (external_coach=True) e explica como mandar
+    o plano do treinador. NÃO gera plano nosso."""
+
+    decision = BrainDecision(
+        say="Fechado!",
+        action=BrainAction("coach_switch", "week", None, "external"),
+    )
+
+    profile_repo = MagicMock()
+    for_profile = AsyncMock()
+
+    reply, _ = _run(
+        decision,
+        runner=make_runner(external_coach=False),
+        extra_patches=[
+            patch(f"{M}.RunnerProfileRepository", return_value=profile_repo),
+            patch(f"{M}.CurrentPlanProvider.for_profile", new=for_profile),
+        ],
+    )
+
+    profile_repo.update_fields.assert_called_once_with(
+        "renato", {"external_coach": True},
+    )
+    assert "teu treinador" in reply
+    for_profile.assert_not_awaited()  # não gera plano nosso
+
+
+def test_coach_switch_noop_when_already_in_mode():
+    """Já externo pedindo pra ir externo (ou já nosso pedindo nosso): no-op —
+    não toca o perfil, cai na fala do coach."""
+
+    decision = BrainDecision(
+        say="segue tudo igual",
+        action=BrainAction("coach_switch", "week", None, "external"),
+    )
+
+    profile_repo = MagicMock()
+
+    reply, _ = _run(
+        decision,
+        runner=make_runner(external_coach=True),
+        extra_patches=[
+            patch(f"{M}.RunnerProfileRepository", return_value=profile_repo),
+        ],
+    )
+
+    profile_repo.update_fields.assert_not_called()
+    assert reply == "segue tudo igual"
+
+
 def test_negotiation_receives_full_athlete_context():
     """O princípio: o ajuste NUNCA é no vácuo — o NegotiationEngine recebe a
     base completa do atleta (o mesmo context_facts que o cérebro viu)."""

@@ -45,7 +45,7 @@ _CARDS = {
 
 _ACTION_TYPES = {
     "move", "skip", "adjust", "simplify", "one_off", "routine", "goal",
-    "preference",
+    "preference", "coach_switch",
 }
 
 _SCOPES = {"single_session", "week"}
@@ -76,7 +76,7 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
   "actions": [] | [{{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
-preference>,
+preference|coach_switch>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
@@ -137,6 +137,18 @@ mexe na semana atual. Só use "routine" quando houver horizonte/durabilidade ("a
 partir de", "sempre", "toda semana", "de agora em diante", "no geral"); um \
 pedido pra mexer só na semana de agora é "adjust"/"simplify", não "routine". No \
 "say", uma confirmação curta de que entendeu e vai montar os próximos assim.
+- TROCA DE TREINADOR (quem monta o plano): quando o atleta deixa CLARO que \
+quer mudar quem cuida do treino dele. (a) Ele SAIU do treinador/assessoria \
+externa e quer que VOCÊ (Ritmind) assuma ("não tenho mais treinador", "quero \
+que você monte meus treinos agora", "assume meu treino", "cancelei a \
+assessoria", "quero seguir só com você"): type="coach_switch", \
+instruction="ours". (b) Ele passou a ter um treinador/assessoria HUMANA e vai \
+seguir o plano DELE ("agora tenho treinador", "vou seguir o plano do meu \
+treinador", "contratei uma assessoria"): type="coach_switch", \
+instruction="external". Só use quando for CLARO que é sobre QUEM monta o plano — \
+citar um treinador de passagem ("meu antigo treinador fazia assim") NÃO é troca. \
+No "say", reconheça a mudança de forma calorosa (o sistema efetiva a troca e, se \
+virou pra você, já monta o plano da semana).
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \
