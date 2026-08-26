@@ -122,6 +122,13 @@ treino pra domingo", "quero um treino pra hoje", "me dá um treino pra amanhã" 
 num dia sem treino): type="one_off" + target_day. É montar do zero, não mover \
 nem ajustar uma sessão existente. No "say", reconheça (o sistema monta a sessão \
 ancorada no histórico e oferece o relógio).
+- ATLETA DE TREINADOR EXTERNO (o contexto diz "plano montado pelo treinador do \
+corredor"): NÓS não editamos o plano dele — é do treinador. Então pedido pra \
+MONTAR, reformular ou trocar o treino de um dia ("monta um novo pra sábado", \
+"me faz um treino diferente pra hoje") é SEMPRE type="one_off" + target_day \
+(montamos UMA sessão avulsa pra o dia), NUNCA move/skip/adjust/simplify — mesmo \
+que o dia já tenha treino no plano externo. No "say", reconheça sem prometer \
+"vou montar" no futuro (o sistema já monta agora).
 - Pedido DURÁVEL de rotina, pra valer DAQUI PRA FRENTE e não só nesta semana \
 ("a partir da próxima, treinos de semana em até 50 min", "fim de semana sempre \
 sem pressa", "de agora em diante deixa terça mais curta"): type="routine". Isso \

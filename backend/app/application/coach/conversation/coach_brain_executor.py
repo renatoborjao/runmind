@@ -218,9 +218,26 @@ class CoachBrainExecutor:
 
         if action.type in _PROPOSAL_ACTIONS:
 
-            return await CoachBrainExecutor._propose(
+            proposed = await CoachBrainExecutor._propose(
                 profile, runner, action, repo, context_facts,
             )
+
+            if proposed is not None:
+
+                return proposed
+
+            # TREINADOR EXTERNO: não editamos a semana dele (é do treinador) —
+            # o _propose devolve None. Mas se ele quer um treino, MONTAMOS um
+            # avulso pro dia da AÇÃO (o texto atual pode ser só "ok/monto?"),
+            # nunca a promessa vazia "vou montar" (o coach fingindo). Bug real
+            # do Mauricio. Ver [[project_treino_avulso]].
+            if runner.external_coach and action.target_day:
+
+                return await CoachBrainExecutor._one_off_for_day(
+                    profile, runner, action.target_day, context_facts,
+                )
+
+            return None
 
         if action.type == "one_off":
 
@@ -275,6 +292,22 @@ class CoachBrainExecutor:
 
         return await OneOffWorkoutFlow.build_for(
             profile, runner, incoming_text, athlete_context=context_facts,
+        )
+
+    @staticmethod
+    async def _one_off_for_day(
+        profile, runner, target_day: str, context_facts="",
+    ) -> str | None:
+        """Treino avulso pra um DIA explícito (o dia da ação do cérebro), sem
+        depender do texto atual (que pode ser só "ok"/"monto?"). Sintetiza o
+        pedido com o dia e roteia pro fluxo avulso."""
+
+        from app.core.weekdays import weekday_label
+
+        request = f"monta um treino pra {weekday_label(target_day)}"
+
+        return await CoachBrainExecutor._one_off(
+            profile, runner, request, context_facts,
         )
 
     @staticmethod
