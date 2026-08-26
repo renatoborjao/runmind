@@ -52,14 +52,34 @@ def test_strained_asks_the_coach_to_ease_and_not_the_athlete():
     assert "sono" in directive
 
 
-def test_recovery_flag_is_milder_than_strained():
+def test_recovery_flag_weighs_against_capacity_not_a_blanket_brake():
+    """RECOVERY_FLAG não é freio automático: manda PESAR contra a capacidade
+    (limitador baseline que ele sustenta + carga tranquila -> não trava a
+    progressão). Era o buraco do Mauricio (limiar de 15min com folga de tempo)."""
 
     directive = body_plan_directive(_reading(BODY_RECOVERY_FLAG))
 
     assert directive != ""
     # não manda cortar volume à toa (carga está ok)
-    assert "à toa" in directive or "à toa" in directive.lower()
-    assert "SUBIR a dose" in directive
+    assert "à toa" in directive.lower()
+    # convida a síntese em vez de um "evite subir" cego
+    assert "capacidade" in directive.lower()
+    assert "baseline" in directive.lower()
+    assert "NÃO trave a progressão" in directive
+
+
+def test_recovery_flag_persistence_points_to_learnings():
+    """RECOVERY_FLAG que se repete: em vez de 'dá mais peso', manda CONFIRMAR nos
+    aprendizados se é baseline (que ele sustenta) ou piora real."""
+
+    directive = body_plan_directive(
+        _reading(BODY_RECOVERY_FLAG),
+        _traj(movement=TRAJ_PERSISTING, streak=3),
+    )
+
+    assert "3 leituras" in directive
+    assert "APRENDIZADOS" in directive
+    assert "BASELINE" in directive
 
 
 def test_persistence_adds_weight():
