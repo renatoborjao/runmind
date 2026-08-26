@@ -172,3 +172,65 @@ def test_fill_time_based_km_estimates_and_counts_all_types():
     assert longao.estimated_distance_km is None          # já tem km planejado
     # volume conta os 3 (8 + ~6.9 + 12), não só o longão de 12
     assert plan.weekly_volume > 25
+
+
+# --- subjetivo recente injetado no contexto do plano (a LEI: plano lê TUDO) ---
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def test_subjective_pulls_recent_rpe_and_checkins():
+    """O plano lê o SUBJETIVO fresco (RPE + check-ins dos últimos ~14 dias) —
+    direto, não só via aprendizado semanal. Antigo > 14 dias fica de fora."""
+
+    rpe = [
+        SimpleNamespace(day="2026-07-02", rpe=8),   # dentro (ref 2026-07-06)
+        SimpleNamespace(day="2026-06-01", rpe=5),   # fora da janela
+    ]
+    checkins = [
+        SimpleNamespace(day="2026-07-04", has_data=True, energy=2,
+                        sleep_quality=1, note="acordei detonado"),
+        SimpleNamespace(day="2026-06-01", has_data=True, energy=5,
+                        sleep_quality=5, note="ótimo"),  # fora
+    ]
+
+    with (
+        patch("app.core.clock.today_local", return_value=date(2026, 7, 6)),
+        patch(
+            "app.infrastructure.persistence.session_rpe_repository."
+            "SessionRpeRepository"
+        ) as rpe_repo,
+        patch(
+            "app.infrastructure.persistence.checkin_repository.CheckinRepository"
+        ) as chk_repo,
+    ):
+        rpe_repo.return_value.load_sessions.return_value = rpe
+        chk_repo.return_value.load.return_value = checkins
+
+        out = AIPlanService._subjective("mauricio")
+
+    assert "COMO ELE VEM SE SENTINDO" in out
+    assert "RPE 8/10" in out
+    assert "energia 2/5" in out
+    assert "acordei detonado" in out
+    # fora da janela não entra
+    assert "RPE 5/10" not in out
+    assert "ótimo" not in out
+
+
+def test_subjective_empty_when_no_recent_data():
+
+    with (
+        patch("app.core.clock.today_local", return_value=date(2026, 7, 6)),
+        patch(
+            "app.infrastructure.persistence.session_rpe_repository."
+            "SessionRpeRepository"
+        ) as rpe_repo,
+        patch(
+            "app.infrastructure.persistence.checkin_repository.CheckinRepository"
+        ) as chk_repo,
+    ):
+        rpe_repo.return_value.load_sessions.return_value = []
+        chk_repo.return_value.load.return_value = []
+
+        assert AIPlanService._subjective("mauricio") == ""

@@ -34,6 +34,7 @@ class PlanContextBuilder:
         body_directive: str = "",
         fitness_directive: str = "",
         recent_plans: list[TrainingPlan] | None = None,
+        subjective: str = "",
     ) -> str:
 
         lines = [f"Atleta: {runner.name}"]
@@ -135,6 +136,13 @@ class PlanContextBuilder:
         if fitness_directive:
 
             lines.append(fitness_directive)
+
+        # o SUBJETIVO recente (RPE dos treinos + check-ins de sensação): o que
+        # ELE SENTIU, fresco — direto no plano, não só via aprendizado semanal.
+        # LEI [[feedback_base_historico_sempre]]: o plano lê TUDO do atleta.
+        if subjective:
+
+            lines.append(subjective)
 
         return "\n".join(line for line in lines if line)
 
