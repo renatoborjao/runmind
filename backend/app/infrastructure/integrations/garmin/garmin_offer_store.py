@@ -1,7 +1,12 @@
 """Marca que oferecemos ao atleta mandar os treinos pro Garmin (na entrega
-do plano). Assim, quando ele responder "SIM", sabemos que o sim é sobre o
-Garmin — e não uma afirmação solta. Vale por uma janela curta (a oferta é do
-plano recém-enviado)."""
+do plano ou numa mudança mid-week). Assim, quando ele responder "SIM", sabemos
+que o sim é sobre o Garmin — e não uma afirmação solta. Vale por uma janela
+curta (a oferta é do plano recém-enviado).
+
+Guarda também se JÁ mandamos o lembrete desta oferta — pra o coach cobrar UMA
+vez o atleta que pediu a mudança e nunca confirmou o envio pro relógio (a
+mudança ficaria perdida no relógio até a oferta expirar). Ver
+[[WatchUpdateReminderNotifier]]."""
 
 import json
 import time
@@ -28,28 +33,77 @@ class GarminOfferStore:
         _STORAGE.mkdir(parents=True, exist_ok=True)
 
         GarminOfferStore._file(profile).write_text(
-            json.dumps({"ts": time.time()}),
+            json.dumps({"ts": time.time(), "reminded": False}),
             encoding="utf-8",
         )
 
     @staticmethod
-    def is_pending(profile: str) -> bool:
+    def _read(profile: str) -> dict | None:
+        """Payload da oferta se ainda VÁLIDA (dentro do TTL), senão None.
+        Tolera o formato legado {"ts": ...} (sem 'reminded')."""
 
         file = GarminOfferStore._file(profile)
 
         if not file.exists():
 
-            return False
+            return None
 
         try:
 
-            ts = json.loads(file.read_text(encoding="utf-8"))["ts"]
+            data = json.loads(file.read_text(encoding="utf-8"))
 
-        except (json.JSONDecodeError, KeyError, OSError):
+            ts = data["ts"]
+
+        except (json.JSONDecodeError, KeyError, OSError, TypeError):
+
+            return None
+
+        if (time.time() - ts) >= _TTL_SECONDS:
+
+            return None
+
+        return data
+
+    @staticmethod
+    def is_pending(profile: str) -> bool:
+
+        return GarminOfferStore._read(profile) is not None
+
+    @staticmethod
+    def reminder_due(profile: str, min_age_seconds: float) -> bool:
+        """Há oferta pendente, com idade >= min_age (o atleta teve tempo de
+        responder no fluxo natural) e que AINDA não foi lembrada. É o sinal de
+        'pediu a mudança e não confirmou o envio pro relógio'."""
+
+        data = GarminOfferStore._read(profile)
+
+        if data is None:
 
             return False
 
-        return (time.time() - ts) < _TTL_SECONDS
+        if data.get("reminded"):
+
+            return False
+
+        return (time.time() - data["ts"]) >= min_age_seconds
+
+    @staticmethod
+    def mark_reminded(profile: str) -> None:
+        """Marca que o lembrete desta oferta já saiu — UM por episódio
+        (orientar-não-repetir). Preserva o ts (a oferta segue válida pro 'sim')."""
+
+        data = GarminOfferStore._read(profile)
+
+        if data is None:
+
+            return
+
+        data["reminded"] = True
+
+        GarminOfferStore._file(profile).write_text(
+            json.dumps(data),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def clear(profile: str) -> None:

@@ -8,6 +8,9 @@ from app.application.garmin.garmin_activity_poller import (
 from app.application.garmin.garmin_health_poller import (
     GarminHealthPoller,
 )
+from app.application.garmin.watch_update_reminder_notifier import (
+    WatchUpdateReminderNotifier,
+)
 from app.application.planner.morning_briefing_notifier import (
     MorningBriefingNotifier,
 )
@@ -213,6 +216,18 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="wellbeing_followup",
+    )
+
+    # Rede de segurança do relógio — de hora em hora (gate de horário local no
+    # notifier): o atleta pediu mudança no treino, o coach ofereceu mandar pro
+    # Garmin e ele não confirmou -> a mudança ficaria só no plano, não no
+    # relógio. O coach cobra UMA vez, e só se o relógio está mesmo defasado.
+    _scheduler.add_job(
+        WatchUpdateReminderNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="watch_update_reminder",
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã
