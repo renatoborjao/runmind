@@ -319,11 +319,14 @@ class CoachBrainExecutor:
             runner.name, plan,
         )
 
+        # semana nova gerada -> oferece mandar pro relógio (o 'sim' empurra; o
+        # lembrete cobre se ele não responder). watch_update_offer se auto-anula
+        # se ele nunca sincronizou antes (sem ruído).
         return (
             f"Que honra, {runner.name}! A partir de agora EU cuido do teu "
             "treino. 🙌 Vou montar cada semana ancorado no teu histórico, no teu "
             "corpo e na tua meta — e evoluindo contigo. Bora começar: aqui está "
-            f"teu plano desta semana. 💪\n\n{plan_text}"
+            f"teu plano desta semana. 💪\n\n{plan_text}{watch_update_offer(profile)}"
         )
 
     @staticmethod

@@ -4,6 +4,7 @@ from app.application.coach.conversation.goal_change_detector import (
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
+from app.application.garmin.watch_offer import watch_update_offer
 from app.application.onboarding.onboarding_answer_parser import (
     OnboardingAnswerParser,
 )
@@ -207,10 +208,15 @@ class GoalChangeApplier:
                 runner.name, plan
             )
 
+            # a semana foi REGENERADA: o relógio ficou defasado -> oferece
+            # mandar a versão nova (o 'sim' empurra; o lembrete cobre se ele
+            # não responder). Sem isso a troca de meta virava limbo no relógio
+            # até o domingo. Ver [[WatchUpdateReminderNotifier]].
             return (
                 f"Anotado, {runner.name}! Somei esse objetivo aos seus — e "
                 "como a prova nova é a mais próxima, ajustei o plano pra mirar "
                 f"ela sem largar o resto. 🎯\n\n{plan_text}"
+                f"{watch_update_offer(profile)}"
             )
 
         return (
@@ -301,9 +307,12 @@ class GoalChangeApplier:
             plan,
         )
 
-        # troca de objetivo: só INFORMA que anotou e ajustou (o relógio segue
-        # o próximo domingo automático / ele pode pedir "manda pro relógio").
+        # a semana foi REGENERADA pra meta nova: o relógio ficou defasado ->
+        # oferece mandar a versão nova (o 'sim' empurra; o lembrete cobre se ele
+        # não responder). Sem isso a troca de meta ficava só no domingo — limbo
+        # no relógio a semana toda. Ver [[WatchUpdateReminderNotifier]].
         return (
             f"Fechou, {runner.name}! Atualizei seu objetivo pra: {goal}. 🎯 "
             f"Já ajustei o plano da semana pra essa meta nova.\n\n{plan_text}"
+            f"{watch_update_offer(profile)}"
         )
