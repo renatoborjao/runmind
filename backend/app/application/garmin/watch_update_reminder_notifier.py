@@ -21,10 +21,14 @@ from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.core.clock import now_in, today_local, use_athlete_timezone
 from app.core.weekdays import weekday_label
 from app.domain.entities.planned_session import PlannedSession
+from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.integrations.garmin.garmin_offer_store import (
     GarminOfferStore,
+)
+from app.infrastructure.integrations.garmin.one_off_offer_store import (
+    OneOffOfferStore,
 )
 from app.infrastructure.persistence.pushed_plan_store import PushedPlanStore
 from app.infrastructure.persistence.runner_profile_repository import (
@@ -71,8 +75,16 @@ class WatchUpdateReminderNotifier:
     @staticmethod
     async def _notify_one(profile: str) -> None:
 
-        # sem oferta pendente, ou já lembrada, ou nova demais pra cobrar
-        if not GarminOfferStore.reminder_due(profile, _REMIND_AFTER_SECONDS):
+        weekly_due = GarminOfferStore.reminder_due(
+            profile, _REMIND_AFTER_SECONDS
+        )
+
+        oneoff_due = OneOffOfferStore.reminder_due(
+            profile, _REMIND_AFTER_SECONDS
+        )
+
+        # nenhuma oferta pendente madura o bastante pra cobrar
+        if not weekly_due and not oneoff_due:
 
             return
 
@@ -81,17 +93,11 @@ class WatchUpdateReminderNotifier:
 
             GarminOfferStore.clear(profile)
 
+            OneOffOfferStore.clear(profile)
+
             return
 
         runner = LoadRunnerProfile.execute(profile)
-
-        # treinador externo recebe os treinos pela ferramenta dele — o push
-        # do Ritmind não se aplica; encerra a oferta órfã
-        if getattr(runner, "external_coach", False):
-
-            GarminOfferStore.clear(profile)
-
-            return
 
         use_athlete_timezone(runner.timezone)
 
@@ -99,13 +105,39 @@ class WatchUpdateReminderNotifier:
 
             return
 
+        external = getattr(runner, "external_coach", False)
+
+        # 1) mudança na SEMANA (não se aplica a treinador externo — o plano é
+        # do treinador dele). Um envio por tick; se mandou aqui, o avulso fica
+        # pro próximo (não empilha ping).
+        if weekly_due and not external:
+
+            if await WatchUpdateReminderNotifier._remind_weekly(profile, runner):
+
+                return
+
+        elif weekly_due and external:
+
+            GarminOfferStore.clear(profile)  # oferta órfã: externo não tem plano nosso
+
+        # 2) treino AVULSO pendente (vale inclusive p/ treinador externo — o
+        # avulso é NOSSO). Independe do snapshot do plano (é sessão à parte).
+        if oneoff_due:
+
+            await WatchUpdateReminderNotifier._remind_one_off(profile, runner)
+
+    @staticmethod
+    async def _remind_weekly(profile: str, runner: RunnerProfile) -> bool:
+        """Lembra da mudança na semana se o relógio está mesmo defasado num
+        treino futuro. Devolve True se mandou o lembrete."""
+
         current = WeeklyPlanRepository().load(profile)
 
         pushed = PushedPlanStore.load(profile)
 
         if current is None or pushed is None:
 
-            return
+            return False
 
         stale = WatchUpdateReminderNotifier._stale_days(current, pushed)
 
@@ -115,16 +147,41 @@ class WatchUpdateReminderNotifier:
 
             GarminOfferStore.clear(profile)
 
-            return
-
-        message = WatchUpdateReminderNotifier._message(runner.name, stale)
+            return False
 
         await CoachOutbox.send(
-            runner, message, profile=profile, kind="watch_update_reminder",
+            runner,
+            WatchUpdateReminderNotifier._message(runner.name, stale),
+            profile=profile,
+            kind="watch_update_reminder",
         )
 
         # UM lembrete por oferta; a oferta segue válida pro "sim" seguinte
         GarminOfferStore.mark_reminded(profile)
+
+        return True
+
+    @staticmethod
+    async def _remind_one_off(profile: str, runner: RunnerProfile) -> None:
+        """Lembra do treino avulso montado que não foi confirmado pro relógio."""
+
+        on_date = OneOffOfferStore.pending_date(profile)
+
+        # data passada / inválida: não adianta cobrar o relógio
+        if on_date is None or on_date < today_local():
+
+            OneOffOfferStore.clear(profile)
+
+            return
+
+        await CoachOutbox.send(
+            runner,
+            WatchUpdateReminderNotifier._one_off_message(runner.name, on_date),
+            profile=profile,
+            kind="watch_update_reminder",
+        )
+
+        OneOffOfferStore.mark_reminded(profile)
 
     @staticmethod
     def _stale_days(
@@ -201,4 +258,14 @@ class WatchUpdateReminderNotifier:
             "mas ainda **não subiu pro seu relógio** — faltou confirmar. Quer "
             "que eu mande a versão atualizada pro seu Garmin agora? Responde "
             "*sim* que eu envio. ⌚"
+        )
+
+    @staticmethod
+    def _one_off_message(name: str, on_date) -> str:
+
+        return (
+            f"Ei, {name}! Aquele treino avulso de {on_date:%d/%m} que eu montei "
+            "ficou aqui na conversa, mas **não chegou a ir pro seu relógio** — "
+            "faltou confirmar. Quer que eu mande pro seu Garmin? Responde *sim* "
+            "que eu envio. ⌚"
         )

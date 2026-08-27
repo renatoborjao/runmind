@@ -46,6 +46,8 @@ def _run(
     hour=10,
     current,
     pushed,
+    oneoff_due=False,
+    oneoff_date=None,
 ):
 
     runner = make_runner(name="Mauricio", external_coach=external)
@@ -54,6 +56,7 @@ def _run(
         patch(f"{MOD}.RunnerProfileRepository") as repo_cls,
         patch(f"{MOD}.LoadRunnerProfile") as load_runner,
         patch(f"{MOD}.GarminOfferStore") as offer,
+        patch(f"{MOD}.OneOffOfferStore") as oneoff,
         patch(f"{MOD}.GarminClient") as garmin,
         patch(f"{MOD}.WeeklyPlanRepository") as plan_cls,
         patch(f"{MOD}.PushedPlanStore") as pushed_store,
@@ -66,6 +69,8 @@ def _run(
         repo_cls.return_value.list_all.return_value = ["mauricio"]
         load_runner.execute.return_value = runner
         offer.reminder_due.return_value = due
+        oneoff.reminder_due.return_value = oneoff_due
+        oneoff.pending_date.return_value = oneoff_date
         garmin.is_connected.return_value = connected
         plan_cls.return_value.load.return_value = current
         pushed_store.load.return_value = pushed
@@ -73,12 +78,12 @@ def _run(
 
         asyncio.run(WatchUpdateReminderNotifier.notify_all())
 
-        return outbox, offer
+        return outbox, offer, oneoff
 
 
 def test_reminds_when_watch_is_stale_and_offer_unanswered():
 
-    outbox, offer = _run(
+    outbox, offer, _ = _run(
         current=_plan("6:20", "6:50"),  # plano atualizado
         pushed=_plan("6:45", "7:05"),   # relógio na versão antiga
     )
@@ -95,7 +100,7 @@ def test_reminds_when_watch_is_stale_and_offer_unanswered():
 
 def test_silent_when_offer_not_due():
 
-    outbox, offer = _run(
+    outbox, offer, _ = _run(
         due=False,
         current=_plan("6:20", "6:50"),
         pushed=_plan("6:45", "7:05"),
@@ -109,7 +114,7 @@ def test_clears_and_silent_when_watch_already_in_sync():
     """Plano igual ao que está no relógio: a falha se resolveu por outro
     caminho -> encerra a oferta sem incomodar."""
 
-    outbox, offer = _run(
+    outbox, offer, _ = _run(
         current=_plan("6:20", "6:50"),
         pushed=_plan("6:20", "6:50"),
     )
@@ -121,7 +126,7 @@ def test_clears_and_silent_when_watch_already_in_sync():
 
 def test_clears_and_silent_for_external_coach():
 
-    outbox, offer = _run(
+    outbox, offer, _ = _run(
         external=True,
         current=_plan("6:20", "6:50"),
         pushed=_plan("6:45", "7:05"),
@@ -133,7 +138,7 @@ def test_clears_and_silent_for_external_coach():
 
 def test_clears_and_silent_when_disconnected():
 
-    outbox, offer = _run(
+    outbox, offer, _ = _run(
         connected=False,
         current=_plan("6:20", "6:50"),
         pushed=_plan("6:45", "7:05"),
@@ -145,7 +150,7 @@ def test_clears_and_silent_when_disconnected():
 
 def test_silent_outside_local_hour():
 
-    outbox, offer = _run(
+    outbox, offer, _ = _run(
         hour=3,
         current=_plan("6:20", "6:50"),
         pushed=_plan("6:45", "7:05"),
@@ -177,7 +182,74 @@ def test_no_reminder_when_only_past_day_differs():
     )
     pushed = _plan("6:20", "6:50")  # sábado igual; terça sem pace
 
-    outbox, offer = _run(current=current, pushed=pushed)
+    outbox, offer, _ = _run(current=current, pushed=pushed)
 
     outbox.send.assert_not_awaited()
     offer.clear.assert_called_once_with("mauricio")
+
+
+def test_reminds_one_off_when_due():
+    """Treino avulso montado e não confirmado pro relógio -> cobra pela data."""
+
+    outbox, offer, oneoff = _run(
+        due=False,
+        oneoff_due=True,
+        oneoff_date=date(2026, 8, 31),  # futuro
+        current=_plan("6:20", "6:50"),
+        pushed=_plan("6:20", "6:50"),
+    )
+
+    outbox.send.assert_awaited_once()
+    _, msg = outbox.send.await_args.args
+    assert "avulso" in msg.lower()
+    assert "31/08" in msg
+    oneoff.mark_reminded.assert_called_once_with("mauricio")
+    offer.mark_reminded.assert_not_called()
+
+
+def test_weekly_takes_priority_over_one_off():
+    """Ambos pendentes: manda UM lembrete (o da semana); o avulso fica pro
+    próximo tick — sem empilhar ping."""
+
+    outbox, offer, oneoff = _run(
+        due=True,
+        oneoff_due=True,
+        oneoff_date=date(2026, 8, 31),
+        current=_plan("6:20", "6:50"),
+        pushed=_plan("6:45", "7:05"),
+    )
+
+    outbox.send.assert_awaited_once()
+    offer.mark_reminded.assert_called_once_with("mauricio")
+    oneoff.mark_reminded.assert_not_called()
+
+
+def test_one_off_reminder_works_for_external_coach():
+    """O avulso é NOSSO mesmo pra quem tem treinador externo -> lembra."""
+
+    outbox, offer, oneoff = _run(
+        external=True,
+        due=False,
+        oneoff_due=True,
+        oneoff_date=date(2026, 8, 31),
+        current=_plan("6:20", "6:50"),
+        pushed=_plan("6:20", "6:50"),
+    )
+
+    outbox.send.assert_awaited_once()
+    oneoff.mark_reminded.assert_called_once_with("mauricio")
+
+
+def test_one_off_past_date_clears_and_silent():
+
+    outbox, offer, oneoff = _run(
+        due=False,
+        oneoff_due=True,
+        oneoff_date=date(2026, 8, 25),  # já passou (hoje é 27/08)
+        current=_plan("6:20", "6:50"),
+        pushed=_plan("6:20", "6:50"),
+    )
+
+    outbox.send.assert_not_awaited()
+    oneoff.clear.assert_called_once_with("mauricio")
+    oneoff.mark_reminded.assert_not_called()
