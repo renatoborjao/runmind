@@ -10,98 +10,129 @@ from app.infrastructure.persistence.shoe_repository import ShoeRepository
 MOD = "app.application.shoes.shoe_recommendation_service"
 
 
-def _session(workout_type):
+def _session(workout_type, day="Monday"):
 
-    return SimpleNamespace(workout_type=workout_type)
+    return SimpleNamespace(workout_type=workout_type, day=day)
+
+
+def _rec(book, session):
+
+    return ShoeRecommendationService.recommend(book, session)
 
 
 def test_rule_drives_recommendation():
 
     book = ShoeBook(
         shoes=[
-            Shoe(id="boston", name="Boston", is_default=True),
-            Shoe(id="vapor", name="Vaporfly"),
+            Shoe(id="boston", name="Boston", category="dia a dia",
+                 is_default=True),
+            Shoe(id="vapor", name="Vaporfly", category="prova"),
         ],
         rules=[ShoeRule(match="tiro", shoe_id="vapor")],
     )
 
-    shoe, reason = ShoeRecommendationService.recommend(book, _session("Tiros"))
+    shoe, reason = _rec(book, _session("Tiros"))
 
     assert shoe.id == "vapor"
     assert "tiro" in reason
 
 
-def test_quality_picks_race_shoe_by_category_without_rule():
+def test_quality_picks_prova_bucket():
 
     book = ShoeBook(shoes=[
         Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
         Shoe(id="vapor", name="Vaporfly", category="prova"),
     ])
 
-    shoe, _ = ShoeRecommendationService.recommend(book, _session("Fartlek"))
+    shoe, _ = _rec(book, _session("Fartlek"))
 
     assert shoe.id == "vapor"
 
 
-def test_easy_run_uses_default():
+def test_easy_run_uses_daily():
 
     book = ShoeBook(shoes=[
         Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
         Shoe(id="vapor", name="Vaporfly", category="prova"),
     ])
 
-    shoe, reason = ShoeRecommendationService.recommend(
-        book, _session("Rodagem leve")
-    )
+    shoe, reason = _rec(book, _session("Rodagem leve"))
 
     assert shoe.id == "boston"
     assert "dia a dia" in reason
 
 
-def test_wear_deviates_to_fresher_shoe():
-    """Par indicado gasto + alternativo mais novo -> manda o novo pra poupar."""
-
-    book = ShoeBook(shoes=[
-        Shoe(id="boston", name="Boston", is_default=True,
-             initial_km=720.0, alert_threshold_km=700.0),
-        Shoe(id="novo", name="Par Novo", initial_km=50.0),
-    ])
-
-    shoe, reason = ShoeRecommendationService.recommend(
-        book, _session("Rodagem leve")
-    )
-
-    assert shoe.id == "novo"
-    assert "poupar" in reason and "Boston" in reason
-
-
-def test_long_run_stays_on_daily_shoe_even_progressive():
-    """Longão é conforto — vai no par do dia a dia mesmo progressivo (nada de
-    placa de carbono no longão)."""
+def test_long_run_stays_on_daily_even_progressive():
 
     book = ShoeBook(shoes=[
         Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
         Shoe(id="vapor", name="Vaporfly", category="prova"),
     ])
 
-    shoe, reason = ShoeRecommendationService.recommend(
-        book, _session("Longão Progressivo")
-    )
+    shoe, reason = _rec(book, _session("Longão Progressivo"))
 
     assert shoe.id == "boston"
     assert "longão" in reason.lower()
 
 
+def test_rotation_varies_daily_shoes_across_days():
+    """Com vários pares do dia a dia, dias diferentes pegam pares diferentes."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="a", name="A", category="dia a dia"),
+        Shoe(id="b", name="B", category="dia a dia"),
+    ])
+
+    mon = _rec(book, _session("Rodagem", day="Monday"))[0]     # idx 0
+    tue = _rec(book, _session("Rodagem", day="Tuesday"))[0]    # idx 1
+
+    assert mon.id != tue.id
+    assert "revezando" in _rec(book, _session("Rodagem"))[1]
+
+
+def test_rotation_favors_freshest_on_first_index():
+
+    book = ShoeBook(shoes=[
+        Shoe(id="rodado", name="Rodado", category="dia a dia",
+             initial_km=400.0),
+        Shoe(id="novo", name="Novo", category="dia a dia", initial_km=20.0),
+    ])
+
+    # Monday -> idx 0 sobre a lista ordenada do mais NOVO pro mais rodado
+    shoe, _ = _rec(book, _session("Rodagem", day="Monday"))
+
+    assert shoe.id == "novo"
+
+
+def test_rule_forced_worn_shoe_swaps_to_fresher():
+    """Regra aponta um par GASTO -> troca pelo mais novo do mesmo balde."""
+
+    book = ShoeBook(
+        shoes=[
+            Shoe(id="boston", name="Boston", category="dia a dia",
+                 initial_km=720.0, alert_threshold_km=700.0),
+            Shoe(id="novo", name="Novo", category="dia a dia",
+                 initial_km=50.0),
+        ],
+        rules=[ShoeRule(match="rodagem", shoe_id="boston")],
+    )
+
+    shoe, reason = _rec(book, _session("Rodagem"))
+
+    assert shoe.id == "novo"
+    assert "poupar" in reason and "Boston" in reason
+
+
 def test_no_shoes_returns_none():
 
-    assert ShoeRecommendationService.recommend(ShoeBook(), _session("x")) is None
+    assert _rec(ShoeBook(), _session("x")) is None
 
 
 def test_single_shoe_is_always_the_pick():
 
     book = ShoeBook(shoes=[Shoe(id="one", name="Único")])
 
-    shoe, _ = ShoeRecommendationService.recommend(book, _session("Tiros"))
+    shoe, _ = _rec(book, _session("Tiros"))
 
     assert shoe.id == "one"
 
@@ -122,7 +153,7 @@ def test_line_formats_suggestion(tmp_path):
     repo.storage = tmp_path
     repo.save("renato", ShoeBook(shoes=[
         Shoe(id="boston", name="Adidas Boston", nickname="Boston",
-             is_default=True),
+             category="dia a dia", is_default=True),
     ]))
 
     with patch(f"{MOD}.ShoeRepository", return_value=repo):

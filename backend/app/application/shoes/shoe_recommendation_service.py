@@ -1,7 +1,14 @@
 """O coach DECIDE qual tênis usar em cada treino e AVISA na hora — antes da
 corrida, não só conta a km depois. Determinístico (rápido/exato, sem IA por
-mensagem), com sabedoria de treinador: regra ensinada → categoria×tipo de
-treino → padrão, e desvia do par gasto. Ver [[project_tracker_tenis]]."""
+mensagem), com sabedoria de treinador:
+
+- casa o TIPO de treino com a FUNÇÃO do par (qualidade → par de prova; rodagem/
+  longão → dia a dia), respeitando regra que o atleta ensinou;
+- REVEZA entre os pares da mesma função (é pra isso que se tem vários!) —
+  espalha o desgaste, variando por dia e favorecendo o mais NOVO;
+- desvia do par gasto pro mais novo.
+
+Ver [[project_tracker_tenis]]."""
 
 from app.domain.entities.shoe import Shoe, ShoeBook
 from app.infrastructure.persistence.shoe_repository import ShoeRepository
@@ -14,6 +21,11 @@ _QUALITY_CUES = (
 
 # categoria que marca o par de correr rápido (prova/competição/placa)
 _RACE_CATEGORY_CUES = ("prova", "corrida", "race", "competi", "carbono", "leve")
+
+_WEEKDAY = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
 
 
 class ShoeRecommendationService:
@@ -39,9 +51,7 @@ class ShoeRecommendationService:
 
     @staticmethod
     def recommend(book: ShoeBook, session) -> tuple[Shoe, str] | None:
-        """(tênis, motivo curto) pro treino, ou None. A cascata: regra ensinada
-        → qualidade casa com o par de prova → padrão. Desvia do par gasto pro
-        alternativo mais novo, se houver."""
+        """(tênis, motivo curto) pro treino, ou None."""
 
         active = book.active()
 
@@ -54,38 +64,7 @@ class ShoeRecommendationService:
             getattr(session, "training_type", "") or "",
         )
 
-        base = ShoeRecommendationService._base_pick(book, active, labels)
-
-        if base is None:
-
-            return None
-
-        shoe, reason = base
-
-        # consciência de desgaste: se o par indicado já passou do limiar e há um
-        # alternativo mais novo (ativo, abaixo do limiar), manda o novo
-        if shoe.total_km >= shoe.alert_threshold_km:
-
-            fresher = ShoeRecommendationService._freshest_under_threshold(
-                active, exclude=shoe.id
-            )
-
-            if fresher is not None:
-
-                return (
-                    fresher,
-                    f"teu {shoe.label} já tá em {round(shoe.total_km)} km — "
-                    f"hoje vai de {fresher.label} pra poupar",
-                )
-
-        return shoe, reason
-
-    @staticmethod
-    def _base_pick(
-        book: ShoeBook, active: list[Shoe], labels: tuple[str, ...]
-    ) -> tuple[Shoe, str] | None:
-
-        # 1) regra que ele ensinou ("tiros = Vaporfly")
+        # 1) regra que o atleta ensinou ("tiros = Vaporfly") — override explícito
         for rule in book.rules:
 
             if rule.matches(*labels):
@@ -94,78 +73,145 @@ class ShoeRecommendationService:
 
                 if shoe is not None and not shoe.retired:
 
-                    return shoe, f"é o teu par de {rule.match}"
+                    return ShoeRecommendationService._with_wear_guard(
+                        shoe, active, session, f"é o teu par de {rule.match}"
+                    )
 
         text = " ".join(labels).lower()
 
-        # o LONGÃO é conforto/volume — vai SEMPRE no par do dia a dia, mesmo
-        # progressivo (Renato: "longão é tênis dia a dia, nada de placa de
-        # carbono"). Só tiro/tempo/prova (qualidade CURTA/rápida) puxam o leve.
+        # o LONGÃO é conforto/volume — vai no dia a dia mesmo progressivo (Renato:
+        # "longão é dia a dia, nada de placa"). Só qualidade CURTA/rápida puxa leve.
         is_long = "long" in text
 
-        is_quality = (not is_long) and any(cue in text for cue in _QUALITY_CUES)
+        is_quality = (not is_long) and any(c in text for c in _QUALITY_CUES)
 
-        # 2) sem regra: treino de qualidade casa com o par de prova (se houver)
-        if is_quality:
+        prova = [s for s in active if ShoeRecommendationService._is_race(s)]
 
-            racer = ShoeRecommendationService._race_shoe(active)
+        daily = [s for s in active if not ShoeRecommendationService._is_race(s)]
 
-            if racer is not None:
+        # 2) qualidade -> reveza entre os pares de PROVA (se houver)
+        if is_quality and prova:
 
-                return racer, "treino forte, pede o par mais leve"
+            return ShoeRecommendationService._from_bucket(
+                prova, session, ShoeRecommendationService._quality_reason(prova),
+            )
 
-        # 3) padrão (dia a dia)
-        default = book.default()
+        # 3) rodagem/longão -> reveza entre os pares do DIA A DIA
+        if daily:
 
-        if default is not None:
+            reason = ShoeRecommendationService._daily_reason(daily, is_long)
 
-            if is_long:
+            return ShoeRecommendationService._from_bucket(daily, session, reason)
 
-                reason = "longão é conforto, teu par do dia a dia"
+        # 4) sem balde do dia a dia: cai no que houver (padrão/prova/único)
+        fallback = book.default() or (active[0] if len(active) == 1 else None)
 
-            elif not is_quality:
+        if fallback is not None:
 
-                reason = "rodagem tranquila, teu par do dia a dia"
+            return ShoeRecommendationService._with_wear_guard(
+                fallback, active, session, "",
+            )
 
-            else:
+        # só tem pares de prova e o treino é fácil: reveza entre eles mesmo
+        if prova:
 
-                reason = ""
-
-            return default, reason
-
-        # sem padrão: se só tem um par ativo, é esse mesmo
-        if len(active) == 1:
-
-            return active[0], ""
-
-        return None
-
-    @staticmethod
-    def _race_shoe(active: list[Shoe]) -> Shoe | None:
-
-        for shoe in active:
-
-            category = (shoe.category or "").lower()
-
-            if any(cue in category for cue in _RACE_CATEGORY_CUES):
-
-                return shoe
+            return ShoeRecommendationService._from_bucket(prova, session, "")
 
         return None
 
-    @staticmethod
-    def _freshest_under_threshold(
-        active: list[Shoe], exclude: str
-    ) -> Shoe | None:
+    # ---- rodízio ---------------------------------------------------------
 
-        candidates = [
-            s
-            for s in active
-            if s.id != exclude and s.total_km < s.alert_threshold_km
+    @staticmethod
+    def _from_bucket(
+        bucket: list[Shoe], session, reason: str
+    ) -> tuple[Shoe, str]:
+        """Escolhe um par do balde REVEZANDO: ordena do mais novo pro mais
+        rodado e gira pelo dia da semana — dias diferentes pegam pares
+        diferentes, e o mais novo é favorecido. Depois aplica o desvio de
+        desgaste dentro do balde."""
+
+        ordered = sorted(bucket, key=lambda s: s.total_km)
+
+        idx = ShoeRecommendationService._day_index(session) % len(ordered)
+
+        pick = ordered[idx]
+
+        return ShoeRecommendationService._wear_swap(pick, bucket, reason)
+
+    @staticmethod
+    def _with_wear_guard(
+        shoe: Shoe, active: list[Shoe], session, reason: str
+    ) -> tuple[Shoe, str]:
+        """Par escolhido por regra/fallback: se estiver gasto, troca pelo mais
+        novo do MESMO balde (não põe racer em rodagem)."""
+
+        same_bucket = [
+            s for s in active
+            if ShoeRecommendationService._is_race(s)
+            == ShoeRecommendationService._is_race(shoe)
         ]
 
-        if not candidates:
+        return ShoeRecommendationService._wear_swap(shoe, same_bucket, reason)
 
-            return None
+    @staticmethod
+    def _wear_swap(
+        pick: Shoe, bucket: list[Shoe], reason: str
+    ) -> tuple[Shoe, str]:
+        """Se o par escolhido passou da vida útil e há um mais novo (abaixo do
+        limiar) no balde, manda o novo — explicando o porquê."""
 
-        return min(candidates, key=lambda s: s.total_km)
+        if pick.total_km < pick.alert_threshold_km:
+
+            return pick, reason
+
+        fresher = [
+            s for s in bucket
+            if s.id != pick.id and s.total_km < s.alert_threshold_km
+        ]
+
+        if not fresher:
+
+            return pick, reason
+
+        novo = min(fresher, key=lambda s: s.total_km)
+
+        return (
+            novo,
+            f"teu {pick.label} já tá em {round(pick.total_km)} km — hoje vai "
+            f"de {novo.label} pra poupar",
+        )
+
+    # ---- rótulos ---------------------------------------------------------
+
+    @staticmethod
+    def _quality_reason(prova: list[Shoe]) -> str:
+
+        if len(prova) > 1:
+
+            return "treino forte — revezando teus pares leves"
+
+        return "treino forte, teu par mais leve"
+
+    @staticmethod
+    def _daily_reason(daily: list[Shoe], is_long: bool) -> str:
+
+        rev = " — revezando teus pares do dia a dia" if len(daily) > 1 else \
+            ", teu par do dia a dia"
+
+        base = "longão é conforto" if is_long else "rodagem tranquila"
+
+        return base + rev
+
+    # ---- helpers ---------------------------------------------------------
+
+    @staticmethod
+    def _is_race(shoe: Shoe) -> bool:
+
+        category = (shoe.category or "").lower()
+
+        return any(cue in category for cue in _RACE_CATEGORY_CUES)
+
+    @staticmethod
+    def _day_index(session) -> int:
+
+        return _WEEKDAY.get((getattr(session, "day", "") or "").lower(), 0)
