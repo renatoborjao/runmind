@@ -123,6 +123,52 @@ def test_rule_forced_worn_shoe_swaps_to_fresher():
     assert "poupar" in reason and "Boston" in reason
 
 
+def test_assignment_overrides_recommendation_for_that_date():
+    """'quero o Red Hare no domingo' sobrepõe a recomendação SÓ naquela data."""
+
+    book = ShoeBook(
+        shoes=[
+            Shoe(id="vomero", name="Vomero", category="dia a dia",
+                 is_default=True),
+            Shoe(id="red", name="Red Hare", category="dia a dia"),
+        ],
+        assignments={"2026-08-30": "red"},
+    )
+
+    session = _session("Longão Progressivo", day="Sunday")
+
+    # com a data fixada -> o par escolhido pelo atleta
+    shoe, reason = ShoeRecommendationService.recommend(
+        book, session, "2026-08-30"
+    )
+    assert shoe.id == "red"
+    assert "pediu" in reason
+
+    # OUTRA data (sem assignment) -> recomendação normal, sem o "você pediu"
+    _, other_reason = ShoeRecommendationService.recommend(
+        book, session, "2026-09-06"
+    )
+    assert "pediu" not in other_reason
+
+
+def test_retired_assigned_shoe_is_ignored():
+
+    book = ShoeBook(
+        shoes=[
+            Shoe(id="vomero", name="Vomero", category="dia a dia",
+                 is_default=True),
+            Shoe(id="red", name="Red Hare", category="dia a dia", retired=True),
+        ],
+        assignments={"2026-08-30": "red"},
+    )
+
+    shoe, _ = ShoeRecommendationService.recommend(
+        book, _session("Longão", day="Sunday"), "2026-08-30"
+    )
+
+    assert shoe.id == "vomero"  # ignora o aposentado, recomenda normal
+
+
 def test_no_shoes_returns_none():
 
     assert _rec(ShoeBook(), _session("x")) is None

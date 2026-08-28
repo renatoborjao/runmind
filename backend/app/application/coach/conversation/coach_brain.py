@@ -153,11 +153,12 @@ virou pra você, já monta o plano da semana).
 corrida dele — registra os pares que tem ("meus tênis são X e Y", "corro com um \
 Vaporfly"), diz o tênis do dia a dia ou que trocou ("meu tênis novo é o Z"), \
 ensina o rodízio ("tiros e provas uso o Vaporfly"), corrige qual par levou uma \
-corrida ("hoje corri com o de prova"), aposenta um par, ou PERGUNTA a km ("quanto \
-tem meu tênis?", "quantos km tem o Boston?"): type="shoe", instruction=a fala \
-dele. É o único caso de "shoe" — só quando o assunto é o CALÇADO, não o treino. \
-No "say", uma confirmação curta (o sistema registra e responde com os números \
-EXATOS de km).
+corrida ("hoje corri com o de prova"), ESCOLHE o par pra um dia ("quero usar o \
+Red Hare no domingo", "amanhã vou de X"), corrige a função de um par ("o Evo SL \
+é de prova"), aposenta um par, ou PERGUNTA a km ("quanto tem meu tênis?", \
+"quantos km tem o Boston?"): type="shoe", instruction=a fala dele. É o único \
+caso de "shoe" — só quando o assunto é o CALÇADO, não o treino. No "say", uma \
+confirmação curta (o sistema registra e responde com os números EXATOS de km).
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \

@@ -222,7 +222,7 @@ class WeeklyPlanMessageFormatter:
 
         # o coach DECIDE e AVISA o tênis do treino (só quando o atleta montou o
         # armário; silêncio total senão). Ver [[ShoeRecommendationService]].
-        shoe_line = WeeklyPlanMessageFormatter._shoe_line(profile, session)
+        shoe_line = WeeklyPlanMessageFormatter._shoe_line(profile, plan, session)
 
         if shoe_line:
 
@@ -231,7 +231,7 @@ class WeeklyPlanMessageFormatter:
         return "\n".join(lines).strip()
 
     @staticmethod
-    def _shoe_line(profile: str | None, session) -> str:
+    def _shoe_line(profile: str | None, plan: TrainingPlan, session) -> str:
 
         if not profile:
 
@@ -243,7 +243,11 @@ class WeeklyPlanMessageFormatter:
                 ShoeRecommendationService,
             )
 
-            return ShoeRecommendationService.line(profile, session)
+            # a data do treino deixa a escolha PONTUAL do atleta ("o Red Hare no
+            # domingo") sobrepor a recomendação só naquele dia
+            session_date = plan.session_date(session).isoformat()
+
+            return ShoeRecommendationService.line(profile, session, session_date)
 
         except Exception as e:
 

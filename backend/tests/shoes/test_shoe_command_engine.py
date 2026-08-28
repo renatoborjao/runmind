@@ -215,6 +215,27 @@ def test_ai_failure_returns_none(tmp_path):
     assert reply is None
 
 
+def test_assign_pins_shoe_to_next_occurrence_of_day(tmp_path):
+    """'quero o Red Hare no domingo' -> fixa o par na próxima data daquele dia."""
+
+    from datetime import date
+
+    seed = ShoeBook(shoes=[
+        Shoe(id="vomero", name="Vomero", category="dia a dia", is_default=True),
+        Shoe(id="red", name="Red Hare", category="dia a dia"),
+    ])
+
+    parsed = {"reply": "Fechou!", "ops": [
+        {"op": "assign", "shoe": "red", "day": "Sunday"}], "show_status": False}
+
+    # hoje = quinta 27/08 -> próximo domingo = 30/08
+    with patch("app.core.clock.today_local", return_value=date(2026, 8, 27)):
+
+        _, book = _handle(tmp_path, parsed, seed)
+
+    assert book.assignments.get("2026-08-30") == "red"
+
+
 def test_research_fills_category_for_new_shoe(tmp_path):
 
     parsed = {

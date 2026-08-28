@@ -47,6 +47,8 @@ false>}},
     {{"op": "recategorize", "shoe": "<id/nome>", "category": "<prova|dia a dia>"}},
     {{"op": "rule", "match": "<palavra do tipo de treino: tiro|longao|prova|\
 rodagem|...>", "shoe": "<id/nome>"}},
+    {{"op": "assign", "shoe": "<id/nome>", "day": "<dia em inglês: Monday..\
+Sunday>"}},
     {{"op": "retire", "shoe": "<id/nome>"}},
     {{"op": "threshold", "shoe": "<id/nome>", "km": <número>}},
     {{"op": "correct_last", "shoe": "<id/nome>"}}
@@ -67,9 +69,11 @@ APENAS se o atleta disser qual é o do dia a dia. Não preencha categoria no "ad
 trainer, não de prova" / "os Evo SL são de prova/tiro" / "esse é pra rodagem" -> \
 "recategorize" com a category certa (super trainer / rodagem / dia a dia = "dia a \
 dia"; racer / placa / velocidade / tiro / prova = "prova").
-- SÓ crie "rule" quando ele CORRIGIR/insistir num rodízio diferente do óbvio \
-("na verdade uso o Vaporfly até na rodagem", "longão eu faço com o X"). O padrão \
-é você encaixar pela categoria — não precisa de regra.
+- SÓ crie "rule" quando for uma regra DURÁVEL ("SEMPRE uso o Vaporfly nos \
+tiros", "longão é SEMPRE com o X"). É rodízio fixo, pra toda semana.
+- ESCOLHA PONTUAL pra UM dia ("quero usar o Red Hare no domingo", "esse domingo \
+vou de X", "amanhã deixa o Y") -> "assign" com o dia (em inglês). Vale só \
+naquele dia/data, não é regra fixa. Diferente de "rule" (que é pra sempre).
 - "hoje/essa corrida foi com o de prova", "corri com o Vaporfly hoje" -> \
 "correct_last" (corrige o ÚLTIMO treino).
 - "aposentei o Boston", "esse tênis já era" -> "retire".
@@ -317,6 +321,10 @@ class ShoeCommandEngine:
                 book, op.get("match"), op.get("shoe")
             )
 
+        if kind == "assign":
+
+            return ShoeCommandEngine._assign(book, op.get("shoe"), op.get("day"))
+
         if kind == "retire":
 
             return ShoeCommandEngine._retire(book, op.get("shoe"))
@@ -412,6 +420,38 @@ class ShoeCommandEngine:
         shoe.alert_threshold_km = ShoeCommandEngine._CATEGORY_WEAR[category]
 
         shoe.wear_alerted = shoe.total_km >= shoe.alert_threshold_km
+
+        return True
+
+    _WEEKDAY = {
+        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+        "friday": 4, "saturday": 5, "sunday": 6,
+    }
+
+    @staticmethod
+    def _assign(book: ShoeBook, ref, day) -> bool:
+        """Escolha PONTUAL: fixa um par pra a PRÓXIMA ocorrência daquele dia da
+        semana (não é regra durável). Ex.: "quero o Red Hare no domingo"."""
+
+        from datetime import timedelta
+
+        from app.core.clock import today_local
+
+        shoe = ShoeCommandEngine._resolve(book, ref)
+
+        index = ShoeCommandEngine._WEEKDAY.get(str(day or "").strip().lower())
+
+        if shoe is None or index is None:
+
+            return False
+
+        today = today_local()
+
+        delta = (index - today.weekday()) % 7  # próxima ocorrência (inclui hoje)
+
+        target = today + timedelta(days=delta)
+
+        book.assignments[target.isoformat()] = shoe.id
 
         return True
 

@@ -31,13 +31,13 @@ _WEEKDAY = {
 class ShoeRecommendationService:
 
     @staticmethod
-    def line(profile: str, session) -> str:
+    def line(profile: str, session, session_date=None) -> str:
         """Linha de sugestão pra anexar na mensagem do treino. Vazia quando o
         atleta não montou o armário (silêncio total) ou não dá pra sugerir."""
 
         book = ShoeRepository().load(profile)
 
-        pick = ShoeRecommendationService.recommend(book, session)
+        pick = ShoeRecommendationService.recommend(book, session, session_date)
 
         if pick is None:
 
@@ -50,7 +50,9 @@ class ShoeRecommendationService:
         return f"👟 Sugestão de tênis: {shoe.label}{tail}"
 
     @staticmethod
-    def recommend(book: ShoeBook, session) -> tuple[Shoe, str] | None:
+    def recommend(
+        book: ShoeBook, session, session_date=None
+    ) -> tuple[Shoe, str] | None:
         """(tênis, motivo curto) pro treino, ou None."""
 
         active = book.active()
@@ -58,6 +60,14 @@ class ShoeRecommendationService:
         if not active:
 
             return None
+
+        # escolha PONTUAL do atleta pra ESTA data ("quero o Red Hare no domingo")
+        # sobrepõe a recomendação — respeita o pedido dele.
+        chosen = ShoeRecommendationService._assigned(book, session_date)
+
+        if chosen is not None:
+
+            return chosen, "você pediu esse pra hoje 👍"
 
         labels = (
             getattr(session, "workout_type", "") or "",
@@ -203,6 +213,24 @@ class ShoeRecommendationService:
         return base + rev
 
     # ---- helpers ---------------------------------------------------------
+
+    @staticmethod
+    def _assigned(book: ShoeBook, session_date) -> Shoe | None:
+        """O par que o atleta fixou pra ESTA data, se ativo. None senão."""
+
+        if session_date is None or not book.assignments:
+
+            return None
+
+        shoe_id = book.assignments.get(str(session_date))
+
+        if shoe_id is None:
+
+            return None
+
+        shoe = book.get(shoe_id)
+
+        return shoe if (shoe is not None and not shoe.retired) else None
 
     @staticmethod
     def _is_race(shoe: Shoe) -> bool:

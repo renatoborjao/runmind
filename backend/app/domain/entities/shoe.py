@@ -97,6 +97,11 @@ class ShoeBook:
     # contar 2x a mesma corrida quando ela chega por Strava E por Garmin
     counted_fingerprints: list[str] = field(default_factory=list)
 
+    # escolhas PONTUAIS do atleta: {data ISO do treino -> shoe_id}. "quero o
+    # Red Hare no domingo" sobrepõe a recomendação SÓ naquele dia (não é regra
+    # durável — vale pra aquela data). Ver [[ShoeRecommendationService]].
+    assignments: dict[str, str] = field(default_factory=dict)
+
     # a ÚLTIMA corrida atribuída — pra a correção pontual ("hoje foi com o de
     # prova") mover a km do par errado pro certo, sem o atleta refazer nada
     last_activity_id: int | None = None

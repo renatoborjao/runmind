@@ -82,6 +82,7 @@ class ShoeRepository:
                 {"match": r.match, "shoe_id": r.shoe_id} for r in book.rules
             ],
             "counted_fingerprints": book.counted_fingerprints,
+            "assignments": book.assignments,
             "last_activity_id": book.last_activity_id,
             "last_shoe_id": book.last_shoe_id,
             "last_km": book.last_km,
@@ -119,6 +120,7 @@ class ShoeRepository:
             shoes=shoes,
             rules=rules,
             counted_fingerprints=data.get("counted_fingerprints", []),
+            assignments=data.get("assignments", {}),
             last_activity_id=data.get("last_activity_id"),
             last_shoe_id=data.get("last_shoe_id"),
             last_km=data.get("last_km", 0.0),
