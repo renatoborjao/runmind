@@ -40,13 +40,11 @@ cite números de km>",
     {{"op": "add", "name": "<o nome EXATAMENTE como o atleta escreveu — só ajuste \
 maiúsculas; NUNCA troque a marca, expanda ou adivinhe o modelo oficial (ex.: \
 'evo sl branco' fica 'Evo SL Branco', NÃO vira 'Puma Deviate')>", \
-"nickname": "<apelido curto|null>", \
-"category": "<prova|dia a dia — INFIRA pelo modelo (veja abaixo)>", \
-"initial_km": <km que o par já rodou antes, número|0>, "default": <true no par de \
-treino/rodagem mais versátil>, "threshold_km": <vida útil típica do MODELO em km \
-— placa de carbono ~450, trainer de rodagem ~650, max-cushion ~800; se ele disser \
-um valor, use o dele; null se não reconhecer o modelo>}},
+"nickname": "<apelido curto|null>", "initial_km": <km que o par já rodou antes, \
+número|0>, "default": <true SÓ se o atleta disser que é o do dia a dia; senão \
+false>}},
     {{"op": "set_default", "shoe": "<id ou nome de um tênis existente>"}},
+    {{"op": "recategorize", "shoe": "<id/nome>", "category": "<prova|dia a dia>"}},
     {{"op": "rule", "match": "<palavra do tipo de treino: tiro|longao|prova|\
 rodagem|...>", "shoe": "<id/nome>"}},
     {{"op": "retire", "shoe": "<id/nome>"}},
@@ -59,19 +57,16 @@ resumo depois de registrar>}}
 COMO MAPEAR:
 - "meus tênis são A e B", "corro com um X", "comprei um Y" -> uma op "add" por \
 par. Se cita km que o par já tem ("o Boston já tem 200km"), põe em initial_km.
-- VOCÊ ENCAIXA a função de cada par pelo MODELO — o atleta NÃO precisa dizer "uso \
-X no tiro". RECONHEÇA o modelo mesmo escrito informal/abreviado (ex.: "evo sl" = \
-Adidas Adizero Evo SL; "red hare" = Li-Ning Red Hare; "clifton" = Hoka Clifton). \
-Você é o coach, sabe pra que serve cada tênis: modelo de PLACA DE CARBONO / \
-competição / racing (Vaporfly, Alphafly, Adios Pro, Metaspeed, Endorphin Pro, \
-Deviate, Red Hare, Cielo, etc.) -> category="prova" (tiros/tempo/prova). Tênis de \
-TREINO/rodagem amortecido (Boston, Pegasus, Ghost, Rider, Clifton, Cumulus, \
-Novablast, Vomero, etc.) -> category="dia a dia". IMPORTANTE: se você NÃO tiver \
-CERTEZA da função do modelo, deixe category=null (o sistema busca na web e \
-classifica com precisão) — NÃO chute "dia a dia". Marque default=true no tênis de \
-"dia a dia" mais versátil (se ele não disser qual, escolha você).
+- NÃO classifique a função do tênis você — o SISTEMA PESQUISA cada modelo na web \
+e descobre se é de prova ou dia a dia + a vida útil (é a inteligência do coach, \
+não um chute). Você só EXTRAI: nome (literal), apelido, km inicial, e default \
+APENAS se o atleta disser qual é o do dia a dia. Não preencha categoria no "add".
 - "meu tênis do dia a dia agora é o Z", "troquei pro novo", "o de sempre é o W" \
 -> "set_default".
+- CORREÇÃO de função (o atleta discorda da classificação): "o Red Hare é super \
+trainer, não de prova" / "os Evo SL são de prova/tiro" / "esse é pra rodagem" -> \
+"recategorize" com a category certa (super trainer / rodagem / dia a dia = "dia a \
+dia"; racer / placa / velocidade / tiro / prova = "prova").
 - SÓ crie "rule" quando ele CORRIGIR/insistir num rodízio diferente do óbvio \
 ("na verdade uso o Vaporfly até na rodagem", "longão eu faço com o X"). O padrão \
 é você encaixar pela categoria — não precisa de regra.
@@ -125,12 +120,17 @@ class ShoeCommandEngine:
 
                 applied_any = True
 
-        # FALLBACK WEB: par NOVO que o coach não classificou (categoria vazia) ->
-        # busca na web quem é o modelo e preenche função + vida útil. Só no caso
-        # raro (modelo desconhecido); best-effort, nunca derruba o registro.
-        enriched_any = await ShoeCommandEngine._enrich_unknown(book, existing_ids)
+        # PESQUISA WEB (classificador PRIMÁRIO): o coach pesquisa cada par NOVO
+        # na web e descobre função + vida útil — a inteligência é dele, não um
+        # chute. Uma busca cobre a lista toda. Best-effort; par não encontrado
+        # fica sem categoria (nunca chutado). Ver [[ShoeWebLookup]].
+        researched = await ShoeCommandEngine._research_new(book, existing_ids)
 
-        if applied_any or enriched_any:
+        # todo armário ativo precisa de UM dia a dia como padrão (recebe as
+        # corridas sem gear/regra) — se ninguém foi marcado, escolhe um
+        default_set = ShoeCommandEngine._ensure_default(book)
+
+        if applied_any or researched or default_set:
 
             repo.save(profile, book)
 
@@ -151,30 +151,35 @@ class ShoeCommandEngine:
         return reply or None
 
     @staticmethod
-    async def _enrich_unknown(book: ShoeBook, existing_ids: set) -> bool:
-        """Pra cada par NOVO sem categoria (o coach não reconheceu o modelo),
-        busca na web e preenche função + vida útil. Best-effort: falha vira
-        no-op (o par fica no padrão, silencioso)."""
+    async def _research_new(book: ShoeBook, existing_ids: set) -> bool:
+        """Pesquisa na web TODOS os pares novos (numa busca só) e preenche
+        função + vida útil. Best-effort: falha vira no-op (par sem categoria)."""
+
+        new_shoes = [s for s in book.shoes if s.id not in existing_ids]
+
+        if not new_shoes:
+
+            return False
 
         from app.application.shoes.shoe_web_lookup import ShoeWebLookup
 
+        try:
+
+            found = await ShoeWebLookup.classify_many(
+                [s.name for s in new_shoes]
+            )
+
+        except Exception as e:
+
+            print(f"Pesquisa web de tênis falhou: {e}")
+
+            return False
+
         changed = False
 
-        for shoe in book.shoes:
+        for shoe in new_shoes:
 
-            if shoe.id in existing_ids or shoe.category:
-
-                continue
-
-            try:
-
-                info = await ShoeWebLookup.classify(shoe.name)
-
-            except Exception as e:
-
-                print(f"Busca web de tênis falhou p/ '{shoe.name}': {e}")
-
-                info = None
+            info = found.get(shoe.name.strip().lower())
 
             if not info:
 
@@ -193,6 +198,23 @@ class ShoeCommandEngine:
                 changed = True
 
         return changed
+
+    @staticmethod
+    def _ensure_default(book: ShoeBook) -> bool:
+        """Garante UM padrão entre os ativos: prefere um 'dia a dia'; senão o
+        primeiro ativo. No-op se já há padrão ou não há tênis."""
+
+        active = book.active()
+
+        if not active or book.default() is not None:
+
+            return False
+
+        daily = next((s for s in active if s.category == "dia a dia"), None)
+
+        (daily or active[0]).is_default = True
+
+        return True
 
     # ---- parsing (IA blindada) -------------------------------------------
 
@@ -283,6 +305,12 @@ class ShoeCommandEngine:
 
             return ShoeCommandEngine._set_default(book, op.get("shoe"))
 
+        if kind == "recategorize":
+
+            return ShoeCommandEngine._recategorize(
+                book, op.get("shoe"), op.get("category")
+            )
+
         if kind == "rule":
 
             return ShoeCommandEngine._add_rule(
@@ -332,13 +360,10 @@ class ShoeCommandEngine:
 
         book.shoes.append(shoe)
 
-        # é o do dia a dia? vira o único default
+        # o atleta disse que é o do dia a dia? vira o único default. Se ninguém
+        # for marcado, _ensure_default decide DEPOIS da pesquisa (preferindo um
+        # 'dia a dia') — não chuta o primeiro antes de saber a função.
         if op.get("default"):
-
-            ShoeCommandEngine._make_default(book, shoe)
-
-        # primeiro tênis cadastrado sem ninguém marcado: assume o padrão
-        elif not book.default():
 
             ShoeCommandEngine._make_default(book, shoe)
 
@@ -363,6 +388,32 @@ class ShoeCommandEngine:
         for s in book.shoes:
 
             s.is_default = s.id == shoe.id
+
+    # vida útil típica por função (quando o atleta recategoriza, a vida se ajusta
+    # junto — um par de prova gasta mais rápido que um trainer)
+    _CATEGORY_WEAR = {"prova": 450.0, "dia a dia": 650.0}
+
+    @staticmethod
+    def _recategorize(book: ShoeBook, ref, category) -> bool:
+        """Correção de função por frase ("o Red Hare é super trainer, não de
+        prova"): muda a categoria e ajusta a vida útil típica junto, rearmando
+        o alerta de desgaste."""
+
+        shoe = ShoeCommandEngine._resolve(book, ref)
+
+        category = str(category or "").strip().lower()
+
+        if shoe is None or category not in ("prova", "dia a dia"):
+
+            return False
+
+        shoe.category = category
+
+        shoe.alert_threshold_km = ShoeCommandEngine._CATEGORY_WEAR[category]
+
+        shoe.wear_alerted = shoe.total_km >= shoe.alert_threshold_km
+
+        return True
 
     @staticmethod
     def _add_rule(book: ShoeBook, match, ref) -> bool:

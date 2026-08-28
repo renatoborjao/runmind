@@ -1,9 +1,9 @@
-"""Fallback: quando o coach NÃO reconhece o modelo do tênis (categoria em
-branco no registro), ele PESQUISA na web pra classificar — função (prova/dia a
-dia) + vida útil típica. Usa o GROUNDING de busca do próprio Gemini (google_search)
-em vez de scraping: sem CAPTCHA/bloqueio de IP, confiável, dentro do tier free.
-Best-effort: se a busca falhar/não achar, devolve None e o par fica no padrão
-(sem quebrar o registro). Ver [[project_tracker_tenis]] e
+"""A inteligência do coach sobre TÊNIS vem da PESQUISA, não de lista fixa: ao
+registrar, o coach pesquisa cada modelo na web (grounding de busca do Gemini,
+`google_search`) e classifica — função (prova/dia a dia) + vida útil típica. Uma
+busca cobre a lista inteira do atleta (rápido, um round-trip). Sem CAPTCHA/bloqueio
+de IP, dentro do tier free. Best-effort: modelo não encontrado fica sem categoria
+(o par não é chutado). Ver [[project_tracker_tenis]] e
 [[feedback_free_tools_preference]]."""
 
 import json
@@ -16,38 +16,71 @@ from app.infrastructure.integrations.gemini.client import (
     repair_json,
 )
 
-# grounding consome tokens na busca; folga pra o JSON sair inteiro
-_MAX_TOKENS = 800
+_MAX_TOKENS = 900
 
-_PROMPT = """Pesquise na web o tênis de corrida "{name}" e classifique. Responda \
-APENAS com o JSON abaixo, nada antes nem depois:
-{{"category": "prova" OU "dia a dia", "threshold_km": <vida útil típica em km, só \
-o número>, "known": true/false}}
+_PROMPT = """Pesquise na web CADA tênis de corrida da lista e classifique pelo \
+que encontrar. Não invente: se não achar o modelo, category=null pra ele.
 
-- category tem que ser EXATAMENTE "prova" ou "dia a dia" (não invente outros \
-rótulos): tênis rápido/leve/com placa (racer OU "super trainer" com placa) = \
-"prova" (vida útil ~350-500 km); trainer amortecido de rodagem/dia a dia = "dia \
-a dia" (~600-800 km).
-- known=false se você NÃO encontrar esse tênis de corrida específico (não \
-invente)."""
+LISTA:
+{shoes}
+
+Responda APENAS com este JSON (nada antes/depois):
+{{"shoes": [{{"name": "<o nome IGUAL ao da lista>", "category": "prova" ou "dia \
+a dia" ou null, "threshold_km": <vida útil típica em km, número, ou null>}}, ...]}}
+
+- "prova" = tênis que se usa pra VELOCIDADE/competição: racer, placa de carbono, \
+speedster leve (vida útil ~350-500 km).
+- "dia a dia" = tênis que se usa pra RODAGEM/volume: trainer de treino, super \
+trainer versátil, max-cushion (vida útil ~600-800 km).
+- Um mesmo modelo em cores diferentes é o MESMO tênis (classifique igual)."""
 
 
 class ShoeWebLookup:
 
     @staticmethod
-    async def classify(name: str) -> dict | None:
-        """{category, threshold_km} do modelo pesquisado, ou None se a busca não
-        ajudou. Best-effort ponta a ponta — qualquer falha vira None."""
+    async def classify_many(names: list[str]) -> dict[str, dict]:
+        """Pesquisa e classifica VÁRIOS modelos numa busca só. Devolve
+        {nome_minúsculo: {category, threshold_km}} só pros que a web reconheceu
+        (com função OU vida útil). {} em qualquer falha."""
 
-        info = await ShoeWebLookup._search_and_classify(name)
+        names = [n for n in names if n and n.strip()]
 
-        if not info or not info.get("known"):
+        if not names:
 
-            return None
+            return {}
 
-        category = ShoeWebLookup._normalize_category(info.get("category"))
+        raw = await ShoeWebLookup._search(names)
 
-        threshold = info.get("threshold_km")
+        if raw is None:
+
+            return {}
+
+        entries = ShoeWebLookup._parse_many(raw)
+
+        result: dict[str, dict] = {}
+
+        for entry in entries:
+
+            name = str(entry.get("name") or "").strip().lower()
+
+            if not name:
+
+                continue
+
+            info = ShoeWebLookup._clean(entry)
+
+            if info is not None:
+
+                result[name] = info
+
+        return result
+
+    @staticmethod
+    def _clean(entry: dict) -> dict | None:
+
+        category = ShoeWebLookup._normalize_category(entry.get("category"))
+
+        threshold = entry.get("threshold_km")
 
         try:
 
@@ -64,17 +97,17 @@ class ShoeWebLookup:
         return {"category": category, "threshold_km": threshold}
 
     @staticmethod
-    async def _search_and_classify(name: str) -> dict | None:
-        """Uma chamada ao Gemini COM busca (google_search grounding): ele
-        pesquisa o modelo e devolve o JSON. None em qualquer falha."""
+    async def _search(names: list[str]) -> str | None:
 
         settings = get_settings()
 
-        prompt = _PROMPT.format(name=name)
+        listing = "\n".join(f"{i + 1}. {n}" for i, n in enumerate(names))
+
+        prompt = _PROMPT.format(shoes=listing)
 
         try:
 
-            raw = await generate_text(
+            return await generate_text(
                 model=settings.gemini_chat_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -86,17 +119,14 @@ class ShoeWebLookup:
 
         except Exception as e:
 
-            print(f"Busca web de tênis (grounding) falhou p/ '{name}': {e}")
+            print(f"Pesquisa web de tênis (grounding) falhou: {e}")
 
             return None
 
-        return ShoeWebLookup._parse(raw)
-
     @staticmethod
     def _normalize_category(value) -> str | None:
-        """Mapeia o rótulo que a IA trouxer pros dois baldes. O grounding às
-        vezes inventa termo ('super trainer', 'racing') — a ordem checa os
-        sinais de PROVA (placa/rápido) antes dos de rodagem."""
+        """Mapeia o rótulo que a IA trouxer pros dois baldes (por USO). A ordem
+        checa os sinais de PROVA (velocidade/placa) antes dos de rodagem."""
 
         text = (value or "").lower()
 
@@ -106,12 +136,12 @@ class ShoeWebLookup:
 
         prova_cues = (
             "prova", "race", "raci", "carbon", "placa", "speed", "plated",
-            "super trainer", "competi", "tempo", "fast", "leve",
+            "competi", "fast", "leve",
         )
 
         daily_cues = (
             "dia a dia", "daily", "trainer", "rodagem", "amortec", "cushion",
-            "easy", "treino",
+            "easy", "treino", "super trainer",
         )
 
         if any(cue in text for cue in prova_cues):
@@ -125,22 +155,33 @@ class ShoeWebLookup:
         return None
 
     @staticmethod
+    def _parse_many(raw: str) -> list[dict]:
+
+        data = ShoeWebLookup._parse(raw)
+
+        if not isinstance(data, dict):
+
+            return []
+
+        shoes = data.get("shoes")
+
+        return shoes if isinstance(shoes, list) else []
+
+    @staticmethod
     def _parse(raw: str) -> dict | None:
 
         try:
 
-            data = json.loads(repair_json(raw))
+            return json.loads(repair_json(raw))
 
         except (json.JSONDecodeError, TypeError, ValueError):
 
-            data = ShoeWebLookup._extract_json_object(raw)
-
-        return data if isinstance(data, dict) else None
+            return ShoeWebLookup._extract_json_object(raw)
 
     @staticmethod
     def _extract_json_object(raw: str) -> dict | None:
-        """Fallback: acha o primeiro objeto {...} no texto (grounding às vezes
-        emenda citações/prosa antes do JSON)."""
+        """Acha o primeiro objeto {...} no texto (grounding às vezes emenda
+        citações/prosa antes do JSON)."""
 
         if not raw:
 
@@ -156,8 +197,10 @@ class ShoeWebLookup:
 
         try:
 
-            return json.loads(repair_json(raw[start:end + 1]))
+            data = json.loads(repair_json(raw[start:end + 1]))
 
         except (json.JSONDecodeError, TypeError, ValueError):
 
             return None
+
+        return data if isinstance(data, dict) else None

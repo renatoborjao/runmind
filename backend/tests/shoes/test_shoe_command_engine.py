@@ -7,6 +7,7 @@ from app.infrastructure.persistence.shoe_repository import ShoeRepository
 from tests.coach.factories import make_runner
 
 MOD = "app.application.shoes.shoe_command_engine"
+WEB = "app.application.shoes.shoe_web_lookup.ShoeWebLookup.classify_many"
 
 PROFILE = "renato"
 
@@ -18,7 +19,7 @@ def _real_repo(tmp_path) -> ShoeRepository:
     return repo
 
 
-def _handle(tmp_path, parsed, seed_book=None):
+def _handle(tmp_path, parsed, seed_book=None, web=None, web_mock=None):
 
     repo = _real_repo(tmp_path)
 
@@ -28,9 +29,12 @@ def _handle(tmp_path, parsed, seed_book=None):
 
     runner = make_runner(name="Renato")
 
+    classify = web_mock or AsyncMock(return_value=web or {})
+
     with (
         patch(f"{MOD}.ShoeRepository", return_value=repo),
         patch(f"{MOD}.generate_json", new=AsyncMock(return_value=parsed)),
+        patch(WEB, new=classify),
     ):
 
         reply = asyncio.run(
@@ -40,27 +44,56 @@ def _handle(tmp_path, parsed, seed_book=None):
     return reply, repo.load(PROFILE)
 
 
-def test_register_two_shoes_sets_default_and_initial_km(tmp_path):
+def test_register_shoes_research_classifies_and_default_set(tmp_path):
+    """O parse só extrai nome/km/default; a FUNÇÃO vem da pesquisa web."""
 
     parsed = {
         "reply": "Anotado!",
         "ops": [
             {"op": "add", "name": "Adidas Boston", "nickname": "Boston",
-             "category": "dia a dia", "initial_km": 200, "default": True},
+             "initial_km": 200, "default": True},
             {"op": "add", "name": "Nike Vaporfly", "nickname": "Vaporfly",
-             "category": "prova", "initial_km": 0, "default": False},
+             "initial_km": 0, "default": False},
         ],
         "show_status": True,
     }
 
-    reply, book = _handle(tmp_path, parsed)
+    web = {
+        "adidas boston": {"category": "dia a dia", "threshold_km": 650.0},
+        "nike vaporfly": {"category": "prova", "threshold_km": 450.0},
+    }
+
+    reply, book = _handle(tmp_path, parsed, web=web)
 
     assert len(book.active()) == 2
     boston = book.get("adidas-boston")
     assert boston.is_default and boston.initial_km == 200
-    assert book.get("nike-vaporfly").is_default is False
-    # status com km EXATO do armário
+    assert boston.category == "dia a dia"
+    assert book.get("nike-vaporfly").category == "prova"
+    assert book.get("nike-vaporfly").alert_threshold_km == 450.0
     assert "Boston" in reply and "200 km" in reply
+
+
+def test_ensure_default_picks_a_daily_when_none_marked(tmp_path):
+    """Atleta não disse qual é o do dia a dia -> escolhe um 'dia a dia'."""
+
+    parsed = {
+        "reply": "ok", "show_status": False,
+        "ops": [
+            {"op": "add", "name": "Vaporfly", "default": False},
+            {"op": "add", "name": "Boston", "default": False},
+        ],
+    }
+
+    web = {
+        "vaporfly": {"category": "prova", "threshold_km": 450.0},
+        "boston": {"category": "dia a dia", "threshold_km": 650.0},
+    }
+
+    _, book = _handle(tmp_path, parsed, web=web)
+
+    assert book.get("boston").is_default is True
+    assert book.get("vaporfly").is_default is False
 
 
 def test_set_default_switches_daily_shoe(tmp_path):
@@ -77,6 +110,24 @@ def test_set_default_switches_daily_shoe(tmp_path):
 
     assert book.get("novo").is_default is True
     assert book.get("boston").is_default is False
+
+
+def test_recategorize_changes_function_and_wear(tmp_path):
+    """'os Evo SL são de prova' -> muda categoria + vida útil, sem tocar km."""
+
+    seed = ShoeBook(shoes=[
+        Shoe(id="evo", name="Evo SL", category="dia a dia",
+             alert_threshold_km=650.0, is_default=True),
+    ])
+
+    parsed = {"reply": "Corrigi!", "ops": [
+        {"op": "recategorize", "shoe": "evo", "category": "prova"}],
+        "show_status": False}
+
+    _, book = _handle(tmp_path, parsed, seed)
+
+    assert book.get("evo").category == "prova"
+    assert book.get("evo").alert_threshold_km == 450.0
 
 
 def test_rule_adds_rotation(tmp_path):
@@ -107,6 +158,19 @@ def test_query_shows_exact_km_without_ops(tmp_path):
 
     assert "Boston" in reply
     assert "153 km" in reply  # 100 + 53.4 -> arredonda 153
+
+
+def test_query_does_not_call_web(tmp_path):
+    """Consulta (sem par novo) não dispara pesquisa web."""
+
+    seed = ShoeBook(shoes=[Shoe(id="boston", name="Boston", is_default=True)])
+
+    web = AsyncMock(return_value={})
+
+    _handle(tmp_path, {"reply": "", "ops": [], "show_status": True},
+            seed, web_mock=web)
+
+    web.assert_not_awaited()
 
 
 def test_correct_last_moves_km_between_shoes(tmp_path):
@@ -151,60 +215,18 @@ def test_ai_failure_returns_none(tmp_path):
     assert reply is None
 
 
-def test_unknown_model_is_enriched_from_web(tmp_path):
-    """Coach não reconheceu (category null) -> busca na web e preenche."""
-
-    repo = _real_repo(tmp_path)
-    runner = make_runner(name="Renato")
+def test_research_fills_category_for_new_shoe(tmp_path):
 
     parsed = {
         "reply": "Registrei!",
-        "ops": [{"op": "add", "name": "Marca Obscura Z1", "category": None,
-                 "default": True}],
+        "ops": [{"op": "add", "name": "Marca Obscura Z1", "default": True}],
         "show_status": False,
     }
 
-    with (
-        patch(f"{MOD}.ShoeRepository", return_value=repo),
-        patch(f"{MOD}.generate_json", new=AsyncMock(return_value=parsed)),
-        patch(
-            "app.application.shoes.shoe_web_lookup.ShoeWebLookup.classify",
-            new=AsyncMock(return_value={"category": "prova",
-                                        "threshold_km": 430.0}),
-        ),
-    ):
+    web = {"marca obscura z1": {"category": "prova", "threshold_km": 430.0}}
 
-        asyncio.run(ShoeCommandEngine.handle(PROFILE, runner, "tenho um Z1"))
+    _, book = _handle(tmp_path, parsed, web=web)
 
-    shoe = repo.load(PROFILE).get("marca-obscura-z1")
+    shoe = book.get("marca-obscura-z1")
     assert shoe.category == "prova"
     assert shoe.alert_threshold_km == 430.0
-
-
-def test_known_model_does_not_call_web(tmp_path):
-    """Coach já classificou (category preenchida) -> NÃO gasta busca web."""
-
-    repo = _real_repo(tmp_path)
-    runner = make_runner(name="Renato")
-
-    parsed = {
-        "reply": "Registrei!",
-        "ops": [{"op": "add", "name": "Nike Vaporfly", "category": "prova",
-                 "default": True}],
-        "show_status": False,
-    }
-
-    web = AsyncMock()
-
-    with (
-        patch(f"{MOD}.ShoeRepository", return_value=repo),
-        patch(f"{MOD}.generate_json", new=AsyncMock(return_value=parsed)),
-        patch(
-            "app.application.shoes.shoe_web_lookup.ShoeWebLookup.classify",
-            new=web,
-        ),
-    ):
-
-        asyncio.run(ShoeCommandEngine.handle(PROFILE, runner, "tenho um Vaporfly"))
-
-    web.assert_not_awaited()

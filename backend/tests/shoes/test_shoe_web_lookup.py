@@ -6,79 +6,76 @@ from app.application.shoes.shoe_web_lookup import ShoeWebLookup
 MOD = "app.application.shoes.shoe_web_lookup"
 
 
-def _classify(gemini_text):
+def _classify_many(names, gemini_text):
 
     with patch(f"{MOD}.generate_text",
                new=AsyncMock(return_value=gemini_text)):
 
-        return asyncio.run(ShoeWebLookup.classify("Marca Modelo X"))
+        return asyncio.run(ShoeWebLookup.classify_many(names))
 
 
-def test_classify_returns_category_and_threshold_when_known():
+def test_classifies_each_shoe_from_search():
 
-    info = _classify(
-        '{"category": "prova", "threshold_km": 420, "known": true}'
+    out = _classify_many(
+        ["Vaporfly 3", "Boston 12"],
+        '{"shoes": ['
+        '{"name": "Vaporfly 3", "category": "prova", "threshold_km": 450},'
+        '{"name": "Boston 12", "category": "dia a dia", "threshold_km": 650}'
+        ']}',
     )
 
-    assert info == {"category": "prova", "threshold_km": 420.0}
+    assert out["vaporfly 3"] == {"category": "prova", "threshold_km": 450.0}
+    assert out["boston 12"] == {"category": "dia a dia", "threshold_km": 650.0}
 
 
-def test_classify_parses_json_inside_markdown_fence():
+def test_super_trainer_normalized_to_daily():
+    """'super trainer' cai no balde de rodagem (uso = volume)."""
 
-    info = _classify(
-        '```json\n{"category": "dia a dia", "threshold_km": 700, '
-        '"known": true}\n```'
+    out = _classify_many(
+        ["Red Hare 9 Ultra"],
+        '{"shoes": [{"name": "Red Hare 9 Ultra", '
+        '"category": "super trainer", "threshold_km": 600}]}',
     )
 
-    assert info == {"category": "dia a dia", "threshold_km": 700.0}
+    assert out["red hare 9 ultra"]["category"] == "dia a dia"
 
 
-def test_classify_none_when_not_known():
+def test_unknown_model_is_omitted():
 
-    info = _classify(
-        '{"category": "prova", "threshold_km": 420, "known": false}'
+    out = _classify_many(
+        ["Modelo Inexistente"],
+        '{"shoes": [{"name": "Modelo Inexistente", '
+        '"category": null, "threshold_km": null}]}',
     )
 
-    assert info is None
+    assert out == {}
 
 
-def test_classify_none_when_gemini_text_unparseable():
+def test_empty_names_returns_empty_without_calling():
 
-    assert _classify("desculpe, não achei nada útil") is None
+    web = AsyncMock()
+
+    with patch(f"{MOD}.generate_text", new=web):
+
+        assert asyncio.run(ShoeWebLookup.classify_many([])) == {}
+
+    web.assert_not_awaited()
 
 
-def test_classify_none_when_generate_text_raises():
+def test_json_wrapped_in_prose_is_extracted():
+
+    out = _classify_many(
+        ["Clifton 9"],
+        'Aqui: {"shoes": [{"name": "Clifton 9", "category": "dia a dia", '
+        '"threshold_km": 800}]} (fonte: reviews)',
+    )
+
+    assert out["clifton 9"]["category"] == "dia a dia"
+
+
+def test_generate_text_failure_returns_empty():
 
     with patch(f"{MOD}.generate_text",
                new=AsyncMock(side_effect=RuntimeError("api down"))):
 
-        assert asyncio.run(ShoeWebLookup.classify("qualquer")) is None
-
-
-def test_classify_drops_invalid_category_keeps_threshold():
-
-    info = _classify(
-        '{"category": "sei la", "threshold_km": 500, "known": true}'
-    )
-
-    assert info == {"category": None, "threshold_km": 500.0}
-
-
-def test_classify_normalizes_super_trainer_to_prova():
-    """Grounding às vezes traz rótulo próprio ('Super Trainer') — mapeia."""
-
-    info = _classify(
-        '{"category": "Super Trainer", "threshold_km": 500, "known": true}'
-    )
-
-    assert info == {"category": "prova", "threshold_km": 500.0}
-
-
-def test_classify_extracts_json_when_wrapped_in_prose():
-
-    info = _classify(
-        'Com base na busca, aqui está: {"category": "dia a dia", '
-        '"threshold_km": 700, "known": true} (fonte: reviews)'
-    )
-
-    assert info == {"category": "dia a dia", "threshold_km": 700.0}
+        assert asyncio.run(ShoeWebLookup.classify_many(["X"])) == {}
