@@ -40,6 +40,15 @@ class HelpMenu:
                 '• "Quantos km corri em maio?" ou "como foi meu treino em '
                 'junho?" — seu histórico mês a mês',
                 "",
+                "👟 Seus tênis (contador de km)",
+                '• "Meus tênis são o Boston (dia a dia) e o Vaporfly (provas)" '
+                "— eu registro e passo a contar a km de cada um sozinho",
+                '• "Tiros e provas eu uso o Vaporfly" — me ensina o rodízio '
+                "uma vez que eu atribuo cada corrida sem você tagar",
+                '• "Quantos km tem meu Boston?" — a quilometragem de cada par',
+                "Quando um tênis chega no fim da vida útil, eu te aviso pra "
+                "pensar no rodízio — sem você precisar ficar de olho.",
+                "",
                 "🎙️ Pode me mandar áudio",
                 "Grave uma nota de voz que eu te entendo (te respondo por "
                 "escrito). E eu te falo em áudio nos momentos que importam — "
@@ -74,6 +83,9 @@ class HelpMenu:
         "com o que já foi feito marcado.",
         '💡 Você sabia? Mande "ajuda" a qualquer hora pra ver tudo que dá pra '
         "me perguntar.",
+        '💡 Você sabia? Me diga quais tênis você usa ("meu tênis do dia a dia é '
+        'o X") que eu conto a km de cada um sozinho — e te aviso quando um par '
+        "estiver gasto.",
         '💡 Você sabia? Se faltar treino num dia (o seu ou do seu treinador), '
         'peça "monta um treino pra domingo" que eu crio um pros seus dados.',
         "💡 Você sabia? Pode me mandar áudio em vez de digitar — eu te entendo. "

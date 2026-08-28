@@ -45,7 +45,7 @@ _CARDS = {
 
 _ACTION_TYPES = {
     "move", "skip", "adjust", "simplify", "one_off", "routine", "goal",
-    "preference", "coach_switch",
+    "preference", "coach_switch", "shoe",
 }
 
 _SCOPES = {"single_session", "week"}
@@ -76,7 +76,7 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
   "actions": [] | [{{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
-preference|coach_switch>,
+preference|coach_switch|shoe>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
@@ -149,6 +149,15 @@ instruction="external". Só use quando for CLARO que é sobre QUEM monta o plano
 citar um treinador de passagem ("meu antigo treinador fazia assim") NÃO é troca. \
 No "say", reconheça a mudança de forma calorosa (o sistema efetiva a troca e, se \
 virou pra você, já monta o plano da semana).
+- TÊNIS / CALÇADO (contador de km por par): quando o atleta fala dos TÊNIS de \
+corrida dele — registra os pares que tem ("meus tênis são X e Y", "corro com um \
+Vaporfly"), diz o tênis do dia a dia ou que trocou ("meu tênis novo é o Z"), \
+ensina o rodízio ("tiros e provas uso o Vaporfly"), corrige qual par levou uma \
+corrida ("hoje corri com o de prova"), aposenta um par, ou PERGUNTA a km ("quanto \
+tem meu tênis?", "quantos km tem o Boston?"): type="shoe", instruction=a fala \
+dele. É o único caso de "shoe" — só quando o assunto é o CALÇADO, não o treino. \
+No "say", uma confirmação curta (o sistema registra e responde com os números \
+EXATOS de km).
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \

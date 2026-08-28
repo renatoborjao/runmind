@@ -141,6 +141,35 @@ class TrainingCompletedEvent:
 
             print(f"Falha no debrief de prova: {e}")
 
+        # Contador de km por TÊNIS: atribui esta corrida ao par certo (gear da
+        # fonte → regra de rodízio → padrão) e soma a km, sem o atleta tagar.
+        # Vale pra todos (inclusive prova e treinador externo — o solado é
+        # dele). Quando o par cruza o desgaste, o coach AVISA (um por par).
+        # Silencioso pra quem não montou o armário. Nunca derruba o feedback.
+        try:
+
+            from app.application.shoes.shoe_mileage_service import (
+                ShoeMileageService,
+            )
+
+            outcome = ShoeMileageService.attribute(
+                profile,
+                runner.name,
+                result["activity"],
+                result.get("planned_session"),
+            )
+
+            if outcome and outcome.wear_alert:
+
+                await CoachOutbox.send(
+                    runner, outcome.wear_alert, profile=profile,
+                    kind="shoe_wear",
+                )
+
+        except Exception as e:
+
+            print(f"Falha no contador de tênis de '{profile}': {e}")
+
         return result
 
     # treinos em que o esforço PERCEBIDO informa de verdade — a rodagem leve
