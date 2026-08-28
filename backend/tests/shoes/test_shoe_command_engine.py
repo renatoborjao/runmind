@@ -149,3 +149,62 @@ def test_ai_failure_returns_none(tmp_path):
     reply, _ = _handle(tmp_path, None)
 
     assert reply is None
+
+
+def test_unknown_model_is_enriched_from_web(tmp_path):
+    """Coach não reconheceu (category null) -> busca na web e preenche."""
+
+    repo = _real_repo(tmp_path)
+    runner = make_runner(name="Renato")
+
+    parsed = {
+        "reply": "Registrei!",
+        "ops": [{"op": "add", "name": "Marca Obscura Z1", "category": None,
+                 "default": True}],
+        "show_status": False,
+    }
+
+    with (
+        patch(f"{MOD}.ShoeRepository", return_value=repo),
+        patch(f"{MOD}.generate_json", new=AsyncMock(return_value=parsed)),
+        patch(
+            "app.application.shoes.shoe_web_lookup.ShoeWebLookup.classify",
+            new=AsyncMock(return_value={"category": "prova",
+                                        "threshold_km": 430.0}),
+        ),
+    ):
+
+        asyncio.run(ShoeCommandEngine.handle(PROFILE, runner, "tenho um Z1"))
+
+    shoe = repo.load(PROFILE).get("marca-obscura-z1")
+    assert shoe.category == "prova"
+    assert shoe.alert_threshold_km == 430.0
+
+
+def test_known_model_does_not_call_web(tmp_path):
+    """Coach já classificou (category preenchida) -> NÃO gasta busca web."""
+
+    repo = _real_repo(tmp_path)
+    runner = make_runner(name="Renato")
+
+    parsed = {
+        "reply": "Registrei!",
+        "ops": [{"op": "add", "name": "Nike Vaporfly", "category": "prova",
+                 "default": True}],
+        "show_status": False,
+    }
+
+    web = AsyncMock()
+
+    with (
+        patch(f"{MOD}.ShoeRepository", return_value=repo),
+        patch(f"{MOD}.generate_json", new=AsyncMock(return_value=parsed)),
+        patch(
+            "app.application.shoes.shoe_web_lookup.ShoeWebLookup.classify",
+            new=web,
+        ),
+    ):
+
+        asyncio.run(ShoeCommandEngine.handle(PROFILE, runner, "tenho um Vaporfly"))
+
+    web.assert_not_awaited()

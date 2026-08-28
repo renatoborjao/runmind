@@ -109,6 +109,8 @@ class ShoeCommandEngine:
 
         show_status = bool(parsed.get("show_status"))
 
+        existing_ids = {s.id for s in book.shoes}
+
         applied_any = False
 
         for op in ops:
@@ -117,7 +119,12 @@ class ShoeCommandEngine:
 
                 applied_any = True
 
-        if applied_any:
+        # FALLBACK WEB: par NOVO que o coach não classificou (categoria vazia) ->
+        # busca na web quem é o modelo e preenche função + vida útil. Só no caso
+        # raro (modelo desconhecido); best-effort, nunca derruba o registro.
+        enriched_any = await ShoeCommandEngine._enrich_unknown(book, existing_ids)
+
+        if applied_any or enriched_any:
 
             repo.save(profile, book)
 
@@ -136,6 +143,50 @@ class ShoeCommandEngine:
                 reply = f"{reply}\n\n{status}" if reply else status
 
         return reply or None
+
+    @staticmethod
+    async def _enrich_unknown(book: ShoeBook, existing_ids: set) -> bool:
+        """Pra cada par NOVO sem categoria (o coach não reconheceu o modelo),
+        busca na web e preenche função + vida útil. Best-effort: falha vira
+        no-op (o par fica no padrão, silencioso)."""
+
+        from app.application.shoes.shoe_web_lookup import ShoeWebLookup
+
+        changed = False
+
+        for shoe in book.shoes:
+
+            if shoe.id in existing_ids or shoe.category:
+
+                continue
+
+            try:
+
+                info = await ShoeWebLookup.classify(shoe.name)
+
+            except Exception as e:
+
+                print(f"Busca web de tênis falhou p/ '{shoe.name}': {e}")
+
+                info = None
+
+            if not info:
+
+                continue
+
+            if info.get("category"):
+
+                shoe.category = info["category"]
+
+                changed = True
+
+            if info.get("threshold_km"):
+
+                shoe.alert_threshold_km = info["threshold_km"]
+
+                changed = True
+
+        return changed
 
     # ---- parsing (IA blindada) -------------------------------------------
 
