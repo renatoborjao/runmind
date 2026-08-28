@@ -37,7 +37,10 @@ Devolva UM JSON:
 {{"reply": "<1 frase curta na voz do coach reconhecendo o que ele disse; NÃO \
 cite números de km>",
   "ops": [
-    {{"op": "add", "name": "<nome do tênis>", "nickname": "<apelido curto|null>", \
+    {{"op": "add", "name": "<o nome EXATAMENTE como o atleta escreveu — só ajuste \
+maiúsculas; NUNCA troque a marca, expanda ou adivinhe o modelo oficial (ex.: \
+'evo sl branco' fica 'Evo SL Branco', NÃO vira 'Puma Deviate')>", \
+"nickname": "<apelido curto|null>", \
 "category": "<prova|dia a dia — INFIRA pelo modelo (veja abaixo)>", \
 "initial_km": <km que o par já rodou antes, número|0>, "default": <true no par de \
 treino/rodagem mais versátil>, "threshold_km": <vida útil típica do MODELO em km \
