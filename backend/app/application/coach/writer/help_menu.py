@@ -40,14 +40,15 @@ class HelpMenu:
                 '• "Quantos km corri em maio?" ou "como foi meu treino em '
                 'junho?" — seu histórico mês a mês',
                 "",
-                "👟 Seus tênis (contador de km)",
-                '• "Meus tênis são o Boston (dia a dia) e o Vaporfly (provas)" '
-                "— eu registro e passo a contar a km de cada um sozinho",
-                '• "Tiros e provas eu uso o Vaporfly" — me ensina o rodízio '
-                "uma vez que eu atribuo cada corrida sem você tagar",
+                "👟 Seus tênis",
+                '• "Meus tênis são o Boston e o Vaporfly" (e a km de cada um, '
+                "se souber) — é só me mandar a lista, eu cuido do resto",
+                "• Eu conto a km de cada par sozinho E te digo qual usar em "
+                "cada treino — o leve nos tiros, o confortável na rodagem e no "
+                "longão (você não precisa me ensinar nada, eu encaixo)",
                 '• "Quantos km tem meu Boston?" — a quilometragem de cada par',
-                "Quando um tênis chega no fim da vida útil, eu te aviso pra "
-                "pensar no rodízio — sem você precisar ficar de olho.",
+                "E te aviso quando um par estiver gasto, pra pensar no rodízio "
+                "antes de virar dor.",
                 "",
                 "🎙️ Pode me mandar áudio",
                 "Grave uma nota de voz que eu te entendo (te respondo por "
@@ -83,9 +84,9 @@ class HelpMenu:
         "com o que já foi feito marcado.",
         '💡 Você sabia? Mande "ajuda" a qualquer hora pra ver tudo que dá pra '
         "me perguntar.",
-        '💡 Você sabia? Me diga quais tênis você usa ("meu tênis do dia a dia é '
-        'o X") que eu conto a km de cada um sozinho — e te aviso quando um par '
-        "estiver gasto.",
+        '💡 Você sabia? Me mande a lista dos seus tênis que eu conto a km de '
+        "cada um, te digo qual usar em cada treino e aviso quando um par "
+        "estiver gasto — você só manda a lista.",
         '💡 Você sabia? Se faltar treino num dia (o seu ou do seu treinador), '
         'peça "monta um treino pra domingo" que eu crio um pros seus dados.',
         "💡 Você sabia? Pode me mandar áudio em vez de digitar — eu te entendo. "

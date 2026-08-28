@@ -38,9 +38,11 @@ Devolva UM JSON:
 cite números de km>",
   "ops": [
     {{"op": "add", "name": "<nome do tênis>", "nickname": "<apelido curto|null>", \
-"category": "<dia a dia|treino|prova|null>", "initial_km": <km que o par já \
-rodou antes, número|0>, "default": <true se é o do dia a dia>, "threshold_km": \
-<km de vida útil se ele disser, senão null>}},
+"category": "<prova|dia a dia — INFIRA pelo modelo (veja abaixo)>", \
+"initial_km": <km que o par já rodou antes, número|0>, "default": <true no par de \
+treino/rodagem mais versátil>, "threshold_km": <vida útil típica do MODELO em km \
+— placa de carbono ~450, trainer de rodagem ~650, max-cushion ~800; se ele disser \
+um valor, use o dele; null se não reconhecer o modelo>}},
     {{"op": "set_default", "shoe": "<id ou nome de um tênis existente>"}},
     {{"op": "rule", "match": "<palavra do tipo de treino: tiro|longao|prova|\
 rodagem|...>", "shoe": "<id/nome>"}},
@@ -53,12 +55,20 @@ resumo depois de registrar>}}
 
 COMO MAPEAR:
 - "meus tênis são A e B", "corro com um X", "comprei um Y" -> uma op "add" por \
-par. Se ele diz qual é o do dia a dia, marque default=true NESSE. Se cita km que \
-o par já tem ("o Boston já tem 200km"), põe em initial_km.
+par. Se cita km que o par já tem ("o Boston já tem 200km"), põe em initial_km.
+- VOCÊ ENCAIXA a função de cada par pelo MODELO — o atleta NÃO precisa dizer "uso \
+X no tiro". Você é o coach, sabe pra que serve cada tênis: modelo de PLACA DE \
+CARBONO / competição (Vaporfly, Alphafly, Adios Pro, Metaspeed, Endorphin Pro, \
+Vaporfly, Deviate, etc.) -> category="prova" (o coach usa nos tiros/tempo/prova). \
+Tênis de TREINO/rodagem do dia a dia (Boston, Pegasus, Ghost, Rider, Clifton, \
+Cumulus, Novablast, etc.) -> category="dia a dia". Na dúvida sobre o modelo, use \
+"dia a dia". Marque default=true no tênis de "dia a dia" mais versátil (se ele \
+não disser qual, escolha você).
 - "meu tênis do dia a dia agora é o Z", "troquei pro novo", "o de sempre é o W" \
 -> "set_default".
-- "tiros e provas eu uso o Vaporfly", "longão é com o X" -> uma op "rule" por \
-associação (match = a palavra do tipo de treino; shoe = o par).
+- SÓ crie "rule" quando ele CORRIGIR/insistir num rodízio diferente do óbvio \
+("na verdade uso o Vaporfly até na rodagem", "longão eu faço com o X"). O padrão \
+é você encaixar pela categoria — não precisa de regra.
 - "hoje/essa corrida foi com o de prova", "corri com o Vaporfly hoje" -> \
 "correct_last" (corrige o ÚLTIMO treino).
 - "aposentei o Boston", "esse tênis já era" -> "retire".
