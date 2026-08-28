@@ -75,6 +75,23 @@ def test_wear_deviates_to_fresher_shoe():
     assert "poupar" in reason and "Boston" in reason
 
 
+def test_long_run_stays_on_daily_shoe_even_progressive():
+    """Longão é conforto — vai no par do dia a dia mesmo progressivo (nada de
+    placa de carbono no longão)."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
+        Shoe(id="vapor", name="Vaporfly", category="prova"),
+    ])
+
+    shoe, reason = ShoeRecommendationService.recommend(
+        book, _session("Longão Progressivo")
+    )
+
+    assert shoe.id == "boston"
+    assert "longão" in reason.lower()
+
+
 def test_no_shoes_returns_none():
 
     assert ShoeRecommendationService.recommend(ShoeBook(), _session("x")) is None

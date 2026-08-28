@@ -96,9 +96,14 @@ class ShoeRecommendationService:
 
                     return shoe, f"é o teu par de {rule.match}"
 
-        is_quality = any(
-            cue in " ".join(labels).lower() for cue in _QUALITY_CUES
-        )
+        text = " ".join(labels).lower()
+
+        # o LONGÃO é conforto/volume — vai SEMPRE no par do dia a dia, mesmo
+        # progressivo (Renato: "longão é tênis dia a dia, nada de placa de
+        # carbono"). Só tiro/tempo/prova (qualidade CURTA/rápida) puxam o leve.
+        is_long = "long" in text
+
+        is_quality = (not is_long) and any(cue in text for cue in _QUALITY_CUES)
 
         # 2) sem regra: treino de qualidade casa com o par de prova (se houver)
         if is_quality:
@@ -114,8 +119,17 @@ class ShoeRecommendationService:
 
         if default is not None:
 
-            reason = "rodagem tranquila, teu par do dia a dia" if not is_quality \
-                else ""
+            if is_long:
+
+                reason = "longão é conforto, teu par do dia a dia"
+
+            elif not is_quality:
+
+                reason = "rodagem tranquila, teu par do dia a dia"
+
+            else:
+
+                reason = ""
 
             return default, reason
 
