@@ -60,13 +60,16 @@ COMO MAPEAR:
 - "meus tênis são A e B", "corro com um X", "comprei um Y" -> uma op "add" por \
 par. Se cita km que o par já tem ("o Boston já tem 200km"), põe em initial_km.
 - VOCÊ ENCAIXA a função de cada par pelo MODELO — o atleta NÃO precisa dizer "uso \
-X no tiro". Você é o coach, sabe pra que serve cada tênis: modelo de PLACA DE \
-CARBONO / competição (Vaporfly, Alphafly, Adios Pro, Metaspeed, Endorphin Pro, \
-Vaporfly, Deviate, etc.) -> category="prova" (o coach usa nos tiros/tempo/prova). \
-Tênis de TREINO/rodagem do dia a dia (Boston, Pegasus, Ghost, Rider, Clifton, \
-Cumulus, Novablast, etc.) -> category="dia a dia". Na dúvida sobre o modelo, use \
-"dia a dia". Marque default=true no tênis de "dia a dia" mais versátil (se ele \
-não disser qual, escolha você).
+X no tiro". RECONHEÇA o modelo mesmo escrito informal/abreviado (ex.: "evo sl" = \
+Adidas Adizero Evo SL; "red hare" = Li-Ning Red Hare; "clifton" = Hoka Clifton). \
+Você é o coach, sabe pra que serve cada tênis: modelo de PLACA DE CARBONO / \
+competição / racing (Vaporfly, Alphafly, Adios Pro, Metaspeed, Endorphin Pro, \
+Deviate, Red Hare, Cielo, etc.) -> category="prova" (tiros/tempo/prova). Tênis de \
+TREINO/rodagem amortecido (Boston, Pegasus, Ghost, Rider, Clifton, Cumulus, \
+Novablast, Vomero, etc.) -> category="dia a dia". IMPORTANTE: se você NÃO tiver \
+CERTEZA da função do modelo, deixe category=null (o sistema busca na web e \
+classifica com precisão) — NÃO chute "dia a dia". Marque default=true no tênis de \
+"dia a dia" mais versátil (se ele não disser qual, escolha você).
 - "meu tênis do dia a dia agora é o Z", "troquei pro novo", "o de sempre é o W" \
 -> "set_default".
 - SÓ crie "rule" quando ele CORRIGIR/insistir num rodízio diferente do óbvio \
