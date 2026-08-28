@@ -1,61 +1,42 @@
 """Fallback: quando o coach NÃO reconhece o modelo do tênis (categoria em
-branco no registro), ele busca na web, lê os trechos reais e classifica —
-função (prova/dia a dia) + vida útil típica. Free (DuckDuckGo, sem API key) e
-best-effort: se a web falhar, devolve None e o par fica no padrão (sem quebrar
-o registro). Ver [[project_tracker_tenis]] e [[feedback_free_tools_preference]]."""
+branco no registro), ele PESQUISA na web pra classificar — função (prova/dia a
+dia) + vida útil típica. Usa o GROUNDING de busca do próprio Gemini (google_search)
+em vez de scraping: sem CAPTCHA/bloqueio de IP, confiável, dentro do tier free.
+Best-effort: se a busca falhar/não achar, devolve None e o par fica no padrão
+(sem quebrar o registro). Ver [[project_tracker_tenis]] e
+[[feedback_free_tools_preference]]."""
 
 import json
-import re
 
-import httpx
 from google.genai import types
 
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import (
-    generate_json,
+    generate_text,
     repair_json,
 )
 
-_DDG_URL = "https://html.duckduckgo.com/html/"
+_MAX_TOKENS = 400
 
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-)
+_PROMPT = """Pesquise na web o tênis de corrida "{name}" e classifique com base \
+no que encontrar. Responda SÓ com um JSON (sem texto fora dele):
+{{"category": "prova" ou "dia a dia", "threshold_km": <vida útil típica em km, \
+número>, "known": true/false}}
 
-_MAX_SNIPPET_CHARS = 2000
-
-_MAX_TOKENS = 200
-
-_CLASSIFY_PROMPT = """Trechos da web sobre o tênis de corrida "{name}":
-
-{snippets}
-
-Com base SÓ nesses trechos, classifique o tênis. Devolva UM JSON:
-{{"category": "<prova|dia a dia>", "threshold_km": <vida útil típica em km, \
-número>, "known": <true se os trechos falam MESMO deste tênis de corrida; false \
-se forem genéricos/irrelevantes>}}
-
-- "prova" = tênis de competição/placa de carbono/rápido/leve (vida útil ~350-500 \
-km). "dia a dia" = trainer de treino/rodagem/amortecido (vida útil ~600-800 km).
-- Se os trechos não deixarem claro que é um tênis de corrida específico, \
-known=false."""
+- "prova" = tênis de competição / placa de carbono / rápido / leve (vida útil \
+~350-500 km). "dia a dia" = trainer de treino/rodagem / amortecido (~600-800 km).
+- known=false se você NÃO encontrar esse tênis de corrida específico na busca \
+(não invente)."""
 
 
 class ShoeWebLookup:
 
     @staticmethod
     async def classify(name: str) -> dict | None:
-        """{category, threshold_km} do modelo, ou None se a web não ajudou.
-        Best-effort ponta a ponta — qualquer falha vira None."""
+        """{category, threshold_km} do modelo pesquisado, ou None se a busca não
+        ajudou. Best-effort ponta a ponta — qualquer falha vira None."""
 
-        snippets = await ShoeWebLookup._search(name)
-
-        if not snippets:
-
-            return None
-
-        info = await ShoeWebLookup._classify_from(name, snippets)
+        info = await ShoeWebLookup._search_and_classify(name)
 
         if not info or not info.get("known"):
 
@@ -84,66 +65,33 @@ class ShoeWebLookup:
         return {"category": category, "threshold_km": threshold}
 
     @staticmethod
-    async def _search(name: str) -> str:
-        """Trechos de resultado do DuckDuckGo pro modelo. String vazia em
-        qualquer falha (rede/bloqueio/HTML mudou)."""
-
-        query = (
-            f'"{name}" running shoe carbon plate racing or daily trainer '
-            "how many miles lifespan"
-        )
-
-        try:
-
-            async with httpx.AsyncClient(
-                timeout=8, headers={"User-Agent": _UA}, follow_redirects=True
-            ) as client:
-
-                response = await client.get(_DDG_URL, params={"q": query})
-
-            response.raise_for_status()
-
-        except (httpx.HTTPError, httpx.InvalidURL):
-
-            return ""
-
-        return ShoeWebLookup._extract_snippets(response.text)
-
-    @staticmethod
-    def _extract_snippets(html: str) -> str:
-        """Puxa o texto dos snippets de resultado; cai pro texto cru sem tags
-        se o layout mudar. Limita o tamanho pra não inflar o prompt."""
-
-        blocks = re.findall(
-            r'class="result__snippet"[^>]*>(.*?)</a>', html, re.DOTALL
-        )
-
-        text = " ".join(blocks) if blocks else html
-
-        # tira tags e colapsa espaços
-        text = re.sub(r"<[^>]+>", " ", text)
-
-        text = re.sub(r"\s+", " ", text).strip()
-
-        return text[:_MAX_SNIPPET_CHARS]
-
-    @staticmethod
-    async def _classify_from(name: str, snippets: str) -> dict | None:
+    async def _search_and_classify(name: str) -> dict | None:
+        """Uma chamada ao Gemini COM busca (google_search grounding): ele
+        pesquisa o modelo e devolve o JSON. None em qualquer falha."""
 
         settings = get_settings()
 
-        prompt = _CLASSIFY_PROMPT.format(name=name, snippets=snippets)
+        prompt = _PROMPT.format(name=name)
 
-        return await generate_json(
-            model=settings.gemini_chat_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                max_output_tokens=_MAX_TOKENS,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-            parse=ShoeWebLookup._parse,
-        )
+        try:
+
+            raw = await generate_text(
+                model=settings.gemini_chat_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    max_output_tokens=_MAX_TOKENS,
+                ),
+                require_text=True,
+            )
+
+        except Exception as e:
+
+            print(f"Busca web de tênis (grounding) falhou p/ '{name}': {e}")
+
+            return None
+
+        return ShoeWebLookup._parse(raw)
 
     @staticmethod
     def _parse(raw: str) -> dict | None:

@@ -6,29 +6,10 @@ from app.application.shoes.shoe_web_lookup import ShoeWebLookup
 MOD = "app.application.shoes.shoe_web_lookup"
 
 
-def test_extract_snippets_pulls_result_text():
+def _classify(gemini_text):
 
-    html = (
-        '<html><body>'
-        '<a class="result__snippet" href="x">The Zoom Fly is a '
-        '<b>carbon</b> plated racer</a>'
-        '<a class="result__snippet">good for 400 km</a>'
-        '</body></html>'
-    )
-
-    text = ShoeWebLookup._extract_snippets(html)
-
-    assert "carbon" in text and "400 km" in text
-    assert "<" not in text  # tags removidas
-
-
-def _classify(search_text, gemini):
-
-    with (
-        patch(f"{MOD}.ShoeWebLookup._search",
-              new=AsyncMock(return_value=search_text)),
-        patch(f"{MOD}.generate_json", new=AsyncMock(return_value=gemini)),
-    ):
+    with patch(f"{MOD}.generate_text",
+               new=AsyncMock(return_value=gemini_text)):
 
         return asyncio.run(ShoeWebLookup.classify("Marca Modelo X"))
 
@@ -36,43 +17,48 @@ def _classify(search_text, gemini):
 def test_classify_returns_category_and_threshold_when_known():
 
     info = _classify(
-        "trechos reais sobre o tênis",
-        {"category": "prova", "threshold_km": 420, "known": True},
+        '{"category": "prova", "threshold_km": 420, "known": true}'
     )
 
     assert info == {"category": "prova", "threshold_km": 420.0}
 
 
+def test_classify_parses_json_inside_markdown_fence():
+
+    info = _classify(
+        '```json\n{"category": "dia a dia", "threshold_km": 700, '
+        '"known": true}\n```'
+    )
+
+    assert info == {"category": "dia a dia", "threshold_km": 700.0}
+
+
 def test_classify_none_when_not_known():
 
     info = _classify(
-        "trechos genéricos",
-        {"category": "prova", "threshold_km": 420, "known": False},
+        '{"category": "prova", "threshold_km": 420, "known": false}'
     )
 
     assert info is None
 
 
-def test_classify_none_when_search_empty():
+def test_classify_none_when_gemini_text_unparseable():
 
-    with patch(f"{MOD}.ShoeWebLookup._search",
-               new=AsyncMock(return_value="")):
+    assert _classify("desculpe, não achei nada útil") is None
+
+
+def test_classify_none_when_generate_text_raises():
+
+    with patch(f"{MOD}.generate_text",
+               new=AsyncMock(side_effect=RuntimeError("api down"))):
 
         assert asyncio.run(ShoeWebLookup.classify("qualquer")) is None
-
-
-def test_classify_none_when_gemini_fails():
-
-    info = _classify("trechos", None)
-
-    assert info is None
 
 
 def test_classify_drops_invalid_category_keeps_threshold():
 
     info = _classify(
-        "trechos",
-        {"category": "sei la", "threshold_km": 500, "known": True},
+        '{"category": "sei la", "threshold_km": 500, "known": true}'
     )
 
     assert info == {"category": None, "threshold_km": 500.0}
