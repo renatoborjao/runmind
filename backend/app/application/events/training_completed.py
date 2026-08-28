@@ -35,6 +35,13 @@ class TrainingCompletedEvent:
 
         runner = result["runner"]
 
+        # Contador de km por TÊNIS: atribui esta corrida ao par certo (gear →
+        # regra → padrão) e soma a km, sem o atleta tagar. Vale pra todos
+        # (inclusive prova e treinador externo — o solado é dele). Roda ANTES do
+        # feedback pra a nota "contei no X" ir na MESMA mensagem. Silencioso pra
+        # quem não montou o armário. Nunca derruba o feedback.
+        shoe_outcome = TrainingCompletedEvent._attribute_shoe(profile, runner, result)
+
         # Se ESTE treino é a prova-alvo, o dia é da PROVA: o feedback de treino
         # comum ("Parabéns pelo treino", "Tipo: Ritmo", "Intensidade: Leve",
         # RPE pra calibrar carga, "retomamos no próximo plano") NÃO sai — quem
@@ -57,6 +64,11 @@ class TrainingCompletedEvent:
             except Exception as e:
 
                 print(f"Falha ao preparar RPE de '{profile}': {e}")
+
+            # nota passiva do tênis: "contei essa no teu X — se foi outro, é só
+            # falar". Afirmação (não pergunta), na MESMA mensagem — mantém a
+            # conta certa sem exigir resposta; ele corrige se tiver trocado.
+            message += TrainingCompletedEvent._shoe_note(shoe_outcome)
 
             # CoachOutbox: envia E registra no outbox (pra o coach lembrar da
             # análise quando o atleta comentar depois no chat). ESSENCIAL: ele
@@ -141,36 +153,54 @@ class TrainingCompletedEvent:
 
             print(f"Falha no debrief de prova: {e}")
 
-        # Contador de km por TÊNIS: atribui esta corrida ao par certo (gear da
-        # fonte → regra de rodízio → padrão) e soma a km, sem o atleta tagar.
-        # Vale pra todos (inclusive prova e treinador externo — o solado é
-        # dele). Quando o par cruza o desgaste, o coach AVISA (um por par).
-        # Silencioso pra quem não montou o armário. Nunca derruba o feedback.
+        # Alerta de DESGASTE (par cruzou a vida útil): mensagem própria, é um
+        # chamado à ação. Um por par (dedup no serviço). Vale pra todos.
+        if shoe_outcome and shoe_outcome.wear_alert:
+
+            await CoachOutbox.send(
+                runner, shoe_outcome.wear_alert, profile=profile,
+                kind="shoe_wear",
+            )
+
+        return result
+
+    @staticmethod
+    def _attribute_shoe(profile: str, runner, result):
+        """Atribui a corrida ao tênis e soma a km. None se não há armário/não
+        deu. Best-effort — nunca derruba o feedback."""
+
         try:
 
             from app.application.shoes.shoe_mileage_service import (
                 ShoeMileageService,
             )
 
-            outcome = ShoeMileageService.attribute(
+            return ShoeMileageService.attribute(
                 profile,
                 runner.name,
                 result["activity"],
                 result.get("planned_session"),
             )
 
-            if outcome and outcome.wear_alert:
-
-                await CoachOutbox.send(
-                    runner, outcome.wear_alert, profile=profile,
-                    kind="shoe_wear",
-                )
-
         except Exception as e:
 
             print(f"Falha no contador de tênis de '{profile}': {e}")
 
-        return result
+            return None
+
+    @staticmethod
+    def _shoe_note(shoe_outcome) -> str:
+        """Nota passiva pra emendar no feedback: qual par recebeu a km, com o
+        convite a corrigir. Vazia quando não houve atribuição (sem armário)."""
+
+        if shoe_outcome is None:
+
+            return ""
+
+        return (
+            f"\n\n👟 Contei essa no teu {shoe_outcome.shoe.label} — se foi "
+            "outro, é só me falar que eu ajusto."
+        )
 
     # treinos em que o esforço PERCEBIDO informa de verdade — a rodagem leve
     # tem RPE previsível (não vale perguntar). Casa por substring no rótulo,
