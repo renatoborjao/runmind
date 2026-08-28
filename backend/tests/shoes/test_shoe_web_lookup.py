@@ -62,3 +62,23 @@ def test_classify_drops_invalid_category_keeps_threshold():
     )
 
     assert info == {"category": None, "threshold_km": 500.0}
+
+
+def test_classify_normalizes_super_trainer_to_prova():
+    """Grounding às vezes traz rótulo próprio ('Super Trainer') — mapeia."""
+
+    info = _classify(
+        '{"category": "Super Trainer", "threshold_km": 500, "known": true}'
+    )
+
+    assert info == {"category": "prova", "threshold_km": 500.0}
+
+
+def test_classify_extracts_json_when_wrapped_in_prose():
+
+    info = _classify(
+        'Com base na busca, aqui está: {"category": "dia a dia", '
+        '"threshold_km": 700, "known": true} (fonte: reviews)'
+    )
+
+    assert info == {"category": "dia a dia", "threshold_km": 700.0}

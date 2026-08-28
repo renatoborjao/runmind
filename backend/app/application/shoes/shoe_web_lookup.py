@@ -16,17 +16,20 @@ from app.infrastructure.integrations.gemini.client import (
     repair_json,
 )
 
-_MAX_TOKENS = 400
+# grounding consome tokens na busca; folga pra o JSON sair inteiro
+_MAX_TOKENS = 800
 
-_PROMPT = """Pesquise na web o tênis de corrida "{name}" e classifique com base \
-no que encontrar. Responda SÓ com um JSON (sem texto fora dele):
-{{"category": "prova" ou "dia a dia", "threshold_km": <vida útil típica em km, \
-número>, "known": true/false}}
+_PROMPT = """Pesquise na web o tênis de corrida "{name}" e classifique. Responda \
+APENAS com o JSON abaixo, nada antes nem depois:
+{{"category": "prova" OU "dia a dia", "threshold_km": <vida útil típica em km, só \
+o número>, "known": true/false}}
 
-- "prova" = tênis de competição / placa de carbono / rápido / leve (vida útil \
-~350-500 km). "dia a dia" = trainer de treino/rodagem / amortecido (~600-800 km).
-- known=false se você NÃO encontrar esse tênis de corrida específico na busca \
-(não invente)."""
+- category tem que ser EXATAMENTE "prova" ou "dia a dia" (não invente outros \
+rótulos): tênis rápido/leve/com placa (racer OU "super trainer" com placa) = \
+"prova" (vida útil ~350-500 km); trainer amortecido de rodagem/dia a dia = "dia \
+a dia" (~600-800 km).
+- known=false se você NÃO encontrar esse tênis de corrida específico (não \
+invente)."""
 
 
 class ShoeWebLookup:
@@ -42,11 +45,7 @@ class ShoeWebLookup:
 
             return None
 
-        category = info.get("category")
-
-        if category not in ("prova", "dia a dia"):
-
-            category = None
+        category = ShoeWebLookup._normalize_category(info.get("category"))
 
         threshold = info.get("threshold_km")
 
@@ -94,6 +93,38 @@ class ShoeWebLookup:
         return ShoeWebLookup._parse(raw)
 
     @staticmethod
+    def _normalize_category(value) -> str | None:
+        """Mapeia o rótulo que a IA trouxer pros dois baldes. O grounding às
+        vezes inventa termo ('super trainer', 'racing') — a ordem checa os
+        sinais de PROVA (placa/rápido) antes dos de rodagem."""
+
+        text = (value or "").lower()
+
+        if text in ("prova", "dia a dia"):
+
+            return text
+
+        prova_cues = (
+            "prova", "race", "raci", "carbon", "placa", "speed", "plated",
+            "super trainer", "competi", "tempo", "fast", "leve",
+        )
+
+        daily_cues = (
+            "dia a dia", "daily", "trainer", "rodagem", "amortec", "cushion",
+            "easy", "treino",
+        )
+
+        if any(cue in text for cue in prova_cues):
+
+            return "prova"
+
+        if any(cue in text for cue in daily_cues):
+
+            return "dia a dia"
+
+        return None
+
+    @staticmethod
     def _parse(raw: str) -> dict | None:
 
         try:
@@ -102,6 +133,31 @@ class ShoeWebLookup:
 
         except (json.JSONDecodeError, TypeError, ValueError):
 
-            return None
+            data = ShoeWebLookup._extract_json_object(raw)
 
         return data if isinstance(data, dict) else None
+
+    @staticmethod
+    def _extract_json_object(raw: str) -> dict | None:
+        """Fallback: acha o primeiro objeto {...} no texto (grounding às vezes
+        emenda citações/prosa antes do JSON)."""
+
+        if not raw:
+
+            return None
+
+        start = raw.find("{")
+
+        end = raw.rfind("}")
+
+        if start == -1 or end <= start:
+
+            return None
+
+        try:
+
+            return json.loads(repair_json(raw[start:end + 1]))
+
+        except (json.JSONDecodeError, TypeError, ValueError):
+
+            return None
