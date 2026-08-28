@@ -96,6 +96,7 @@ class OnDemandAnswers:
                 runner.name,
                 plan,
                 done_days=done_days,
+                profile=profile,
             )
 
         if intent == ChatIntent.WEEKLY_PLAN:

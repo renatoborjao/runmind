@@ -79,6 +79,7 @@ class DailyTrainingNotifier:
             runner.name,
             plan,
             greet=greet,
+            profile=profile,
         )
 
         if message is None:

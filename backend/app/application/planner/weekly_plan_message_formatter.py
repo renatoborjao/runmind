@@ -129,10 +129,12 @@ class WeeklyPlanMessageFormatter:
         plan: TrainingPlan,
         reference_date: date | None = None,
         done_days: set[str] | None = None,
+        profile: str | None = None,
     ) -> str:
         """Próximo treino (a partir de hoje, incluindo hoje) já com o
         detalhe de execução. Semana concluída vira mensagem de descanso.
-        `done_days` pula sessões já cumpridas (mesmo fora de ordem)."""
+        `done_days` pula sessões já cumpridas (mesmo fora de ordem).
+        `profile`: quando dado, anexa a sugestão de tênis do treino."""
 
         reference_date = reference_date or today_local()
 
@@ -154,6 +156,7 @@ class WeeklyPlanMessageFormatter:
             f"🏃 Seu próximo treino, {runner_name}:",
             plan,
             session,
+            profile,
         )
 
     @staticmethod
@@ -162,6 +165,7 @@ class WeeklyPlanMessageFormatter:
         plan: TrainingPlan,
         reference_date: date | None = None,
         greet: bool = True,
+        profile: str | None = None,
     ) -> str | None:
         """Treino de HOJE detalhado — ou None se hoje é dia de descanso
         (usado pelo lembrete matinal, que aí não envia nada). Casa pela
@@ -199,6 +203,7 @@ class WeeklyPlanMessageFormatter:
             intro,
             plan,
             session,
+            profile,
         )
 
     @staticmethod
@@ -206,6 +211,7 @@ class WeeklyPlanMessageFormatter:
         intro: str,
         plan: TrainingPlan,
         session,
+        profile: str | None = None,
     ) -> str:
 
         lines = [intro, ""]
@@ -214,7 +220,36 @@ class WeeklyPlanMessageFormatter:
             WeeklyPlanMessageFormatter._session_block(plan, session)
         )
 
+        # o coach DECIDE e AVISA o tênis do treino (só quando o atleta montou o
+        # armário; silêncio total senão). Ver [[ShoeRecommendationService]].
+        shoe_line = WeeklyPlanMessageFormatter._shoe_line(profile, session)
+
+        if shoe_line:
+
+            lines.append(f"   {shoe_line}")
+
         return "\n".join(lines).strip()
+
+    @staticmethod
+    def _shoe_line(profile: str | None, session) -> str:
+
+        if not profile:
+
+            return ""
+
+        try:
+
+            from app.application.shoes.shoe_recommendation_service import (
+                ShoeRecommendationService,
+            )
+
+            return ShoeRecommendationService.line(profile, session)
+
+        except Exception as e:
+
+            print(f"Sugestão de tênis falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _next_session(
