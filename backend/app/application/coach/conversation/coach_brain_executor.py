@@ -270,7 +270,21 @@ class CoachBrainExecutor:
 
             return await CoachBrainExecutor._coach_switch(profile, runner, action)
 
+        if action.type == "shoe":
+
+            return await CoachBrainExecutor._shoe(profile, runner, incoming_text)
+
         return None
+
+    @staticmethod
+    async def _shoe(profile, runner, incoming_text) -> str | None:
+        """Contador de km por tênis: registra pares, define o do dia a dia,
+        ensina o rodízio, corrige atribuição, aposenta ou responde a km — com os
+        números EXATOS do armário. Ver [[project_tracker_tenis]]."""
+
+        from app.application.shoes.shoe_command_engine import ShoeCommandEngine
+
+        return await ShoeCommandEngine.handle(profile, runner, incoming_text)
 
     @staticmethod
     async def _coach_switch(
