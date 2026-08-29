@@ -23,13 +23,14 @@ _MAX_TOKENS = 800
 
 _PROMPT = """Pesquise na web o tênis de corrida "{name}" e classifique. Responda \
 APENAS com o JSON abaixo, nada antes nem depois:
-{{"category": "prova" OU "dia a dia", "threshold_km": <vida útil típica em km, só \
-o número>, "known": true/false}}
+{{"category": "prova" OU "versátil" OU "dia a dia", "threshold_km": <vida útil \
+típica em km, só o número>, "known": true/false}}
 
-- "prova" = tênis que se usa pra VELOCIDADE/competição: racer, placa de carbono, \
-speedster leve (vida útil ~350-500 km).
-- "dia a dia" = tênis que se usa pra RODAGEM/volume: trainer de treino, super \
-trainer versátil, max-cushion (vida útil ~600-800 km).
+- "prova" = racer / placa de carbono / competição pura (vida útil ~350-500 km).
+- "versátil" = SUPER TRAINER (encaixa em tudo: rodagem, tempo e até prova — ex.: \
+Superblast, Endorphin Speed, Neo Vista) ou trainer leve/rápido de tempo (vida \
+útil ~500-650 km).
+- "dia a dia" = trainer amortecido de treino/rodagem, max-cushion (~600-800 km).
 - known=false se você NÃO encontrar esse tênis de corrida específico (não \
 invente)."""
 
@@ -118,24 +119,33 @@ class ShoeWebLookup:
 
     @staticmethod
     def _normalize_category(value) -> str | None:
-        """Mapeia o rótulo que a IA trouxer pros dois baldes (por USO). A ordem
-        checa os sinais de PROVA (velocidade/placa) antes dos de rodagem."""
+        """Mapeia o rótulo que a IA trouxer pros 3 níveis. A ordem checa VERSÁTIL
+        (super trainer) e PROVA (racer/placa) antes de cair em dia a dia."""
 
         text = (value or "").lower()
 
-        if text in ("prova", "dia a dia"):
+        if text in ("prova", "versátil", "dia a dia"):
 
-            return text
+            return "versátil" if text == "versátil" else text
+
+        versatil_cues = (
+            "versát", "versat", "super trainer", "supertrainer", "super-trainer",
+            "tempo", "speed trainer",
+        )
 
         prova_cues = (
-            "prova", "race", "raci", "carbon", "placa", "speed", "plated",
-            "competi", "fast", "leve",
+            "prova", "race", "raci", "carbon", "placa", "plated", "competi",
+            "racer",
         )
 
         daily_cues = (
             "dia a dia", "daily", "trainer", "rodagem", "amortec", "cushion",
-            "easy", "treino", "super trainer",
+            "easy", "treino", "max",
         )
+
+        if any(cue in text for cue in versatil_cues):
+
+            return "versátil"
 
         if any(cue in text for cue in prova_cues):
 

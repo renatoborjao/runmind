@@ -44,7 +44,8 @@ maiúsculas; NUNCA troque a marca, expanda ou adivinhe o modelo oficial (ex.: \
 número|0>, "default": <true SÓ se o atleta disser que é o do dia a dia; senão \
 false>}},
     {{"op": "set_default", "shoe": "<id ou nome de um tênis existente>"}},
-    {{"op": "recategorize", "shoe": "<id/nome>", "category": "<prova|dia a dia>"}},
+    {{"op": "recategorize", "shoe": "<id/nome>", "category": "<prova|versátil|\
+dia a dia>"}},
     {{"op": "rule", "match": "<palavra do tipo de treino: tiro|longao|prova|\
 rodagem|...>", "shoe": "<id/nome>"}},
     {{"op": "assign", "shoe": "<id/nome>", "day": "<dia em inglês: Monday..\
@@ -65,10 +66,11 @@ não um chute). Você só EXTRAI: nome (literal), apelido, km inicial, e default
 APENAS se o atleta disser qual é o do dia a dia. Não preencha categoria no "add".
 - "meu tênis do dia a dia agora é o Z", "troquei pro novo", "o de sempre é o W" \
 -> "set_default".
-- CORREÇÃO de função (o atleta discorda da classificação): "o Red Hare é super \
-trainer, não de prova" / "os Evo SL são de prova/tiro" / "esse é pra rodagem" -> \
-"recategorize" com a category certa (super trainer / rodagem / dia a dia = "dia a \
-dia"; racer / placa / velocidade / tiro / prova = "prova").
+- CORREÇÃO de função (o atleta discorda da classificação): "os Evo SL são de \
+prova/tiro" / "o Red Hare é super trainer" / "esse é só pra rodagem" -> \
+"recategorize" com a category certa: racer/placa/velocidade/tiro/prova = \
+"prova"; SUPER TRAINER/versátil/encaixa em tudo = "versátil"; trainer de \
+rodagem/amortecido/conforto = "dia a dia".
 - SÓ crie "rule" quando for uma regra DURÁVEL ("SEMPRE uso o Vaporfly nos \
 tiros", "longão é SEMPRE com o X"). É rodízio fixo, pra toda semana.
 - ESCOLHA PONTUAL pra UM dia ("quero usar o Red Hare no domingo", "esse domingo \
@@ -399,19 +401,23 @@ class ShoeCommandEngine:
 
     # vida útil típica por função (quando o atleta recategoriza, a vida se ajusta
     # junto — um par de prova gasta mais rápido que um trainer)
-    _CATEGORY_WEAR = {"prova": 450.0, "dia a dia": 650.0}
+    _CATEGORY_WEAR = {"prova": 450.0, "versátil": 600.0, "dia a dia": 700.0}
 
     @staticmethod
     def _recategorize(book: ShoeBook, ref, category) -> bool:
-        """Correção de função por frase ("o Red Hare é super trainer, não de
-        prova"): muda a categoria e ajusta a vida útil típica junto, rearmando
-        o alerta de desgaste."""
+        """Correção de função por frase ("o Red Hare é super trainer" / "o Evo
+        SL é de prova"): muda a categoria e ajusta a vida útil típica junto,
+        rearmando o alerta de desgaste."""
 
         shoe = ShoeCommandEngine._resolve(book, ref)
 
         category = str(category or "").strip().lower()
 
-        if shoe is None or category not in ("prova", "dia a dia"):
+        if category in ("versatil", "super trainer", "super-trainer"):
+
+            category = "versátil"
+
+        if shoe is None or category not in ShoeCommandEngine._CATEGORY_WEAR:
 
             return False
 

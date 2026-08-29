@@ -23,13 +23,14 @@ def test_classify_returns_category_and_threshold_when_known():
     assert info == {"category": "prova", "threshold_km": 420.0}
 
 
-def test_classify_super_trainer_normalized_to_daily():
+def test_classify_super_trainer_normalized_to_versatil():
+    """Super trainer é VERSÁTIL (encaixa em tudo), não dia a dia puro."""
 
     info = _classify(
         '{"category": "super trainer", "threshold_km": 600, "known": true}'
     )
 
-    assert info["category"] == "dia a dia"
+    assert info["category"] == "versátil"
 
 
 def test_classify_none_when_not_known():

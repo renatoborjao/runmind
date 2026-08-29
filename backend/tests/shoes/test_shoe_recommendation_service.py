@@ -169,6 +169,54 @@ def test_retired_assigned_shoe_is_ignored():
     assert shoe.id == "vomero"  # ignora o aposentado, recomenda normal
 
 
+def test_quality_uses_versatil_when_no_prova():
+    """Fartlek sem racer -> pega o SUPER TRAINER (versátil), não o dia a dia."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="nova", name="Novablast", category="dia a dia", is_default=True),
+        Shoe(id="sonic", name="Sonicblast", category="versátil"),
+    ])
+
+    shoe, reason = _rec(book, _session("Fartlek"))
+
+    assert shoe.id == "sonic"
+    assert "super trainer" in reason
+
+
+def test_prova_beats_versatil_on_quality():
+
+    book = ShoeBook(shoes=[
+        Shoe(id="evo", name="Evo SL", category="prova"),
+        Shoe(id="red", name="Red Hare", category="versátil"),
+        Shoe(id="vom", name="Vomero", category="dia a dia", is_default=True),
+    ])
+
+    shoe, _ = _rec(book, _session("Tempo Run"))
+
+    assert shoe.id == "evo"
+
+
+def test_versatil_runs_in_daily_pool_for_long():
+    """Versátil (Red Hare) entra no rodízio de rodagem/longão junto do dia a dia."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="vom", name="Vomero", category="dia a dia", initial_km=300.0),
+        Shoe(id="red", name="Red Hare", category="versátil", initial_km=8.0),
+    ])
+
+    # domingo, longão -> pool = [Red Hare(8), Vomero(300)]; mais novo no idx certo
+    shoe, reason = _rec(book, _session("Longão", day="Sunday"))
+
+    assert shoe.id in ("red", "vom")
+    assert "longão" in reason.lower()
+    # o Red Hare (versátil) É elegível pro longão
+    picks = {
+        _rec(book, _session("Longão", day=d))[0].id
+        for d in ("Monday", "Tuesday", "Sunday", "Saturday")
+    }
+    assert "red" in picks
+
+
 def test_no_shoes_returns_none():
 
     assert _rec(ShoeBook(), _session("x")) is None
