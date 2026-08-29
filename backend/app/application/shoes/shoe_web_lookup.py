@@ -26,11 +26,14 @@ APENAS com o JSON abaixo, nada antes nem depois:
 {{"category": "prova" OU "versátil" OU "dia a dia", "threshold_km": <vida útil \
 típica em km, só o número>, "known": true/false}}
 
+A pergunta-chave é o USO: dá pra fazer TREINO RÁPIDO (tempo/tiro) nele, ou é de \
+CONFORTO pra rodagem?
 - "prova" = racer / placa de carbono / competição pura (vida útil ~350-500 km).
-- "versátil" = SUPER TRAINER (encaixa em tudo: rodagem, tempo e até prova — ex.: \
-Superblast, Endorphin Speed, Neo Vista) ou trainer leve/rápido de tempo (vida \
-útil ~500-650 km).
-- "dia a dia" = trainer amortecido de treino/rodagem, max-cushion (~600-800 km).
+- "versátil" = super trainer LEVE e RESPONSIVO que serve pra TEMPO/treino rápido \
+também (ex.: Superblast, Endorphin Speed, Deviate Nitro) — vida útil ~500-650 km.
+- "dia a dia" = trainer de CONFORTO/amortecimento pra rodagem/longão. INCLUI \
+super trainer MAX-CUSHION pesado que NÃO é pra velocidade (ex.: Neo Vista, Bondi, \
+Skyward): se você NÃO faria tiro/tempo nele, é "dia a dia" (~600-800 km).
 - known=false se você NÃO encontrar esse tênis de corrida específico (não \
 invente)."""
 
