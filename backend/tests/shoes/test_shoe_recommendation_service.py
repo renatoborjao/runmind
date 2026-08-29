@@ -196,25 +196,31 @@ def test_prova_beats_versatil_on_quality():
     assert shoe.id == "evo"
 
 
-def test_versatil_runs_in_daily_pool_for_long():
-    """Versátil (Red Hare) entra no rodízio de rodagem/longão junto do dia a dia."""
+def test_long_prefers_daily_and_reserves_versatil():
+    """Longão prioriza o dia a dia PURO; o versátil fica reservado (o atleta o
+    fixa quando quer, como o Red Hare no domingo)."""
 
     book = ShoeBook(shoes=[
         Shoe(id="vom", name="Vomero", category="dia a dia", initial_km=300.0),
         Shoe(id="red", name="Red Hare", category="versátil", initial_km=8.0),
     ])
 
-    # domingo, longão -> pool = [Red Hare(8), Vomero(300)]; mais novo no idx certo
-    shoe, reason = _rec(book, _session("Longão", day="Sunday"))
+    # com um dia a dia disponível, o longão NÃO puxa o versátil sozinho
+    for d in ("Monday", "Tuesday", "Sunday", "Saturday"):
 
-    assert shoe.id in ("red", "vom")
-    assert "longão" in reason.lower()
-    # o Red Hare (versátil) É elegível pro longão
-    picks = {
-        _rec(book, _session("Longão", day=d))[0].id
-        for d in ("Monday", "Tuesday", "Sunday", "Saturday")
-    }
-    assert "red" in picks
+        assert _rec(book, _session("Longão", day=d))[0].id == "vom"
+
+
+def test_versatil_covers_long_when_no_daily():
+    """Sem trainer de conforto, o versátil cobre o longão."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="red", name="Red Hare", category="versátil", is_default=True),
+    ])
+
+    shoe, _ = _rec(book, _session("Longão", day="Sunday"))
+
+    assert shoe.id == "red"
 
 
 def test_no_shoes_returns_none():

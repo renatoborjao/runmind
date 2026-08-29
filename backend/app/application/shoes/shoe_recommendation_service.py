@@ -144,16 +144,20 @@ class ShoeRecommendationService:
 
             return active, ""
 
-        # rodagem / longão: dia a dia + versátil correm juntos
-        combined = daily + versatil
-
+        # rodagem / longão: prioriza o DIA A DIA puro (reserva o versátil pra
+        # qualidade / pros dias que o atleta fixar). Versátil e prova só entram
+        # se não houver trainer de conforto.
         base = "longão é conforto" if is_long else "rodagem tranquila"
 
-        if combined:
+        if daily:
 
-            return combined, ShoeRecommendationService._rev(
-                f"{base}, teu par do dia a dia", combined
+            return daily, ShoeRecommendationService._rev(
+                f"{base}, teu par do dia a dia", daily
             )
+
+        if versatil:
+
+            return versatil, base
 
         if prova:
 
