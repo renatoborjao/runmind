@@ -223,6 +223,32 @@ def test_versatil_covers_long_when_no_daily():
     assert shoe.id == "red"
 
 
+def test_rotation_by_position_spreads_across_fleet():
+    """Com os treinos da semana, os 2 treinos fáceis pegam pares DIFERENTES
+    (1º fácil -> par 1, 2º fácil -> par 2), não o mesmo por paridade de dia."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="neo", name="Neo Vista", category="dia a dia", initial_km=100.0),
+        Shoe(id="nova", name="Novablast", category="dia a dia", initial_km=50.0),
+    ])
+
+    tue = _session("Fartlek", "Tuesday")     # qualidade
+    thu = _session("Rodagem leve", "Thursday")  # 1º fácil
+    sat = _session("Longão", "Saturday")     # 2º fácil
+    week = [tue, thu, sat]
+
+    thu_pick = ShoeRecommendationService.recommend(
+        book, thu, week_sessions=week
+    )[0]
+    sat_pick = ShoeRecommendationService.recommend(
+        book, sat, week_sessions=week
+    )[0]
+
+    assert thu_pick.id == "nova"   # 1º fácil -> mais novo
+    assert sat_pick.id == "neo"    # 2º fácil -> o outro
+    assert thu_pick.id != sat_pick.id
+
+
 def test_no_shoes_returns_none():
 
     assert _rec(ShoeBook(), _session("x")) is None

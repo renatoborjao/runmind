@@ -38,13 +38,15 @@ _PROVA, _VERSATIL, _DAILY = "prova", "versatil", "diaadia"
 class ShoeRecommendationService:
 
     @staticmethod
-    def line(profile: str, session, session_date=None) -> str:
+    def line(profile: str, session, session_date=None, week_sessions=None) -> str:
         """Linha de sugestão pra anexar na mensagem do treino. Vazia quando o
         atleta não montou o armário (silêncio total) ou não dá pra sugerir."""
 
         book = ShoeRepository().load(profile)
 
-        pick = ShoeRecommendationService.recommend(book, session, session_date)
+        pick = ShoeRecommendationService.recommend(
+            book, session, session_date, week_sessions
+        )
 
         if pick is None:
 
@@ -58,9 +60,11 @@ class ShoeRecommendationService:
 
     @staticmethod
     def recommend(
-        book: ShoeBook, session, session_date=None
+        book: ShoeBook, session, session_date=None, week_sessions=None
     ) -> tuple[Shoe, str] | None:
-        """(tênis, motivo curto) pro treino, ou None."""
+        """(tênis, motivo curto) pro treino, ou None. `week_sessions` (os treinos
+        da semana em ordem) faz o rodízio girar pela POSIÇÃO do treino, não pelo
+        dia da semana — espalha de verdade pela frota."""
 
         active = book.active()
 
@@ -107,7 +111,55 @@ class ShoeRecommendationService:
 
             return None
 
-        return ShoeRecommendationService._from_pool(pool, session, reason)
+        index = ShoeRecommendationService._rotation_index(
+            session, is_quality, week_sessions
+        )
+
+        return ShoeRecommendationService._from_pool(pool, index, reason)
+
+    @staticmethod
+    def _rotation_index(session, is_quality: bool, week_sessions) -> int:
+        """Posição do treino entre os da MESMA intenção (qualidade × fácil) na
+        semana — o 1º treino fácil pega o 1º par, o 2º pega o 2º, etc. Sem os
+        treinos da semana, cai no dia da semana (melhor que nada)."""
+
+        if not week_sessions:
+
+            return ShoeRecommendationService._day_index(session)
+
+        index = 0
+
+        for other in week_sessions:
+
+            if ShoeRecommendationService._same_session(other, session):
+
+                return index
+
+            if ShoeRecommendationService._is_quality(other) == is_quality:
+
+                index += 1
+
+        return index
+
+    @staticmethod
+    def _is_quality(session) -> bool:
+
+        text = " ".join(
+            (
+                getattr(session, "workout_type", "") or "",
+                getattr(session, "training_type", "") or "",
+            )
+        ).lower()
+
+        return ("long" not in text) and any(c in text for c in _QUALITY_CUES)
+
+    @staticmethod
+    def _same_session(a, b) -> bool:
+
+        return a is b or (
+            getattr(a, "day", None) == getattr(b, "day", None)
+            and getattr(a, "workout_type", None) == getattr(b, "workout_type", None)
+        )
 
     # ---- escolha do balde -------------------------------------------------
 
@@ -181,17 +233,17 @@ class ShoeRecommendationService:
 
     @staticmethod
     def _from_pool(
-        pool: list[Shoe], session, reason: str
+        pool: list[Shoe], index: int, reason: str
     ) -> tuple[Shoe, str]:
-        """Escolhe REVEZANDO: ordena do mais novo pro mais rodado e gira pelo dia
-        da semana — dias diferentes pegam pares diferentes, favorecendo o novo.
-        Depois aplica o desvio de desgaste dentro do balde."""
+        """Escolhe REVEZANDO: ordena do mais novo pro mais rodado e gira pela
+        POSIÇÃO do treino na semana — o 1º treino pega o mais novo, o 2º o
+        próximo, etc. (espalha pela frota). Depois aplica o desvio de desgaste."""
 
         ordered = sorted(pool, key=lambda s: s.total_km)
 
-        idx = ShoeRecommendationService._day_index(session) % len(ordered)
-
-        return ShoeRecommendationService._wear_swap(ordered[idx], pool, reason)
+        return ShoeRecommendationService._wear_swap(
+            ordered[index % len(ordered)], pool, reason
+        )
 
     @staticmethod
     def _with_wear_guard(

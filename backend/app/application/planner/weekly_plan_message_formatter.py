@@ -247,7 +247,13 @@ class WeeklyPlanMessageFormatter:
             # domingo") sobrepor a recomendação só naquele dia
             session_date = plan.session_date(session).isoformat()
 
-            return ShoeRecommendationService.line(profile, session, session_date)
+            # os treinos da semana em ordem -> o rodízio gira pela POSIÇÃO do
+            # treino (espalha a frota), não pelo dia da semana
+            week_sessions = sorted(plan.sessions, key=plan.session_date)
+
+            return ShoeRecommendationService.line(
+                profile, session, session_date, week_sessions
+            )
 
         except Exception as e:
 
