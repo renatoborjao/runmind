@@ -31,7 +31,8 @@ o coach deve lembrar em conversas futuras. Categorias possíveis:
   NÃO é doença passageira: gripe, resfriado, virose, febre, dor de garganta,
   catarro, tosse, covid, sinusite, indisposição — NADA disso é "lesao" (vai em
   "vida"). Na dúvida entre lesão e doença, NÃO marque como lesao.
-- preferencia: preferências de treino (horário, terreno, tipo de treino...)
+- preferencia: preferências de treino (horário, terreno, tipo de treino...) —
+  MAS veja a regra "DIA DE QUALIDADE" abaixo antes de cravar um tipo de treino
 - disponibilidade: viagens, ausências, mudanças de agenda
 - objetivo: mudança de meta ou prova alvo
 - motivacao: o PORQUÊ profundo de correr / o que a corrida significa pra ele /
@@ -62,6 +63,15 @@ Se disser que a prova foi cancelada ou já aconteceu:
 "race": {{"clear": true}}
 
 REGRAS:
+- DIA DE QUALIDADE (NÃO engessar o tipo): a inteligência do treino é do COACH —
+  ele decide o estímulo pensando na EVOLUÇÃO do atleta rumo à META. Quando o
+  corredor liga um treino FORTE de velocidade a um dia (tiro, intervalado,
+  fartlek, VO2, tempo/limiar — ex: "quero intervalado na terça"), NÃO cristalize
+  o TIPO específico: guarde a INTENÇÃO — "terça é o dia do treino forte de
+  qualidade/velocidade; o coach varia o tipo (intervalado/fartlek/VO2/tempo)
+  semana a semana rumo à meta". Só fixe UM tipo exato se ele for ENFÁTICO que
+  quer SEMPRE aquele e nenhum outro. Rodagem, longão e regenerativo são
+  estímulos de base — esses podem ficar como ele disse.
 - Só fatos duráveis. Perguntas, cumprimentos e comentários sobre um treino
   pontual NÃO geram memória.
 - "content" em uma linha curta, em português, terceira pessoa implícita

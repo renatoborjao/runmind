@@ -395,5 +395,8 @@ class PlanContextBuilder:
             + " | ".join(weeks)
             + ". IMPORTANTE: se os tipos vêm SE REPETINDO, VARIE agora (traga "
             "tempo/limiar, fartlek ou progressivo que sirva à fase/meta) em "
-            "vez de repetir o mesmo cardápio."
+            "vez de repetir o mesmo cardápio. Uma preferência de 'dia de "
+            "qualidade' (ex: forte na terça) fixa o DIA, não o TIPO: reveze o "
+            "estímulo forte (intervalado/fartlek/VO2/tempo) conforme a "
+            "evolução × meta — nunca engesse no mesmo tipo toda semana."
         )
