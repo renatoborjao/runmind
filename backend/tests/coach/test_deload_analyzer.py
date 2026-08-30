@@ -66,3 +66,33 @@ def test_zeros_reset_streak():
 
     assert d.building_weeks == 2
     assert d.due is False
+
+
+def test_low_acwr_blocks_deload_even_with_fatigue_signal():
+    """Bug do Maurício: ACWR 0.97 (carga aguda <= crônica) + rhr caindo não
+    justifica descarga — sem sobrecarga, semana leve à força só destreina."""
+
+    d = DeloadAnalyzer.assess(
+        [294, 151, 344, 252], _recovery(rhr=FALLING), acwr=0.97
+    )
+
+    assert d.due is False
+    assert "carga não está elevada" in d.reason
+    assert deload_directive(d) == ""
+
+
+def test_elevated_acwr_still_allows_deload():
+    """Com carga elevada de verdade (ACWR alto), a descarga do bloco vale."""
+
+    d = DeloadAnalyzer.assess([80, 90, 100], _recovery(), acwr=1.25)
+
+    assert d.due is True
+    assert d.building_weeks == 3
+
+
+def test_acwr_none_keeps_legacy_behavior():
+    """Sem dado de ACWR, o gatilho segue pelo bloco (retrocompat)."""
+
+    d = DeloadAnalyzer.assess([80, 90, 100], _recovery(), acwr=None)
+
+    assert d.due is True

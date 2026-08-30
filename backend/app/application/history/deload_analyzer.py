@@ -27,6 +27,11 @@ _DIP_RATIO = 0.7
 # descarga de bloco por cima da afiação)
 _TAPER_ZONE_WEEKS = 3
 
+# descarga só dissipa fadiga de carga ELEVADA. Abaixo deste ACWR a carga aguda
+# está <= a crônica: NÃO há sobrecarga pra descarregar — forçar leve só
+# DESTREINA (bug do Maurício: descarga com ACWR 0.97 e semana já em queda).
+_MIN_OVERLOAD_ACWR = 1.0
+
 
 @dataclass(slots=True)
 class DeloadDecision:
@@ -43,10 +48,12 @@ class DeloadAnalyzer:
         weekly_loads: list[float],
         recovery: RecoveryTrend,
         weeks_to_race: int | None = None,
+        acwr: float | None = None,
     ) -> DeloadDecision:
         """Decide se a PRÓXIMA semana (a que estamos gerando) deve ser de
         descarga. Gatilho principal: tamanho do bloco de carga; a fadiga
-        antecipa; o taper (perto da prova) desliga."""
+        antecipa; o taper (perto da prova) desliga; e o ACWR trava — sem carga
+        elevada, descarga só destreina."""
 
         streak = DeloadAnalyzer._consecutive_load_weeks(weekly_loads)
 
@@ -54,6 +61,13 @@ class DeloadAnalyzer:
         if weeks_to_race is not None and weeks_to_race <= _TAPER_ZONE_WEEKS:
 
             return DeloadDecision(False, streak, "taper cuida do recuo")
+
+        # SEM SOBRECARGA não se descarrega nada: com o ACWR mostrando carga aguda
+        # <= crônica, uma semana leve à força só APAGA forma (o atleta reclama
+        # que "não evolui"). Descarga é pra dissipar overload — exige overload.
+        if acwr is not None and acwr < _MIN_OVERLOAD_ACWR:
+
+            return DeloadDecision(False, streak, "carga não está elevada")
 
         fatigued = (
             recovery.hrv_direction == FALLING
