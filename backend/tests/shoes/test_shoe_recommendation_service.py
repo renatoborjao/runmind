@@ -59,7 +59,7 @@ def test_easy_run_uses_daily():
     shoe, reason = _rec(book, _session("Rodagem leve"))
 
     assert shoe.id == "boston"
-    assert "dia a dia" in reason
+    assert "rodagem" in reason.lower()
 
 
 def test_long_run_stays_on_daily_even_progressive():
@@ -220,19 +220,23 @@ def test_prova_beats_versatil_on_quality():
     assert shoe.id == "evo"
 
 
-def test_long_prefers_daily_and_reserves_versatil():
-    """Longão prioriza o dia a dia PURO; o versátil fica reservado (o atleta o
-    fixa quando quer, como o Red Hare no domingo)."""
+def test_versatil_rotates_with_daily_on_long_and_easy():
+    """O versátil (super trainer) NÃO fica reservado: reveza JUNTO com o dia a
+    dia no longão/rodagem — o Red Hare vale pra longão E rodagem (Renato)."""
 
     book = ShoeBook(shoes=[
         Shoe(id="vom", name="Vomero", category="dia a dia", initial_km=300.0),
         Shoe(id="red", name="Red Hare", category="versátil", initial_km=8.0),
     ])
 
-    # com um dia a dia disponível, o longão NÃO puxa o versátil sozinho
-    for d in ("Monday", "Tuesday", "Sunday", "Saturday"):
+    # os dois revezam pelo dia; o mais NOVO (Red Hare) sai primeiro
+    mon = _rec(book, _session("Longão", day="Monday"))[0].id
+    tue = _rec(book, _session("Longão", day="Tuesday"))[0].id
 
-        assert _rec(book, _session("Longão", day=d))[0].id == "vom"
+    assert mon == "red"                 # versátil elegível e freshest-first
+    assert {mon, tue} == {"red", "vom"}  # os dois na rotação, nenhum de fora
+    # vale também pra rodagem
+    assert _rec(book, _session("Rodagem", day="Monday"))[0].id == "red"
 
 
 def test_versatil_covers_long_when_no_daily():
