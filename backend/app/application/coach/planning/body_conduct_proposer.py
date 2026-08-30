@@ -106,7 +106,41 @@ class BodyConductProposer:
             ),
         )
 
-        return decision.message
+        # a proposta DESCREVE o treino de hoje (o briefing pula o detalhe normal
+        # quando ela entra) — então ela também leva a sugestão de tênis, senão o
+        # atleta com armário fica sem o par nos dias de sobrecarga. Ver
+        # [[ShoeRecommendationService]] e [[project_tracker_tenis]].
+        return BodyConductProposer._with_shoe(
+            profile, plan, session, decision.message
+        )
+
+    @staticmethod
+    def _with_shoe(
+        profile: str, plan: TrainingPlan, session, message: str
+    ) -> str:
+        """Anexa a sugestão de tênis do coach pra a sessão. Best-effort:
+        silêncio total sem armário; falhar aqui nunca derruba a proposta."""
+
+        try:
+
+            from app.application.shoes.shoe_recommendation_service import (
+                ShoeRecommendationService,
+            )
+
+            shoe = ShoeRecommendationService.line(
+                profile,
+                session,
+                plan.session_date(session).isoformat(),
+                sorted(plan.sessions, key=plan.session_date),
+            )
+
+            return f"{message}\n\n{shoe}" if shoe else message
+
+        except Exception as e:
+
+            print(f"Tênis na proposta de corpo de '{profile}' falhou: {e}")
+
+            return message
 
     @staticmethod
     async def for_briefing(profile: str) -> str | None:

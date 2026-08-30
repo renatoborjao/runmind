@@ -115,6 +115,24 @@ def test_eve_of_demanding_session_proposes_and_stages():
     assert saved.kind == "body_ease"
 
 
+def test_proposal_appends_shoe_suggestion_when_armario_exists():
+    """A proposta descreve o treino de hoje (o briefing pula o detalhe normal),
+    então tem que levar a sugestão de tênis — senão o atleta com armário fica
+    sem o par nos dias de sobrecarga (bug do Renato, longão de domingo)."""
+
+    shoe = "👟 Sugestão de tênis: Vomero Plus — longão é conforto"
+
+    with patch(
+        "app.application.shoes.shoe_recommendation_service."
+        "ShoeRecommendationService.line",
+        return_value=shoe,
+    ):
+
+        message, _, _ = _run(today=SATURDAY, when="today")
+
+    assert shoe in message
+
+
 def test_today_of_demanding_session_proposes_with_fresh_data():
 
     # sábado: o treino exigente é HOJE -> propõe no dia, com dado fresco
