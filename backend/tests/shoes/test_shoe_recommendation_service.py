@@ -273,6 +273,32 @@ def test_rotation_by_position_spreads_across_fleet():
     assert thu_pick.id != sat_pick.id
 
 
+def test_rodagem_por_tempo_is_easy_not_quality():
+    """'Rodagem por Tempo' (medida em minutos) NÃO é tempo run — rodagem é
+    fácil e pega o dia a dia, não o par rápido."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="vom", name="Vomero", category="dia a dia", is_default=True),
+        Shoe(id="evo", name="Evo SL", category="rápido"),
+    ])
+
+    shoe, reason = _rec(book, _session("Rodagem por Tempo"))
+
+    assert shoe.id == "vom"
+    assert "forte" not in reason
+
+
+def test_rodagem_progressiva_stays_easy():
+    """'Rodagem Progressiva' segue rodagem (fácil), apesar do 'progress'."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="vom", name="Vomero", category="dia a dia", is_default=True),
+        Shoe(id="evo", name="Evo SL", category="rápido"),
+    ])
+
+    assert _rec(book, _session("Rodagem Progressiva"))[0].id == "vom"
+
+
 def test_no_shoes_returns_none():
 
     assert _rec(ShoeBook(), _session("x")) is None

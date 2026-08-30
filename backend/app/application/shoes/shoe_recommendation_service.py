@@ -19,6 +19,12 @@ _QUALITY_CUES = (
     "vo2", "progress", "simulad", "prova", "race", "ritmo",
 )
 
+# RODAGEM/regenerativo é treino FÁCIL por definição — vence os cues ambíguos de
+# qualidade que aparecem no nome ("Rodagem por Tempo" = medida em minutos, NÃO é
+# tempo run; "Rodagem Progressiva" segue rodagem). Sem isso, o par rápido caía
+# num treino leve.
+_EASY_CUES = ("rodagem", "regenerativ", "trote")
+
 # categoria -> função (3 níveis). A ordem checa RÁPIDO (racer/placa) antes de
 # VERSÁTIL (super trainer), pra placa não cair como versátil. "rápido" é o rótulo
 # atual; "prova" segue aceito (dado antigo) — os dois caem no balde veloz.
@@ -106,7 +112,13 @@ class ShoeRecommendationService:
         # o leve. Progressivo conta como longão (não é qualidade curta).
         is_long = "long" in text
 
-        is_quality = (not is_long) and any(c in text for c in _QUALITY_CUES)
+        is_easy = any(c in text for c in _EASY_CUES)
+
+        is_quality = (
+            (not is_long)
+            and (not is_easy)
+            and any(c in text for c in _QUALITY_CUES)
+        )
 
         pool, reason = ShoeRecommendationService._pool(active, is_quality, is_long)
 
@@ -154,7 +166,11 @@ class ShoeRecommendationService:
             )
         ).lower()
 
-        return ("long" not in text) and any(c in text for c in _QUALITY_CUES)
+        return (
+            ("long" not in text)
+            and not any(c in text for c in _EASY_CUES)
+            and any(c in text for c in _QUALITY_CUES)
+        )
 
     @staticmethod
     def _same_session(a, b) -> bool:
