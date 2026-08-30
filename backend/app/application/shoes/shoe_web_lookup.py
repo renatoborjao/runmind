@@ -23,12 +23,12 @@ _MAX_TOKENS = 800
 
 _PROMPT = """Pesquise na web o tênis de corrida "{name}" e classifique. Responda \
 APENAS com o JSON abaixo, nada antes nem depois:
-{{"category": "prova" OU "versátil" OU "dia a dia", "threshold_km": <vida útil \
+{{"category": "rápido" OU "versátil" OU "dia a dia", "threshold_km": <vida útil \
 típica em km, só o número>, "known": true/false}}
 
 A pergunta-chave é o USO: dá pra fazer TREINO RÁPIDO (tempo/tiro) nele, ou é de \
 CONFORTO pra rodagem?
-- "prova" = racer / placa de carbono / competição pura (vida útil ~350-500 km).
+- "rápido" = racer / placa de carbono / competição pura (vida útil ~350-500 km).
 - "versátil" = super trainer LEVE e RESPONSIVO que serve pra TEMPO/treino rápido \
 também (ex.: Superblast, Endorphin Speed, Deviate Nitro) — vida útil ~500-650 km.
 - "dia a dia" = trainer de CONFORTO/amortecimento pra rodagem/longão. INCLUI \
@@ -123,22 +123,27 @@ class ShoeWebLookup:
     @staticmethod
     def _normalize_category(value) -> str | None:
         """Mapeia o rótulo que a IA trouxer pros 3 níveis. A ordem checa VERSÁTIL
-        (super trainer) e PROVA (racer/placa) antes de cair em dia a dia."""
+        (super trainer) e RÁPIDO (racer/placa) antes de cair em dia a dia."""
 
         text = (value or "").lower()
 
-        if text in ("prova", "versátil", "dia a dia"):
+        if text in ("rápido", "rapido", "prova", "versátil", "versatil",
+                    "dia a dia"):
 
-            return "versátil" if text == "versátil" else text
+            if text in ("rápido", "rapido", "prova"):
+
+                return "rápido"
+
+            return "versátil" if text in ("versátil", "versatil") else text
 
         versatil_cues = (
             "versát", "versat", "super trainer", "supertrainer", "super-trainer",
             "tempo", "speed trainer",
         )
 
-        prova_cues = (
-            "prova", "race", "raci", "carbon", "placa", "plated", "competi",
-            "racer",
+        rapido_cues = (
+            "rápido", "rapido", "veloz", "prova", "race", "raci", "carbon",
+            "placa", "plated", "competi", "racer",
         )
 
         daily_cues = (
@@ -150,9 +155,9 @@ class ShoeWebLookup:
 
             return "versátil"
 
-        if any(cue in text for cue in prova_cues):
+        if any(cue in text for cue in rapido_cues):
 
-            return "prova"
+            return "rápido"
 
         if any(cue in text for cue in daily_cues):
 

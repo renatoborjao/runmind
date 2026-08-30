@@ -1,10 +1,10 @@
 """O coach DECIDE qual tênis usar em cada treino e AVISA na hora. Determinístico
 (rápido/exato, sem IA por mensagem), com sabedoria de treinador:
 
-- 3 FUNÇÕES: `prova` (racer/placa — tiro/prova), `versátil` (super trainer —
-  encaixa em TUDO), `dia a dia` (trainer amortecido — rodagem/longão);
-- casa o TIPO de treino com a função: qualidade → prova > versátil > dia a dia;
-  rodagem/longão → dia a dia + versátil (juntos), senão prova;
+- 3 FUNÇÕES: `rápido` (racer/placa — tiro/tempo/prova), `versátil` (super
+  trainer — encaixa em TUDO), `dia a dia` (trainer amortecido — rodagem/longão);
+- casa o TIPO de treino com a função: qualidade → rápido > versátil > dia a dia;
+  rodagem/longão → dia a dia + versátil (juntos), senão rápido;
 - REVEZA entre os pares elegíveis (é pra isso que se tem vários!) — favorece o
   mais NOVO e varia por dia; desvia do par gasto;
 - a escolha PONTUAL do atleta (assign) e a regra durável dele mandam. O coach
@@ -19,12 +19,15 @@ _QUALITY_CUES = (
     "vo2", "progress", "simulad", "prova", "race", "ritmo",
 )
 
-# categoria -> função (3 níveis). A ordem checa PROVA (racer/placa) antes de
-# VERSÁTIL (super trainer), pra placa não cair como versátil.
-_PROVA_CUES = ("prova", "race", "raci", "carbon", "placa", "competi", "racer")
+# categoria -> função (3 níveis). A ordem checa RÁPIDO (racer/placa) antes de
+# VERSÁTIL (super trainer), pra placa não cair como versátil. "rápido" é o rótulo
+# atual; "prova" segue aceito (dado antigo) — os dois caem no balde veloz.
+_PROVA_CUES = (
+    "rápido", "rapido", "veloz", "prova", "race", "raci", "carbon", "placa",
+    "competi", "racer",
+)
 _VERSATIL_CUES = (
-    "versát", "versat", "super trainer", "supertrainer", "rápido", "rapido",
-    "speed", "leve",
+    "versát", "versat", "super trainer", "supertrainer", "speed", "leve",
 )
 
 _WEEKDAY = {
@@ -181,7 +184,7 @@ class ShoeRecommendationService:
             if prova:
 
                 return prova, ShoeRecommendationService._rev(
-                    "treino forte, teu par de prova", prova
+                    "treino forte, teu par rápido", prova
                 )
 
             if versatil:

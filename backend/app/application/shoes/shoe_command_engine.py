@@ -44,7 +44,7 @@ maiúsculas; NUNCA troque a marca, expanda ou adivinhe o modelo oficial (ex.: \
 número|0>, "default": <true SÓ se o atleta disser que é o do dia a dia; senão \
 false>}},
     {{"op": "set_default", "shoe": "<id ou nome de um tênis existente>"}},
-    {{"op": "recategorize", "shoe": "<id/nome>", "category": "<prova|versátil|\
+    {{"op": "recategorize", "shoe": "<id/nome>", "category": "<rápido|versátil|\
 dia a dia>"}},
     {{"op": "rule", "match": "<palavra do tipo de treino: tiro|longao|prova|\
 rodagem|...>", "shoe": "<id/nome>"}},
@@ -71,7 +71,7 @@ APENAS se o atleta disser qual é o do dia a dia. Não preencha categoria no "ad
 - CORREÇÃO de função (o atleta discorda da classificação): "os Evo SL são de \
 prova/tiro" / "o Red Hare é super trainer" / "esse é só pra rodagem" -> \
 "recategorize" com a category certa: racer/placa/velocidade/tiro/prova = \
-"prova"; SUPER TRAINER/versátil/encaixa em tudo = "versátil"; trainer de \
+"rápido"; SUPER TRAINER/versátil/encaixa em tudo = "versátil"; trainer de \
 rodagem/amortecido/conforto = "dia a dia".
 - SÓ crie "rule" quando for uma regra DURÁVEL ("SEMPRE uso o Vaporfly nos \
 tiros", "longão é SEMPRE com o X"). É rodízio fixo, pra toda semana.
@@ -467,8 +467,9 @@ class ShoeCommandEngine:
             s.is_default = s.id == shoe.id
 
     # vida útil típica por função (quando o atleta recategoriza, a vida se ajusta
-    # junto — um par de prova gasta mais rápido que um trainer)
-    _CATEGORY_WEAR = {"prova": 450.0, "versátil": 600.0, "dia a dia": 700.0}
+    # junto — um par rápido gasta mais rápido que um trainer). "prova" segue
+    # aceito como sinônimo de "rápido" (dado/fala antiga).
+    _CATEGORY_WEAR = {"rápido": 450.0, "versátil": 600.0, "dia a dia": 700.0}
 
     @staticmethod
     def _recategorize(book: ShoeBook, ref, category) -> bool:
@@ -478,11 +479,7 @@ class ShoeCommandEngine:
 
         shoe = ShoeCommandEngine._resolve(book, ref)
 
-        category = str(category or "").strip().lower()
-
-        if category in ("versatil", "super trainer", "super-trainer"):
-
-            category = "versátil"
+        category = ShoeCommandEngine._canon_category(category)
 
         if shoe is None or category not in ShoeCommandEngine._CATEGORY_WEAR:
 
@@ -677,6 +674,29 @@ class ShoeCommandEngine:
         slug = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
 
         return slug[:24]
+
+    @staticmethod
+    def _canon_category(category) -> str | None:
+        """Normaliza o rótulo de função pros 3 valores canônicos: 'rápido'
+        (racer/placa/velocidade/tiro/prova), 'versátil' (super trainer) ou
+        'dia a dia' (conforto). 'prova' vira 'rápido' (sinônimo). None se não
+        reconhece."""
+
+        text = str(category or "").strip().lower()
+
+        if text in ("rápido", "rapido", "prova", "racer", "race", "veloz"):
+
+            return "rápido"
+
+        if text in ("versátil", "versatil", "super trainer", "super-trainer"):
+
+            return "versátil"
+
+        if text in ("dia a dia", "diaadia", "daily"):
+
+            return "dia a dia"
+
+        return None
 
     @staticmethod
     def _num(value) -> float:

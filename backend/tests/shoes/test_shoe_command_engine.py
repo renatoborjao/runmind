@@ -113,7 +113,8 @@ def test_set_default_switches_daily_shoe(tmp_path):
 
 
 def test_recategorize_changes_function_and_wear(tmp_path):
-    """'os Evo SL são de prova' -> muda categoria + vida útil, sem tocar km."""
+    """'os Evo SL são de prova' -> vira 'rápido' (rótulo atual) + vida útil,
+    sem tocar km. 'prova' é aceito como sinônimo na fala."""
 
     seed = ShoeBook(shoes=[
         Shoe(id="evo", name="Evo SL", category="dia a dia",
@@ -126,7 +127,7 @@ def test_recategorize_changes_function_and_wear(tmp_path):
 
     _, book = _handle(tmp_path, parsed, seed)
 
-    assert book.get("evo").category == "prova"
+    assert book.get("evo").category == "rápido"
     assert book.get("evo").alert_threshold_km == 450.0
 
 

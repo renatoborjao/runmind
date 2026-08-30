@@ -15,12 +15,13 @@ def _classify(gemini_text):
 
 
 def test_classify_returns_category_and_threshold_when_known():
+    """'prova' que a IA trouxer é normalizado pro rótulo atual 'rápido'."""
 
     info = _classify(
         '{"category": "prova", "threshold_km": 420, "known": true}'
     )
 
-    assert info == {"category": "prova", "threshold_km": 420.0}
+    assert info == {"category": "rápido", "threshold_km": 420.0}
 
 
 def test_classify_super_trainer_normalized_to_versatil():
@@ -74,7 +75,7 @@ def test_classify_many_gathers_each_shoe():
             ShoeWebLookup.classify_many(["Vaporfly 3", "Boston 12"])
         )
 
-    assert out["vaporfly 3"] == {"category": "prova", "threshold_km": 450.0}
+    assert out["vaporfly 3"] == {"category": "rápido", "threshold_km": 450.0}
     assert out["boston 12"] == {"category": "dia a dia", "threshold_km": 650.0}
 
 

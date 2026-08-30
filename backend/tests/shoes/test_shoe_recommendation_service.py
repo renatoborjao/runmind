@@ -183,6 +183,30 @@ def test_quality_uses_versatil_when_no_prova():
     assert "super trainer" in reason
 
 
+def test_rapido_label_is_the_fast_bucket_and_reason():
+    """Rótulo atual 'rápido' = balde veloz; a fala diz 'par rápido' (não
+    'prova'). E 'prova' segue aceito como sinônimo (dado antigo)."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
+        Shoe(id="evo", name="Evo SL", category="rápido"),
+    ])
+
+    shoe, reason = _rec(book, _session("Tempo Run"))
+
+    assert shoe.id == "evo"
+    assert "rápido" in reason
+    assert "prova" not in reason
+
+    # retrocompat: um par salvo como 'prova' ainda cai no balde veloz
+    legacy = ShoeBook(shoes=[
+        Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
+        Shoe(id="vapor", name="Vaporfly", category="prova"),
+    ])
+
+    assert _rec(legacy, _session("Tiros"))[0].id == "vapor"
+
+
 def test_prova_beats_versatil_on_quality():
 
     book = ShoeBook(shoes=[
