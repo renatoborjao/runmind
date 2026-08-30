@@ -50,6 +50,8 @@ dia a dia>"}},
 rodagem|...>", "shoe": "<id/nome>"}},
     {{"op": "assign", "shoe": "<id/nome>", "day": "<dia em inglês: Monday..\
 Sunday>"}},
+    {{"op": "set_km", "shoe": "<id/nome>", "km": <TOTAL de km que o par tem \
+hoje>}},
     {{"op": "retire", "shoe": "<id/nome>"}},
     {{"op": "threshold", "shoe": "<id/nome>", "km": <número>}},
     {{"op": "correct_last", "shoe": "<id/nome>"}}
@@ -76,13 +78,21 @@ tiros", "longão é SEMPRE com o X"). É rodízio fixo, pra toda semana.
 - ESCOLHA PONTUAL pra UM dia ("quero usar o Red Hare no domingo", "esse domingo \
 vou de X", "amanhã deixa o Y") -> "assign" com o dia (em inglês). Vale só \
 naquele dia/data, não é regra fixa. Diferente de "rule" (que é pra sempre).
+- CORRIGIR O ODÔMETRO (o total de km do par está errado): "o Novablast tá com \
+80km, não 50", "atualiza a km do Boston pra 200", "corrige o Vaporfly pra 120" \
+-> "set_km" com o TOTAL atual que o atleta informou. É o par que JÁ existe na \
+lista — NUNCA use "add" (não é par novo) NEM "correct_last" (isso é outra coisa: \
+só troca com QUAL tênis foi a última corrida). Uma correção de km = UMA op \
+"set_km", nada além.
 - "hoje/essa corrida foi com o de prova", "corri com o Vaporfly hoje" -> \
-"correct_last" (corrige o ÚLTIMO treino).
+"correct_last" (corrige com QUAL par foi o ÚLTIMO treino — NÃO mexe no total).
 - "aposentei o Boston", "esse tênis já era" -> "retire".
 - "o Vaporfly aguenta só 400km", "esse dura 500" -> "threshold".
 - "quanto tem meu tênis?", "quantos km no Boston?" -> ops=[] e show_status=true.
 - Referencie tênis EXISTENTES por id ou nome como aparecem na lista acima. Só \
-use "add" pra par NOVO (que não está na lista).
+use "add" pra par NOVO (que NÃO está na lista). Se o nome que ele citou já bate \
+com um par da lista (mesmo que abreviado, tipo "Novablast" p/ "Novablast 5"), \
+NÃO é "add" — é set_km/set_default/recategorize/... sobre o par existente.
 
 MENSAGEM DO ATLETA:
 "{message}"
@@ -311,6 +321,10 @@ class ShoeCommandEngine:
 
             return ShoeCommandEngine._set_default(book, op.get("shoe"))
 
+        if kind == "set_km":
+
+            return ShoeCommandEngine._set_km(book, op.get("shoe"), op.get("km"))
+
         if kind == "recategorize":
 
             return ShoeCommandEngine._recategorize(
@@ -349,6 +363,23 @@ class ShoeCommandEngine:
         if not name:
 
             return False
+
+        # ANTI-FANTASMA: a IA às vezes manda "add" pra um par que JÁ está no
+        # armário (ex.: "atualiza a km do Novablast" com o Novablast 5 já lá).
+        # Se o nome casa com um ativo, NÃO duplica: se veio km, é correção de
+        # odômetro; senão, no-op. Assim nunca nasce tênis repetido (nem paga a
+        # pesquisa web de um par que não é novo). Ver [[project_tracker_tenis]].
+        twin = ShoeCommandEngine._resolve(book, name)
+
+        if twin is not None and not twin.retired:
+
+            km = op.get("initial_km")
+
+            return (
+                ShoeCommandEngine._set_km(book, twin.id, km)
+                if km
+                else False
+            )
 
         shoe_id = ShoeCommandEngine._unique_id(book, name)
 
@@ -389,6 +420,42 @@ class ShoeCommandEngine:
             return False
 
         ShoeCommandEngine._make_default(book, shoe)
+
+        return True
+
+    @staticmethod
+    def _set_km(book: ShoeBook, ref, km) -> bool:
+        """Corrige o ODÔMETRO do par: o total passa a ser exatamente `km` (ex.:
+        'o Novablast tá com 80, não 50'). Ajusta a base (km inicial) e PRESERVA
+        o que o app já contou por cima — as corridas nossas continuam somando.
+        NÃO cria par nem move km de outro tênis (isso é o correct_last)."""
+
+        shoe = ShoeCommandEngine._resolve(book, ref)
+
+        value = ShoeCommandEngine._num(km)
+
+        if shoe is None or value < 0:
+
+            return False
+
+        # total = inicial + acumulado. Mantém o acumulado (corridas do app) e
+        # corrige a base pra fechar no total informado.
+        base = round(value - shoe.accumulated_km, 2)
+
+        if base >= 0:
+
+            shoe.initial_km = base
+
+        else:
+
+            # o atleta diz um total MENOR do que o app já somou — confia nele:
+            # zera a base e ancora o acumulado no total.
+            shoe.initial_km = 0.0
+
+            shoe.accumulated_km = value
+
+        # novo total pode cruzar (ou sair de) o limiar de desgaste — rearma
+        shoe.wear_alerted = shoe.total_km >= shoe.alert_threshold_km
 
         return True
 

@@ -236,6 +236,67 @@ def test_assign_pins_shoe_to_next_occurrence_of_day(tmp_path):
     assert book.assignments.get("2026-08-30") == "red"
 
 
+def test_set_km_fixes_odometer_keeping_app_mileage(tmp_path):
+    """'o Novablast tá com 80, não 50' -> total vira 80 exato, preservando o
+    que o app já contou (accumulated) por cima."""
+
+    seed = ShoeBook(shoes=[
+        Shoe(id="novablast-5", name="Novablast 5", is_default=True,
+             initial_km=38.0, accumulated_km=12.0),  # total 50
+    ])
+
+    parsed = {"reply": "Ajustei!", "ops": [
+        {"op": "set_km", "shoe": "novablast-5", "km": 80}], "show_status": True}
+
+    reply, book = _handle(tmp_path, parsed, seed)
+
+    shoe = book.get("novablast-5")
+    assert shoe.total_km == 80.0
+    assert shoe.accumulated_km == 12.0  # corridas do app intactas
+    assert shoe.initial_km == 68.0      # base corrigida (80 - 12)
+    assert "80 km" in reply
+    assert len(book.active()) == 1      # NÃO criou par novo
+
+
+def test_add_for_existing_shoe_is_km_correction_not_a_phantom(tmp_path):
+    """O bug do print: a IA manda 'add' (com km) pra um par que já existe
+    (Novablast ~ Novablast 5). NÃO nasce fantasma — vira correção de odômetro
+    no par existente, e a pesquisa web nem roda (não é par novo)."""
+
+    seed = ShoeBook(shoes=[
+        Shoe(id="novablast-5", name="Novablast 5", is_default=True,
+             initial_km=50.0),
+    ])
+
+    parsed = {"reply": "Ajustei!", "ops": [
+        {"op": "add", "name": "Novablast", "initial_km": 80, "default": False}],
+        "show_status": True}
+
+    web = AsyncMock(return_value={})
+
+    reply, book = _handle(tmp_path, parsed, seed, web_mock=web)
+
+    assert len(book.active()) == 1                 # sem tênis fantasma
+    assert book.get("novablast-5").total_km == 80.0  # km corrigida no certo
+    web.assert_not_awaited()                       # não pesquisou par "novo"
+
+
+def test_add_without_km_for_existing_shoe_is_noop(tmp_path):
+    """'add' sem km pra par que já existe é no-op (nunca duplica)."""
+
+    seed = ShoeBook(shoes=[
+        Shoe(id="novablast-5", name="Novablast 5", is_default=True),
+    ])
+
+    parsed = {"reply": "ok", "ops": [
+        {"op": "add", "name": "Novablast 5", "default": False}],
+        "show_status": False}
+
+    _, book = _handle(tmp_path, parsed, seed)
+
+    assert len(book.active()) == 1
+
+
 def test_research_fills_category_for_new_shoe(tmp_path):
 
     parsed = {
