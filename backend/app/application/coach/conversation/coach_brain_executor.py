@@ -330,7 +330,7 @@ class CoachBrainExecutor:
         _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
 
         plan_text = WeeklyPlanMessageFormatter.week_plan_message(
-            runner.name, plan,
+            runner.name, plan, profile=profile,
         )
 
         # semana nova gerada -> oferece mandar pro relógio (o 'sim' empurra; o

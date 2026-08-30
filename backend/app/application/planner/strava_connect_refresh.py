@@ -94,7 +94,7 @@ class StravaConnectRefresh:
             force=True,
         )
 
-        message = StravaConnectRefresh._message(runner.name, plan)
+        message = StravaConnectRefresh._message(runner.name, plan, profile)
 
         # Leitura de boas-vindas: o coach mostra que ESTUDOU o histórico (ritmo
         # real, forma, evolução) antes de entregar o plano — a 1ª impressão que
@@ -136,7 +136,7 @@ class StravaConnectRefresh:
         StravaRefreshStore.mark(profile)
 
     @staticmethod
-    def _message(name: str, plan: TrainingPlan) -> str:
+    def _message(name: str, plan: TrainingPlan, profile: str | None = None) -> str:
 
         # dias já passados desta semana ficam marcados (não vira "vá fazer"
         # um treino cuja data já passou)
@@ -145,6 +145,7 @@ class StravaConnectRefresh:
                 plan,
                 reference_date=today_local(),
                 past_label="⏭️ (já passou)",
+                profile=profile,
             )
         ).strip()
 

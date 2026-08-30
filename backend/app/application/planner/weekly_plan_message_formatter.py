@@ -33,7 +33,11 @@ class WeeklyPlanMessageFormatter:
     def format(
         runner_name: str,
         plan: TrainingPlan,
+        profile: str | None = None,
     ) -> str:
+        """Plano completo da semana (entrega de domingo). `profile`: quando dado,
+        anexa a sugestão de tênis do coach em cada sessão (silêncio total se o
+        atleta não montou o armário). Ver [[ShoeRecommendationService]]."""
 
         lines = [
             "🏃 Ritmind — Plano da semana",
@@ -46,7 +50,7 @@ class WeeklyPlanMessageFormatter:
         lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan))
 
         lines.extend(
-            WeeklyPlanMessageFormatter.session_lines(plan)
+            WeeklyPlanMessageFormatter.session_lines(plan, profile=profile)
         )
 
         lines.append("Bora treinar! 💪")
@@ -95,10 +99,13 @@ class WeeklyPlanMessageFormatter:
         plan: TrainingPlan,
         reference_date: date | None = None,
         done_days: set[str] | None = None,
+        profile: str | None = None,
     ) -> str:
         """Plano completo da semana, sob demanda ("qual meu plano?"). Com
         `done_days` (dias cumpridos, validados no histórico do Strava), os
-        treinos passados aparecem como ✅ feito ou ❌ não feito."""
+        treinos passados aparecem como ✅ feito ou ❌ não feito. `profile`:
+        anexa a sugestão de tênis do coach nas sessões futuras (silêncio sem
+        armário)."""
 
         reference_date = reference_date or today_local()
 
@@ -118,6 +125,7 @@ class WeeklyPlanMessageFormatter:
                 plan,
                 reference_date,
                 done_days=done_days,
+                profile=profile,
             )
         )
 
@@ -293,12 +301,14 @@ class WeeklyPlanMessageFormatter:
         reference_date: date | None = None,
         past_label: str = "✅ (já feito)",
         done_days: set[str] | None = None,
+        profile: str | None = None,
     ) -> list[str]:
         """Blocos detalhados por sessão, em ordem cronológica — reusado
         pelo resumo, onboarding e plano externo. Com `reference_date`,
         sessões já passadas viram uma linha marcada. Se `done_days` for
         dado, marca ✅ feito / ❌ não feito validando o histórico; senão
-        usa `past_label` fixo (onboarding: "já passou")."""
+        usa `past_label` fixo (onboarding: "já passou"). `profile`: anexa a
+        sugestão de tênis do coach em cada sessão futura (silêncio sem armário)."""
 
         sessions = sorted(
             plan.sessions,
@@ -316,6 +326,7 @@ class WeeklyPlanMessageFormatter:
                     reference_date,
                     past_label,
                     done_days,
+                    profile,
                 )
             )
 
@@ -330,6 +341,7 @@ class WeeklyPlanMessageFormatter:
         reference_date: date | None = None,
         past_label: str = "✅ (já feito)",
         done_days: set[str] | None = None,
+        profile: str | None = None,
     ) -> list[str]:
 
         session_date_obj = plan.session_date(session)
@@ -404,6 +416,16 @@ class WeeklyPlanMessageFormatter:
         if session.adjusted and session.adjustment_reason:
 
             block.append(f"   ⚠️ {session.adjustment_reason}")
+
+        # sugestão de tênis do coach (só nas sessões futuras/de hoje — as
+        # passadas já retornaram acima; silêncio total sem armário)
+        shoe_line = WeeklyPlanMessageFormatter._shoe_line(
+            profile, plan, session
+        )
+
+        if shoe_line:
+
+            block.append(f"   {shoe_line}")
 
         return block
 

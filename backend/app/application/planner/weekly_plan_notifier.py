@@ -137,6 +137,7 @@ class WeeklyPlanNotifier:
         message = WeeklyPlanMessageFormatter.format(
             runner.name,
             plan,
+            profile=profile,
         )
 
         # relógio: quem JÁ sincronizou antes (tem snapshot) recebe a semana
@@ -252,6 +253,7 @@ class WeeklyPlanNotifier:
             message = WeeklyPlanMessageFormatter.format(
                 runner.name,
                 plan,
+                profile=profile,
             )
 
         else:

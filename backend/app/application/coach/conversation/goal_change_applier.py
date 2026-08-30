@@ -205,7 +205,7 @@ class GoalChangeApplier:
             _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
 
             plan_text = WeeklyPlanMessageFormatter.week_plan_message(
-                runner.name, plan
+                runner.name, plan, profile=profile
             )
 
             # a semana foi REGENERADA: o relógio ficou defasado -> oferece
@@ -305,6 +305,7 @@ class GoalChangeApplier:
         plan_text = WeeklyPlanMessageFormatter.week_plan_message(
             runner.name,
             plan,
+            profile=profile,
         )
 
         # a semana foi REGENERADA pra meta nova: o relógio ficou defasado ->

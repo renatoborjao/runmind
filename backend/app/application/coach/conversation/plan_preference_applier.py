@@ -93,6 +93,7 @@ class PlanPreferenceApplier:
         plan_text = WeeklyPlanMessageFormatter.week_plan_message(
             runner.name,
             plan,
+            profile=profile,
         )
 
         # mudança de DIA de treino: informa e PERGUNTA se quer no relógio
