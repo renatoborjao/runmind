@@ -1,3 +1,7 @@
+from app.application.history.training_reality_analyzer import (
+    TrainingRealityAnalyzer,
+    training_reality_directive,
+)
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.weekdays import weekday_label
 from app.domain.entities.adherence_report import AdherenceReport
@@ -58,6 +62,20 @@ class PlanContextBuilder:
             f"({len(runner.preferred_running_days)}x/semana) — respeite "
             "essa frequência."
         )
+
+        # REALIDADE × PLANO: o que ele FAZ de verdade (frequência/volume reais
+        # do histórico) pode divergir do registrado — dimensione à VERDADE dele,
+        # sem subestimar quem faz mais nem forçar quem faz menos. Vazio quando
+        # batem. Ver [[TrainingRealityAnalyzer]] e [[feedback_tudo_dinamico]].
+        reality = training_reality_directive(
+            TrainingRealityAnalyzer.assess(
+                len(runner.preferred_running_days), baseline
+            )
+        )
+
+        if reality:
+
+            lines.append(reality)
 
         # a preferência de DIA do longão não é campo rígido: vive na memória
         # evolutiva (injetada abaixo em "Memória do atleta") como qualquer
