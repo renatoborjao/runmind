@@ -6,6 +6,7 @@ from app.application.history.training_reality_analyzer import (
     OVER,
     UNDER,
     TrainingRealityAnalyzer,
+    frequency_reconcile_message,
     training_reality_directive,
 )
 
@@ -91,3 +92,19 @@ def test_only_last_four_weeks_count():
     v = TrainingRealityAnalyzer.assess(3, _acts([5, 5, 3, 3, 3, 3]))
 
     assert v.verdict == ALIGNED  # as 4 últimas são 3,3,3,3
+
+
+def test_frequency_message_asks_to_officialize_on_over():
+
+    v = TrainingRealityAnalyzer.assess(3, _acts([4, 4, 3, 4]))
+
+    msg = frequency_reconcile_message("Hélio", v)
+
+    assert "4 dias" in msg and "Hélio" in msg
+
+
+def test_frequency_message_empty_when_aligned():
+
+    v = TrainingRealityAnalyzer.assess(3, _acts([3, 3, 3, 3]))
+
+    assert frequency_reconcile_message("Hélio", v) == ""

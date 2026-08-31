@@ -115,3 +115,26 @@ def training_reality_directive(verdict: RealityVerdict) -> str:
         )
 
     return ""
+
+
+def frequency_reconcile_message(runner_name: str, verdict: RealityVerdict) -> str:
+    """A pergunta ATHLETE-facing do coach quando ele vem treinando ALÉM dos dias
+    registrados de forma rotineira: quer oficializar mais um dia? Orientar, não
+    mandar — o atleta decide. Vazia quando não é 'over'."""
+
+    if verdict.verdict != OVER:
+
+        return ""
+
+    real = round(verdict.real_runs_per_week)
+
+    reg = verdict.registered_days
+
+    return (
+        f"{runner_name}, reparei que você vem metendo um treino a mais além dos "
+        f"{reg} do teu plano — já faz umas semanas ({real}x por semana na real). "
+        f"👊 Quer que eu passe teu plano pra {real} dias/semana? Aí eu monto já "
+        "contando com esse dia e distribuo melhor a carga (em vez de você somar "
+        f"por fora). Se preferir manter os {reg} e o extra ficar livre, também "
+        "tá ótimo — é só me dizer."
+    )

@@ -2,6 +2,9 @@ from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.application.coach.intelligence.coach_reconcile_notifier import (
+    CoachReconcileNotifier,
+)
 from app.application.garmin.garmin_activity_poller import (
     GarminActivityPoller,
 )
@@ -228,6 +231,20 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="watch_update_reminder",
+    )
+
+    # Conversas de RECONCILIAÇÃO — de hora em hora (gate de horário/flag no
+    # notifier): quando o atleta treina em ROTINA além dos dias registrados, o
+    # coach pergunta se quer oficializar o dia; e quando a META está vaga, pede
+    # pra cravar. DESLIGADA por padrão (coach_reconcile_enabled=false) — no-op
+    # até o Renato liberar. Uma por atleta/dia, dedup, governada. Ver
+    # [[project_reconciliacao_coach]].
+    _scheduler.add_job(
+        CoachReconcileNotifier.notify_all,
+        trigger="cron",
+        minute=0,
+        misfire_grace_time=3600,
+        id="coach_reconcile",
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã

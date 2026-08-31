@@ -264,6 +264,38 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # Conversas de RECONCILIAÇÃO do coach (perguntas que fecham lacunas): quando
+    # o atleta treina em ROTINA além dos dias registrados, o coach pergunta se
+    # quer oficializar mais um dia; e quando a META está vaga (sem prova/prazo),
+    # pede pra cravar. Uma vez só (dedup), governado, orientar-não-repetir.
+    # DESLIGADA até validar offline + o Renato liberar. Ver
+    # [[project_reconciliacao_coach]] e [[feedback_orientar_nao_mandar]].
+    coach_reconcile_enabled: bool = False
+
+    # Canário: quando não-vazio, roda SÓ nestes perfis. Vazio = todos (com a
+    # flag global ligada). Perfis separados por vírgula.
+    coach_reconcile_profiles: str = ""
+
+    @property
+    def coach_reconcile_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.coach_reconcile_profiles.split(",")
+            if p.strip()
+        ]
+
+    def coach_reconcile_active_for(self, profile: str) -> bool:
+        """As conversas de reconciliação atendem este perfil? (flag + canário)."""
+
+        if not self.coach_reconcile_enabled:
+
+            return False
+
+        allow = self.coach_reconcile_profile_list
+
+        return not allow or profile in allow
+
     @property
     def cors_origin_list(self) -> list[str]:
 
