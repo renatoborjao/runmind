@@ -231,6 +231,12 @@ class AIPlanService:
         # no plano — não só via aprendizado semanal. Ver [[feedback_base_historico_sempre]].
         subjective = AIPlanService._subjective(profile)
 
+        # REALIDADE × PLANO: ele treina de verdade a frequência/volume que o
+        # coach prescreve? Só afirma ROTINA (maioria das semanas), nunca um pico
+        # isolado; o coach dimensiona o VOLUME à verdade (a frequência é conversa
+        # à parte). Best-effort. Ver [[TrainingRealityAnalyzer]].
+        reality_directive = AIPlanService._reality_directive(runner, history)
+
         return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
@@ -249,7 +255,32 @@ class AIPlanService:
             body_directive=body_directive,
             fitness_directive=fitness_directive,
             subjective=subjective,
+            reality_directive=reality_directive,
         )
+
+    @staticmethod
+    def _reality_directive(runner, history) -> str:
+        """Diretriz de REALIDADE × PLANO: frequência/volume reais (do histórico)
+        vs os dias registrados. Best-effort — falhar aqui nunca derruba o plano."""
+
+        try:
+
+            from app.application.history.training_reality_analyzer import (
+                TrainingRealityAnalyzer,
+                training_reality_directive,
+            )
+
+            verdict = TrainingRealityAnalyzer.assess(
+                len(runner.preferred_running_days), history.activities
+            )
+
+            return training_reality_directive(verdict)
+
+        except Exception as e:
+
+            print(f"Diretriz de realidade falhou p/ '{runner.id}': {e}")
+
+            return ""
 
     @staticmethod
     def _subjective(profile: str) -> str:

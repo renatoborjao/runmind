@@ -1,3 +1,6 @@
+from datetime import date, timedelta
+from types import SimpleNamespace
+
 from app.application.history.training_reality_analyzer import (
     ALIGNED,
     OVER,
@@ -5,67 +8,86 @@ from app.application.history.training_reality_analyzer import (
     TrainingRealityAnalyzer,
     training_reality_directive,
 )
-from app.domain.entities.runner_baseline import RunnerBaseline
+
+_MONDAY = date(2026, 8, 3)  # uma segunda qualquer
 
 
-def _baseline(runs_per_week, weekly_km=25.0, has_history=True) -> RunnerBaseline:
+def _acts(weekly_counts, km_each=6.0):
+    """Gera atividades: uma lista de contagens por semana (antiga->recente),
+    cada corrida com `km_each` km."""
 
-    return RunnerBaseline(
-        has_history=has_history,
-        weekly_km=weekly_km,
-        last_week_km=weekly_km,
-        max_week_km=weekly_km,
-        runs_per_week=runs_per_week,
-        typical_run_km=6.0,
-        longest_km=12.0,
-        trend="estável",
-    )
+    acts = []
+
+    for w, n in enumerate(weekly_counts):
+
+        week_monday = _MONDAY + timedelta(days=7 * w)
+
+        for r in range(n):
+
+            day = week_monday + timedelta(days=r)
+
+            acts.append(
+                SimpleNamespace(
+                    start_date=day.isoformat(),
+                    start_date_local=day.isoformat(),
+                    distance=km_each * 1000,
+                )
+            )
+
+    return acts
 
 
-def test_over_delivery_when_runs_more_than_registered():
-    """Hélio: registrou 3, corre ~5x -> descolamento 'over'."""
+def test_routine_over_when_exceeds_in_majority_of_weeks():
+    """Hélio: 4,4,3,4 nas últimas 4 -> 4x em 3 delas = rotina 'over'."""
 
-    v = TrainingRealityAnalyzer.assess(3, _baseline(5.0, weekly_km=28.0))
+    v = TrainingRealityAnalyzer.assess(3, _acts([4, 4, 3, 4]))
 
     assert v.verdict == OVER
+    assert v.weeks_over == 3
     d = training_reality_directive(v)
-    assert "5x" in d and "28 km" in d and "dimensione" in d.lower()
+    assert "MAIORIA" in d and "NÃO adicione dias" in d
 
 
-def test_under_delivery_when_runs_less_than_registered():
+def test_single_spike_is_not_routine():
+    """Maurício: 2,4,6,3 -> um pico de 6, over só em 2 de 4 -> NÃO dispara."""
 
-    v = TrainingRealityAnalyzer.assess(4, _baseline(2.0, weekly_km=12.0))
+    v = TrainingRealityAnalyzer.assess(3, _acts([2, 4, 6, 3]))
+
+    assert v.verdict == ALIGNED
+    assert training_reality_directive(v) == ""
+
+
+def test_aligned_when_hits_registered():
+
+    v = TrainingRealityAnalyzer.assess(3, _acts([3, 3, 3, 3]))
+
+    assert v.verdict == ALIGNED
+
+
+def test_routine_under_when_below_in_majority():
+
+    v = TrainingRealityAnalyzer.assess(4, _acts([2, 2, 3, 2]))
 
     assert v.verdict == UNDER
     assert "cumpre" in training_reality_directive(v)
 
 
-def test_aligned_when_reality_matches_registration():
+def test_insufficient_weeks_never_asserts():
+    """Menos de 4 semanas ativas: não dá pra afirmar rotina."""
 
-    v = TrainingRealityAnalyzer.assess(3, _baseline(3.0))
-
-    assert v.verdict == ALIGNED
-    assert training_reality_directive(v) == ""
-
-
-def test_small_gap_is_aligned_not_flagged():
-    """3 registrados x 3.5 reais é ruído de rotina, não descolamento."""
-
-    v = TrainingRealityAnalyzer.assess(3, _baseline(3.5))
+    v = TrainingRealityAnalyzer.assess(3, _acts([4, 5, 4]))
 
     assert v.verdict == ALIGNED
 
 
-def test_no_real_history_never_asserts():
-    """Só declarado (sem Strava): não afirma nada — evita chutar no vácuo."""
+def test_zero_registered_is_aligned():
 
-    v = TrainingRealityAnalyzer.assess(3, _baseline(6.0, has_history=False))
-
-    assert v.verdict == ALIGNED
-    assert training_reality_directive(v) == ""
+    assert TrainingRealityAnalyzer.assess(0, _acts([4, 4, 4, 4])).verdict == ALIGNED
 
 
-def test_zero_registered_or_zero_real_is_aligned():
+def test_only_last_four_weeks_count():
+    """Semanas antigas de over não contam se as 4 recentes batem."""
 
-    assert TrainingRealityAnalyzer.assess(0, _baseline(5.0)).verdict == ALIGNED
-    assert TrainingRealityAnalyzer.assess(3, _baseline(0.0)).verdict == ALIGNED
+    v = TrainingRealityAnalyzer.assess(3, _acts([5, 5, 3, 3, 3, 3]))
+
+    assert v.verdict == ALIGNED  # as 4 últimas são 3,3,3,3

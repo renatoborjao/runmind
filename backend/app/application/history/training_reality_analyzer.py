@@ -1,29 +1,30 @@
 """REALIDADE × PLANO: o atleta treina o que o coach prescreve, ou vive por conta
 própria? O `preferred_running_days` é o que ele REGISTROU (rígido); o que ele
-FAZ de verdade (frequência/volume reais, do histórico) pode ser bem diferente —
-o Hélio registrou 3 dias e corre ~5x/~28 km. Sem ler isso, o coach subestima
-quem faz MAIS (plano descola da realidade) ou insiste com quem faz MENOS (plano
-que ele nunca cumpre).
+FAZ de verdade pode divergir — o Hélio registrou 3 dias e faz 4x na maioria das
+semanas. Sem ler isso, o coach subestima o volume de quem faz MAIS (plano
+descola) ou insiste com quem faz MENOS (plano que ele nunca cumpre).
 
-Puro/determinístico: recebe o baseline (já traz `runs_per_week` e `weekly_km`
-reais) + os dias registrados, e vira uma diretriz pra o gerador dimensionar o
-plano à VERDADE. Não fala com o atleta nem decide sozinho. Ver
-[[feedback_tudo_dinamico]], [[feedback_base_historico_sempre]] e
+REGRA (Renato): uma semana isolada NÃO é nada — só quando o comportamento é
+ROTINA (se repete na maioria das últimas semanas) é que conta. E o coach nunca
+muda a FREQUÊNCIA sozinho: o plano só garante o piso de VOLUME nos dias
+registrados; oficializar mais um dia é uma CONVERSA (o atleta decide).
+
+Puro/determinístico: conta as corridas reais por semana. Não fala com o atleta.
+Ver [[feedback_tudo_dinamico]], [[feedback_base_historico_sempre]] e
 [[project_track_a_plano_fiel]]."""
 
 from dataclasses import dataclass
+from statistics import mean
 
-from app.domain.entities.runner_baseline import RunnerBaseline
+from app.application.history.weekly_buckets import group_by_week
 
-# descolamento = ~1 treino a mais (ou a menos) na MAIORIA das semanas. Como o
-# runs_per_week é média de 4 semanas ativas, 0.75 pega o "3.8 vs 3" (uma corrida
-# extra em ~3 de 4 semanas — padrão do Hélio/Maurício) e ainda trata 3.5 vs 3
-# como ruído de rotina.
-_FREQ_GAP = 0.75
+# as últimas N semanas ATIVAS definem a "rotina"; precisa de N pra afirmar
+# (menos que isso, não dá pra separar rotina de uma fase pontual)
+_WINDOW = 4
 
-# margem do volume: só cita "faz mais km" quando é claramente acima (evita
-# ruído de uma semana forte)
-_KM_OVER_RATIO = 1.20
+# em quantas dessas semanas o comportamento precisa aparecer pra ser ROTINA
+# (3 de 4 = maioria forte; um pico isolado — o 6 do Maurício — não dispara)
+_ROUTINE = 3
 
 OVER, UNDER, ALIGNED = "over", "under", "aligned"
 
@@ -35,56 +36,72 @@ class RealityVerdict:
     registered_days: int
     real_runs_per_week: float
     real_weekly_km: float
+    weeks_over: int
+    window: int
 
 
 class TrainingRealityAnalyzer:
 
     @staticmethod
-    def assess(
-        registered_days: int, baseline: RunnerBaseline
-    ) -> RealityVerdict:
-        """Compara a frequência REAL (baseline) com os dias REGISTRADOS. Só
-        afirma com histórico real (Strava) — sem lastro, nada a dizer."""
-
-        real = round(baseline.runs_per_week or 0.0, 1)
+    def assess(registered_days: int, activities: list) -> RealityVerdict:
+        """Conta as corridas por SEMANA nas últimas `_WINDOW` semanas ativas e
+        decide se o atleta rotineiramente faz MAIS (ou MENOS) que os dias
+        registrados. Sem semanas suficientes, nada a afirmar (aligned)."""
 
         reg = int(registered_days or 0)
 
-        aligned = RealityVerdict(ALIGNED, reg, real, baseline.weekly_km)
+        buckets = group_by_week(activities or [])
 
-        # sem histórico real (só declarado) ou sem dias registrados: não afirma
-        if not baseline.has_history or reg <= 0 or real <= 0:
+        recent = sorted(buckets)[-_WINDOW:]
 
-            return aligned
+        empty = RealityVerdict(ALIGNED, reg, 0.0, 0.0, 0, len(recent))
 
-        if real >= reg + _FREQ_GAP:
+        if reg <= 0 or len(recent) < _WINDOW:
 
-            return RealityVerdict(OVER, reg, real, baseline.weekly_km)
+            return empty
 
-        if real <= reg - _FREQ_GAP:
+        counts = [len(buckets[k]) for k in recent]
 
-            return RealityVerdict(UNDER, reg, real, baseline.weekly_km)
+        kms = [
+            sum(a.distance for a in buckets[k]) / 1000 for k in recent
+        ]
 
-        return aligned
+        over = sum(1 for c in counts if c > reg)
+
+        under = sum(1 for c in counts if c < reg)
+
+        avg_runs = round(mean(counts), 1)
+
+        avg_km = round(mean(kms))
+
+        if over >= _ROUTINE:
+
+            return RealityVerdict(OVER, reg, avg_runs, avg_km, over, len(recent))
+
+        if under >= _ROUTINE:
+
+            return RealityVerdict(UNDER, reg, avg_runs, avg_km, under, len(recent))
+
+        return RealityVerdict(ALIGNED, reg, avg_runs, avg_km, over, len(recent))
 
 
 def training_reality_directive(verdict: RealityVerdict) -> str:
-    """Diretriz COACH-facing pro plano: dimensione à realidade do atleta.
-    Vazio quando plano e realidade já batem — sem ruído."""
+    """Diretriz COACH-facing pro plano. NÃO manda mudar a frequência (isso é
+    conversa com o atleta); só garante o piso de VOLUME nos dias registrados.
+    Vazio quando plano e realidade já batem."""
 
     if verdict.verdict == OVER:
 
         return (
-            f"REALIDADE × PLANO (dimensione à VERDADE dele): ele registrou "
-            f"{verdict.registered_days} dias/semana, mas vem CORRENDO "
-            f"~{verdict.real_runs_per_week:.0f}x (~{verdict.real_weekly_km:.0f} "
-            "km) de verdade nas últimas semanas — treina por conta além do "
-            "plano. NÃO o subestime devolvendo menos do que ele já faz sozinho: "
-            f"dimensione o plano pra ~{verdict.real_runs_per_week:.0f} dias e o "
-            "volume à altura do que ele sustenta, com progressão segura e a "
-            "variação de estímulo da fase/meta. Se fizer sentido manter os dias "
-            "registrados, ao menos distribua o volume REAL neles — nunca um "
-            "plano abaixo do que ele treina."
+            f"REALIDADE × PLANO: ele registrou {verdict.registered_days} dias, "
+            f"mas vem correndo ~{verdict.real_runs_per_week:.0f}x "
+            f"(~{verdict.real_weekly_km:.0f} km) de verdade na MAIORIA das "
+            "últimas semanas — treina além do plano de forma consistente. NÃO o "
+            f"subestime: prescreva o volume à altura do que ele já faz "
+            f"(~{verdict.real_weekly_km:.0f} km), distribuído nos "
+            f"{verdict.registered_days} dias registrados (sessões mais "
+            "completas). NÃO adicione dias por conta própria — a frequência é "
+            "escolha dele; o piso é o volume real."
         )
 
     if verdict.verdict == UNDER:
@@ -92,9 +109,9 @@ def training_reality_directive(verdict: RealityVerdict) -> str:
         return (
             f"REALIDADE × PLANO: ele registrou {verdict.registered_days} dias, "
             f"mas só vem sustentando ~{verdict.real_runs_per_week:.0f}x "
-            f"(~{verdict.real_weekly_km:.0f} km) nas últimas semanas. Ancore no "
-            "que ele REALMENTE cumpre em vez de forçar dias que ele fura — um "
-            "plano que ele fecha vale mais que um cheio que o frustra."
+            f"(~{verdict.real_weekly_km:.0f} km) na maioria das últimas semanas. "
+            "Ancore no que ele REALMENTE cumpre em vez de forçar dias que ele "
+            "fura — um plano que ele fecha vale mais que um cheio que o frustra."
         )
 
     return ""
