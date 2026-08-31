@@ -15,9 +15,11 @@ from dataclasses import dataclass
 
 from app.domain.entities.runner_baseline import RunnerBaseline
 
-# corre pelo menos 1 dia A MAIS (ou A MENOS) que o registrado, de forma
-# sustentada (o runs_per_week já é média de 4 semanas ativas) -> descolamento
-_FREQ_GAP = 1.0
+# descolamento = ~1 treino a mais (ou a menos) na MAIORIA das semanas. Como o
+# runs_per_week é média de 4 semanas ativas, 0.75 pega o "3.8 vs 3" (uma corrida
+# extra em ~3 de 4 semanas — padrão do Hélio/Maurício) e ainda trata 3.5 vs 3
+# como ruído de rotina.
+_FREQ_GAP = 0.75
 
 # margem do volume: só cita "faz mais km" quando é claramente acima (evita
 # ruído de uma semana forte)
