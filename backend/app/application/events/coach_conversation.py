@@ -232,6 +232,33 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # "SIM" pra oferta de OFICIALIZAR um dia a mais (o coach viu que ele
+        # treina em rotina além dos dias registrados e perguntou). Resolve
+        # determinístico ANTES do cérebro: atualiza os dias, regera a semana e
+        # arma a oferta de relógio. Só age com oferta pendente. Ver
+        # [[project_reconciliacao_coach]].
+        if reply_text is None:
+
+            try:
+
+                from app.application.coach.conversation.frequency_reconcile_flow import (  # noqa: E501
+                    FrequencyReconcileFlow,
+                )
+
+                reply_text = await FrequencyReconcileFlow.resolve_reply(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Reconciliação de frequência de '{profile}': {e}")
+
+                reply_text = None
+
         # O cérebro está ativo pra este perfil? Além de escolher o caminho, isso
         # faz a cascata abaixo PULAR os fluxos de MUTAÇÃO que o cérebro já cobre
         # (mover/pular/ajustar/avulso/aversão/rotina/objetivo/preferência) —

@@ -19,6 +19,7 @@ from app.application.coach.intelligence.goal_clarity_checker import (
     goal_clarity_message,
 )
 from app.application.history.training_reality_analyzer import (
+    OVER,
     TrainingRealityAnalyzer,
     frequency_reconcile_message,
 )
@@ -28,7 +29,11 @@ from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import LoadTrainingHistory
 from app.core.clock import now_in, use_athlete_timezone
 from app.core.config import get_settings
+from app.core.weekdays import weekday_label
 from app.infrastructure.persistence.dispatch_guard import DispatchGuard
+from app.infrastructure.persistence.frequency_offer_store import (
+    FrequencyOfferStore,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -106,11 +111,23 @@ class CoachReconcileNotifier:
 
         verdict = TrainingRealityAnalyzer.assess(reg, history.activities)
 
-        message = frequency_reconcile_message(runner.name, verdict)
-
-        if not message:
+        if verdict.verdict != OVER:
 
             return None
+
+        # o dia que ele mais adiciona — só pergunta se há um dia CLARO pra
+        # oficializar (senão o "sim" não teria o que aplicar)
+        weekday = TrainingRealityAnalyzer.extra_weekday(
+            runner.preferred_running_days, history.activities
+        )
+
+        if not weekday:
+
+            return None
+
+        message = frequency_reconcile_message(
+            runner.name, verdict, weekday_label(weekday)
+        )
 
         # dedup por nº de dias registrados: se ele mudar os dias, re-elegível
         key = f"{reg}->{round(verdict.real_runs_per_week)}"
@@ -120,6 +137,11 @@ class CoachReconcileNotifier:
             return None
 
         DispatchGuard.mark("reconcile_freq", profile, key)
+
+        # estagia a oferta pra o "sim" saber o que aplicar (dia/nº de dias)
+        FrequencyOfferStore.set_pending(
+            profile, round(verdict.real_runs_per_week), weekday
+        )
 
         return message
 

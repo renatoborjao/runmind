@@ -108,3 +108,22 @@ def test_frequency_message_empty_when_aligned():
     v = TrainingRealityAnalyzer.assess(3, _acts([3, 3, 3, 3]))
 
     assert frequency_reconcile_message("Hélio", v) == ""
+
+
+def test_extra_weekday_finds_the_added_day():
+    """Registrado Seg/Qua/Sáb; ele também corre sexta -> 'Friday'."""
+
+    # _acts gera corridas a partir de segunda: n=4 -> Seg,Ter,Qua,Qui
+    v_acts = _acts([4, 4, 4, 4])
+
+    day = TrainingRealityAnalyzer.extra_weekday(
+        ["Monday", "Wednesday", "Saturday"], v_acts
+    )
+
+    # o extra mais comum fora dos registrados é terça ou quinta (Tue/Thu)
+    assert day in ("Tuesday", "Thursday")
+
+
+def test_extra_weekday_none_without_activities():
+
+    assert TrainingRealityAnalyzer.extra_weekday(["Monday"], []) is None

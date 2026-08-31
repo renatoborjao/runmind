@@ -13,10 +13,16 @@ Puro/determinístico: conta as corridas reais por semana. Não fala com o atleta
 Ver [[feedback_tudo_dinamico]], [[feedback_base_historico_sempre]] e
 [[project_track_a_plano_fiel]]."""
 
+from collections import Counter
 from dataclasses import dataclass
 from statistics import mean
 
-from app.application.history.weekly_buckets import group_by_week
+from app.application.history.weekly_buckets import activity_date, group_by_week
+
+_WEEKDAY_NAMES = [
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    "Sunday",
+]
 
 # as últimas N semanas ATIVAS definem a "rotina"; precisa de N pra afirmar
 # (menos que isso, não dá pra separar rotina de uma fase pontual)
@@ -84,6 +90,38 @@ class TrainingRealityAnalyzer:
 
         return RealityVerdict(ALIGNED, reg, avg_runs, avg_km, over, len(recent))
 
+    @staticmethod
+    def extra_weekday(registered_weekdays: list[str], activities: list):
+        """O dia da semana (nome em inglês) que ele mais corre FORA dos
+        registrados, nas últimas semanas ativas — o dia a oficializar quando ele
+        topa. None se não há um extra claro."""
+
+        registered = {d for d in registered_weekdays or []}
+
+        buckets = group_by_week(activities or [])
+
+        recent = sorted(buckets)[-_WINDOW:]
+
+        counts: Counter = Counter()
+
+        for key in recent:
+
+            for activity in buckets[key]:
+
+                try:
+
+                    name = _WEEKDAY_NAMES[activity_date(activity).weekday()]
+
+                except (ValueError, TypeError):
+
+                    continue
+
+                if name not in registered:
+
+                    counts[name] += 1
+
+        return counts.most_common(1)[0][0] if counts else None
+
 
 def training_reality_directive(verdict: RealityVerdict) -> str:
     """Diretriz COACH-facing pro plano. NÃO manda mudar a frequência (isso é
@@ -117,10 +155,13 @@ def training_reality_directive(verdict: RealityVerdict) -> str:
     return ""
 
 
-def frequency_reconcile_message(runner_name: str, verdict: RealityVerdict) -> str:
+def frequency_reconcile_message(
+    runner_name: str, verdict: RealityVerdict, weekday_label: str | None = None
+) -> str:
     """A pergunta ATHLETE-facing do coach quando ele vem treinando ALÉM dos dias
     registrados de forma rotineira: quer oficializar mais um dia? Orientar, não
-    mandar — o atleta decide. Vazia quando não é 'over'."""
+    mandar — o atleta decide. Vazia quando não é 'over'. `weekday_label` (em
+    pt) cita o dia que ele mais adiciona."""
 
     if verdict.verdict != OVER:
 
@@ -130,11 +171,15 @@ def frequency_reconcile_message(runner_name: str, verdict: RealityVerdict) -> st
 
     reg = verdict.registered_days
 
+    dia = f" — geralmente {weekday_label}" if weekday_label else ""
+
+    com_dia = f" (fixando o {weekday_label})" if weekday_label else ""
+
     return (
         f"{runner_name}, reparei que você vem metendo um treino a mais além dos "
-        f"{reg} do teu plano — já faz umas semanas ({real}x por semana na real). "
-        f"👊 Quer que eu passe teu plano pra {real} dias/semana? Aí eu monto já "
-        "contando com esse dia e distribuo melhor a carga (em vez de você somar "
-        f"por fora). Se preferir manter os {reg} e o extra ficar livre, também "
-        "tá ótimo — é só me dizer."
+        f"{reg} do teu plano{dia}, já faz umas semanas ({real}x por semana na "
+        f"real). 👊 Quer que eu passe teu plano pra {real} dias/semana{com_dia}? "
+        "Aí eu monto já contando com ele e distribuo melhor a carga, em vez de "
+        f"você somar por fora. Se preferir manter os {reg} e o extra ficar "
+        "livre, também tá ótimo — é só dizer."
     )
