@@ -5,7 +5,12 @@ determinística, nunca texto na memória. Ver [[project_tracker_tenis]]."""
 import json
 from pathlib import Path
 
-from app.domain.entities.shoe import Shoe, ShoeBook, ShoeRule
+from app.domain.entities.shoe import (
+    Shoe,
+    ShoeBook,
+    ShoeRule,
+    heal_mojibake,
+)
 
 
 class ShoeRepository:
@@ -96,7 +101,11 @@ class ShoeRepository:
                 id=s["id"],
                 name=s["name"],
                 nickname=s.get("nickname"),
-                category=s.get("category"),
+                # cura mojibake de dado antigo ('versÃ¡til' -> 'versátil'): a
+                # categoria corrompida quebrava listagem, agrupamento E a
+                # recomendação (que casa por substring). Curar na LEITURA blinda
+                # todo leitor e auto-repara no próximo save.
+                category=heal_mojibake(s.get("category")),
                 gear_id=s.get("gear_id"),
                 is_default=s.get("is_default", False),
                 retired=s.get("retired", False),

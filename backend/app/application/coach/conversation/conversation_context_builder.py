@@ -183,6 +183,19 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{state}\n"
 
+        # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
+        # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
+        # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir
+        # enxuto. Ver [[project_tracker_tenis]] e [[project_consumo_tokens]].
+        armario = ConversationContextBuilder._shoe_armario(
+            profile,
+            incoming_text,
+        )
+
+        if armario:
+
+            facts = f"{facts}\n{armario}\n"
+
         memory = RunnerMemoryService.render(profile)
 
         if memory:
@@ -474,6 +487,77 @@ class ConversationContextBuilder:
             "a trajetória inteira ao analisar, propor e responder, nunca só o "
             "dia de hoje):\n" + "\n".join(lines)
         )
+
+    # rótulo amigável de cada função no grounding do chat
+    _SHOE_CATEGORY_PT = {
+        "rápido": "rápido (tiros/prova)",
+        "versátil": "versátil (serve pra tudo)",
+        "dia a dia": "dia a dia (rodagem/longão)",
+    }
+
+    _SHOE_KEYWORDS = (
+        "tênis", "tenis", "calçado", "calcado", "sapato", "par novo",
+        "rodízio", "rodizio", "solado", "amortec",
+    )
+
+    @staticmethod
+    def _shoe_armario(profile: str, incoming_text: str) -> str:
+        """Armário REAL do atleta (pares + função + km) pro coach falar de tênis
+        ancorado — nunca inventar modelo. Portão barato: só entra quando a
+        mensagem cita tênis ou o nome de um par do armário. Best-effort."""
+
+        try:
+
+            from app.domain.entities.shoe import canonical_category
+            from app.infrastructure.persistence.shoe_repository import (
+                ShoeRepository,
+            )
+
+            active = ShoeRepository().load(profile).active()
+
+            if not active:
+
+                return ""
+
+            text = (incoming_text or "").lower()
+
+            mentions = any(
+                kw in text for kw in ConversationContextBuilder._SHOE_KEYWORDS
+            ) or any(
+                s.name.lower() in text
+                or (s.nickname and s.nickname.lower() in text)
+                for s in active
+            )
+
+            if not mentions:
+
+                return ""
+
+            lines = [
+                "ARMÁRIO DE TÊNIS DO ATLETA (estes são os ÚNICOS pares que ele "
+                "tem — para falar de tênis use SÓ esta lista; NUNCA invente nem "
+                "cite um modelo que não está aqui):"
+            ]
+
+            for s in active:
+
+                cat = ConversationContextBuilder._SHOE_CATEGORY_PT.get(
+                    canonical_category(s.category), "sem categoria definida"
+                )
+
+                default = " [par padrão]" if s.is_default else ""
+
+                lines.append(
+                    f"- {s.label}: {cat}{default} — {round(s.total_km)} km"
+                )
+
+            return "\n".join(lines)
+
+        except Exception as e:
+
+            print(f"Armário de tênis falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _prehab_line(profile: str, risk) -> str:

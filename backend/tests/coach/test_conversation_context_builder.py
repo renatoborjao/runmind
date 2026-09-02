@@ -807,3 +807,65 @@ def test_athlete_state_is_best_effort_when_everything_fails():
         out = ConversationContextBuilder._athlete_state("renato")
 
     assert out == ""
+
+
+# ---- grounding do armário de tênis (mata o "Corre 4") ---------------------
+
+
+def _armario_book():
+
+    from app.domain.entities.shoe import Shoe, ShoeBook
+
+    return ShoeBook(shoes=[
+        Shoe(id="vomero", name="Vomero Plus", category="dia a dia",
+             is_default=True, initial_km=200.0),
+        Shoe(id="sonic", name="SonicBlast", category="versÃ¡til"),  # mojibake
+    ])
+
+
+def _shoe_armario(text):
+
+    repo = MagicMock()
+    repo.load.return_value = _armario_book()
+
+    with patch(
+        "app.infrastructure.persistence.shoe_repository.ShoeRepository",
+        return_value=repo,
+    ):
+
+        return ConversationContextBuilder._shoe_armario("renato", text)
+
+
+def test_shoe_armario_injects_real_shoes_when_asked():
+
+    out = _shoe_armario("que tênis uso no tiro?")
+
+    assert "SonicBlast" in out and "Vomero Plus" in out
+    assert "versátil" in out          # mojibake curado no grounding
+    assert "ÚNICOS" in out            # trava anti-alucinação
+    assert "par padrão" in out
+
+
+def test_shoe_armario_triggers_on_shoe_name_even_without_keyword():
+
+    out = _shoe_armario("o sonicblast é bom pra longão?")
+
+    assert "SonicBlast" in out
+
+
+def test_shoe_armario_silent_when_off_topic():
+
+    assert _shoe_armario("como foi meu treino de ontem?") == ""
+
+
+def test_shoe_armario_silent_without_shoes():
+
+    repo = MagicMock()
+    repo.load.return_value.active.return_value = []
+
+    with patch(
+        "app.infrastructure.persistence.shoe_repository.ShoeRepository",
+        return_value=repo,
+    ):
+
+        assert ConversationContextBuilder._shoe_armario("renato", "meus tênis") == ""

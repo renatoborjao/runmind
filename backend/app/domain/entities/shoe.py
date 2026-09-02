@@ -12,6 +12,56 @@ from dataclasses import dataclass, field
 DEFAULT_WEAR_KM = 700.0
 
 
+def heal_mojibake(text: str | None) -> str | None:
+    """Cura texto UTF-8 que foi salvo lido-como-Latin1 ('versÃ¡til' -> 'versátil',
+    'rÃ¡pido' -> 'rápido'). Texto já correto (ou puro ASCII) passa intacto —
+    o round-trip falha e a gente devolve o original. None-safe."""
+
+    if not text:
+
+        return text
+
+    try:
+
+        return text.encode("latin-1").decode("utf-8")
+
+    except (UnicodeEncodeError, UnicodeDecodeError):
+
+        return text
+
+
+# os 3 rótulos de função canônicos + os sinônimos que a IA/atleta/dado antigo
+# usam. "prova" é sinônimo histórico de "rápido". Fonte ÚNICA de verdade — o
+# engine (recategorize), a listagem e o grounding do chat passam por aqui.
+_CATEGORY_SYNONYMS = {
+    "rápido": ("rápido", "rapido", "prova", "racer", "race", "veloz"),
+    "versátil": (
+        "versátil", "versatil", "super trainer", "supertrainer",
+        "super-trainer",
+    ),
+    "dia a dia": ("dia a dia", "diaadia", "daily"),
+}
+
+
+def canonical_category(value: str | None) -> str | None:
+    """Normaliza o rótulo de função pros 3 valores canônicos ('rápido',
+    'versátil', 'dia a dia'), curando mojibake antes. None se não reconhece."""
+
+    text = (heal_mojibake(value) or "").strip().lower()
+
+    if not text:
+
+        return None
+
+    for canon, synonyms in _CATEGORY_SYNONYMS.items():
+
+        if text in synonyms:
+
+            return canon
+
+    return None
+
+
 @dataclass(slots=True)
 class Shoe:
 

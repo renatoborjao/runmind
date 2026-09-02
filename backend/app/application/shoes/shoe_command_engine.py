@@ -14,7 +14,13 @@ from google.genai import types
 
 from app.core.config import get_settings
 from app.domain.entities.runner_profile import RunnerProfile
-from app.domain.entities.shoe import DEFAULT_WEAR_KM, Shoe, ShoeBook, ShoeRule
+from app.domain.entities.shoe import (
+    DEFAULT_WEAR_KM,
+    Shoe,
+    ShoeBook,
+    ShoeRule,
+    canonical_category,
+)
 from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
@@ -27,7 +33,7 @@ _PROMPT = """Você interpreta o que {name} disse sobre os TÊNIS de corrida dele
 e devolve as operações pro sistema aplicar. NÃO invente km — o sistema tem os \
 números; você só entende a INTENÇÃO.
 
-TÊNIS QUE ELE JÁ TEM (id | nome | apelido | dia-a-dia?):
+TÊNIS QUE ELE JÁ TEM (id | nome | apelido | dia-a-dia? | categoria atual):
 {shoes}
 
 REGRAS DE RODÍZIO JÁ CADASTRADAS:
@@ -72,7 +78,10 @@ APENAS se o atleta disser qual é o do dia a dia. Não preencha categoria no "ad
 prova/tiro" / "o Red Hare é super trainer" / "esse é só pra rodagem" -> \
 "recategorize" com a category certa: racer/placa/velocidade/tiro/prova = \
 "rápido"; SUPER TRAINER/versátil/encaixa em tudo = "versátil"; trainer de \
-rodagem/amortecido/conforto = "dia a dia".
+rodagem/amortecido/conforto = "dia a dia". Se ele diz que serve pra DOIS usos \
+diferentes ("rápido E rodagem", "tiro e longão", "prova e dia a dia") = \
+"versátil" (é exatamente o que faz tudo) — UMA op recategorize, category \
+"versátil".
 - SÓ crie "rule" quando for uma regra DURÁVEL ("SEMPRE uso o Vaporfly nos \
 tiros", "longão é SEMPRE com o X"). É rodízio fixo, pra toda semana.
 - ESCOLHA PONTUAL pra UM dia ("quero usar o Red Hare no domingo", "esse domingo \
@@ -288,7 +297,8 @@ class ShoeCommandEngine:
 
         return "\n".join(
             f"- {s.id} | {s.name} | {s.nickname or '-'} | "
-            f"{'SIM' if s.is_default else 'não'}"
+            f"{'SIM' if s.is_default else 'não'} | "
+            f"{canonical_category(s.category) or 'sem categoria'}"
             for s in book.active()
         )
 
@@ -677,26 +687,10 @@ class ShoeCommandEngine:
 
     @staticmethod
     def _canon_category(category) -> str | None:
-        """Normaliza o rótulo de função pros 3 valores canônicos: 'rápido'
-        (racer/placa/velocidade/tiro/prova), 'versátil' (super trainer) ou
-        'dia a dia' (conforto). 'prova' vira 'rápido' (sinônimo). None se não
-        reconhece."""
+        """Normaliza o rótulo de função pros 3 valores canônicos ('rápido',
+        'versátil', 'dia a dia'), curando mojibake. Fonte única no domínio."""
 
-        text = str(category or "").strip().lower()
-
-        if text in ("rápido", "rapido", "prova", "racer", "race", "veloz"):
-
-            return "rápido"
-
-        if text in ("versátil", "versatil", "super trainer", "super-trainer"):
-
-            return "versátil"
-
-        if text in ("dia a dia", "diaadia", "daily"):
-
-            return "dia a dia"
-
-        return None
+        return canonical_category(category)
 
     @staticmethod
     def _num(value) -> float:
@@ -709,9 +703,19 @@ class ShoeCommandEngine:
 
             return 0.0
 
+    # ordem + rótulo bonito de cada função na listagem (do mais rápido ao mais
+    # confortável). O canônico é a chave; a IA/atleta veem o rótulo amigável.
+    _CATEGORY_DISPLAY = (
+        ("rápido", "⚡ Rápidos", "tiros e prova"),
+        ("versátil", "🔀 Versáteis", "servem pra tudo"),
+        ("dia a dia", "😌 Dia a dia", "rodagem e longão"),
+    )
+
     @staticmethod
     def _status_block(book: ShoeBook) -> str:
-        """Resumo com os km EXATOS do armário (nunca da IA)."""
+        """Lista os tênis AGRUPADOS por função (rápido/versátil/dia a dia), com
+        os km EXATOS do armário (nunca da IA). O par padrão (recebe a corrida
+        quando o atleta não diz qual foi) leva ⭐."""
 
         active = book.active()
 
@@ -719,18 +723,56 @@ class ShoeCommandEngine:
 
             return ""
 
-        lines = ["👟 Teus tênis:"]
+        def _line(s: Shoe) -> str:
 
-        for s in active:
+            star = " ⭐" if s.is_default else ""
 
-            tag = " · dia a dia" if s.is_default else ""
+            wear = (
+                " — ⚠️ hora do rodízio"
+                if s.total_km >= s.alert_threshold_km
+                else ""
+            )
 
-            wear = ""
+            return f"• {s.label}{star}: {round(s.total_km)} km{wear}"
 
-            if s.total_km >= s.alert_threshold_km:
+        blocks = ["👟 Teus tênis:"]
 
-                wear = " ⚠️ hora do rodízio"
+        shown: set[str] = set()
 
-            lines.append(f"• {s.label}{tag}: {round(s.total_km)} km{wear}")
+        for canon, header, hint in ShoeCommandEngine._CATEGORY_DISPLAY:
 
-        return "\n".join(lines)
+            group = [
+                s for s in active if canonical_category(s.category) == canon
+            ]
+
+            if not group:
+
+                continue
+
+            blocks.append(f"\n{header} ({hint})")
+
+            for s in group:
+
+                shown.add(s.id)
+
+                blocks.append(_line(s))
+
+        # par que a pesquisa não classificou ainda: nunca some da lista
+        rest = [s for s in active if s.id not in shown]
+
+        if rest:
+
+            blocks.append("\n🏷️ Ainda sem categoria")
+
+            for s in rest:
+
+                blocks.append(_line(s))
+
+        if any(s.is_default for s in active):
+
+            blocks.append(
+                "\n⭐ é o par padrão — recebe a corrida quando você não diz "
+                "qual foi"
+            )
+
+        return "\n".join(blocks)

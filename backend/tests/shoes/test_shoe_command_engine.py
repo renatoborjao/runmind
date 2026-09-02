@@ -313,3 +313,84 @@ def test_research_fills_category_for_new_shoe(tmp_path):
     shoe = book.get("marca-obscura-z1")
     assert shoe.category == "prova"
     assert shoe.alert_threshold_km == 430.0
+
+
+# ---- listagem bonita (agrupada por função) --------------------------------
+
+
+def _full_book() -> ShoeBook:
+    """Um armário como o do Renato: pares em cada função + um par padrão."""
+
+    return ShoeBook(shoes=[
+        Shoe(id="vomero", name="Vomero Plus", category="dia a dia",
+             is_default=True, initial_km=200.0),
+        Shoe(id="evo-b", name="Evo SL Branco", category="rápido"),
+        Shoe(id="evo-v", name="Evo SL Verde", category="rápido",
+             initial_km=7.0),
+        Shoe(id="red", name="Lining Red Hare", category="versátil",
+             initial_km=20.0),
+        Shoe(id="sonic", name="SonicBlast", category="versátil"),
+    ])
+
+
+def test_status_block_groups_by_category_and_shows_all():
+
+    block = ShoeCommandEngine._status_block(_full_book())
+
+    # cada seção aparece
+    assert "⚡ Rápidos" in block
+    assert "🔀 Versáteis" in block
+    assert "😌 Dia a dia" in block
+
+    # o par vem sob a função certa (não mais só km solto)
+    assert "Evo SL Branco" in block and "Evo SL Verde" in block
+    assert "SonicBlast" in block and "Lining Red Hare" in block
+
+    # o padrão leva ⭐ e há legenda
+    assert "Vomero Plus ⭐" in block
+    assert "par padrão" in block
+
+
+def test_status_block_marks_wear_and_uncategorized():
+
+    book = ShoeBook(shoes=[
+        Shoe(id="gasto", name="Par Gasto", category="rápido",
+             initial_km=500.0, alert_threshold_km=450.0),
+        Shoe(id="novo", name="Par Sem Cat", category=None, is_default=True),
+    ])
+
+    block = ShoeCommandEngine._status_block(book)
+
+    assert "hora do rodízio" in block          # cruzou o limiar
+    assert "🏷️ Ainda sem categoria" in block   # None não some
+    assert "Par Sem Cat" in block
+
+
+def test_status_block_heals_mojibake_when_grouping():
+    """Categoria corrompida ('versÃ¡til') ainda cai na seção certa."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="x", name="Mojibake Shoe", category="versÃ¡til"),
+    ])
+
+    block = ShoeCommandEngine._status_block(book)
+
+    assert "🔀 Versáteis" in block
+    assert "Mojibake Shoe" in block
+    assert "🏷️ Ainda sem categoria" not in block
+
+
+def test_canon_category_delegates_and_heals_mojibake():
+
+    assert ShoeCommandEngine._canon_category("prova") == "rápido"
+    assert ShoeCommandEngine._canon_category("versÃ¡til") == "versátil"
+    assert ShoeCommandEngine._canon_category("rÃ¡pido") == "rápido"
+    assert ShoeCommandEngine._canon_category("xpto") is None
+
+
+def test_shoes_context_exposes_category_to_ai():
+
+    ctx = ShoeCommandEngine._shoes_context(_full_book())
+
+    # a IA passa a VER a função atual de cada par (antes era cega)
+    assert "versátil" in ctx and "rápido" in ctx and "dia a dia" in ctx
