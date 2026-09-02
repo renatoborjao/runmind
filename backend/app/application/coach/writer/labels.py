@@ -53,6 +53,25 @@ def plan_workout_label(
     return workout_type_label(code)
 
 
+def plan_session_title(session) -> str:
+    """Título do treino como vai pro RELÓGIO (Garmin) e pro STRAVA — uma fonte
+    só, sem drift. Ex.: 'Ritmind · Longão Aeróbico 13.0km' / 'Ritmind ·
+    Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava."""
+
+    label = plan_workout_label(
+        getattr(session, "workout_type", "") or "",
+        getattr(session, "planned_distance_km", None),
+    )
+
+    km = getattr(session, "planned_distance_km", None)
+
+    if km:
+
+        return f"Ritmind · {label} {km:.1f}km"
+
+    return f"Ritmind · {label}"
+
+
 def intensity_label(intensity: str) -> str:
 
     return INTENSITY_LABELS.get(intensity, intensity)

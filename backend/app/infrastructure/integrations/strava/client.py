@@ -187,6 +187,38 @@ class StravaClient:
             data
         )
 
+    async def update_activity(
+        self,
+        activity_id: int,
+        name: str,
+    ) -> bool:
+        """Renomeia a atividade no Strava (PUT /activities/{id}). Exige o escopo
+        activity:write no token do atleta — sem ele o Strava devolve 401/403 e a
+        gente devolve False (best-effort, nunca crasha). True se renomeou."""
+
+        access_token = await self._get_access_token()
+
+        async with httpx.AsyncClient(timeout=10) as client:
+
+            response = await client.put(
+                f"{self.BASE_URL}/activities/{activity_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                data={"name": name},
+            )
+
+        if response.status_code in (401, 403):
+
+            print(
+                f"Strava [{self.profile}]: sem permissão de escrita "
+                f"(activity:write) — atleta precisa reconectar"
+            )
+
+            return False
+
+        response.raise_for_status()
+
+        return True
+
     async def get_activity_best_efforts(
         self,
         activity_id: int,

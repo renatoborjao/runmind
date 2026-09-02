@@ -12,6 +12,9 @@ from app.application.notifications.coach_outbox import (
 from app.application.orchestrators.training_pipeline import (
     TrainingPipeline,
 )
+from app.application.strava.strava_activity_renamer import (
+    StravaActivityRenamer,
+)
 from app.domain.entities.activity import (
     Activity,
 )
@@ -48,6 +51,24 @@ class TrainingCompletedEvent:
         # conduz é o debrief de prova, o relatório do dia (mais abaixo). Era a
         # queixa do Renato: a prova tratada como "mais um treino".
         is_race = RaceDebrief.is_target_race(runner, result["activity"])
+
+        # Renomeia o treino no Strava com o nome do NOSSO plano ("Tempo · 6 km")
+        # no lugar do genérico "Corrida matinal". Só treino do plano (não prova),
+        # canário/flag, exige activity:write. Best-effort — nunca derruba o
+        # feedback. Ver [[project_tracker_tenis]].
+        if not is_race:
+
+            try:
+
+                await StravaActivityRenamer.rename_to_plan(
+                    profile,
+                    result["activity"],
+                    result.get("planned_session"),
+                )
+
+            except Exception as e:
+
+                print(f"Falha ao renomear treino no Strava de '{profile}': {e}")
 
         if not is_race:
 

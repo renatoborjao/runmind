@@ -5,7 +5,7 @@ derruba as outras."""
 
 from datetime import date
 
-from app.application.coach.writer.labels import plan_workout_label
+from app.application.coach.writer.labels import plan_session_title
 from app.application.garmin.garmin_workout_builder import (
     GarminWorkoutBuilder,
 )
@@ -17,17 +17,8 @@ from app.infrastructure.integrations.garmin.garmin_client import (
 
 def _workout_name(session: PlannedSession) -> str:
 
-    # rótulo amigável (LONG_RUN -> Longão), nunca o código cru
-    label = plan_workout_label(
-        session.workout_type,
-        session.planned_distance_km,
-    )
-
-    if session.planned_distance_km:
-
-        return f"Ritmind · {label} {session.planned_distance_km:.1f}km"
-
-    return f"Ritmind · {label}"
+    # fonte ÚNICA do título (mesmo nome no relógio E no Strava, sem drift)
+    return plan_session_title(session)
 
 
 def _description(session: PlannedSession) -> str:

@@ -296,6 +296,34 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # RENOMEAR O TREINO NO STRAVA com o nome do nosso plano (ex.: "Tempo 6 km")
+    # no lugar do genérico "Corrida matinal". Exige escopo activity:write (o
+    # atleta reconecta o Strava uma vez). Canário: começa só no renato2 pra
+    # teste. Ver [[project_tracker_tenis]] / roadmap.
+    strava_rename_enabled: bool = False
+
+    strava_rename_profiles: str = ""
+
+    @property
+    def strava_rename_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.strava_rename_profiles.split(",")
+            if p.strip()
+        ]
+
+    def strava_rename_active_for(self, profile: str) -> bool:
+        """Renomear o treino no Strava atende este perfil? (flag + canário)."""
+
+        if not self.strava_rename_enabled:
+
+            return False
+
+        allow = self.strava_rename_profile_list
+
+        return not allow or profile in allow
+
     @property
     def cors_origin_list(self) -> list[str]:
 

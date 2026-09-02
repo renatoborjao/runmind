@@ -60,7 +60,10 @@ async def connect(state: str = ""):
         "&response_type=code"
         f"&redirect_uri={redirect_uri}"
         "&approval_prompt=force"
-        "&scope=read,activity:read_all"
+        # activity:write habilita renomear o treino no Strava com o nome do
+        # nosso plano ("Tempo 6 km"). Só é USADO nos perfis do canário
+        # (strava_rename_active_for); pra os demais é permissão inócua.
+        "&scope=read,activity:read_all,activity:write"
     )
 
     if state:
