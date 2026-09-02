@@ -56,6 +56,7 @@ def _run_conversation(tmp_path, exchanges, today=FIM_DE_SEMANA):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.StravaRefreshStore"),
         patch(f"{MODULE}.today_local", return_value=today),
         patch(
             f"{MODULE}.OnboardingFlow._build_plan_message",
@@ -526,6 +527,7 @@ def test_no_strava_reminder_when_already_connected(tmp_path):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.StravaRefreshStore"),
         patch(f"{MODULE}.today_local", return_value=FIM_DE_SEMANA),
         patch(
             f"{MODULE}.OnboardingFlow._build_plan_message",
@@ -792,6 +794,7 @@ def test_coach_branch_receives_plan_media_and_finalizes(tmp_path):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.StravaRefreshStore"),
         patch(f"{MODULE}.download_media") as mock_download,
         patch(f"{MODULE}.ExternalPlanExtractionEngine") as mock_engine,
         patch(f"{MODULE}.ExternalPlanService") as mock_service,
@@ -878,6 +881,7 @@ def test_coach_plan_accepts_multiple_prints(tmp_path):
         ),
         patch(f"{MODULE}.OnboardingAnswerParser") as mock_parser,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.StravaRefreshStore"),
         patch(f"{MODULE}.download_media") as mock_download,
         patch(f"{MODULE}.ExternalPlanExtractionEngine") as mock_engine,
         patch(f"{MODULE}.ExternalPlanService") as mock_service,
@@ -1063,3 +1067,50 @@ def test_slug_collision_gets_numeric_suffix(tmp_path):
 
         assert OnboardingFlow._unique_slug("Fulano") == "fulano2"
         assert OnboardingFlow._unique_slug("José da Silva") == "josedasilva"
+
+
+# ---- late-connector: não regenerar plano de quem já conectou no cadastro ---
+
+
+def test_finish_marks_refresh_when_strava_connected_at_signup():
+    """Conectou o Strava DURANTE o cadastro -> marca refresh feito, pra uma
+    reconexão futura NÃO regenerar a semana (bug do renato2)."""
+
+    state = {
+        "answers": {"name": "Fulano"},
+        "slug": "fulano",
+        "channel": "telegram",
+        "address": "tg:1",
+    }
+
+    with (
+        patch(f"{MODULE}.TokenStore") as ts,
+        patch(f"{MODULE}.StravaRefreshStore") as srs,
+    ):
+        ts.return_value.load.return_value = {"access_token": "x"}
+
+        reply = OnboardingFlow._finish("tg:1", state, "PLANO", MagicMock())
+
+    srs.mark.assert_called_once_with("fulano")
+    assert "conectar seu Strava" not in reply   # sem lembrete: já conectou
+
+
+def test_finish_without_strava_skips_mark_and_reminds():
+
+    state = {
+        "answers": {"name": "Fulano"},
+        "slug": "fulano",
+        "channel": "telegram",
+        "address": "tg:1",
+    }
+
+    with (
+        patch(f"{MODULE}.TokenStore") as ts,
+        patch(f"{MODULE}.StravaRefreshStore") as srs,
+    ):
+        ts.return_value.load.return_value = None
+
+        reply = OnboardingFlow._finish("tg:1", state, "PLANO", MagicMock())
+
+    srs.mark.assert_not_called()
+    assert "conectar seu Strava" in reply

@@ -37,6 +37,9 @@ from app.infrastructure.persistence.onboarding_state_repository import (
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+from app.infrastructure.persistence.strava_refresh_store import (
+    StravaRefreshStore,
+)
 from app.infrastructure.storage.token_store import TokenStore
 
 RETRY_PREFIX = "Desculpa, não consegui entender. "
@@ -1092,6 +1095,16 @@ class OnboardingFlow:
                 "feedback. Conecta aqui:\n"
                 f"{OnboardingFlow._connect_link(state)}"
             )
+
+        else:
+
+            # Já conectou o Strava DURANTE o cadastro: o plano já saiu com o
+            # histórico real, então uma reconexão futura NÃO deve regenerar a
+            # semana (o late-connector só vale pra quem entrou sem Strava).
+            # Marca o refresh como feito. Ver [[StravaConnectRefresh]] — sem
+            # isto, atleta que conecta no cadastro regenerava o plano (com
+            # perda de ajustes/moves) na 1ª reconexão. Bug do renato2 (legado).
+            StravaRefreshStore.mark(slug)
 
         return (
             f"Cadastro feito, {answers['name']}! 🎉\n\n"
