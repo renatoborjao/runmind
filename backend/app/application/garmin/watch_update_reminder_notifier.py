@@ -17,7 +17,11 @@ proativos ([[ProactiveGovernor]]) como extra. Ver [[GarminOfferStore]] e
 [[feedback_conversa_viva]] (falha nunca vira silêncio)."""
 
 from app.application.notifications.coach_outbox import CoachOutbox
+from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+from app.application.use_cases.load_training_history import (
+    LoadTrainingHistory,
+)
 from app.core.clock import now_in, today_local, use_athlete_timezone
 from app.core.weekdays import weekday_label
 from app.domain.entities.planned_session import PlannedSession
@@ -139,7 +143,30 @@ class WatchUpdateReminderNotifier:
 
             return False
 
-        stale = WatchUpdateReminderNotifier._stale_days(current, pushed)
+        # dias JÁ TREINADOS não precisam de push — cobrar pra subir um treino
+        # que o atleta já correu não faz sentido (bug do Renato: cutucou a
+        # quarta que ele já tinha feito, depois de o plano mudar). Best-effort:
+        # sem histórico, não pula nada.
+        done_days: set[str] = set()
+
+        try:
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            done_days = {
+                d.lower()
+                for d in WeeklyPlanMatcher.fulfilled_days(
+                    current, history.activities
+                )
+            }
+
+        except Exception as e:
+
+            print(f"Lembrete relógio: histórico falhou p/ '{profile}': {e}")
+
+        stale = WatchUpdateReminderNotifier._stale_days(
+            current, pushed, done_days
+        )
 
         # o relógio já está em dia (sincronizou por outro caminho): encerra a
         # oferta sem incomodar — a falha se resolveu sozinha
@@ -185,11 +212,15 @@ class WatchUpdateReminderNotifier:
 
     @staticmethod
     def _stale_days(
-        current: TrainingPlan, pushed: TrainingPlan
+        current: TrainingPlan,
+        pushed: TrainingPlan,
+        done_days: set[str] | None = None,
     ) -> list[str]:
-        """Dias FUTUROS cujo treino no plano atual difere do que está no
-        relógio (snapshot empurrado) — ou que nem existiam no snapshot. É o
-        que o atleta veria desatualizado no Garmin."""
+        """Dias FUTUROS e AINDA NÃO TREINADOS cujo treino no plano atual difere
+        do que está no relógio (snapshot empurrado) — ou que nem existiam no
+        snapshot. É o que o atleta veria desatualizado no Garmin."""
+
+        done = done_days or set()
 
         pushed_by_day = {s.day.lower(): s for s in pushed.sessions}
 
@@ -198,6 +229,12 @@ class WatchUpdateReminderNotifier:
         stale = []
 
         for session in current.sessions:
+
+            # já treinou esse dia: não faz sentido cobrar o push de um treino
+            # que já foi feito (mesmo que o plano tenha mudado depois)
+            if session.day.lower() in done:
+
+                continue
 
             when = WatchUpdateReminderNotifier._session_date(current, session)
 

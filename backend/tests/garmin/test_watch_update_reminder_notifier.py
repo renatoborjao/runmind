@@ -48,6 +48,7 @@ def _run(
     pushed,
     oneoff_due=False,
     oneoff_date=None,
+    fulfilled=None,
 ):
 
     runner = make_runner(name="Mauricio", external_coach=external)
@@ -61,6 +62,8 @@ def _run(
         patch(f"{MOD}.WeeklyPlanRepository") as plan_cls,
         patch(f"{MOD}.PushedPlanStore") as pushed_store,
         patch(f"{MOD}.CoachOutbox") as outbox,
+        patch(f"{MOD}.LoadTrainingHistory") as history,
+        patch(f"{MOD}.WeeklyPlanMatcher") as matcher,
         patch(f"{MOD}.now_in", return_value=SimpleNamespace(hour=hour)),
         patch(f"{MOD}.today_local", return_value=TODAY),
         patch(f"{MOD}.use_athlete_timezone"),
@@ -74,6 +77,10 @@ def _run(
         garmin.is_connected.return_value = connected
         plan_cls.return_value.load.return_value = current
         pushed_store.load.return_value = pushed
+        history.execute = AsyncMock(
+            return_value=SimpleNamespace(activities=[])
+        )
+        matcher.fulfilled_days.return_value = fulfilled or set()
         outbox.send = AsyncMock()
 
         asyncio.run(WatchUpdateReminderNotifier.notify_all())
@@ -183,6 +190,21 @@ def test_no_reminder_when_only_past_day_differs():
     pushed = _plan("6:20", "6:50")  # sábado igual; terça sem pace
 
     outbox, offer, _ = _run(current=current, pushed=pushed)
+
+    outbox.send.assert_not_awaited()
+    offer.clear.assert_called_once_with("mauricio")
+
+
+def test_no_reminder_when_stale_day_already_trained():
+    """Bug do Renato: o plano mudou num dia que ele JÁ TREINOU -> não cobra o
+    push (não faz sentido subir pro relógio um treino já feito)."""
+
+    # sábado difere do relógio (seria stale), MAS já foi cumprido
+    outbox, offer, _ = _run(
+        current=_plan("6:20", "6:50"),
+        pushed=_plan("6:45", "7:05"),
+        fulfilled={"Saturday"},
+    )
 
     outbox.send.assert_not_awaited()
     offer.clear.assert_called_once_with("mauricio")
