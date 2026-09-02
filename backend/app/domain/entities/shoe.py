@@ -152,6 +152,13 @@ class ShoeBook:
     # durável — vale pra aquela data). Ver [[ShoeRecommendationService]].
     assignments: dict[str, str] = field(default_factory=dict)
 
+    # o que o COACH recomendou e MOSTROU pra cada data: {data ISO -> shoe_id}.
+    # Sem gear do Strava nem regra, é o melhor palpite do que o atleta calçou
+    # (ele costuma seguir a sugestão) — a atribuição conta NELE, não no padrão
+    # cego. Gravado quando a sugestão é exibida; a correção do atleta ainda
+    # manda. Ver [[ShoeRecommendationService]] e [[ShoeAttributionResolver]].
+    recommended: dict[str, str] = field(default_factory=dict)
+
     # a ÚLTIMA corrida atribuída — pra a correção pontual ("hoje foi com o de
     # prova") mover a km do par errado pro certo, sem o atleta refazer nada
     last_activity_id: int | None = None

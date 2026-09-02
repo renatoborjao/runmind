@@ -72,7 +72,9 @@ class ShoeMileageService:
             getattr(enriched, "training_type", "") or "",
         )
 
-        attribution = ShoeAttributionResolver.resolve(book, gear_id, labels)
+        attribution = ShoeAttributionResolver.resolve(
+            book, gear_id, labels, session_date_iso=day
+        )
 
         if attribution is None:
 

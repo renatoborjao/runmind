@@ -51,7 +51,9 @@ class ShoeRecommendationService:
         """Linha de sugestão pra anexar na mensagem do treino. Vazia quando o
         atleta não montou o armário (silêncio total) ou não dá pra sugerir."""
 
-        book = ShoeRepository().load(profile)
+        repo = ShoeRepository()
+
+        book = repo.load(profile)
 
         pick = ShoeRecommendationService.recommend(
             book, session, session_date, week_sessions
@@ -63,9 +65,38 @@ class ShoeRecommendationService:
 
         shoe, reason = pick
 
+        # LEMBRA a sugestão MOSTRADA pra esta data: sem gear do Strava nem regra,
+        # é assim que a atribuição conta no par recomendado (não cego no padrão).
+        # Fecha o furo "recomendou Evo SL, contou no Vomero". Ver
+        # [[ShoeAttributionResolver]].
+        ShoeRecommendationService._remember(
+            repo, profile, book, session_date, shoe.id
+        )
+
         tail = f" — {reason}" if reason else ""
 
         return f"👟 Sugestão de tênis: {shoe.label}{tail}"
+
+    @staticmethod
+    def _remember(repo, profile: str, book: ShoeBook, session_date,
+                  shoe_id: str) -> None:
+        """Persiste {data -> shoe_id} do que o coach mostrou (last-write-wins: o
+        lembrete da manhã, mais perto da corrida, é o que vale). Só grava se
+        mudou, pra não bater no disco à toa."""
+
+        if session_date is None:
+
+            return
+
+        key = session_date.isoformat()
+
+        if book.recommended.get(key) == shoe_id:
+
+            return
+
+        book.recommended[key] = shoe_id
+
+        repo.save(profile, book)
 
     @staticmethod
     def recommend(

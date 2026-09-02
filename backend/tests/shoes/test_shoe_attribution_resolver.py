@@ -1,6 +1,8 @@
 from app.application.shoes.shoe_attribution_resolver import (
+    BY_ASSIGN,
     BY_DEFAULT,
     BY_GEAR,
+    BY_RECOMMENDED,
     BY_RULE,
     ShoeAttributionResolver,
 )
@@ -67,4 +69,83 @@ def test_rule_pointing_to_missing_shoe_falls_through_to_default():
     attr = ShoeAttributionResolver.resolve(book, None, ("Tiros",))
 
     assert attr.shoe.id == "boston"
+    assert attr.how == BY_DEFAULT
+
+
+# ---- recomendação do coach dirige a atribuição (fim do "contou no padrão") --
+
+
+def _reco_book():
+
+    return ShoeBook(
+        shoes=[
+            Shoe(id="vomero", name="Vomero", is_default=True),   # padrão
+            Shoe(id="evo", name="Evo SL", category="versátil"),
+            Shoe(id="red", name="Red Hare", category="dia a dia"),
+        ],
+        recommended={"2026-09-01": "evo"},
+        assignments={"2026-09-02": "red"},
+    )
+
+
+def test_recommended_beats_default_for_the_date():
+    """O bug do Renato: recomendou Evo SL, contava no Vomero. Agora conta no
+    par recomendado pra AQUELA data."""
+
+    attr = ShoeAttributionResolver.resolve(
+        _reco_book(), None, ("Tempo",), session_date_iso="2026-09-01"
+    )
+
+    assert attr.shoe.id == "evo"
+    assert attr.how == BY_RECOMMENDED
+
+
+def test_athlete_assignment_beats_recommendation():
+
+    attr = ShoeAttributionResolver.resolve(
+        _reco_book(), None, ("Rodagem",), session_date_iso="2026-09-02"
+    )
+
+    assert attr.shoe.id == "red"
+    assert attr.how == BY_ASSIGN
+
+
+def test_gear_still_wins_over_recommendation():
+
+    book = _reco_book()
+    book.get("red").gear_id = "g1"
+
+    attr = ShoeAttributionResolver.resolve(
+        book, "g1", ("Tempo",), session_date_iso="2026-09-01"
+    )
+
+    assert attr.shoe.id == "red"
+    assert attr.how == BY_GEAR
+
+
+def test_falls_to_default_when_no_recommendation_for_date():
+
+    attr = ShoeAttributionResolver.resolve(
+        _reco_book(), None, ("Rodagem",), session_date_iso="2026-09-09"
+    )
+
+    assert attr.shoe.id == "vomero"
+    assert attr.how == BY_DEFAULT
+
+
+def test_recommendation_to_retired_shoe_falls_through():
+
+    book = ShoeBook(
+        shoes=[
+            Shoe(id="vomero", name="Vomero", is_default=True),
+            Shoe(id="evo", name="Evo SL", retired=True),
+        ],
+        recommended={"2026-09-01": "evo"},
+    )
+
+    attr = ShoeAttributionResolver.resolve(
+        book, None, ("Tempo",), session_date_iso="2026-09-01"
+    )
+
+    assert attr.shoe.id == "vomero"
     assert attr.how == BY_DEFAULT

@@ -89,6 +89,25 @@ def test_rotation_rule_by_workout_type(tmp_path):
     assert outcome.shoe.id == "vapor"
 
 
+def test_recommended_shoe_gets_the_run_not_default(tmp_path):
+    """O bug do Renato: coach recomendou o Evo SL pra o dia, a corrida ia pro
+    Vomero (padrão). Agora conta no par recomendado pra AQUELA data."""
+
+    book = ShoeBook(
+        shoes=[
+            Shoe(id="vomero", name="Vomero", is_default=True),
+            Shoe(id="evo", name="Evo SL", category="versátil"),
+        ],
+        recommended={"2026-08-20": "evo"},
+    )
+
+    outcome, saved = _run(tmp_path, book, _enriched(day="2026-08-20"))
+
+    assert outcome.shoe.id == "evo"
+    assert saved.get("evo").accumulated_km == 10.0
+    assert saved.get("vomero").accumulated_km == 0.0
+
+
 def test_idempotent_same_activity_id(tmp_path):
     """Reentrega do MESMO id (id já contado) não soma de novo — guarda por id,
     independente do fingerprint cross-fonte."""
