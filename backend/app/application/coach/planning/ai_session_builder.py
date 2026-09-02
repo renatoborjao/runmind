@@ -4,6 +4,8 @@ virar operação de proposta. Fonte única usada pela troca de aversão e pelo
 re-plano do 'furou-ontem' — os steps ficam no formato cru da IA (o applier
 reidrata com parse_steps)."""
 
+from app.domain.entities.workout_step import parse_steps, total_distance_km
+
 
 def build_session_dict(day: str, kind: str, raw: dict) -> dict | None:
 
@@ -14,6 +16,14 @@ def build_session_dict(day: str, kind: str, raw: dict) -> dict | None:
         return None
 
     distance = raw.get("distance_km")
+
+    # a distância REAL vem dos PASSOS (aquecimento/recuperações/desaquecimento);
+    # o número solto da IA às vezes os esquece. Com passos, eles mandam.
+    step_km = total_distance_km(parse_steps(raw.get("steps")))
+
+    if step_km is not None:
+
+        distance = step_km
 
     duration = raw.get("duration_min")
 

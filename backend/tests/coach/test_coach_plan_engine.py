@@ -121,6 +121,28 @@ def test_structure_as_list_becomes_steps():
     ]
 
 
+def test_distance_comes_from_steps_not_the_ai_number():
+    """Bug do Renato: a IA dá distance_km=6.5 mas os PASSOS somam 7.5 (ela
+    esquece as recuperações). A distância gravada tem que ser a dos passos."""
+
+    plan_json = (
+        '{"weekly_objective": "x", "sessions": [{"day": "Wednesday",'
+        ' "kind": "run", "workout_type": "Intervalado de VO2",'
+        ' "distance_km": 6.5,'
+        ' "steps": ['
+        ' {"kind": "warmup", "distance_m": 2000},'
+        ' {"kind": "repeat", "reps": 5, "steps": ['
+        '   {"kind": "interval", "distance_m": 600},'
+        '   {"kind": "recovery", "distance_m": 200}]},'
+        ' {"kind": "cooldown", "distance_m": 1500}],'
+        ' "purpose": "vo2"}]}'
+    )
+
+    plan = _generate(plan_json)
+
+    assert plan.find_session_by_day("Wednesday").planned_distance_km == 7.5
+
+
 def test_invalid_json_raises_for_fallback():
 
     with pytest.raises(ValueError):

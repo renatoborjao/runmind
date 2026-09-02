@@ -81,6 +81,57 @@ def _hr(item: dict, key: str) -> int | None:
     return int(value) if isinstance(value, (int, float)) else None
 
 
+def _distance_and_reliable(steps: list[WorkoutStep]) -> tuple[float, bool]:
+    """(soma da distância em m, confiável?). Recursivo: 'repeat' = reps × soma
+    dos filhos. Não é confiável se ALGUM passo executável (fora REST, que fica
+    parado) for por TEMPO/aberto — aí a soma subestima (fartlek de 1min/tiro
+    por tempo) e não dá pra usar como distância total."""
+
+    total = 0.0
+
+    reliable = True
+
+    for s in steps:
+
+        if s.kind == REPEAT:
+
+            child_m, child_ok = _distance_and_reliable(s.steps)
+
+            total += (s.reps or 0) * child_m
+
+            reliable = reliable and child_ok
+
+        elif s.kind == REST:
+
+            continue  # parado não percorre distância
+
+        elif s.distance_m:
+
+            total += s.distance_m
+
+        else:
+
+            reliable = False  # executável por tempo/aberto -> soma incompleta
+
+    return total, reliable
+
+
+def total_distance_km(steps: list[WorkoutStep]) -> float | None:
+    """Distância REAL do treino a partir dos passos — INCLUI aquecimento,
+    recuperações entre tiros e desaquecimento (que o número solto da IA às
+    vezes esquece: p.ex. dá 6.5 quando os passos somam 7.5). Fonte de verdade
+    pra distância/nome/volume. None quando o treino tem trecho por TEMPO (soma
+    subestimaria) ou nenhum passo tem distância — aí vale o número da IA."""
+
+    total, reliable = _distance_and_reliable(steps)
+
+    if not reliable or total <= 0:
+
+        return None
+
+    return round(total / 1000, 1)
+
+
 def parse_steps(raw) -> list[WorkoutStep]:
     """Lê a lista de passos que a IA emitiu (tolerante a lixo). Passo
     inválido é descartado; nunca levanta."""

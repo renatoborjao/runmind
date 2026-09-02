@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
-from app.domain.entities.workout_step import parse_steps
+from app.domain.entities.workout_step import parse_steps, total_distance_km
 from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
@@ -346,6 +346,18 @@ class CoachPlanEngine:
 
                 distance = None
 
+            parsed_steps = parse_steps(item.get("steps"))
+
+            # A distância REAL vem dos PASSOS (inclui aquecimento/recuperações/
+            # desaquecimento) — o número solto da IA às vezes os esquece (dá 6.5
+            # quando os passos somam 7.5). Com passos, eles mandam; sem eles,
+            # cai no distance_km da IA.
+            step_km = total_distance_km(parsed_steps)
+
+            if step_km is not None:
+
+                distance = step_km
+
             duration = item.get("duration_min")
 
             if not isinstance(duration, (int, float)) or duration <= 0:
@@ -378,7 +390,7 @@ class CoachPlanEngine:
                         item.get("structure"),
                     ),
                     purpose=str(item.get("purpose", "")).strip(),
-                    steps=parse_steps(item.get("steps")),
+                    steps=parsed_steps,
                 )
             )
 

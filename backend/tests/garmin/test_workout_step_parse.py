@@ -1,4 +1,43 @@
-from app.domain.entities.workout_step import parse_steps
+from app.domain.entities.workout_step import parse_steps, total_distance_km
+
+
+# a estrutura REAL da quarta do Renato: aquecimento 2km + 5x(600m+200m) +
+# desaquecimento 1.5km = 7.5km. A IA dava distance_km=6.5 (esquecia as
+# recuperações). total_distance_km soma a verdade.
+_INTERVAL_RAW = [
+    {"kind": "warmup", "distance_m": 2000},
+    {"kind": "repeat", "reps": 5, "steps": [
+        {"kind": "interval", "distance_m": 600},
+        {"kind": "recovery", "distance_m": 200},
+    ]},
+    {"kind": "cooldown", "distance_m": 1500},
+]
+
+
+def test_total_distance_includes_warmup_recoveries_cooldown():
+
+    total = total_distance_km(parse_steps(_INTERVAL_RAW))
+
+    assert total == 7.5   # NÃO 6.5 (a IA esquecia as 5x200m de recuperação)
+
+
+def test_total_distance_simple_run():
+
+    assert total_distance_km(parse_steps(
+        [{"kind": "run", "distance_km": 8}]
+    )) == 8.0
+
+
+def test_total_distance_none_for_time_based():
+
+    assert total_distance_km(parse_steps(
+        [{"kind": "run", "duration_min": 45}]
+    )) is None
+
+
+def test_total_distance_none_for_empty():
+
+    assert total_distance_km([]) is None
 
 
 def test_parses_distance_km_to_meters():
