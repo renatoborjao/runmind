@@ -29,7 +29,8 @@ def _session(workout_type="Tempo", km=6.0, minutes=None):
     )
 
 
-def _run(profile, done, session, strava_recent, active=True, update=True):
+def _run(profile, done, session, strava_recent, active=True, update=True,
+         executed_type=None):
 
     client = MagicMock()
     client.get_last_activities = AsyncMock(return_value=strava_recent)
@@ -45,7 +46,9 @@ def _run(profile, done, session, strava_recent, active=True, update=True):
     ):
 
         result = asyncio.run(
-            StravaActivityRenamer.rename_to_plan(profile, done, session)
+            StravaActivityRenamer.rename_to_plan(
+                profile, done, session, executed_type=executed_type
+            )
         )
 
     return result, client
@@ -114,6 +117,65 @@ def test_idempotent_when_already_named():
 
     assert ok is False
     client.update_activity.assert_not_awaited()
+
+
+# ---- trava de tipo: não carimba nome errado (atleta sem Garmin) -----------
+
+
+def test_skips_when_executed_type_diverges_from_plan():
+    """Planejou Tempo (forte), correu EASY (leve) -> NÃO renomeia."""
+
+    strava = [_activity(dist=6000.0, name="Corrida matinal")]
+
+    ok, client = _run("helio", _activity(dist=6000.0), _session("Tempo", 6.0),
+                      strava, executed_type="EASY")
+
+    assert ok is False
+    client.update_activity.assert_not_awaited()
+
+
+def test_renames_when_executed_type_matches_plan():
+    """Planejou Tempo, correu no ritmo (TEMPO) -> renomeia."""
+
+    strava = [_activity(dist=6000.0, name="Corrida matinal")]
+
+    ok, _ = _run("helio", _activity(dist=6000.0), _session("Tempo", 6.0),
+                 strava, executed_type="VO2")
+
+    assert ok is True
+
+
+def test_long_run_accepts_easy_execution():
+    """Longão pode sair leve -> compatível, renomeia."""
+
+    strava = [_activity(dist=15000.0, name="Corrida matinal")]
+
+    ok, _ = _run("helio", _activity(dist=15000.0),
+                 _session("Longão Aeróbico", 15.0), strava,
+                 executed_type="EASY")
+
+    assert ok is True
+
+
+def test_no_executed_type_is_permissive():
+    """Sem tipo detectado -> não bloqueia (confia no match de distância)."""
+
+    strava = [_activity(dist=6000.0, name="Corrida matinal")]
+
+    ok, _ = _run("helio", _activity(dist=6000.0), _session("Tempo", 6.0),
+                 strava, executed_type=None)
+
+    assert ok is True
+
+
+def test_planned_category_easy_beats_ambiguous_tempo():
+
+    assert StravaActivityRenamer._planned_category("Rodagem por Tempo") == "easy"
+    assert StravaActivityRenamer._planned_category(
+        "Intervalado de VO2") == "quality"
+    assert StravaActivityRenamer._planned_category("Longão Aeróbico") == "long"
+    assert StravaActivityRenamer._planned_category("Prova 10K") == "race"
+    assert StravaActivityRenamer._planned_category("Sei lá") is None
 
 
 # ---- montagem do nome -----------------------------------------------------

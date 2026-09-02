@@ -60,10 +60,16 @@ class TrainingCompletedEvent:
 
             try:
 
+                # result["activity"] é o EnrichedActivity: a corrida crua fica
+                # em .activity e o tipo DETECTADO em .training_type (a trava
+                # que evita carimbar nome errado em quem não tem Garmin).
+                enriched = result["activity"]
+
                 await StravaActivityRenamer.rename_to_plan(
                     profile,
-                    result["activity"],
+                    getattr(enriched, "activity", enriched),
                     result.get("planned_session"),
+                    executed_type=getattr(enriched, "training_type", None),
                 )
 
             except Exception as e:
