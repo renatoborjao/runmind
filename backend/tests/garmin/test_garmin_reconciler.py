@@ -66,26 +66,38 @@ def _patched(push_ok=True):
             "date": on_date.isoformat(),
         }
 
+    def _resched(session, record, on_date, garmin=None):
+
+        # troca de dia: REAPROVEITA o workout_id, novo agendamento, nova data
+        return {
+            "ok": True,
+            "workout_id": record["workout_id"],
+            "schedule_id": 500 + record["workout_id"],
+            "date": on_date.isoformat(),
+        }
+
     push = MagicMock(side_effect=_push)
     remove = MagicMock(return_value={"ok": True})
+    reschedule = MagicMock(side_effect=_resched)
 
-    return push, remove
+    return push, remove, reschedule
 
 
 def _run(previous, current, push_ok=True, reference=TUESDAY):
 
-    push, remove = _patched(push_ok)
+    push, remove, reschedule = _patched(push_ok)
 
     with (
         patch(f"{MODULE}.push_session", push),
         patch(f"{MODULE}.remove_session", remove),
+        patch(f"{MODULE}.reschedule_session", reschedule),
     ):
 
         results = GarminReconciler.reconcile(
             PROFILE, previous, current, reference_date=reference,
         )
 
-    return results, push, remove
+    return results, push, remove, reschedule
 
 
 def test_first_push_sends_each_running_session_and_records_it():
@@ -95,7 +107,7 @@ def test_first_push_sends_each_running_session_and_records_it():
         _session("Thursday", workout_type="Velocidade"),
     )
 
-    results, push, remove = _run(previous=plan, current=plan)
+    results, push, remove, _ = _run(previous=plan, current=plan)
 
     # ambas empurradas, nenhuma removida
     assert push.call_count == 2
@@ -117,7 +129,7 @@ def test_non_running_sessions_are_ignored():
         _session("Monday", kind="strength"),
     )
 
-    results, push, remove = _run(previous=plan, current=plan)
+    results, push, remove, _ = _run(previous=plan, current=plan)
 
     assert push.call_count == 1
     assert {r["day"] for r in results} == {"Tuesday"}
@@ -131,7 +143,7 @@ def test_repush_of_unchanged_plan_is_idempotent():
     _run(previous=plan, current=plan)
 
     # 2ª: mesmo plano, já com registros -> nada é empurrado nem removido
-    results, push, remove = _run(previous=plan, current=plan)
+    results, push, remove, _ = _run(previous=plan, current=plan)
 
     push.assert_not_called()
     remove.assert_not_called()
@@ -149,7 +161,7 @@ def test_changed_content_replaces_on_the_watch():
     # novo plano: mesma terça, distância diferente -> conteúdo mudou
     new = _plan(_session("Tuesday", planned_distance_km=12.0))
 
-    results, push, remove = _run(previous=old, current=new)
+    results, push, remove, _ = _run(previous=old, current=new)
 
     # tira o antigo do relógio e empurra o novo (cliente reusado = None no teste)
     remove.assert_called_once_with(PROFILE, old_record, None)
@@ -173,7 +185,7 @@ def test_dropped_session_is_removed_from_the_watch():
         old.find_session_by_day("Tuesday").garmin
     )
 
-    results, push, remove = _run(previous=old, current=new)
+    results, push, remove, _ = _run(previous=old, current=new)
 
     push.assert_not_called()                       # terça não mudou
     remove.assert_called_once_with(PROFILE, dropped_record, None)
@@ -181,24 +193,81 @@ def test_dropped_session_is_removed_from_the_watch():
                for r in results)
 
 
-def test_moved_session_pushes_new_day_and_removes_old():
+def test_moved_session_reschedules_same_template():
+    """Troca de dia (mesmo conteúdo): REAPROVEITA o template já no relógio e só
+    remarca a data — não recria nem apaga. O relógio mantém como 'Programado' em
+    vez de virar treino novo em 'Meus treinos'. Ver [[project_rede_relogio]]."""
 
     old = _plan(_session("Tuesday"))
 
     _run(previous=old, current=old)
 
-    old_record = old.find_session_by_day("Tuesday").garmin
+    old_record = dict(old.find_session_by_day("Tuesday").garmin)
 
     # mesmo treino, agora na quarta
     new = _plan(_session("Wednesday"))
 
-    results, push, remove = _run(previous=old, current=new)
+    results, push, remove, reschedule = _run(previous=old, current=new)
 
-    push.assert_called_once()                       # empurra quarta
-    remove.assert_called_once_with(PROFILE, old_record, None)  # tira terça
+    # reagenda o MESMO treino; não empurra novo nem apaga o antigo
+    reschedule.assert_called_once()
+    push.assert_not_called()
+    remove.assert_not_called()
+
+    assert results[0]["action"] == "moved"
+    assert results[0]["day"] == "Wednesday"
+
+    # a sessão passou pro reschedule com o registro antigo (mesmo workout_id)
+    passed_record = reschedule.call_args.args[1]
+    assert passed_record["workout_id"] == old_record["workout_id"]
+
+    # o registro novo reusa o workout_id e ganha novo agendamento + data
+    moved = new.find_session_by_day("Wednesday").garmin
+    assert moved["workout_id"] == old_record["workout_id"]
+    assert moved["schedule_id"] == 500 + old_record["workout_id"]
+    assert moved["date"] == date(2026, 7, 8).isoformat()
+    assert moved["fingerprint"] == old_record["fingerprint"]
+
+
+def test_ambiguous_fingerprint_move_falls_back_to_recreate():
+    """Dois treinos de conteúdo IDÊNTICO no plano anterior: não dá pra saber
+    qual moveu -> NÃO reagenda (ambíguo), recai no caminho seguro (recria)."""
+
+    old = _plan(_session("Tuesday"), _session("Thursday"))  # fp idêntico
+
+    _run(previous=old, current=old)
+
+    # ambos os dias antigos esvaziados; um treino do mesmo conteúdo na quarta
+    new = _plan(_session("Wednesday"))
+
+    results, push, remove, reschedule = _run(previous=old, current=new)
+
+    reschedule.assert_not_called()          # fingerprint ambíguo -> sem reuso
+    push.assert_called_once()               # recria na quarta
     actions = {r["day"]: r["action"] for r in results}
     assert actions["Wednesday"] == "pushed"
-    assert actions["Thursday" if False else "Tuesday"] == "removed"
+
+
+def test_move_with_content_change_recreates():
+    """Mudou de dia E de conteúdo: fingerprint diferente -> não é troca de dia
+    pura, recria (push novo + remove antigo)."""
+
+    old = _plan(_session("Tuesday", planned_distance_km=8.0))
+
+    _run(previous=old, current=old)
+
+    old_record = dict(old.find_session_by_day("Tuesday").garmin)
+
+    new = _plan(_session("Wednesday", planned_distance_km=12.0))
+
+    results, push, remove, reschedule = _run(previous=old, current=new)
+
+    reschedule.assert_not_called()
+    push.assert_called_once()
+    remove.assert_called_once_with(PROFILE, old_record, None)
+    actions = {r["day"]: r["action"] for r in results}
+    assert actions["Wednesday"] == "pushed"
+    assert actions["Tuesday"] == "removed"
 
 
 def test_past_sessions_are_left_untouched():
@@ -206,7 +275,7 @@ def test_past_sessions_are_left_untouched():
     # terça é a referência; segunda já passou
     plan = _plan(_session("Monday"), _session("Tuesday"))
 
-    results, push, remove = _run(
+    results, push, remove, _ = _run(
         previous=plan, current=plan, reference=TUESDAY,
     )
 
@@ -219,7 +288,7 @@ def test_failed_push_leaves_no_record():
 
     plan = _plan(_session("Tuesday"))
 
-    results, push, remove = _run(previous=plan, current=plan, push_ok=False)
+    results, push, remove, _ = _run(previous=plan, current=plan, push_ok=False)
 
     assert results[0]["action"] == "failed"
     assert results[0]["ok"] is False
