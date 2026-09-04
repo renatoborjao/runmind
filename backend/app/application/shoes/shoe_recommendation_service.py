@@ -88,7 +88,16 @@ class ShoeRecommendationService:
 
             return
 
-        key = session_date.isoformat()
+        # os callers reais (formatters) passam a data já como STRING ISO
+        # (plan.session_date(...).isoformat()); aceita os dois, string ou date,
+        # pra a chave bater com o que o ShoeAttributionResolver lê. Sem isso,
+        # `.isoformat()` numa string estourava e o líne inteiro caía no except
+        # — tênis sumia do lembrete E nada era lembrado pra a atribuição.
+        key = (
+            session_date
+            if isinstance(session_date, str)
+            else session_date.isoformat()
+        )
 
         if book.recommended.get(key) == shoe_id:
 

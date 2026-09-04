@@ -366,6 +366,32 @@ def test_line_remembers_recommendation_for_the_date(tmp_path):
     assert book.recommended["2026-09-01"] == "evo"   # o versátil sugerido
 
 
+def test_line_remembers_when_date_is_iso_string(tmp_path):
+    """REGRESSÃO: os callers reais (formatters) passam a data como STRING ISO,
+    não como date. Antes, `_remember` chamava `.isoformat()` na string e o line
+    inteiro estourava no except -> tênis sumia do lembrete E nada era lembrado
+    pra a atribuição (o bug 'não veio o tênis' + 'contou no Vomero')."""
+
+    repo = ShoeRepository()
+    repo.storage = tmp_path
+    repo.save("renato", ShoeBook(shoes=[
+        Shoe(id="vomero", name="Vomero", category="dia a dia", is_default=True),
+        Shoe(id="evo", name="Evo SL", category="versátil"),
+    ]))
+
+    with patch(f"{MOD}.ShoeRepository", return_value=repo):
+
+        line = ShoeRecommendationService.line(
+            "renato", _session("Rodagem por Tempo"),
+            session_date="2026-09-04",  # STRING, como o formatter passa
+        )
+
+    # a sugestão SAI (não engoliu no except)
+    assert line.startswith("👟 Sugestão de tênis:")
+    # e ficou lembrada pra a data (a atribuição vai contar nela)
+    assert repo.load("renato").recommended["2026-09-04"] in {"vomero", "evo"}
+
+
 def test_line_without_date_does_not_persist(tmp_path):
 
     repo = ShoeRepository()
