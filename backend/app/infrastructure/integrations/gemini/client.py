@@ -1,5 +1,4 @@
 import asyncio
-import json
 import random
 import re
 from functools import lru_cache
@@ -211,6 +210,21 @@ async def generate_text(
                     contents=contents,
                     config=config,
                 )
+
+                # medidor de consumo por atleta (observação): grava tokens desta
+                # chamada, atribuídos ao escopo atual. Best-effort — nunca
+                # derruba a resposta. Ver [[project_consumo_tokens]].
+                try:
+
+                    from app.application.monitoring.token_meter import TokenMeter
+
+                    TokenMeter.record(
+                        candidate, getattr(response, "usage_metadata", None)
+                    )
+
+                except Exception:  # noqa: BLE001 — medidor é best-effort
+
+                    pass
 
                 text = response.text or ""
 

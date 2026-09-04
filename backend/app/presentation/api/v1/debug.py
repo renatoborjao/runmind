@@ -182,6 +182,68 @@ async def proactive_ledger(profile: str, limit: int = 20):
         )
 
 
+@router.get("/usage/{profile}")
+async def token_usage(profile: str):
+    """Consumo REAL de tokens/chamadas do Gemini deste atleta: totais +
+    quebra por modelo, por rótulo (chat/plano/análise/briefing) e por dia. O
+    medidor é observação (best-effort), não custo em dinheiro (tier grátis).
+    Ver [[project_consumo_tokens]]."""
+
+    try:
+
+        from app.application.monitoring.token_meter import TokenMeter
+
+        return TokenMeter.report(profile)
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.get("/usage")
+async def token_usage_all():
+    """Consumo de TODOS os atletas com medição — totais por atleta, do maior
+    pro menor."""
+
+    try:
+
+        from app.application.monitoring.token_meter import TokenMeter
+        from app.infrastructure.persistence.token_usage_repository import (
+            TokenUsageRepository,
+        )
+
+        reports = [
+            TokenMeter.report(p) for p in TokenUsageRepository().profiles()
+        ]
+
+        reports.sort(key=lambda r: r["total"], reverse=True)
+
+        return {
+            "athletes": [
+                {
+                    "profile": r["profile"],
+                    "calls": r["calls"],
+                    "total_tokens": r["total"],
+                    "in": r["in"],
+                    "out": r["out"],
+                    "thoughts": r["thoughts"],
+                    "by_label": r["by_label"],
+                }
+                for r in reports
+            ]
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
 @router.get("/proactive-preview/{profile}")
 async def proactive_preview(profile: str):
     """DRY-RUN (não envia): a sequência de toques de PROVA que ainda vai sair —

@@ -31,6 +31,11 @@ class TrainingCompletedEvent:
         activity: Activity | None = None,
     ):
 
+        # medidor de tokens: atribui o Gemini da análise deste treino ao atleta
+        from app.application.monitoring.token_meter import TokenMeter
+
+        TokenMeter.set_current(profile, "analysis")
+
         result = await TrainingPipeline.execute(
             profile=profile,
             activity=activity,

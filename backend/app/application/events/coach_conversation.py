@@ -102,6 +102,11 @@ class CoachConversationEvent:
         send_fallback: bool = True,
     ) -> str:
 
+        # medidor de tokens: atribui todo Gemini deste turno ao atleta
+        from app.application.monitoring.token_meter import TokenMeter
+
+        TokenMeter.set_current(profile, "chat")
+
         runner = LoadRunnerProfile.execute(profile)
 
         # todas as datas da conversa (hoje/amanhã, semana) no fuso do atleta

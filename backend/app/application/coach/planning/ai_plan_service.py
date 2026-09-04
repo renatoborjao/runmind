@@ -99,9 +99,16 @@ class AIPlanService:
                 repository, week_start, assessment.run_walk,
             )
 
-            plan = await AIPlanService._generate_ai(
-                profile, runner.name, goal.name, week_start, context,
-            )
+            # medidor: rotula a geração como "plano" (context manager reseta
+            # depois, pra não vazar o rótulo quando o plano é gerado DENTRO de
+            # um chat/briefing). Ver [[project_consumo_tokens]].
+            from app.application.monitoring.token_meter import TokenMeter
+
+            with TokenMeter.scope(profile, "plan"):
+
+                plan = await AIPlanService._generate_ai(
+                    profile, runner.name, goal.name, week_start, context,
+                )
 
             # A periodização é decisão do COACH (ele vê a prova/distância no
             # retrato e marca a fase coerente com o plano que montou). Só caímos

@@ -76,6 +76,11 @@ class MorningBriefingNotifier:
     @staticmethod
     async def _notify_one(profile: str) -> None:
 
+        # medidor de tokens: atribui o Gemini do briefing deste atleta a ele
+        from app.application.monitoring.token_meter import TokenMeter
+
+        TokenMeter.set_current(profile, "briefing")
+
         runner = LoadRunnerProfile.execute(profile)
 
         # fuso do atleta primeiro: ontem/hoje/semana no horário dele
