@@ -13,6 +13,10 @@ from app.application.garmin.garmin_reconciler import GarminReconciler
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
 )
+from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
+from app.application.use_cases.load_training_history import (
+    LoadTrainingHistory,
+)
 from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
@@ -53,12 +57,18 @@ async def push_current_plan(
     # reconcilia contra si mesmo (empurra tudo, idempotente).
     previous = PushedPlanStore.load(profile)
 
+    # dias JÁ CUMPRIDOS: não re-empurra treino que o atleta já fez (não volta
+    # como "Programado" um treino concluído). Best-effort — sem histórico, não
+    # pula nada. Ver [[project_rede_relogio]].
+    done_days = await _fulfilled_days(profile, plan)
+
     if full_refresh:
 
-        # apaga os templates FUTUROS que já estão no relógio e zera os registros
-        # -> o reconciliador re-empurra tudo do zero (semana inteira fresca),
-        # e o relógio, ao sincronizar, repovoa "Programado" como faz no domingo.
-        _purge_future(plan, reference, garmin)
+        # apaga os templates FUTUROS AINDA NÃO FEITOS que estão no relógio e zera
+        # os registros -> o reconciliador re-empurra do zero (semana inteira
+        # fresca), e o relógio repovoa "Programado" como faz no domingo. Os
+        # cumpridos ficam intactos.
+        _purge_future(plan, reference, garmin, done_days)
 
         previous = None  # nada "já no relógio" -> reconcilia tudo como novo
 
@@ -68,6 +78,7 @@ async def push_current_plan(
         current_plan=plan,
         reference_date=reference,
         garmin=garmin,
+        done_days=done_days,
     )
 
     # persiste os registros de push (workout_id/schedule_id) gravados nas
@@ -91,18 +102,46 @@ async def push_current_plan(
     return runner, plan, results
 
 
-def _purge_future(plan: TrainingPlan, reference: date, garmin) -> None:
-    """Apaga do Garmin os templates das sessões FUTURAS que já estão no relógio
-    e zera seus registros — pra o reconciliador re-empurrar a semana inteira
-    fresca (o passado fica intacto). delete_workout cascateia o desagendamento,
-    então não sobra treino nem agendamento antigo. Best-effort: falha numa
-    remoção não derruba o re-push."""
+async def _fulfilled_days(profile: str, plan: TrainingPlan) -> set[str]:
+    """Dias da semana já CUMPRIDOS (casados com treino real no histórico).
+    Best-effort: qualquer falha volta vazio (não pula nada)."""
+
+    try:
+
+        history = await LoadTrainingHistory.execute(profile=profile)
+
+        return WeeklyPlanMatcher.fulfilled_days(plan, history.activities)
+
+    except Exception as e:  # noqa: BLE001 — best-effort
+
+        print(f"fulfilled_days falhou p/ '{profile}': {e}")
+
+        return set()
+
+
+def _purge_future(
+    plan: TrainingPlan,
+    reference: date,
+    garmin,
+    done_days: set[str] | None = None,
+) -> None:
+    """Apaga do Garmin os templates das sessões FUTURAS AINDA NÃO FEITAS que já
+    estão no relógio e zera seus registros — pra o reconciliador re-empurrar a
+    semana fresca (o passado E os treinos já cumpridos ficam intactos).
+    delete_workout cascateia o desagendamento, então não sobra treino nem
+    agendamento antigo. Best-effort: falha numa remoção não derruba o re-push."""
+
+    done = {d.lower() for d in (done_days or set())}
 
     for session in plan.sessions:
 
         if plan.session_date(session) < reference:
 
             continue  # o que já passou fica como está
+
+        if session.day.lower() in done:
+
+            continue  # treino já cumprido: não mexe (não volta como programado)
 
         record = session.garmin or {}
 

@@ -63,13 +63,19 @@ class GarminReconciler:
         current_plan: TrainingPlan,
         reference_date: date | None = None,
         garmin=None,
+        done_days: set[str] | None = None,
     ) -> list[dict]:
         """Aplica no Garmin a diferença entre o plano anterior e o atual.
         Grava o registro de push em cada sessão de `current_plan` (o chamador
         persiste o plano depois). Retorna um resultado por ação. `garmin` já
-        conectado (do chamador) é reusado em todas as ops — um login só."""
+        conectado (do chamador) é reusado em todas as ops — um login só.
+
+        `done_days` (dias da semana já CUMPRIDOS) são pulados: não re-empurra
+        treino que o atleta já fez (não faz sentido voltar como 'Programado')."""
 
         reference_date = reference_date or today_local()
+
+        done = {d.lower() for d in (done_days or set())}
 
         prev_by_day = {
             session.day.lower(): session
@@ -95,6 +101,12 @@ class GarminReconciler:
 
             # não mexe no passado: o que já era pra ter acontecido fica
             if on_date < reference_date:
+
+                continue
+
+            # treino de HOJE que o atleta JÁ fez: não re-empurra (não volta
+            # como 'Programado' um treino concluído)
+            if day in done:
 
                 continue
 

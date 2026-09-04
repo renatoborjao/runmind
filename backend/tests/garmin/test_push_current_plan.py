@@ -31,7 +31,7 @@ def _plan(days, records=None) -> TrainingPlan:
     )
 
 
-def _run(snapshot, full_refresh=True, current=None):
+def _run(snapshot, full_refresh=True, current=None, done=frozenset()):
 
     current = current or _plan(["Tuesday", "Thursday", "Saturday"])
 
@@ -44,6 +44,8 @@ def _run(snapshot, full_refresh=True, current=None):
         patch(f"{MODULE}.WeeklyPlanRepository"),
         patch(f"{MODULE}.PushedPlanStore") as store,
         patch(f"{MODULE}.sweep_orphan_workouts"),
+        patch(f"{MODULE}.LoadTrainingHistory") as history,
+        patch(f"{MODULE}.WeeklyPlanMatcher") as matcher,
         patch(f"{MODULE}.today_local", return_value=MONDAY),
     ):
 
@@ -53,6 +55,8 @@ def _run(snapshot, full_refresh=True, current=None):
         garmin.connect.return_value = g
         reconciler.reconcile.return_value = []
         store.load.return_value = snapshot
+        history.execute = AsyncMock(return_value=MagicMock(activities=[]))
+        matcher.fulfilled_days.return_value = set(done)
 
         asyncio.run(push_current_plan("renato2", full_refresh=full_refresh))
 
@@ -112,6 +116,8 @@ def test_full_refresh_leaves_past_sessions_untouched():
         patch(f"{MODULE}.WeeklyPlanRepository"),
         patch(f"{MODULE}.PushedPlanStore") as store,
         patch(f"{MODULE}.sweep_orphan_workouts"),
+        patch(f"{MODULE}.LoadTrainingHistory") as history,
+        patch(f"{MODULE}.WeeklyPlanMatcher") as matcher,
         patch(f"{MODULE}.today_local", return_value=date(2026, 7, 16)),
     ):
         g = MagicMock()
@@ -119,12 +125,45 @@ def test_full_refresh_leaves_past_sessions_untouched():
         garmin.connect.return_value = g
         reconciler.reconcile.return_value = []
         store.load.return_value = None
+        history.execute = AsyncMock(return_value=MagicMock(activities=[]))
+        matcher.fulfilled_days.return_value = set()
 
         asyncio.run(push_current_plan("renato2"))
 
     # terça já passou: NÃO foi apagada, registro preservado
     g.delete_workout.assert_not_called()
     assert current.find_session_by_day("Tuesday").garmin is not None
+
+
+def test_full_refresh_skips_fulfilled_workout():
+    """Treino JÁ CUMPRIDO (ex.: já correu hoje) não é purgado nem re-empurrado
+    — não volta como 'Programado' um treino concluído. Ver [[project_rede_relogio]]."""
+
+    current = _plan(
+        ["Tuesday", "Thursday", "Saturday"],
+        records={
+            "Tuesday": {"workout_id": 11, "schedule_id": 111,
+                        "date": "2026-07-14", "fingerprint": "a"},
+            "Thursday": {"workout_id": 22, "schedule_id": 222,
+                         "date": "2026-07-16", "fingerprint": "b"},
+            "Saturday": {"workout_id": 33, "schedule_id": 333,
+                         "date": "2026-07-18", "fingerprint": "c"},
+        },
+    )
+
+    # terça JÁ foi cumprida (today=segunda, mas terça marcada como done)
+    current, reconciler, store, g = _run(
+        snapshot=None, current=current, done={"Tuesday"},
+    )
+
+    # terça cumprida: NÃO apagada; quinta e sábado (futuros não feitos) sim
+    deleted = {c.args[0] for c in g.delete_workout.call_args_list}
+    assert deleted == {22, 33}
+    assert 11 not in deleted
+    # o registro da terça cumprida é preservado
+    assert current.find_session_by_day("Tuesday").garmin is not None
+    # e o reconciliador recebe done_days pra pular a terça no re-push
+    assert reconciler.reconcile.call_args.kwargs["done_days"] == {"Tuesday"}
 
 
 def test_incremental_reconciles_against_the_pushed_snapshot():
