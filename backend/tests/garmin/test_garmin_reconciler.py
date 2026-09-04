@@ -72,7 +72,7 @@ def _patched(push_ok=True):
     return push, remove
 
 
-def _run(previous, current, push_ok=True, reference=TUESDAY):
+def _run(previous, current, push_ok=True, reference=TUESDAY, done=None):
 
     push, remove = _patched(push_ok)
 
@@ -83,6 +83,7 @@ def _run(previous, current, push_ok=True, reference=TUESDAY):
 
         results = GarminReconciler.reconcile(
             PROFILE, previous, current, reference_date=reference,
+            done_days=done,
         )
 
     return results, push, remove
@@ -199,6 +200,21 @@ def test_moved_session_pushes_new_day_and_removes_old():
     actions = {r["day"]: r["action"] for r in results}
     assert actions["Wednesday"] == "pushed"
     assert actions["Thursday" if False else "Tuesday"] == "removed"
+
+
+def test_fulfilled_day_is_not_repushed():
+    """Dia já CUMPRIDO não é re-empurrado (não volta como 'Programado' um treino
+    concluído) — mesmo sendo hoje/futuro. Ver [[project_rede_relogio]]."""
+
+    plan = _plan(_session("Tuesday"), _session("Thursday"))
+
+    results, push, remove = _run(
+        previous=plan, current=plan, done={"Tuesday"},
+    )
+
+    # terça cumprida: pulada; só quinta é empurrada
+    assert push.call_count == 1
+    assert {r["day"] for r in results} == {"Thursday"}
 
 
 def test_past_sessions_are_left_untouched():

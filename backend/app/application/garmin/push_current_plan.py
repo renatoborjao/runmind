@@ -64,11 +64,12 @@ async def push_current_plan(
 
     if full_refresh:
 
-        # apaga os templates FUTUROS AINDA NÃO FEITOS que estão no relógio e zera
-        # os registros -> o reconciliador re-empurra do zero (semana inteira
-        # fresca), e o relógio repovoa "Programado" como faz no domingo. Os
-        # cumpridos ficam intactos.
-        _purge_future(plan, reference, garmin, done_days)
+        # apaga TODOS os templates futuros que estão no relógio (inclusive os já
+        # cumpridos — pra o treino concluído SAIR do "Programado") e zera os
+        # registros. O reconciliador re-empurra só os NÃO-feitos (done_days
+        # pula os cumpridos), então o relógio repovoa "Programado" só com os
+        # faltantes, como no domingo.
+        _purge_future(plan, reference, garmin)
 
         previous = None  # nada "já no relógio" -> reconcilia tudo como novo
 
@@ -123,25 +124,19 @@ def _purge_future(
     plan: TrainingPlan,
     reference: date,
     garmin,
-    done_days: set[str] | None = None,
 ) -> None:
-    """Apaga do Garmin os templates das sessões FUTURAS AINDA NÃO FEITAS que já
-    estão no relógio e zera seus registros — pra o reconciliador re-empurrar a
-    semana fresca (o passado E os treinos já cumpridos ficam intactos).
+    """Apaga do Garmin os templates das sessões de HOJE em diante que já estão
+    no relógio e zera seus registros — INCLUSIVE os já cumpridos, pra o treino
+    concluído SAIR do 'Programado'. O reconciliador re-empurra só os não-feitos
+    (ele recebe done_days e pula os cumpridos). Só o PASSADO fica intacto.
     delete_workout cascateia o desagendamento, então não sobra treino nem
     agendamento antigo. Best-effort: falha numa remoção não derruba o re-push."""
-
-    done = {d.lower() for d in (done_days or set())}
 
     for session in plan.sessions:
 
         if plan.session_date(session) < reference:
 
             continue  # o que já passou fica como está
-
-        if session.day.lower() in done:
-
-            continue  # treino já cumprido: não mexe (não volta como programado)
 
         record = session.garmin or {}
 

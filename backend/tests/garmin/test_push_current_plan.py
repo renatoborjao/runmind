@@ -135,9 +135,10 @@ def test_full_refresh_leaves_past_sessions_untouched():
     assert current.find_session_by_day("Tuesday").garmin is not None
 
 
-def test_full_refresh_skips_fulfilled_workout():
-    """Treino JÁ CUMPRIDO (ex.: já correu hoje) não é purgado nem re-empurrado
-    — não volta como 'Programado' um treino concluído. Ver [[project_rede_relogio]]."""
+def test_full_refresh_removes_fulfilled_and_does_not_repush_it():
+    """Treino JÁ CUMPRIDO (ex.: já correu hoje) SAI do 'Programado': é purgado
+    do relógio e NÃO é re-empurrado (o reconciliador recebe done_days e pula).
+    Só os faltantes repovoam. Ver [[project_rede_relogio]]."""
 
     current = _plan(
         ["Tuesday", "Thursday", "Saturday"],
@@ -156,13 +157,12 @@ def test_full_refresh_skips_fulfilled_workout():
         snapshot=None, current=current, done={"Tuesday"},
     )
 
-    # terça cumprida: NÃO apagada; quinta e sábado (futuros não feitos) sim
+    # TODOS os futuros são purgados do relógio, inclusive a terça cumprida
+    # (pra ela sair do "Programado")
     deleted = {c.args[0] for c in g.delete_workout.call_args_list}
-    assert deleted == {22, 33}
-    assert 11 not in deleted
-    # o registro da terça cumprida é preservado
-    assert current.find_session_by_day("Tuesday").garmin is not None
-    # e o reconciliador recebe done_days pra pular a terça no re-push
+    assert deleted == {11, 22, 33}
+    assert all(s.garmin is None for s in current.sessions)
+    # mas o reconciliador recebe done_days pra NÃO re-empurrar a terça
     assert reconciler.reconcile.call_args.kwargs["done_days"] == {"Tuesday"}
 
 
