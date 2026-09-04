@@ -99,52 +99,6 @@ def _schedule_id(schedule) -> int | str | None:
     return schedule.get("workoutScheduleId") or schedule.get("scheduleId")
 
 
-def reschedule_session(
-    session: PlannedSession,
-    record: dict,
-    on_date: date,
-    garmin,
-) -> dict:
-    """Move o AGENDAMENTO de uma sessão pro novo dia SEM recriar o template:
-    reaproveita o MESMO workout_id (o relógio já o conhece → continua como
-    'Programado', em vez de aparecer como um treino novo em 'Meus treinos') e
-    só troca a data. Agenda a nova ANTES de desagendar a antiga — nunca deixa
-    o dia sem treino. Devolve {ok, workout_id, schedule_id novo, date}, ou
-    {ok: False} se não dá pra reaproveitar (sem workout_id). Ver
-    [[project_rede_relogio]]."""
-
-    workout_id = record.get("workout_id")
-
-    if not workout_id:
-
-        return {"ok": False, "error": "sem workout_id no registro anterior"}
-
-    date_str = on_date.isoformat()
-
-    schedule = garmin.schedule_workout(workout_id, date_str)
-
-    # tira o agendamento ANTIGO (só o agendamento, o template continua vivo e
-    # reaproveitado). unschedule_workout usa o ID do AGENDAMENTO, não do treino.
-    old_schedule_id = record.get("schedule_id")
-
-    if old_schedule_id is not None:
-
-        try:
-
-            garmin.unschedule_workout(old_schedule_id)
-
-        except Exception as e:
-
-            print(f"Falha ao desagendar antigo ({old_schedule_id}): {e}")
-
-    return {
-        "ok": True,
-        "workout_id": workout_id,
-        "schedule_id": _schedule_id(schedule),
-        "date": date_str,
-    }
-
-
 def remove_session(profile: str, record: dict, garmin=None) -> dict:
     """Tira do Garmin o treino que uma sessão colocou lá. Confirmado no
     device (perfil renato2, jul/2026): apagar o template com delete_workout
