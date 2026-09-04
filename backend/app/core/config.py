@@ -296,6 +296,38 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # METAS/PROVAS pelo cérebro do coach: quando ligada, a ação `goal` do
+    # CoachBrain traz os campos ESTRUTURADOS da prova (nome/distância/data ISO/
+    # tempo-alvo/relação degrau×norte) e um executor determinístico aplica com a
+    # âncora certa (prova datada MAIS PRÓXIMA nunca é atropelada por uma mais
+    # distante), preserva o objetivo-mãe e grava a hierarquia na memória. OFF =
+    # roteia pro GoalChangeApplier de sempre (fallback estável). Canário no
+    # renato2 até validar offline. Ver [[project_multiplos_objetivos]].
+    goal_brain_enabled: bool = False
+
+    goal_brain_profiles: str = ""
+
+    @property
+    def goal_brain_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.goal_brain_profiles.split(",")
+            if p.strip()
+        ]
+
+    def goal_brain_active_for(self, profile: str) -> bool:
+        """O executor estruturado de metas/provas atende este perfil?
+        (flag global + allowlist de canário)."""
+
+        if not self.goal_brain_enabled:
+
+            return False
+
+        allow = self.goal_brain_profile_list
+
+        return not allow or profile in allow
+
     # RENOMEAR O TREINO NO STRAVA com o nome do nosso plano (ex.: "Tempo 6 km")
     # no lugar do genérico "Corrida matinal". Exige escopo activity:write (o
     # atleta reconecta o Strava uma vez). Canário: começa só no renato2 pra

@@ -511,6 +511,116 @@ def test_two_moves_in_one_message_build_single_combined_proposal():
     assert "Como fica" in reply
 
 
+def test_goal_action_routes_to_structured_executor_when_flag_on():
+    """Flag goal_brain ON: a ação goal vai pro executor ESTRUTURADO, recebendo
+    a ação (com os campos de prova) e a voz do coach (say)."""
+
+    action = BrainAction(
+        "goal", "single_session", None, "correr a 15k em 5:00/km",
+        race_name="Villa-Lobos", distance_km=15, race_date="2026-12-20",
+        target_time="1:15:00", relationship="stepping_stone",
+    )
+
+    decision = BrainDecision(say="Registrei tua 15k como degrau! 🎯", action=action)
+
+    settings = MagicMock()
+    settings.goal_brain_active_for.return_value = True
+
+    apply_many = AsyncMock(return_value="Registrei tua 15k como degrau! 🎯")
+
+    reply, _ = _run(
+        decision,
+        extra_patches=[
+            patch("app.core.config.get_settings", return_value=settings),
+            patch(
+                "app.application.coach.conversation.goal_action_executor."
+                "GoalActionExecutor.apply_many",
+                new=apply_many,
+            ),
+        ],
+    )
+
+    assert reply == "Registrei tua 15k como degrau! 🎯"
+    # recebeu a lista de ações estruturadas e o say
+    passed_actions = apply_many.call_args.args[2]
+    assert passed_actions[0].race_date == "2026-12-20"
+    assert passed_actions[0].relationship == "stepping_stone"
+    assert apply_many.call_args.args[3] == "Registrei tua 15k como degrau! 🎯"
+
+
+def test_multiple_goal_actions_route_to_apply_many():
+    """Turno real do Renato: a meia como norte (primary) E a 15k como degrau
+    (stepping_stone) na MESMA mensagem — as DUAS vão pro executor estruturado,
+    nenhuma é descartada."""
+
+    decision = BrainDecision(
+        say="A meia é o norte; a 15k é degrau. 🎯",
+        actions=[
+            BrainAction(
+                "goal", "single_session", None, "meia como foco",
+                race_name="Nike SP", distance_km=21, race_date="2027-07-25",
+                target_time=None, relationship="primary",
+            ),
+            BrainAction(
+                "goal", "single_session", None, "15k degrau",
+                race_name="Villa-Lobos", distance_km=15, race_date="2026-12-20",
+                target_time="1:15:00", relationship="stepping_stone",
+            ),
+        ],
+    )
+
+    settings = MagicMock()
+    settings.goal_brain_active_for.return_value = True
+
+    apply_many = AsyncMock(return_value="A meia é o norte; a 15k é degrau. 🎯")
+
+    reply, _ = _run(
+        decision,
+        extra_patches=[
+            patch("app.core.config.get_settings", return_value=settings),
+            patch(
+                "app.application.coach.conversation.goal_action_executor."
+                "GoalActionExecutor.apply_many",
+                new=apply_many,
+            ),
+        ],
+    )
+
+    assert reply == "A meia é o norte; a 15k é degrau. 🎯"
+    passed_actions = apply_many.call_args.args[2]
+    assert len(passed_actions) == 2  # NENHUMA meta ficou de fora
+    assert {a.relationship for a in passed_actions} == {"primary", "stepping_stone"}
+
+
+def test_goal_action_falls_back_to_applier_when_flag_off():
+    """Flag OFF: a ação goal segue pela cascata estável (GoalChangeApplier)."""
+
+    decision = BrainDecision(
+        say="Bora ajustar a meta!",
+        action=BrainAction("goal", "single_session", None, "meta nova: sub-45"),
+    )
+
+    settings = MagicMock()
+    settings.goal_brain_active_for.return_value = False
+
+    handle = AsyncMock(return_value="Atualizei seu objetivo. 🎯")
+
+    reply, _ = _run(
+        decision,
+        extra_patches=[
+            patch("app.core.config.get_settings", return_value=settings),
+            patch(
+                "app.application.coach.conversation.goal_change_applier."
+                "GoalChangeApplier.handle",
+                new=handle,
+            ),
+        ],
+    )
+
+    assert reply == "Atualizei seu objetivo. 🎯"
+    handle.assert_awaited_once()
+
+
 def test_reject_pending_clears_without_applying():
 
     decision = BrainDecision(say="Tranquilo, deixo como está. 👍", on_pending="reject")

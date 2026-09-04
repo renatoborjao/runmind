@@ -52,6 +52,10 @@ _SCOPES = {"single_session", "week"}
 
 _ON_PENDING = {"apply", "reject", "refine"}
 
+# relação da prova/meta nova com o que o atleta já tem — a hierarquia que o
+# executor usa pra saber o que ancora, o que soma e o que troca o norte.
+_RELATIONSHIPS = {"primary", "stepping_stone", "additional", "replace"}
+
 MAX_OUTPUT_TOKENS = 700
 
 
@@ -81,7 +85,14 @@ preference|coach_switch|shoe>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
                      "content_change": <se ALÉM de mover o dia ele também quer o \
-treino diferente, o que muda no CONTEÚDO | null>}}, ...],
+treino diferente, o que muda no CONTEÚDO | null>,
+                     "race_name": <SÓ em type=goal com prova: nome da prova | \
+null>, "distance_km": <SÓ em goal com prova: número em km | null>,
+                     "race_date": <SÓ em goal com prova: data ISO aaaa-mm-dd \
+resolvida pelo calendário | null>, "target_time": <SÓ em goal: tempo-alvo \
+"h:mm:ss"/"mm:ss", ou null se ele só quer completar/sem cronômetro>,
+                     "relationship": <SÓ em goal: primary|stepping_stone|\
+additional|replace | null>}}, ...],
   "on_pending": null | <apply|reject|refine>}}
 
 COMO ESCOLHER:
@@ -99,7 +110,7 @@ usando os números exatos do quadro) e deixe "answer_card"=null — ele já tem 
 treino, o cartão só REPETIRIA a sessão embaixo (paredão). answer_card=\
 next_training é só pra quando ele pergunta QUAL é o treino, não COMO fazê-lo.
 - Pedido de MUDAR o plano SÓ DESTA SEMANA (mover de dia, pular, deixar mais \
-leve/livre, simplificar pro relógio, trocar tipo, mudar objetivo, fixar dia do \
+leve/livre, simplificar pro relógio, trocar tipo, fixar dia do \
 longão): coloque em "actions". ESCOPO é sagrado — se o atleta aponta UMA sessão \
 ("o de amanhã", "só o longão"), scope="single_session" e target_day daquele \
 dia; se fala da semana, scope="week". NUNCA mexa em mais do que ele pediu. Se \
@@ -159,6 +170,29 @@ Red Hare no domingo", "amanhã vou de X"), corrige a função de um par ("o Evo 
 "quantos km tem o Boston?"): type="shoe", instruction=a fala dele. É o único \
 caso de "shoe" — só quando o assunto é o CALÇADO, não o treino. No "say", uma \
 confirmação curta (o sistema registra e responde com os números EXATOS de km).
+- META / PROVA (o atleta fala de um OBJETIVO ou de uma PROVA — com ou sem \
+data): type="goal". Instruction = uma frase curta com a meta/intenção (ex.: \
+"correr a 15k Villa-Lobos em 5:00/km", "emagrecer com saúde"). QUANDO houver \
+prova, preencha os campos estruturados: race_name (nome), distance_km (número), \
+race_date (ISO aaaa-mm-dd — RESOLVA "20/12/2026" ou "em dezembro" pelo \
+CALENDÁRIO do quadro), target_time ("h:mm:ss"/"mm:ss", ou null se ele só quer \
+COMPLETAR/chegar bem, sem cronômetro). E o mais importante, relationship (a \
+hierarquia): \
+  * "primary" = é a meta PRINCIPAL/norte dele ("meu foco é a maratona", "meu \
+grande objetivo é o 21k"); \
+  * "stepping_stone" = uma prova (em geral mais próxima) que serve de DEGRAU \
+pra meta maior ("essa 15k é preparação pros 21k", "faço a 10k mas meu foco de \
+fundo continua no 21k"); \
+  * "additional" = SOMA mais uma prova/meta às que já tem, sem trocar ("também \
+quero correr a São Silvestre"); \
+  * "replace" = está TROCANDO o objetivo, o antigo não vale mais ("meu objetivo \
+agora é outro", "esquece a meia, agora quero é 5k rápido"). \
+  Se ele quer mudar a meta mas ainda NÃO disse qual, NÃO invente ação — \
+pergunte no "say" qual é (distância? tempo? prova com data?). No "say", \
+reconheça e, se for prova, situe a hierarquia (degrau × norte) com a voz do \
+coach; NUNCA diga que já regerou o plano/mandou pro relógio (o sistema decide e \
+executa). Uma prova por item; várias provas na mesma mensagem = vários itens \
+goal.
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \
@@ -197,6 +231,21 @@ class BrainAction:
     # carrega o que muda no CONTEÚDO — o executor faz as duas coisas numa
     # proposta só. None quando é só mover (ou qualquer outra ação).
     content_change: str | None = None
+
+    # --- campos ESTRUTURADOS de META/PROVA (só na ação type="goal") ---
+    # Quando o atleta fala de uma prova, o cérebro devolve os fatos já
+    # extraídos/resolvidos (nada de re-parsear texto comprimido). `relationship`
+    # carrega a INTELIGÊNCIA da hierarquia: primary (norte) | stepping_stone
+    # (degrau rumo ao norte) | additional (soma) | replace (troca o objetivo).
+    race_name: str | None = None
+
+    distance_km: float | None = None
+
+    race_date: str | None = None  # ISO aaaa-mm-dd, já resolvido pelo calendário
+
+    target_time: str | None = None  # "h:mm:ss"/"mm:ss"; None = meta de conclusão
+
+    relationship: str | None = None
 
 
 @dataclass(slots=True)
@@ -410,4 +459,41 @@ class CoachBrain:
             target_day=target_day,
             instruction=str(raw.get("instruction") or "").strip(),
             content_change=content_change,
+            race_name=CoachBrain._clean_str(raw.get("race_name")),
+            distance_km=CoachBrain._clean_float(raw.get("distance_km")),
+            race_date=CoachBrain._clean_str(raw.get("race_date")),
+            target_time=CoachBrain._clean_str(raw.get("target_time")),
+            relationship=(
+                raw.get("relationship")
+                if raw.get("relationship") in _RELATIONSHIPS
+                else None
+            ),
         )
+
+    @staticmethod
+    def _clean_str(value) -> str | None:
+
+        if not isinstance(value, str) or not value.strip():
+
+            return None
+
+        return value.strip()
+
+    @staticmethod
+    def _clean_float(value) -> float | None:
+
+        if isinstance(value, (int, float)):
+
+            return float(value)
+
+        if isinstance(value, str):
+
+            try:
+
+                return float(value.replace(",", ".").strip())
+
+            except ValueError:
+
+                return None
+
+        return None

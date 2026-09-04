@@ -113,7 +113,7 @@ class CoachBrainExecutor:
 
             applied = await CoachBrainExecutor._act_all(
                 profile, runner, decision.all_actions, repo, incoming_text,
-                context_facts,
+                context_facts, decision.say,
             )
 
             if applied is not None:
@@ -177,7 +177,7 @@ class CoachBrainExecutor:
 
             applied = await CoachBrainExecutor._act_all(
                 profile, runner, decision.all_actions, repo, incoming_text,
-                context_facts,
+                context_facts, decision.say,
             )
 
             if applied is not None:
@@ -191,7 +191,7 @@ class CoachBrainExecutor:
     @staticmethod
     async def _act_all(
         profile, runner, actions: list[BrainAction], repo, incoming_text,
-        context_facts="",
+        context_facts="", say="",
     ) -> str | None:
         """Executa a(s) ação(ões). DUAS+ mudanças de plano na mesma mensagem
         (ex.: "troca terça pra quarta E quinta pra sexta") viram UMA proposta
@@ -206,14 +206,24 @@ class CoachBrainExecutor:
                 profile, runner, actions, repo, context_facts,
             )
 
+        # VÁRIAS metas/provas na mesma mensagem (ex.: a meia como norte E a 15k
+        # como degrau) — aplica TODAS numa tacada (reancora na mais próxima,
+        # regenera no máximo uma vez). Sem isso o _act só pegava a 1ª.
+        if len(actions) >= 2 and all(a.type == "goal" for a in actions):
+
+            return await CoachBrainExecutor._goals(
+                profile, runner, actions, say,
+            )
+
         return await CoachBrainExecutor._act(
             profile, runner, actions[0], repo, incoming_text, context_facts,
+            say,
         )
 
     @staticmethod
     async def _act(
         profile, runner, action: BrainAction, repo, incoming_text,
-        context_facts="",
+        context_facts="", say="",
     ) -> str | None:
         """Concretiza UMA ação: mudança da semana vira PROPOSTA (pede 'sim');
         rotina durável vira MEMÓRIA; objetivo/preferência os appliers aplicam.
@@ -254,13 +264,7 @@ class CoachBrainExecutor:
 
         if action.type == "goal":
 
-            from app.application.coach.conversation.goal_change_applier import (
-                GoalChangeApplier,
-            )
-
-            return await GoalChangeApplier.handle(
-                profile, runner, action.instruction or action.type,
-            )
+            return await CoachBrainExecutor._goals(profile, runner, [action], say)
 
         if action.type == "preference":
 
@@ -275,6 +279,39 @@ class CoachBrainExecutor:
             return await CoachBrainExecutor._shoe(profile, runner, incoming_text)
 
         return None
+
+    @staticmethod
+    async def _goals(
+        profile, runner, actions: list[BrainAction], say="",
+    ) -> str | None:
+        """Roteia a(s) meta(s)/prova(s). Flag goal_brain ON: executor
+        ESTRUTURADO (âncora certa + hierarquia degrau×norte + múltiplas provas
+        numa tacada, sem re-parsear texto). OFF: cascata estável de sempre
+        (GoalChangeApplier, uma meta por vez — a 1ª)."""
+
+        from app.core.config import get_settings
+
+        if get_settings().goal_brain_active_for(profile):
+
+            from app.application.coach.conversation.goal_action_executor import (
+                GoalActionExecutor,
+            )
+
+            result = await GoalActionExecutor.apply_many(
+                profile, runner, actions, say,
+            )
+
+            if result is not None:
+
+                return result
+
+        from app.application.coach.conversation.goal_change_applier import (
+            GoalChangeApplier,
+        )
+
+        return await GoalChangeApplier.handle(
+            profile, runner, actions[0].instruction or actions[0].type,
+        )
 
     @staticmethod
     async def _shoe(profile, runner, incoming_text) -> str | None:

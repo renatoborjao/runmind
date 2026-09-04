@@ -50,6 +50,53 @@ def test_parse_action_with_scope():
     assert "livre" in a.instruction
 
 
+def test_parse_goal_action_with_structured_race_fields():
+    """Ação goal traz a prova ESTRUTURADA + a hierarquia (relationship), sem
+    depender de re-parsear texto."""
+
+    d = _parse({
+        "say": "Boa! Registrei tua 15k como degrau rumo aos 21k. 🎯",
+        "actions": [{
+            "type": "goal", "scope": "single_session", "target_day": None,
+            "instruction": "correr a 15k Villa-Lobos em 5:00/km",
+            "race_name": "Santander Track&Field - Villa-Lobos",
+            "distance_km": 15, "race_date": "2026-12-20",
+            "target_time": "1:15:00", "relationship": "stepping_stone",
+        }],
+    })
+
+    a = d.all_actions[0]
+    assert a.type == "goal"
+    assert a.race_name == "Santander Track&Field - Villa-Lobos"
+    assert a.distance_km == 15.0
+    assert a.race_date == "2026-12-20"
+    assert a.target_time == "1:15:00"
+    assert a.relationship == "stepping_stone"
+
+
+def test_parse_goal_invalid_relationship_dropped():
+    """relationship fora do vocabulário vira None (o executor cai no default)."""
+
+    d = _parse({
+        "say": "ok",
+        "actions": [{"type": "goal", "instruction": "meta nova",
+                     "relationship": "xpto"}],
+    })
+
+    assert d.all_actions[0].relationship is None
+
+
+def test_parse_goal_distance_from_string():
+    """distance_km como string ('15' ou '21,1') é normalizada pra float."""
+
+    d = _parse({
+        "say": "ok",
+        "actions": [{"type": "goal", "instruction": "x", "distance_km": "21,1"}],
+    })
+
+    assert d.all_actions[0].distance_km == 21.1
+
+
 def test_parse_defaults_scope_when_invalid():
 
     d = _parse({"say": "ok", "actions": [{"type": "move", "scope": "xpto"}]})
