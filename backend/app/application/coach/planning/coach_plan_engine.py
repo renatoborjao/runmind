@@ -200,6 +200,8 @@ class CoachPlanEngine:
         objective: str,
         week_start: date,
         context: str,
+        model: str | None = None,
+        thinking_budget: int | None = None,
     ) -> TrainingPlan:
 
         settings = get_settings()
@@ -210,18 +212,24 @@ class CoachPlanEngine:
             time_rule=TIME_OR_DISTANCE_RULE,
         )
 
+        # modelo/thinking podem ser sobrepostos pelo chamador (ex.: modelo PRO
+        # só no plano, atrás de flag) — default é o coach model (Flash) atual.
+        model = model or settings.gemini_coach_model
+
+        budget = THINKING_BUDGET if thinking_budget is None else thinking_budget
+
         # generate_json re-gera se o JSON do plano vier torto (blindagem) —
         # o plano é core; não pode cair no determinístico por escorregada do
         # modelo. Só cai no fallback (AIPlanService) se TODAS as tentativas
         # falharem, aí levanta pra ele.
         plan = await generate_json(
-            model=settings.gemini_coach_model,
+            model=model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 thinking_config=types.ThinkingConfig(
-                    thinking_budget=THINKING_BUDGET,
+                    thinking_budget=budget,
                 ),
             ),
             parse=lambda raw: CoachPlanEngine._parse_plan(

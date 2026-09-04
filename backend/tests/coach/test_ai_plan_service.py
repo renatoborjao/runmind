@@ -135,6 +135,82 @@ def test_force_regenerates_by_ai_even_with_cached_plan():
     assert plan.source == "runmind"
 
 
+def _run_pro(ai_side_effect, pro_active=True):
+    """Roda ensure_plan com o canário do modelo PRO controlado via settings."""
+
+    settings = MagicMock()
+    settings.plan_model_active_for.return_value = pro_active
+    settings.plan_model = "gemini-3.1-pro-preview"
+    settings.plan_thinking_budget = 8192
+    settings.gemini_coach_model = "gemini-3.6-flash"
+
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as repo_cls,
+        patch(f"{MODULE}.CoachPlanEngine") as coach,
+        patch(f"{MODULE}.WeeklyPlanService") as wps,
+        patch.object(AIPlanService, "_build_context", return_value="ctx"),
+        patch("app.core.config.get_settings", return_value=settings),
+    ):
+
+        repo_cls.return_value.load.return_value = None
+        wps.active_week_start.return_value = WEEK
+        wps.get_or_generate.return_value = _plan(source="deterministico")
+        coach.generate = AsyncMock(side_effect=ai_side_effect)
+
+        plan = asyncio.run(
+            AIPlanService.ensure_plan(
+                "renato2", make_runner(), _assessment(),
+                MagicMock(), MagicMock(race_date=None),
+                TrainingHistory([]), WEEK,
+            )
+        )
+
+        return plan, coach, wps
+
+
+def test_pro_canary_uses_strong_model_and_thinking():
+    """Perfil no canário: o plano é gerado com o modelo PRO + thinking do
+    settings (não o Flash padrão)."""
+
+    plan, coach, wps = _run_pro(ai_side_effect=[_plan()])
+
+    coach.generate.assert_awaited_once()
+    kwargs = coach.generate.await_args.kwargs
+    assert kwargs["model"] == "gemini-3.1-pro-preview"
+    assert kwargs["thinking_budget"] == 8192
+    assert plan.source == "runmind"
+
+
+def test_pro_failure_falls_back_to_flash_before_deterministic():
+    """Se o PRO cai/rate-limit, tenta o FLASH antes do determinístico — não
+    despenca a qualidade por uma falha do PRO."""
+
+    plan, coach, wps = _run_pro(
+        ai_side_effect=[RuntimeError("pro rate-limit"), _plan()],
+    )
+
+    assert coach.generate.await_count == 2
+    # 1ª tentativa: PRO; 2ª: Flash (sem model explícito -> default do engine)
+    first = coach.generate.await_args_list[0].kwargs
+    second = coach.generate.await_args_list[1].kwargs
+    assert first.get("model") == "gemini-3.1-pro-preview"
+    assert "model" not in second
+    wps.get_or_generate.assert_not_called()   # não precisou do determinístico
+    assert plan.source == "runmind"
+
+
+def test_pro_and_flash_both_fail_go_deterministic():
+    """PRO e Flash caem: aí sim cai no determinístico (nunca sem plano)."""
+
+    plan, coach, wps = _run_pro(
+        ai_side_effect=[RuntimeError("pro caiu"), RuntimeError("flash caiu")],
+    )
+
+    assert coach.generate.await_count == 2
+    wps.get_or_generate.assert_called_once()
+    assert plan.source == "deterministico"
+
+
 def test_fill_time_based_km_estimates_and_counts_all_types():
     """Sessão por TEMPO ganha km estimado (duração ÷ pace) e o volume da semana
     passa a contar TODOS os tipos, não só os por distância."""

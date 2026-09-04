@@ -99,11 +99,8 @@ class AIPlanService:
                 repository, week_start, assessment.run_walk,
             )
 
-            plan = await CoachPlanEngine.generate(
-                runner_name=runner.name,
-                objective=goal.name,
-                week_start=week_start,
-                context=context,
+            plan = await AIPlanService._generate_ai(
+                profile, runner.name, goal.name, week_start, context,
             )
 
             # A periodização é decisão do COACH (ele vê a prova/distância no
@@ -133,6 +130,53 @@ class AIPlanService:
             return AIPlanService._deterministic(
                 profile, runner, assessment, metrics, goal,
                 history, reference_date,
+            )
+
+    @staticmethod
+    async def _generate_ai(
+        profile: str,
+        runner_name: str,
+        objective: str,
+        week_start: date,
+        context: str,
+    ) -> TrainingPlan:
+        """Gera o plano pela IA. Perfil no canário do modelo PRO usa o modelo
+        forte (raciocínio pesado, 1×/semana); se ele cair/rate-limit, FAZ
+        FALLBACK pro Flash antes de deixar o determinístico assumir — não deixa
+        a qualidade despencar por uma falha do PRO. Ver [[project_consumo_tokens]]."""
+
+        from app.core.config import get_settings
+
+        settings = get_settings()
+
+        if not settings.plan_model_active_for(profile):
+
+            # caminho padrão: Flash (modelo/thinking atuais do CoachPlanEngine)
+            return await CoachPlanEngine.generate(
+                runner_name=runner_name, objective=objective,
+                week_start=week_start, context=context,
+            )
+
+        # canário PRO: tenta o modelo forte; na falha, cai pro Flash
+        try:
+
+            return await CoachPlanEngine.generate(
+                runner_name=runner_name, objective=objective,
+                week_start=week_start, context=context,
+                model=settings.plan_model,
+                thinking_budget=settings.plan_thinking_budget,
+            )
+
+        except Exception as e:
+
+            print(
+                f"Plano PRO ({settings.plan_model}) falhou p/ '{profile}', "
+                f"fallback pro Flash: {e}"
+            )
+
+            return await CoachPlanEngine.generate(
+                runner_name=runner_name, objective=objective,
+                week_start=week_start, context=context,
             )
 
     @staticmethod

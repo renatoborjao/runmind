@@ -328,6 +328,41 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # MODELO PRO só na geração do PLANO da semana (a tarefa de raciocínio mais
+    # pesada, roda 1×/semana/atleta — então mesmo um modelo caro sai barato). O
+    # resto (chat/briefing/análise/memória) segue no Flash, rápido e barato onde
+    # é frequente. Canário; fallback Pro→Flash→determinístico se o Pro cair/
+    # rate-limit. Validado offline (A/B nos dados reais). Ver [[project_consumo_tokens]].
+    plan_model_enabled: bool = False
+
+    plan_model_profiles: str = ""
+
+    # modelo forte usado na geração do plano quando a flag está ativa pro perfil
+    plan_model: str = "gemini-3.1-pro-preview"
+
+    # orçamento de raciocínio (thinking) do plano no modelo forte
+    plan_thinking_budget: int = 8192
+
+    @property
+    def plan_model_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.plan_model_profiles.split(",")
+            if p.strip()
+        ]
+
+    def plan_model_active_for(self, profile: str) -> bool:
+        """O plano deste perfil usa o modelo PRO? (flag global + canário)."""
+
+        if not self.plan_model_enabled:
+
+            return False
+
+        allow = self.plan_model_profile_list
+
+        return not allow or profile in allow
+
     # RENOMEAR O TREINO NO STRAVA com o nome do nosso plano (ex.: "Tempo 6 km")
     # no lugar do genérico "Corrida matinal". Exige escopo activity:write (o
     # atleta reconecta o Strava uma vez). Canário: começa só no renato2 pra
