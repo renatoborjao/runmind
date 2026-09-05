@@ -34,27 +34,38 @@ class GarminClient:
 
     @staticmethod
     def analysis_enabled(profile: str) -> bool:
-        """Válvula separada de 'conectado': só quando o marcador existe é
-        que a ANÁLISE passa a vir do Garmin. Deixa conectar (push/dump) sem
-        já trocar a análise — e voltar pro Strava num toque se algo sair
-        torto durante a verificação do mapeamento."""
+        """PADRÃO: quem tem Garmin conectado é analisado PELO Garmin — sem
+        precisar ligar nada. A análise via Garmin é o padrão do atleta
+        conectado; o marcador `analysis_off` é só a VÁLVULA DE ESCAPE (opt-out)
+        pra forçar a análise de volta ao Strava num toque, caso o mapeamento
+        Garmin saia torto pra alguém. Ausente por padrão. (O antigo `analysis_on`
+        virou desnecessário e é ignorado.)"""
 
-        return (GarminClient.token_dir(profile) / "analysis_on").exists()
+        if not GarminClient.is_connected(profile):
+
+            return False
+
+        return not (GarminClient.token_dir(profile) / "analysis_off").exists()
 
     @staticmethod
     def set_analysis(profile: str, enabled: bool) -> None:
+        """enabled=True volta ao PADRÃO (análise via Garmin) removendo o
+        opt-out; enabled=False força a análise pro Strava gravando o
+        marcador `analysis_off`."""
 
-        marker = GarminClient.token_dir(profile) / "analysis_on"
+        marker = GarminClient.token_dir(profile) / "analysis_off"
 
         if enabled:
+
+            if marker.exists():
+
+                marker.unlink()
+
+        else:
 
             marker.parent.mkdir(parents=True, exist_ok=True)
 
             marker.write_text("1", encoding="utf-8")
-
-        elif marker.exists():
-
-            marker.unlink()
 
     @staticmethod
     def connect(profile: str) -> Garmin:

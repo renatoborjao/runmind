@@ -1,9 +1,11 @@
-"""Liga/desliga a ANÁLISE via Garmin pra um atleta (separado de estar
-conectado). Use 'off' pra voltar a análise pro Strava num toque se algo
-sair torto durante a verificação do mapeamento.
+"""Override da ANÁLISE do Garmin pra um atleta. O PADRÃO é: quem tem Garmin
+conectado já é analisado pelo Garmin (não precisa ligar nada). Este script é
+só a válvula de escape: 'off' força a análise de volta ao Strava num toque
+(se o mapeamento Garmin sair torto pra alguém); 'on' remove o override e volta
+ao padrão.
 
 Uso:  python garmin_analysis.py <profile> <on|off>
-Ex.:  python garmin_analysis.py renato2 on
+Ex.:  python garmin_analysis.py renato2 off   # forçar Strava
 """
 
 import sys
@@ -25,11 +27,11 @@ def main(profile: str, state: str) -> None:
                   f"Garmin (rode garmin_login.py). A análise só troca "
                   f"quando conectar.")
 
-        print(f"✅ Análise via GARMIN LIGADA para '{profile}'.")
+        print(f"✅ '{profile}' no PADRÃO: análise via GARMIN (override removido).")
 
     else:
 
-        print(f"↩️ Análise de '{profile}' de volta ao STRAVA (Garmin off).")
+        print(f"↩️ '{profile}' forçado pro STRAVA (override analysis_off ligado).")
 
 
 if __name__ == "__main__":
