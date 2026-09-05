@@ -106,23 +106,73 @@ def test_premium_computed_fields_absent_on_basic_watch():
     assert health.training_load_balance is None
 
 
-def test_premium_computed_fields_used_when_present():
+# --- FORMATO REAL do FR265 (dump da conta do João, 2026-09-05) ---
 
-    # relógio melhor: a Garmin ENTREGA readiness + training status -> usa
-    garmin = _fake_garmin(
-        get_training_readiness=[{"score": 82, "level": "READY"}],
-        get_training_status={
-            "mostRecentTrainingStatus": "PRODUCTIVE",
-            "mostRecentTrainingLoadBalance": {"trainingStatus": "BALANCED"},
+_DEVICE = "3628537299"
+
+
+def _training_status_fr265(
+    status_phrase="PRODUCTIVE_3",
+    balance_phrase="AEROBIC_HIGH_SHORTAGE",
+    balance_map_null=False,
+):
+    """mostRecentTrainingStatus/LoadBalance ANINHADOS por deviceId, como o
+    FR265 realmente devolve."""
+
+    balance_map = None if balance_map_null else {
+        _DEVICE: {
+            "trainingBalanceFeedbackPhrase": balance_phrase,
+            "primaryTrainingDevice": True,
+        }
+    }
+
+    return {
+        "mostRecentTrainingStatus": {
+            "latestTrainingStatusData": {
+                _DEVICE: {
+                    "trainingStatus": 7,
+                    "trainingStatusFeedbackPhrase": status_phrase,
+                    "acuteTrainingLoadDTO": {"acwrStatus": "OPTIMAL"},
+                    "primaryTrainingDevice": True,
+                }
+            }
         },
+        "mostRecentTrainingLoadBalance": {
+            "metricsTrainingLoadBalanceDTOMap": balance_map
+        },
+    }
+
+
+def test_premium_readiness_and_status_used_when_present():
+
+    # FR265: readiness (lista) + training status/balance ANINHADOS por device
+    garmin = _fake_garmin(
+        get_training_readiness=[{"score": 82, "level": "HIGH", "sleepScore": 90}],
+        get_training_status=_training_status_fr265(),
     )
 
     health = _fetch(garmin)
 
     assert health.readiness_score == 82
-    assert health.readiness_level == "READY"
+    assert health.readiness_level == "HIGH"
+    # "PRODUCTIVE_3" -> rótulo canônico "PRODUCTIVE" (o formatter traduz)
     assert health.training_status == "PRODUCTIVE"
-    assert health.training_load_balance == "BALANCED"
+    assert health.training_load_balance == "AEROBIC_HIGH_SHORTAGE"
+
+
+def test_no_status_phrase_maps_to_none():
+
+    # relógio ainda sem base suficiente: "NO_STATUS_2" + mapa de balance nulo
+    garmin = _fake_garmin(
+        get_training_status=_training_status_fr265(
+            status_phrase="NO_STATUS_2", balance_map_null=True
+        ),
+    )
+
+    health = _fetch(garmin)
+
+    assert health.training_status is None
+    assert health.training_load_balance is None
 
 
 def test_missing_endpoint_never_crashes():

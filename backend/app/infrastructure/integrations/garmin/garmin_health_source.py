@@ -2,14 +2,21 @@
 battery, FC repouso, VO2max + os sinais que a Garmin já computa nos relógios
 melhores) e mapeia pra DailyHealth. Camada 1: só ingere, sem IA.
 
-Mapeamento ancorado no JSON REAL (dump da conta do Renato, FR165, 2026-07):
-cada endpoint num try isolado — device sem tal métrica, relógio novo sem
-baseline, dia sem sono medido: o campo vira None, o snapshot não quebra.
+Mapeamento ancorado no JSON REAL: os primitivos no dump do FR165 (Renato,
+2026-07); os campos PREMIUM (readiness, training status/load balance) no dump
+do FR265 (João, 2026-09-05) — o formato populado, antes só suposto, foi
+validado ao vivo. Cada endpoint num try isolado — device sem tal métrica,
+relógio novo sem baseline, dia sem sono medido: o campo vira None, o snapshot
+não quebra.
 
-Os campos que a Garmin só calcula nos relógios melhores (readiness,
-training_status) vêm None no FR165; o formato POPULADO deles ainda não foi
-validado contra um device premium — a extração é best-effort e defensiva
-(nunca quebra), a validar quando um atleta com FR265/965 conectar."""
+Readiness vem numa lista (item[0].score/level). Training status/load balance
+vêm ANINHADOS por deviceId: `mostRecentTrainingStatus.latestTrainingStatusData
+[<deviceId>].trainingStatusFeedbackPhrase` (ex.: "PRODUCTIVE_3") e
+`mostRecentTrainingLoadBalance.metricsTrainingLoadBalanceDTOMap[<deviceId>].
+trainingBalanceFeedbackPhrase` (ex.: "AEROBIC_HIGH_SHORTAGE"). No FR165 ambos
+vêm vazios (None), sem quebrar."""
+
+import re
 
 from app.domain.entities.daily_health import DailyHealth
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
@@ -163,8 +170,8 @@ class GarminHealthSource:
     @staticmethod
     def _apply_readiness(health: DailyHealth, data) -> None:
 
-        # vazio no FR165; nos relógios melhores é uma lista com score/level.
-        # Formato populado a validar num device premium — extração defensiva.
+        # vazio no FR165; no FR265 é uma lista com score/level (validado ao
+        # vivo, João 2026-09-05: item[0] tem 'score' e 'level').
         if not isinstance(data, list) or not data:
 
             return
@@ -178,47 +185,83 @@ class GarminHealthSource:
     @staticmethod
     def _apply_training_status(health: DailyHealth, data) -> None:
 
-        # tudo None no FR165. Em device premium, mostRecentTrainingStatus e
-        # mostRecentTrainingLoadBalance vêm preenchidos (formato exato a
-        # validar) — guarda um rótulo legível quando dá, None quando não.
+        # tudo None no FR165. No FR265 (validado ao vivo) os valores vêm
+        # ANINHADOS por deviceId — desce até o device (primário quando marcado)
+        # e pega a frase de feedback, mais legível que o código inteiro.
         if not isinstance(data, dict):
 
             return
 
-        health.training_status = GarminHealthSource._label(
-            data.get("mostRecentTrainingStatus")
+        status_dto = GarminHealthSource._primary_device(
+            data.get("mostRecentTrainingStatus"), "latestTrainingStatusData"
         )
 
-        health.training_load_balance = GarminHealthSource._label(
-            data.get("mostRecentTrainingLoadBalance")
+        if status_dto:
+
+            health.training_status = GarminHealthSource._status_label(
+                status_dto.get("trainingStatusFeedbackPhrase")
+            )
+
+        balance_dto = GarminHealthSource._primary_device(
+            data.get("mostRecentTrainingLoadBalance"),
+            "metricsTrainingLoadBalanceDTOMap",
         )
+
+        if balance_dto:
+
+            phrase = balance_dto.get("trainingBalanceFeedbackPhrase")
+
+            health.training_load_balance = (
+                phrase if isinstance(phrase, str) else None
+            )
 
     @staticmethod
-    def _label(value):
-        """Reduz um valor Garmin (string direta OU DTO aninhado) a um rótulo
-        legível, defensivo — None se não der pra extrair."""
+    def _primary_device(container, map_key: str):
+        """Do container aninhado por deviceId (`{map_key: {<id>: {...}}}`),
+        devolve o DTO do device PRIMÁRIO (ou o primeiro que houver). None se o
+        formato não bater (FR165 manda o container None) — nunca quebra.
+        Aceita também um container que já venha como string direta (defensivo:
+        firmware/futuro), devolvendo-a embrulhada pra o chamador extrair."""
 
-        if value is None:
+        if isinstance(container, str):
+
+            return {"trainingStatusFeedbackPhrase": container,
+                    "trainingBalanceFeedbackPhrase": container}
+
+        if not isinstance(container, dict):
 
             return None
 
-        if isinstance(value, str):
+        by_device = container.get(map_key)
 
-            return value
+        if not isinstance(by_device, dict) or not by_device:
 
-        if isinstance(value, dict):
+            return None
 
-            for key in (
-                "trainingStatus",
-                "trainingStatusKey",
-                "status",
-                "key",
-            ):
+        devices = [d for d in by_device.values() if isinstance(d, dict)]
 
-                found = value.get(key)
+        for dto in devices:
 
-                if isinstance(found, str):
+            if dto.get("primaryTrainingDevice"):
 
-                    return found
+                return dto
 
-        return None
+        return devices[0] if devices else None
+
+    @staticmethod
+    def _status_label(phrase):
+        """Normaliza a frase de status da Garmin ("PRODUCTIVE_3") pro rótulo
+        canônico ("PRODUCTIVE") que o formatter traduz. "NO_STATUS_x" (relógio
+        ainda sem base suficiente) e "NONE" viram None — nada a mostrar."""
+
+        if not isinstance(phrase, str):
+
+            return None
+
+        base = re.sub(r"_\d+$", "", phrase).upper()
+
+        if base in ("NO_STATUS", "NONE", ""):
+
+            return None
+
+        return base
