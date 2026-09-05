@@ -162,5 +162,6 @@ class GarminSync:
             f"Pronto, {runner.name}! ⌚ Mandei pro seu Garmin:\n\n"
             f"{lines}\n\n"
             "É só sincronizar o relógio com o app que eles aparecem em "
-            "Treino → Treinos. Bons treinos! 🏃"
+            "Treino → Programados, cada um agendado no seu dia. "
+            "Bons treinos! 🏃"
         )
