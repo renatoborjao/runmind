@@ -254,10 +254,18 @@ class AIPlanService:
             history.activities,
         )
 
+        # PROVA recente no histórico: o taper (antes) + a prova já foram o
+        # recuo — a análise de carga não pode ler a reconstrução pós-prova como
+        # sobrecarga nova e mandar descarregar. Detectada do próprio histórico
+        # (Strava marca a corrida como prova), sem marcação manual.
+        weeks_since_race = AIPlanService._weeks_since_race(history, week_start)
+
         # o corpo AGORA (carga à luz da recuperação): se pede freio, vira
         # diretriz de dose pra IA decidir a semana. Best-effort — falhar aqui
         # nunca deixa o atleta sem plano.
-        body_directive = AIPlanService._body_directive(profile, weeks_to_race)
+        body_directive = AIPlanService._body_directive(
+            profile, weeks_to_race, weeks_since_race
+        )
 
         # a FORMA (o atleta está evoluindo?): eficiência aeróbica subindo ->
         # progride; estagnada -> já traz o estímulo que fura o platô; caindo ->
@@ -440,7 +448,31 @@ class AIPlanService:
         return sleep_performance_directive(reading)
 
     @staticmethod
-    def _body_directive(profile: str, weeks_to_race: int | None = None) -> str:
+    def _weeks_since_race(history, week_start: date) -> int | None:
+        """Semanas desde a última PROVA no histórico (do ponto de vista da semana
+        que estamos gerando). None sem prova recente. Best-effort — detecção
+        falhar nunca derruba o plano. Ver [[race_detector]]."""
+
+        try:
+
+            from app.application.history.race_detector import RaceDetector
+
+            race = RaceDetector.most_recent(history.activities, week_start)
+
+            return race.weeks_ago if race else None
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Detecção de prova recente falhou: {e}")
+
+            return None
+
+    @staticmethod
+    def _body_directive(
+        profile: str,
+        weeks_to_race: int | None = None,
+        weeks_since_race: int | None = None,
+    ) -> str:
         """Sinais de ESTADO pra a dose: o objetivo (carga à luz da recuperação,
         do Garmin) + o subjetivo (o que o atleta RELATOU sentir). Os dois
         contam — o relógio não sente o que o atleta sente. Best-effort."""
@@ -526,6 +558,7 @@ class AIPlanService:
                     body_reading.recovery,
                     weeks_to_race=weeks_to_race,
                     acwr=getattr(body_reading.load, "acwr", None),
+                    weeks_since_race=weeks_since_race,
                 )
 
                 parts.append(deload_directive(decision))

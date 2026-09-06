@@ -27,6 +27,14 @@ _DIP_RATIO = 0.7
 # descarga de bloco por cima da afiação)
 _TAPER_ZONE_WEEKS = 3
 
+# depois de uma PROVA, o taper (antes) + a prova JÁ foram o recuo — a
+# reconstrução dos primeiros dias não é um novo bloco de sobrecarga. Nesta janela
+# pós-prova NÃO descarrega (senão empilha descanso sobre descanso e destreina).
+# Bug do Renato/Maurício: prova em 23/08, taper (cargas 341,338) lido como bloco,
+# tração de volta (652,691) lida como sobrecarga -> descarga falsa. Ver
+# [[race_detector]].
+_POST_RACE_GRACE_WEEKS = 3
+
 # descarga só dissipa fadiga de carga ELEVADA. Abaixo deste ACWR a carga aguda
 # está <= a crônica: NÃO há sobrecarga pra descarregar — forçar leve só
 # DESTREINA (bug do Maurício: descarga com ACWR 0.97 e semana já em queda).
@@ -49,11 +57,12 @@ class DeloadAnalyzer:
         recovery: RecoveryTrend,
         weeks_to_race: int | None = None,
         acwr: float | None = None,
+        weeks_since_race: int | None = None,
     ) -> DeloadDecision:
         """Decide se a PRÓXIMA semana (a que estamos gerando) deve ser de
         descarga. Gatilho principal: tamanho do bloco de carga; a fadiga
-        antecipa; o taper (perto da prova) desliga; e o ACWR trava — sem carga
-        elevada, descarga só destreina."""
+        antecipa; o taper (perto da prova) e a janela PÓS-PROVA desligam; e o
+        ACWR trava — sem carga elevada, descarga só destreina."""
 
         streak = DeloadAnalyzer._consecutive_load_weeks(weekly_loads)
 
@@ -61,6 +70,18 @@ class DeloadAnalyzer:
         if weeks_to_race is not None and weeks_to_race <= _TAPER_ZONE_WEEKS:
 
             return DeloadDecision(False, streak, "taper cuida do recuo")
+
+        # logo APÓS a prova: o taper + a prova já foram o recuo. A carga
+        # "subindo" que o histórico mostra é só a reconstrução — não descarrega
+        # (o ACWR vem inflado porque o taper puxou a crônica pra baixo).
+        if (
+            weeks_since_race is not None
+            and weeks_since_race <= _POST_RACE_GRACE_WEEKS
+        ):
+
+            return DeloadDecision(
+                False, streak, "pós-prova (o taper/prova já foi o recuo)"
+            )
 
         # SEM SOBRECARGA não se descarrega nada: com o ACWR mostrando carga aguda
         # <= crônica, uma semana leve à força só APAGA forma (o atleta reclama

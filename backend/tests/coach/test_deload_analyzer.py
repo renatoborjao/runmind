@@ -60,6 +60,38 @@ def test_taper_zone_disables_deload():
     assert d.due is False
 
 
+def test_post_race_window_disables_deload():
+    """Bug do Renato/Maurício: prova em 23/08 era o alvo, o coach afinou (cargas
+    caíram no taper), a prova passou e voltamos a puxar. O histórico mostra
+    'carga subindo' mas o recuo JÁ foi o taper+prova — não descarrega em cima,
+    mesmo com ACWR inflado e recuperação caindo."""
+
+    d = DeloadAnalyzer.assess(
+        [341.8, 338.0, 652.6, 691.2],
+        _recovery(hrv=FALLING),
+        acwr=1.37,
+        weeks_since_race=2,
+    )
+
+    assert d.due is False
+    assert "pós-prova" in d.reason
+    assert deload_directive(d) == ""
+
+
+def test_deload_returns_after_post_race_window():
+    """Passada a janela pós-prova, um bloco real de carga volta a justificar a
+    descarga — a graça não é permanente."""
+
+    d = DeloadAnalyzer.assess(
+        [80, 90, 100, 110],
+        _recovery(hrv=FALLING),
+        acwr=1.3,
+        weeks_since_race=5,
+    )
+
+    assert d.due is True
+
+
 def test_zeros_reset_streak():
 
     d = DeloadAnalyzer.assess([0, 0, 60, 70], _recovery())
