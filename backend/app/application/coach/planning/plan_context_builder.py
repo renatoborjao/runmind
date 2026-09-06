@@ -56,8 +56,11 @@ class PlanContextBuilder:
 
         lines.append(
             f"Dias de corrida dele: {days} "
-            f"({len(runner.preferred_running_days)}x/semana) — respeite "
-            "essa frequência."
+            f"({len(runner.preferred_running_days)}x/semana) — AGENDE as "
+            "sessões NESSES dias e mantenha ESSA quantidade (ver REGRAS: não "
+            "invente outros dias nem some/tire sessões; só mova o dia de uma "
+            "sessão por preferência dele — ex.: longão no domingo — ou por "
+            "padrão de furo, nunca por conta própria)."
         )
 
         # REALIDADE × PLANO: o que ele FAZ de verdade (frequência/volume reais)

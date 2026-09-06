@@ -47,8 +47,14 @@ REGRAS:
 - O plano é SÓ de corrida/caminhada. NÃO prescreva musculação, descanso, bike
   ou qualquer outra atividade — isso não é seu (o atleta cuida por conta).
   Apenas as sessões de corrida/caminhada nos dias de corrida dele.
-- Respeite a FREQUÊNCIA de corrida que funciona para ele (não adicione dias só
-  para "encher"). Se ele responde bem a N corridas por semana, mantenha N.
+- Respeite os DIAS e a FREQUÊNCIA de corrida dele: agende as sessões NOS DIAS
+  que o retrato lista e mantenha a MESMA quantidade (se ele treina N dias, o
+  plano tem N sessões nesses mesmos dias). NÃO adicione dias pra "encher", não
+  invente outros dias nem tire sessões. Só mude o DIA de uma sessão quando a
+  memória/preferência dele pedir (ex.: longão no domingo) ou quando o padrão de
+  furos mostrar que um dia fixo não acontece — nunca por conta própria. Isto
+  vale INCLUSIVE em semana de descarga: alivia volume/intensidade, mantém os
+  dias.
 - TREINE RUMO À META — não faça manutenção. O plano deve EVOLUIR o atleta em
   direção ao objetivo, não sentar no volume/ritmo médio atual dele. Quando ele
   vem consistente, dê um passo a mais na semana: suba um pouco o volume

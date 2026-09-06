@@ -46,6 +46,24 @@ def test_no_long_run_soft_default_line():
     assert "por padrão ele faz o longão" not in context
 
 
+def test_days_line_anchors_specific_days_and_count():
+    """O retrato TRAVA os dias e a quantidade (não só a frequência) — o Pro
+    reshuffava Tue/Thu/Sat pra Wed/Fri/Sat+Sun (bug do Mauricio). A exceção
+    (mover por preferência/furo) fica explícita."""
+
+    runner = make_runner(
+        preferred_running_days=["Tuesday", "Thursday", "Saturday"],
+    )
+
+    context = _context(runner)
+
+    assert "terça-feira, quinta-feira, sábado (3x/semana)" in context.lower()
+    assert "AGENDE as sessões NESSES dias" in context
+    assert "mantenha ESSA quantidade" in context
+    # a exceção legítima continua permitida (longão por preferência / furo)
+    assert "longão no domingo" in context
+
+
 def _context_with_report(report) -> str:
 
     return PlanContextBuilder.build(
