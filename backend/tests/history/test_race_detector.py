@@ -68,6 +68,27 @@ def test_ignores_races_outside_lookback():
     assert RaceDetector.most_recent(acts, _TODAY) is None
 
 
+def test_uses_first_party_race_result_without_strava_tag():
+    """Fonte de PRIMEIRA-MÃO: a prova que o coach já debriefou é reconhecida
+    mesmo sem marcação no Strava (bug do Renato: 'Netshoes Run 10K' não estava
+    marcada como prova, mas o coach tinha o resultado gravado)."""
+
+    acts = [_Act(date(2026, 8, 23), name="Netshoes Run 10K")]  # sem workout_type
+    results = [{"date": "2026-08-23", "distance_km": 10.03,
+                "race_label": "10 km", "time": "54:18", "beat": True}]
+
+    # sem os resultados, a atividade crua não é reconhecida como prova
+    assert RaceDetector.most_recent(acts, _TODAY) is None
+
+    # com o registro do coach, é reconhecida (autoritativa)
+    race = RaceDetector.most_recent(acts, _TODAY, past_results=results)
+
+    assert race is not None
+    assert race.date == date(2026, 8, 23)
+    assert race.weeks_ago == 2
+    assert race.distance_km == 10.03
+
+
 def test_ignores_non_run_race():
     acts = [_Act(date(2026, 8, 23), name="Prova de ciclismo",
                  sport="Ride", workout_type=1)]

@@ -254,11 +254,13 @@ class AIPlanService:
             history.activities,
         )
 
-        # PROVA recente no histórico: o taper (antes) + a prova já foram o
-        # recuo — a análise de carga não pode ler a reconstrução pós-prova como
-        # sobrecarga nova e mandar descarregar. Detectada do próprio histórico
-        # (Strava marca a corrida como prova), sem marcação manual.
-        weeks_since_race = AIPlanService._weeks_since_race(history, week_start)
+        # PROVA recente: o taper (antes) + a prova já foram o recuo — a análise
+        # de carga não pode ler a reconstrução pós-prova como sobrecarga nova e
+        # mandar descarregar. Detectada PRIMEIRO do que o coach já sabia (debrief
+        # da prova-alvo), com o Strava só como rede. Sem marcação manual.
+        weeks_since_race = AIPlanService._weeks_since_race(
+            profile, history, week_start
+        )
 
         # o corpo AGORA (carga à luz da recuperação): se pede freio, vira
         # diretriz de dose pra IA decidir a semana. Best-effort — falhar aqui
@@ -448,16 +450,25 @@ class AIPlanService:
         return sleep_performance_directive(reading)
 
     @staticmethod
-    def _weeks_since_race(history, week_start: date) -> int | None:
-        """Semanas desde a última PROVA no histórico (do ponto de vista da semana
-        que estamos gerando). None sem prova recente. Best-effort — detecção
-        falhar nunca derruba o plano. Ver [[race_detector]]."""
+    def _weeks_since_race(profile, history, week_start: date) -> int | None:
+        """Semanas desde a última PROVA (do ponto de vista da semana que estamos
+        gerando). Fonte principal: o RESULTADO que o coach já registrou (debrief
+        da prova-alvo — o que o sistema já SABIA); rede: atividades marcadas como
+        prova. None sem prova recente. Best-effort — falhar nunca derruba o
+        plano. Ver [[race_detector]]."""
 
         try:
 
             from app.application.history.race_detector import RaceDetector
+            from app.infrastructure.persistence.race_result_repository import (
+                RaceResultRepository,
+            )
 
-            race = RaceDetector.most_recent(history.activities, week_start)
+            past_results = RaceResultRepository().load(profile)
+
+            race = RaceDetector.most_recent(
+                history.activities, week_start, past_results=past_results
+            )
 
             return race.weeks_ago if race else None
 
