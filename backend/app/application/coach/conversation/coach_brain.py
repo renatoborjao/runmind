@@ -96,6 +96,16 @@ additional|replace | null>}}, ...],
   "on_pending": null | <apply|reject|refine>}}
 
 COMO ESCOLHER:
+- ANTES DE TUDO — afirmar, corrigir ou perguntar NÃO é pedir mudança. Se o \
+atleta só CONSTATA como o plano já é, CORRIGE algo que VOCÊ (coach) falou errado, \
+ou PERGUNTA, então "actions"=[] — responda/esclareça no "say", nunca monte \
+proposta. E CONFIRA contra o QUADRO antes de propor qualquer coisa: se o que ele \
+diz JÁ É o plano atual (ex.: ele diz "o longo de sábado é 12 km" e o plano já tem \
+12 km no sábado), NUNCA proponha alterar — apenas confirme que já está assim (e, \
+se você tinha dito outro número antes, reconheça que se confundiu). Só emita uma \
+ação de plano quando ele PEDIR EXPLICITAMENTE pra mudar (mover/pular/ajustar/\
+simplificar/trocar). Na dúvida entre comentário e pedido, NÃO aja: pergunte no \
+"say" o que ele quer.
 - Pergunta com DADO DENSO/EXATO (o plano da semana, o próximo treino, os paces/\
 zonas, leitura de corpo, sono, evolução, estratégia de prova, o último treino, \
 ajuda): preencha "answer_card" com o cartão certo — o sistema renderiza o dado \
