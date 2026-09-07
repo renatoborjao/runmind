@@ -34,6 +34,21 @@ _MIN_HISTORY_DAYS = 21
 _ACUTE_DAYS = 7
 _CHRONIC_DAYS = 28
 
+# uma semana abaixo desta fração do PICO da janela é "taper" (afiação pré-prova),
+# não a carga normal do atleta — ao calcular a crônica pós-prova, essas semanas
+# ficam de fora (senão deflacionam a base e o ACWR vira um pico falso). Espelha o
+# _DIP_RATIO do DeloadAnalyzer. Ver [[race_detector]].
+_TAPER_DIP_RATIO = 0.7
+
+# a crônica PADRÃO é 28d (padrão do ACWR — de propósito, pra o radar de risco não
+# ficar lento). Mas quando há PROVA na janela, o taper corrompe esses 28d; aí a
+# BASE ignora as semanas de carga baixa (a afiação) e usa as últimas 4 com carga
+# REAL — a carga que o atleta de fato sustenta. Não hardcodamos "quantas semanas
+# de taper" (varia com a distância: 10k~1, meia~2, maratona~3): detectamos o
+# taper pela carga baixa e pulamos. Ver a conversa com o Renato (09/2026).
+_BASELINE_WEEKS = 4                # semanas de carga REAL que formam a base
+_BASELINE_LOOKBACK_WEEKS = 10      # até onde vasculhar pra achar essas 4
+
 # fator de intensidade da sessão SEM FC (raro): usa a mediana do próprio
 # atleta; sem nenhuma sessão com FC, cai neste moderado
 _DEFAULT_INTENSITY = 0.65
@@ -55,12 +70,18 @@ class TrainingLoadAnalyzer:
         resting_hr: int | None = None,
         max_hr: int | None = None,
         sex: str | None = None,
+        recent_race_date: date | None = None,
     ) -> TrainingLoad:
         """Carga aguda vs crônica + ACWR. Com `resting_hr` E `max_hr`, cada
         sessão é ponderada por INTENSIDADE (TRIMP de Banister quando o `sex` é
         conhecido — exponencial por sexo; senão %FCR linear). Sem FC repouso/
         máx, cai na duração pura. O ACWR é razão, então a unidade não muda o
-        veredito — o que muda é o peso relativo de treino forte vs leve."""
+        veredito — o que muda é o peso relativo de treino forte vs leve.
+
+        `recent_race_date`: houve uma PROVA na janela crônica → o taper que a
+        antecedeu deflaciona a base (e infla o ACWR num pico falso). Nesse caso a
+        crônica é calculada IGNORANDO as semanas de taper/prova — a base passa a
+        ser a carga real do atleta, não a afiação temporária."""
 
         ref = reference_date or today_local()
 
@@ -79,6 +100,17 @@ class TrainingLoadAnalyzer:
         # crônica = média SEMANAL nos 28 dias (pra o ACWR comparar maçã com
         # maçã: aguda de 7 dias contra a média de 7 dias do último mês)
         chronic = round(chronic_total / (_CHRONIC_DAYS / 7), 1)
+
+        # PÓS-PROVA: recalcula a base ignorando o taper (senão o retorno ao
+        # normal vira "pico"). Só reduz o ACWR (base mais honesta), nunca cria
+        # sobrecarga falsa.
+        race_aware = TrainingLoadAnalyzer._race_aware_chronic(
+            per_day, ref, recent_race_date
+        )
+
+        if race_aware is not None:
+
+            chronic = race_aware
 
         acute = round(acute, 1)
 
@@ -264,6 +296,110 @@ class TrainingLoadAnalyzer:
             return 0
 
         return (ref - min(days_with_load)).days + 1
+
+    @staticmethod
+    def _race_aware_chronic(
+        per_day: dict[date, float],
+        ref: date,
+        race_date: date | None,
+    ) -> float | None:
+        """Base crônica quando há PROVA na janela: as `_BASELINE_WEEKS` semanas
+        de carga REAL IMEDIATAMENTE ANTES do taper — o bloco que o atleta
+        construiu rumo à prova, a carga que ele de fato sustentava.
+
+        Anda pra trás A PARTIR da semana da prova: pula o taper (semanas baixas
+        coladas na prova) e junta as semanas de volume que vêm logo antes. NÃO
+        entra a reconstrução pós-prova (senão um retorno agressivo mascararia o
+        próprio ACWR) nem semanas soltas lá de trás (a base tem que ser o bloco
+        recente que levou à prova, não volume antigo qualquer).
+
+        None quando não há prova na janela ou não há bloco pré-taper no alcance —
+        aí vale a crônica padrão de 28d. Só pode ELEVAR a base, nunca inventa
+        sobrecarga."""
+
+        if race_date is None:
+
+            return None
+
+        window_start = ref - timedelta(days=_CHRONIC_DAYS - 1)
+
+        # só entra no modo pós-prova se a prova está na janela do ACWR (28d)
+        if not (window_start <= race_date <= ref):
+
+            return None
+
+        # semanas (início, fim, carga) até o lookback, antigo→novo
+        weeks: list[tuple[date, date, float]] = []
+
+        for w in range(_BASELINE_LOOKBACK_WEEKS - 1, -1, -1):
+
+            end = ref - timedelta(days=7 * w)
+
+            start = end - timedelta(days=6)
+
+            load = sum(
+                v for day, v in per_day.items() if start <= day <= end
+            )
+
+            weeks.append((start, end, round(load, 1)))
+
+        peak = max((load for _, _, load in weeks), default=0.0)
+
+        if peak <= 0:
+
+            return None
+
+        race_idx = next(
+            (
+                i
+                for i, (start, end, _) in enumerate(weeks)
+                if start <= race_date <= end
+            ),
+            None,
+        )
+
+        if race_idx is None:
+
+            return None
+
+        # Passo 1 — o TRECHO contíguo de treino antes da prova: anda pra trás
+        # desde a prova e para no 1º GAP (semana bem abaixo do que já se viu no
+        # trecho). Assim volume ALTO e ANTIGO, separado por um buraco, NÃO entra
+        # (ponto do Renato) — a referência é local ao trecho, não um pico global.
+        stretch: list[float] = []  # do mais novo pro mais antigo
+
+        run_peak = 0.0
+
+        for i in range(race_idx - 1, -1, -1):
+
+            load = weeks[i][2]
+
+            if stretch and load < _TAPER_DIP_RATIO * run_peak:
+
+                break  # gap: fim do trecho que levou à prova
+
+            stretch.append(load)
+
+            run_peak = max(run_peak, load)
+
+        if not stretch:
+
+            return None
+
+        # Passo 2 — dentro do trecho, tira o TAPER (semanas abaixo do pico do
+        # trecho) e fica com as últimas `_BASELINE_WEEKS` de carga REAL antes da
+        # afiação: a carga que o atleta de fato sustentava.
+        peak = max(stretch)
+
+        block = [load for load in stretch if load >= _TAPER_DIP_RATIO * peak]
+
+        base = block[:_BASELINE_WEEKS]
+
+        if not base:
+
+            return None
+
+        return round(sum(base) / len(base), 1)
 
     @staticmethod
     def _weekly_loads(per_day: dict[date, float], ref: date) -> list[float]:

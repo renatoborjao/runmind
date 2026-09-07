@@ -73,12 +73,20 @@ class BodyReadingBuilder:
             + CrossTrainingRepository().load_activities(profile)
         )
 
+        # PROVA recente: o taper que a antecede deflaciona a base crônica e o
+        # ACWR vira um pico falso (pós-prova). Detecta do que o coach já sabia
+        # (debrief) + rede do Strava, e a análise de carga desconta o taper.
+        recent_race_date = BodyReadingBuilder._recent_race_date(
+            profile, activities, reference_date
+        )
+
         load = TrainingLoadAnalyzer.analyze(
             TrainingHistory(activities=activities),
             reference_date=reference_date,
             resting_hr=resting_hr,
             max_hr=max_hr,
             sex=getattr(runner, "sex", None),
+            recent_race_date=recent_race_date,
         )
 
         recovery = RecoveryTrendAnalyzer.analyze(
@@ -97,6 +105,34 @@ class BodyReadingBuilder:
         )
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _recent_race_date(profile, activities, reference_date):
+        """Data da última prova (na janela) — do que o coach já sabia (debrief)
+        + rede do Strava. None sem prova. Best-effort: falhar aqui nunca derruba
+        a leitura de corpo. Ver [[race_detector]]."""
+
+        try:
+
+            from app.application.history.race_detector import RaceDetector
+            from app.core.clock import today_local
+            from app.infrastructure.persistence.race_result_repository import (
+                RaceResultRepository,
+            )
+
+            ref = reference_date or today_local()
+
+            race = RaceDetector.most_recent(
+                activities, ref, past_results=RaceResultRepository().load(profile)
+            )
+
+            return race.date if race else None
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Detecção de prova (leitura de corpo) falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def _resting_hr(series) -> int | None:

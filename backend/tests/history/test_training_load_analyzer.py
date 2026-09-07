@@ -255,3 +255,101 @@ def test_falls_back_when_window_missing_zones():
 
     # duração pura: 7 dias × 60 min na aguda -> 420 (não os valores de Edwards)
     assert load.acute_load == 420.0
+
+
+# --- pós-prova: o taper não pode inflar o ACWR (bug do Renato) ---
+
+def test_race_taper_does_not_inflate_acwr():
+    """Prova em 23/08: taper (2 semanas de carga baixa) + reconstrução depois.
+    Sem ciência de prova, o ACWR viraria ~1.4 (base deflacionada pelo taper).
+    Com a prova, a base ignora as semanas baixas e usa as de carga REAL ->
+    ACWR volta pro razoável e o status não é HIGH."""
+
+    # semanas (antigo->novo): 2 normais, 2 de taper, 2 de reconstrução
+    acts = []
+    # 6-5 semanas atrás: carga normal (~600 min/sem = ~86/dia)
+    for d in range(42, 28, -1):
+        acts.append(_act(d, 86))
+    # 4-3 semanas atrás: TAPER (carga baixa ~ metade)
+    for d in range(28, 14, -1):
+        acts.append(_act(d, 40))
+    # 2-1 semanas atrás: reconstrução (carga normal de volta)
+    for d in range(14, 0, -1):
+        acts.append(_act(d, 86))
+
+    race_day = REF - timedelta(days=15)  # dentro do taper/janela
+
+    naive = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts), reference_date=REF,
+    )
+    aware = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts), reference_date=REF,
+        recent_race_date=race_day,
+    )
+
+    # sem ciência de prova, o taper infla o ACWR bem acima do razoável
+    assert naive.acwr > aware.acwr
+    # com ciência, a base sobe (ignora o taper) e o ACWR fica perto de 1
+    assert aware.acwr <= 1.2
+    assert aware.status in (LOAD_OPTIMAL, LOAD_DETRAINING)
+
+
+def test_no_race_uses_standard_four_weeks():
+    """Sem prova, nada muda: a crônica segue as últimas 4 semanas normais."""
+
+    acts = [_act(d, 60) for d in range(28)]
+
+    with_flag = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts), reference_date=REF,
+        recent_race_date=None,
+    )
+
+    assert with_flag.chronic_load == 420.0
+    assert with_flag.acwr == 1.0
+
+
+def test_race_outside_window_is_ignored():
+    """Prova velha (fora dos 28d) não aciona o modo pós-prova."""
+
+    acts = [_act(d, 60) for d in range(28)]
+
+    load = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts), reference_date=REF,
+        recent_race_date=REF - timedelta(days=60),
+    )
+
+    assert load.chronic_load == 420.0
+    assert load.acwr == 1.0
+
+
+def test_base_is_contiguous_block_before_taper_not_old_volume():
+    """A base é o BLOCO contíguo antes do taper — não fura um gap de semanas
+    baixas pra catar volume antigo lá de trás (ponto do Renato)."""
+
+    acts = []
+    # 9-10 sem atrás: volume ALTO e antigo (não deve entrar na base)
+    for d in range(70, 56, -1):
+        acts.append(_act(d, 90))
+    # 6-8 sem atrás: GAP (quase parado)
+    for d in range(56, 35, -1):
+        acts.append(_act(d, 10))
+    # 4-5 sem atrás: bloco real que levou à prova (a BASE certa)
+    for d in range(35, 21, -1):
+        acts.append(_act(d, 60))
+    # 2-3 sem atrás: taper
+    for d in range(21, 7, -1):
+        acts.append(_act(d, 25))
+    # última semana: reconstrução (não entra na base)
+    for d in range(7, 0, -1):
+        acts.append(_act(d, 60))
+
+    race_day = REF - timedelta(days=10)
+
+    aware = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts), reference_date=REF,
+        recent_race_date=race_day,
+    )
+
+    # base ancora no bloco pré-taper (~420/sem), NÃO no volume antigo além do
+    # gap (~630/sem) nem no taper (~175/sem)
+    assert 380.0 <= aware.chronic_load <= 460.0
