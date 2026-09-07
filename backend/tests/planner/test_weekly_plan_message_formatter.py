@@ -499,3 +499,44 @@ def test_done_session_shows_executed_km_for_time_based():
 
     assert "45 min" in text            # cabeçalho por tempo
     assert "✅ (feito) · 6.2 km" in text  # km executado no feito
+
+
+def test_structured_session_appends_pace_when_prose_omits_it():
+    """Bug do Renato: sessão por tempo (ter/qui) com structure da IA que não
+    escreveu o número do pace -> o formatador injeta 'Ritmo alvo: X/km' dos
+    dados (o alvo existe, só não estava na prosa)."""
+
+    session = _session(
+        "Tuesday", "FARTLEK", None,
+        planned_duration_minutes=50,
+        target_pace_min="4:55", target_pace_max="5:05",
+        structure="Aquecimento: 10 min leve\nSérie: 6x (3 min forte / 2 min trote)",
+    )
+    plan = TrainingPlan(
+        athlete_name="Renato", objective="10k", phase="BUILD",
+        weekly_volume=8.0, running_days=["Tuesday"],
+        week_start=date(2026, 9, 7), sessions=[session],
+    )
+
+    msg = WeeklyPlanMessageFormatter.week_plan_message("Renato", plan)
+
+    assert "Ritmo alvo: 4:55–5:05/km" in msg
+
+
+def test_structured_session_does_not_duplicate_pace_when_present():
+    """Se a prosa já traz o número, NÃO anexa outra linha de ritmo."""
+
+    session = _session(
+        "Sunday", "LONG_RUN", 14.0,
+        target_pace_min="6:20", target_pace_max="6:40",
+        structure="Base: 10 km em ritmo leve (6:20 a 6:40/km)\nFinal: 4 km forte",
+    )
+    plan = TrainingPlan(
+        athlete_name="Renato", objective="10k", phase="BUILD",
+        weekly_volume=14.0, running_days=["Sunday"],
+        week_start=date(2026, 9, 7), sessions=[session],
+    )
+
+    msg = WeeklyPlanMessageFormatter.week_plan_message("Renato", plan)
+
+    assert "Ritmo alvo:" not in msg  # a prosa já tinha o pace

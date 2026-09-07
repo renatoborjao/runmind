@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from app.application.coach.writer.labels import plan_workout_label
@@ -259,8 +260,15 @@ class WeeklyPlanMessageFormatter:
             # treino (espalha a frota), não pelo dia da semana
             week_sessions = sorted(plan.sessions, key=plan.session_date)
 
+            # as DATAS da semana -> o recomendador não repete um par já sugerido
+            # em OUTRA sessão desta mesma semana (bug: Ter e Qui caíam no mesmo
+            # Evo Verde). Ver [[ShoeRecommendationService]].
+            week_dates = [
+                plan.session_date(s).isoformat() for s in week_sessions
+            ]
+
             return ShoeRecommendationService.line(
-                profile, session, session_date, week_sessions
+                profile, session, session_date, week_sessions, week_dates
             )
 
         except Exception as e:
@@ -445,6 +453,18 @@ class WeeklyPlanMessageFormatter:
                 if step.strip()
             ]
 
+            # GARANTE o pace numérico: a prosa da IA às vezes só diz "ritmo forte"
+            # sem o número (bug do Renato: ter/qui por TEMPO saíam sem pace, mesmo
+            # com o alvo gravado). Se os passos têm alvo e a prosa não mostrou
+            # nenhum pace, anexa o ritmo-alvo do treino.
+            pace_line = WeeklyPlanMessageFormatter._pace_target_text(session)
+
+            if pace_line and not any(
+                re.search(r"\d{1,2}:\d{2}", line) for line in detail
+            ):
+
+                detail.append(pace_line)
+
             if session.purpose:
 
                 detail.append(f"Foco: {session.purpose}")
@@ -615,6 +635,23 @@ class WeeklyPlanMessageFormatter:
             return f"{minutes} min"
 
         return f"{minutes}min{rest:02d}"
+
+    @staticmethod
+    def _pace_target_text(session) -> str:
+        """Ritmo-alvo numérico da sessão pra anexar quando a prosa da IA não
+        trouxe número. Vazio sem alvo gravado."""
+
+        lo = session.target_pace_min
+
+        hi = session.target_pace_max
+
+        if not (lo and hi):
+
+            return ""
+
+        rng = lo if lo == hi else f"{lo}–{hi}"
+
+        return f"Ritmo alvo: {rng}/km"
 
     @staticmethod
     def _pace_range(session) -> str:

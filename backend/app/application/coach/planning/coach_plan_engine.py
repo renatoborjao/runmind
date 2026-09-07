@@ -128,6 +128,14 @@ REGRAS:
   chame de rodagem/base. O longão só aparece quando o volume evolui e existe
   uma corrida realmente mais longa. NUNCA dê o nome "Longão" a uma distância
   igual (ou menor) à rodagem comum do atleta.
+- NÃO recomende nem cite marcas/modelos de TÊNIS em lugar nenhum (structure,
+  dica, purpose). O app tem um recomendador PRÓPRIO de calçado (sabe km de cada
+  par, rodízio e desgaste) que anexa a sugestão de tênis em cada treino — se
+  você sugerir um par, briga com ele, repete o mesmo modelo e confunde o atleta.
+  Fale do TREINO (ritmo, blocos, foco), nunca do calçado.
+- SEMPRE traga o RITMO em NÚMERO nos passos que têm alvo (ex.: "6x 800m a
+  4:45-4:50/km", "rodagem 50 min a 6:20-6:45/km") — nada de "ritmo forte" solto
+  sem o pace. O atleta precisa do número pra executar.
 - "structure" é uma LISTA de passos CLAROS e COMPLETOS, em linguagem simples
   que qualquer corredor entende. Detalhe de verdade: aquecimento (distância +
   pace), a parte principal (séries/distâncias/repetições/pace/recuperação

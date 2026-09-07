@@ -405,3 +405,43 @@ def test_line_without_date_does_not_persist(tmp_path):
         ShoeRecommendationService.line("renato", _session("Rodagem"))
 
     assert repo.load("renato").recommended == {}
+
+
+def test_no_repeat_shoe_across_week_sessions():
+    """Bug do Renato: sem par 'prova', os versáteis servem qualidade E fácil, e
+    o índice reiniciava por intenção -> ter (qualidade) e qui (fácil) caíam no
+    mesmo par mais novo. Com as datas da semana, o par de um dia não repete no
+    outro (via book.recommended, persistido em ordem)."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="verde", name="Evo SL Verde", category="versátil"),
+        Shoe(id="branco", name="Evo SL Branco", category="versátil"),
+        Shoe(id="sonic", name="SonicBlast", category="versátil"),
+        Shoe(id="vomero", name="Vomero", category="dia a dia", is_default=True),
+    ])
+
+    ter = _session("Fartlek", day="Tuesday")
+    qui = _session("Rodagem Leve", day="Thursday")
+    week = [ter, qui]
+    dates = ["2026-09-08", "2026-09-10"]
+
+    # simula o render cronológico: recomenda ter, PERSISTE, depois qui
+    p_ter = ShoeRecommendationService.recommend(book, ter, dates[0], week, dates)
+    book.recommended[dates[0]] = p_ter[0].id
+
+    p_qui = ShoeRecommendationService.recommend(book, qui, dates[1], week, dates)
+
+    assert p_ter[0].id != p_qui[0].id  # não repete na mesma semana
+
+
+def test_recommend_still_works_without_week_dates():
+    """Sem as datas (chamadas antigas), nada quebra — rodízio normal."""
+
+    book = ShoeBook(shoes=[
+        Shoe(id="boston", name="Boston", category="dia a dia", is_default=True),
+        Shoe(id="vapor", name="Vaporfly", category="prova"),
+    ])
+
+    shoe, _ = ShoeRecommendationService.recommend(book, _session("Fartlek"))
+
+    assert shoe.id == "vapor"

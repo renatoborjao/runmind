@@ -47,7 +47,8 @@ _PROVA, _VERSATIL, _DAILY = "prova", "versatil", "diaadia"
 class ShoeRecommendationService:
 
     @staticmethod
-    def line(profile: str, session, session_date=None, week_sessions=None) -> str:
+    def line(profile: str, session, session_date=None, week_sessions=None,
+             week_dates=None) -> str:
         """Linha de sugestão pra anexar na mensagem do treino. Vazia quando o
         atleta não montou o armário (silêncio total) ou não dá pra sugerir."""
 
@@ -56,7 +57,7 @@ class ShoeRecommendationService:
         book = repo.load(profile)
 
         pick = ShoeRecommendationService.recommend(
-            book, session, session_date, week_sessions
+            book, session, session_date, week_sessions, week_dates
         )
 
         if pick is None:
@@ -109,11 +110,13 @@ class ShoeRecommendationService:
 
     @staticmethod
     def recommend(
-        book: ShoeBook, session, session_date=None, week_sessions=None
+        book: ShoeBook, session, session_date=None, week_sessions=None,
+        week_dates=None,
     ) -> tuple[Shoe, str] | None:
         """(tênis, motivo curto) pro treino, ou None. `week_sessions` (os treinos
         da semana em ordem) faz o rodízio girar pela POSIÇÃO do treino, não pelo
-        dia da semana — espalha de verdade pela frota."""
+        dia da semana — espalha de verdade pela frota. `week_dates` (as datas da
+        semana) evita repetir um par já sugerido em OUTRA sessão da semana."""
 
         active = book.active()
 
@@ -166,11 +169,45 @@ class ShoeRecommendationService:
 
             return None
 
+        # não repete um par já sugerido em OUTRA sessão desta semana (os pares
+        # versáteis servem qualidade E fácil, então sem isso o mesmo par mais novo
+        # caía em ter e qui). Só filtra se sobrar par — não fica sem sugestão.
+        pool = ShoeRecommendationService._drop_used_this_week(
+            pool, book, session_date, week_dates
+        )
+
         index = ShoeRecommendationService._rotation_index(
             session, is_quality, week_sessions
         )
 
         return ShoeRecommendationService._from_pool(pool, index, reason)
+
+    @staticmethod
+    def _drop_used_this_week(pool, book, session_date, week_dates):
+        """Tira do balde os pares já sugeridos em OUTRAS sessões desta semana
+        (lidos de book.recommended, que o render persiste em ordem cronológica).
+        Se sobrar par, usa o filtrado; se todos já foram usados, mantém o balde
+        cheio (rodízio normal) — nunca fica sem sugestão."""
+
+        if not week_dates or session_date is None:
+
+            return pool
+
+        cur = str(session_date)
+
+        # só as sessões ANTERIORES da semana (datas < atual). Como o render é
+        # cronológico e persiste a cada sessão, essas já foram reescritas NESTA
+        # passada (valor fresco); as futuras ainda podem ter valor velho, então
+        # são ignoradas — a atribuição fica limpa e estável mesmo em re-render.
+        used = {
+            book.recommended.get(d)
+            for d in week_dates
+            if d < cur and d in book.recommended
+        }
+
+        remaining = [s for s in pool if s.id not in used]
+
+        return remaining or pool
 
     @staticmethod
     def _rotation_index(session, is_quality: bool, week_sessions) -> int:
