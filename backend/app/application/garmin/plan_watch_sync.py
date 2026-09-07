@@ -1,28 +1,29 @@
 """Mantém o Garmin em sincronia depois que o plano da semana é REGERADO
-(preferência de rotina, troca de objetivo) — o mesmo que o mover/pular já faz,
-mas pro caminho da regeração inteira da semana.
+(entrega de domingo) — re-empurra a semana inteira pro relógio.
 
 Guarda de ouro: só ressincroniza quem JÁ tinha o plano no relógio (tem
 snapshot em `PushedPlanStore`). Quem nunca sincronizou NÃO é surpreendido com
 treinos aparecendo no relógio do nada — pra esse, o push segue opt-in
-('manda pro relógio')."""
+('manda pro relógio').
 
-from app.application.garmin.garmin_reconciler import GarminReconciler
+FULL REFRESH: apaga a semana e recria tudo, pra TODOS os treinos caírem na aba
+'Programado'. O incremental (reconciliar só o que mudou) deixava os treinos
+NOVOS em 'Meus treinos' e só os inalterados em 'Programado' — o split que o
+Renato viu no FR165. Reusa o MESMO caminho do domingo/mudança-de-dia
+(`push_current_plan`). Ver [[project_rede_relogio]]."""
+
 from app.domain.entities.training_plan import TrainingPlan
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.persistence.pushed_plan_store import PushedPlanStore
-from app.infrastructure.persistence.weekly_plan_repository import (
-    WeeklyPlanRepository,
-)
 
 
 async def resync_watch_if_pushed(profile: str, plan: TrainingPlan) -> bool:
-    """Reconcilia o plano REGERADO contra o último snapshot empurrado, pra o
-    relógio refletir a mudança (remove os treinos antigos nossos, empurra os
-    novos — sem duplicar). Devolve True se sincronizou, False se não havia o
-    que sincronizar (desconectado ou nunca empurrou). Best-effort: qualquer
-    falha aqui NUNCA derruba a resposta ao atleta (o relógio reconcilia na
-    próxima; a fonte de verdade é o plano no app)."""
+    """Re-empurra a semana pro relógio com FULL REFRESH (tudo em 'Programado').
+    Devolve True se sincronizou, False se não havia o que sincronizar
+    (desconectado ou nunca empurrou). Best-effort: qualquer falha aqui NUNCA
+    derruba a resposta ao atleta (o relógio reconcilia na próxima; a fonte de
+    verdade é o plano no app). O `plan` já foi salvo pelo chamador — o
+    `push_current_plan` relê o mesmo do repositório."""
 
     try:
 
@@ -31,26 +32,16 @@ async def resync_watch_if_pushed(profile: str, plan: TrainingPlan) -> bool:
             return False
 
         # nunca empurrou pro relógio: não surpreende com treinos do nada
-        previous = PushedPlanStore.load(profile)
-
-        if previous is None:
+        if PushedPlanStore.load(profile) is None:
 
             return False
 
-        # conecta uma vez e reusa; reconcilia o novo contra o que estava lá
-        garmin = GarminClient.connect(profile)
+        # full refresh: apaga os templates futuros e recria+reagenda a semana
+        # inteira -> repovoa 'Programado' com TODOS os treinos (o incremental
+        # deixava os novos em 'Meus treinos'). Import tardio evita ciclo.
+        from app.application.garmin.push_current_plan import push_current_plan
 
-        GarminReconciler.reconcile(
-            profile,
-            previous_plan=previous,
-            current_plan=plan,
-            garmin=garmin,
-        )
-
-        # persiste os registros de push gravados nas sessões + novo snapshot
-        WeeklyPlanRepository().save(profile, plan)
-
-        PushedPlanStore.save(profile, plan)
+        await push_current_plan(profile, full_refresh=True)
 
         return True
 

@@ -1,86 +1,66 @@
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.garmin.plan_watch_sync import resync_watch_if_pushed
 
 MODULE = "app.application.garmin.plan_watch_sync"
+PUSH = "app.application.garmin.push_current_plan.push_current_plan"
 
 
-def _run(*, connected, snapshot, reconcile_raises=False):
+def _run(*, connected, snapshot, push_raises=False):
 
     plan = MagicMock(name="plan_regenerado")
 
     with (
         patch(f"{MODULE}.GarminClient") as garmin,
         patch(f"{MODULE}.PushedPlanStore") as store,
-        patch(f"{MODULE}.GarminReconciler") as reconciler,
-        patch(f"{MODULE}.WeeklyPlanRepository") as weekly,
+        patch(PUSH, new_callable=AsyncMock) as push,
     ):
 
         garmin.is_connected.return_value = connected
-        garmin.connect.return_value = MagicMock(name="garmin_conn")
         store.load.return_value = snapshot
 
-        if reconcile_raises:
-            reconciler.reconcile.side_effect = RuntimeError("relógio fora")
+        if push_raises:
+            push.side_effect = RuntimeError("relógio fora")
 
         synced = asyncio.run(resync_watch_if_pushed("renato", plan))
 
-        return synced, reconciler, weekly, store, plan
+        return synced, push, store, plan
 
 
-def test_syncs_when_connected_and_previously_pushed():
+def test_full_refresh_when_connected_and_previously_pushed():
+    """Entrega de domingo re-empurra a semana INTEIRA com full_refresh -> tudo
+    cai em 'Programado' (não split entre 'Meus treinos' e 'Programado')."""
 
-    previous = MagicMock(name="snapshot")
-
-    synced, reconciler, weekly, store, plan = _run(
-        connected=True, snapshot=previous,
-    )
+    synced, push, store, _ = _run(connected=True, snapshot=MagicMock())
 
     assert synced is True
-    # reconcilia o plano REGERADO contra o snapshot do que estava no relógio
-    reconciler.reconcile.assert_called_once()
-    kwargs = reconciler.reconcile.call_args.kwargs
-    assert kwargs["previous_plan"] is previous
-    assert kwargs["current_plan"] is plan
-    # persiste os registros de push + novo snapshot
-    weekly.return_value.save.assert_called_once_with("renato", plan)
-    store.save.assert_called_once_with("renato", plan)
+    push.assert_awaited_once_with("renato", full_refresh=True)
 
 
 def test_skips_when_not_connected():
 
-    synced, reconciler, weekly, store, _ = _run(
-        connected=False, snapshot=MagicMock(),
-    )
+    synced, push, store, _ = _run(connected=False, snapshot=MagicMock())
 
     assert synced is False
-    reconciler.reconcile.assert_not_called()
-    weekly.return_value.save.assert_not_called()
-    store.save.assert_not_called()
+    push.assert_not_awaited()
 
 
 def test_skips_when_never_pushed():
     """Sem snapshot = nunca sincronizou: NÃO surpreende o atleta empurrando
     treinos do nada — o push segue opt-in."""
 
-    synced, reconciler, weekly, store, _ = _run(
-        connected=True, snapshot=None,
+    synced, push, store, _ = _run(connected=True, snapshot=None)
+
+    assert synced is False
+    push.assert_not_awaited()
+
+
+def test_push_failure_is_swallowed():
+    """Falha no relógio nunca derruba a resposta ao atleta — devolve False."""
+
+    synced, push, store, _ = _run(
+        connected=True, snapshot=MagicMock(), push_raises=True,
     )
 
     assert synced is False
-    reconciler.reconcile.assert_not_called()
-    store.save.assert_not_called()
-
-
-def test_reconcile_failure_is_swallowed():
-    """Falha no relógio nunca derruba a resposta ao atleta — devolve False e
-    o plano no app segue como fonte de verdade (reconcilia depois)."""
-
-    synced, reconciler, weekly, store, _ = _run(
-        connected=True, snapshot=MagicMock(), reconcile_raises=True,
-    )
-
-    assert synced is False
-    # tentou, falhou, não persistiu snapshot novo
-    store.save.assert_not_called()
