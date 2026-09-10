@@ -31,6 +31,13 @@ import sys
 from datetime import date, timedelta
 
 from app.application.history.adherence_analyzer import AdherenceAnalyzer
+from app.application.history.stimulus_adherence import (
+    ON_TARGET,
+    STRUCTURED,
+    TOO_FAST,
+    TOO_SLOW,
+    StimulusAdherence,
+)
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.core.clock import today_local, use_athlete_timezone
 from app.domain.entities.adherence_report import (
@@ -159,6 +166,14 @@ def _assess(profile: str) -> dict | None:
         reference_date=today,
     )
 
+    stimulus = StimulusAdherence.analyze(
+        plans,
+        history,
+        until_week=until_week,
+        weeks=WEEKS,
+        reference_date=today,
+    )
+
     last_plan = max(plan.week_start for plan in plans)
 
     last_run = (
@@ -177,6 +192,7 @@ def _assess(profile: str) -> dict | None:
         "last_run": last_run,
         "today": today,
         "verdict": _verdict(report, last_run, today),
+        "stimulus": stimulus,
     }
 
 
@@ -196,6 +212,34 @@ def _rate_pct(report) -> str:
         return "  —"
 
     return f"{round(report.rate * 100):3d}%"
+
+
+def _stimulus_pct(stimulus) -> str:
+
+    if stimulus.rate is None:
+
+        return "—"
+
+    return f"{round(stimulus.rate * 100)}%"
+
+
+def _stimulus_deviation(stimulus) -> str:
+    """O desvio de ritmo DOMINANTE — pegar leve (foi no dia e trotou) ou
+    forçar além (não respeita o fácil/descarga). '—' quando corre no alvo."""
+
+    slow = len(stimulus.too_slow)
+
+    fast = len(stimulus.too_fast)
+
+    if slow == 0 and fast == 0:
+
+        return "—"
+
+    if slow >= fast:
+
+        return f"pegou leve ({slow}x)"
+
+    return f"forçou além ({fast}x)"
 
 
 def ranking() -> None:
@@ -228,13 +272,13 @@ def ranking() -> None:
     print()
     print("ADERÊNCIA AO PLANO DO COACH  —  manter ou limar")
     print(f"(janela: últimas {WEEKS} semanas · gerado {rows[0]['today']})")
-    print("* 'segue' = PRESENÇA no plano (treinou no dia/distância certa);")
-    print("  ainda NÃO confere se o TIPO do treino bateu — ver nota no fim.")
+    print("* 'segue'  = PRESENÇA (treinou no dia/distância certa)")
+    print("* 'ritmo'  = EXECUTOU o estímulo (pace na faixa que o coach mandou)")
     print()
 
     header = (
-        f"{'atleta':<12} {'veredito':<16} {'segue':>5}  {'tendência':<11} "
-        f"{'fura':<16} {'último treino':<14}"
+        f"{'atleta':<12} {'veredito':<16} {'segue':>5} {'ritmo':>6}  "
+        f"{'desvio de ritmo':<20} {'último treino':<14}"
     )
     print(header)
     print("-" * len(header))
@@ -243,10 +287,8 @@ def ranking() -> None:
 
         report = row["report"]
 
-        trend = _TREND_LABEL.get(report.trend, "poucos dados")
-
-        # padrão de furo: dia primeiro (mais acionável), senão o tipo
-        fura = _fmt_pattern(report.missed_day or report.missed_type)
+        # desvio de ritmo dominante: pegar leve ou forçar além
+        desvio = _stimulus_deviation(row["stimulus"])
 
         # aviso de dado velho: último treino há muito tempo = cópia defasada
         idle = (
@@ -270,9 +312,9 @@ def ranking() -> None:
         print(
             f"{row['name'][:11]:<12} "
             f"{VERDICTS[row['verdict']][0]:<16} "
-            f"{_rate_pct(report)}  "
-            f"{trend:<11} "
-            f"{fura:<16} "
+            f"{_rate_pct(report)} "
+            f"{_stimulus_pct(row['stimulus']):>6}  "
+            f"{desvio:<20} "
             f"{sync:<14}"
         )
 
@@ -285,7 +327,9 @@ def ranking() -> None:
     print("  SEGUINDO ✅      cumpre a maior parte e está ativo")
     print()
     print("  segue = % do prescrito com treino casado por DIA/DISTÂNCIA (presença)")
-    print("  fura  = dia/tipo mais furado · ⚠ presença ≠ executou o estímulo certo")
+    print("  ritmo = % das sessões avaliáveis com pace na faixa prescrita")
+    print("  desvio = tiros e sessões sem pace-alvo saem da conta do ritmo")
+    print("  (detalhe sessão a sessão: report_adherence.py <atleta>)")
     print()
 
     # honestidade do dado: só alerta se ALGUÉM está com treino velho (a
@@ -353,6 +397,67 @@ def detail(profile: str) -> None:
             f"    {week.week_start}  "
             f"{week.done}/{week.planned}  "
             f"({round(week.rate * 100):3d}%)  furou: {missed}"
+        )
+
+    print()
+
+    _print_stimulus(assessed["stimulus"])
+
+
+_STIMULUS_MARK = {
+    ON_TARGET: "✅ no ritmo",
+    TOO_SLOW: "🐢 pegou leve",
+    TOO_FAST: "🔥 forçou além",
+    STRUCTURED: "· tiro (s/ splits)",
+}
+
+
+def _print_stimulus(stimulus) -> None:
+    """Prescrito × executado, sessão a sessão — 'seguir o plano de verdade'."""
+
+    print("  EXECUÇÃO DO ESTÍMULO (pace prescrito × executado):")
+
+    if stimulus.rate is not None:
+
+        print(
+            f"    no ritmo: {round(stimulus.rate * 100)}% "
+            f"({len(stimulus.on_target)}/{len(stimulus.evaluated)} avaliáveis) "
+            f"· 🐢 leve: {len(stimulus.too_slow)} · "
+            f"🔥 forte: {len(stimulus.too_fast)}"
+        )
+
+    else:
+
+        print("    (nenhuma sessão contínua com pace-alvo pra avaliar)")
+
+    print()
+
+    # só as sessões que dizem algo (avaliadas + tiros); NO_TARGET é ruído aqui
+    shown = [
+        session
+        for session in stimulus.sessions
+        if session.verdict in _STIMULUS_MARK
+    ]
+
+    for session in shown:
+
+        mark = _STIMULUS_MARK[session.verdict]
+
+        pace = (
+            f"alvo {session.target} · fez {session.executed}"
+            if session.target and session.executed
+            else (f"fez {session.executed}" if session.executed else "")
+        )
+
+        delta = (
+            f"  ({session.delta_sec:+d}s/km)"
+            if session.delta_sec
+            else ""
+        )
+
+        print(
+            f"    {session.week_start} {session.day[:3]:<3} "
+            f"{session.workout_type[:26]:<26} {mark:<16} {pace}{delta}"
         )
 
     print()
