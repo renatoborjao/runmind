@@ -4,9 +4,17 @@ atletas, para decidir quem vale manter e quem é peso morto.
 Reaproveita o AdherenceAnalyzer (a mesma engine que o coach usa por dentro):
 para cada atleta confronta o que foi PRESCRITO com o que foi TREINADO de
 verdade, semana a semana, e resume em três coisas que decidem:
-  - rate:  fração das sessões prescritas que viraram treino real (0-100%)
+  - rate:  fração das sessões prescritas que tiveram treino casado (0-100%)
   - trend: aderência subindo, estável ou caindo nas últimas semanas
   - furo:  o que ele MAIS vive furando (um dia da semana ou um tipo de treino)
+
+⚠ O QUE ESTE 'rate' MEDE (e o que NÃO mede): mede PRESENÇA no plano — a
+sessão é dada como cumprida quando houve corrida no DIA planejado (ou, fora
+do dia, com DISTÂNCIA dentro de 2 km/30%). NÃO confere se o TIPO/estímulo
+bateu: quem correu 8 km de rodagem lenta no dia do intervalado conta como
+'cumprido' aqui. 'Seguir o plano de verdade' (executar o estímulo certo)
+exige os splits/voltas do treino, que o arquivo permanente não guarda —
+é a evolução 'aderência de estímulo' (ver TODO no fim do arquivo).
 
 Puro leitura de disco (arquivo permanente de treinos + histórico de planos),
 sem tocar em Strava/rede. Roda igual local ou no servidor — mas o resultado só
@@ -220,6 +228,8 @@ def ranking() -> None:
     print()
     print("ADERÊNCIA AO PLANO DO COACH  —  manter ou limar")
     print(f"(janela: últimas {WEEKS} semanas · gerado {rows[0]['today']})")
+    print("* 'segue' = PRESENÇA no plano (treinou no dia/distância certa);")
+    print("  ainda NÃO confere se o TIPO do treino bateu — ver nota no fim.")
     print()
 
     header = (
@@ -274,7 +284,8 @@ def ranking() -> None:
     print("  FURA 1 ESTÍMULO segue quase tudo, evita 1 dia/tipo — AJUSTAR, não limar")
     print("  SEGUINDO ✅      cumpre a maior parte e está ativo")
     print()
-    print("  segue = % do prescrito que virou treino real · fura = dia/tipo mais furado")
+    print("  segue = % do prescrito com treino casado por DIA/DISTÂNCIA (presença)")
+    print("  fura  = dia/tipo mais furado · ⚠ presença ≠ executou o estímulo certo")
     print()
 
     # honestidade do dado: só alerta se ALGUÉM está com treino velho (a
@@ -297,13 +308,6 @@ def ranking() -> None:
             "abandono real."
         )
         print()
-    print(
-        "⚠ Este relatório lê o storage LOCAL. Para a decisão real de limar,"
-    )
-    print(
-        "  rode no servidor (Oracle) onde os dados estão vivos."
-    )
-    print()
 
 
 def detail(profile: str) -> None:
@@ -370,3 +374,22 @@ if __name__ == "__main__":
     # LoadRunnerProfile é síncrono, mas mantém o mesmo shape do seed
     _ = asyncio
     main()
+
+
+# ----------------------------------------------------------------------
+# TODO — EVOLUÇÃO 'aderência de ESTÍMULO' (seguir o plano DE VERDADE)
+#
+# Hoje o 'segue %' é PRESENÇA: casou a corrida com a sessão por dia/distância
+# (WeeklyPlanMatcher). Não distingue "fez o intervalado prescrito" de "foi no
+# dia e trotou 8 km". Para medir execução do estímulo:
+#   1. classificar a corrida executada (TrainingClassifier -> WorkoutType) e
+#      comparar com o session.workout_type prescrito (bateu o TIPO?);
+#   2. o classificador precisa de RunnerMetrics (RunnerMetricsBuilder) + do
+#      pace/FC médios (o arquivo TEM) — isso já pega "mandei forte, fez fácil";
+#   3. o caso do TIRO exige WorkoutStructure.is_interval, que vem dos
+#      splits/voltas — o arquivo permanente NÃO guarda. Ou se persiste a
+#      estrutura por atividade, ou se lê a evidência que o pipeline pós-treino
+#      já produz (comparação bloco-a-bloco / PaceCalibrationStore).
+# Desenhar + validar OFFLINE com treinos reais ANTES de expor no relatório
+# (senão vira falso-negativo: acusa de furar quem fez o tiro certo).
+# ----------------------------------------------------------------------
