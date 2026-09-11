@@ -21,24 +21,40 @@ MIN_KEEP_FRACTION = 0.4   # nunca corta pra menos de 40% do planejado
 MIN_DISTANCE_KM = 1.0
 
 PROMPT_TEMPLATE = """Você é um treinador de corrida experiente revisando um \
-plano gerado automaticamente, para garantir que ele é REALISTA e SEGURO para
-este atleta específico.
+plano gerado automaticamente. Sua função é uma REDE DE SEGURANÇA: só intervém no
+que for CLARAMENTE irreal ou inseguro para este atleta. Na dúvida, NÃO sinalize —
+um plano de qualidade bem dosado deve passar limpo.
 
 ATLETA:
 {athlete}
-
+{capacity_section}
 PLANO DA SEMANA (uma sessão por linha):
 {sessions}
 
-Para CADA sessão que for claramente irreal ou insegura para este atleta
-(ex.: correr contínuo além do que ele aguenta, volume/intensidade alta demais
-para iniciante de alto peso, ritmo incompatível com a capacidade):
-- retorne um alerta CURTO e prático em "note" (o que fazer no lugar);
-- se der pra tornar a sessão viável só REDUZINDO a distância, informe um teto
-  seguro em km em "suggested_max_km" (sempre MENOR que o planejado, nunca
-  maior; omita se não fizer sentido reduzir).
+A CAPACIDADE PROJETADA (quando informada acima) É A REFERÊNCIA DE REALISMO E
+MANDA sobre peso/idade: ela reflete o que o atleta REALMENTE sustenta hoje. Um
+atleta mais pesado que a projeção mostra correndo 10K a 5:10/km SUSTENTA esse
+ritmo — NÃO é "agressivo demais pelo peso". Só o que a projeção NÃO sustenta é
+que é irreal.
 
-Se o plano estiver adequado, retorne lista vazia.
+Sinalize APENAS nestes casos, com um "note" CURTO e prático (o que fazer no
+lugar), ajuste sempre GRADUAL, nunca reescrevendo o ritmo como ordem:
+1. VOLUME/CONTÍNUO inseguro pra este atleta (ex.: iniciante de alto peso ou
+   run/walk correndo contínuo muito além do que aguenta) — aí, e SÓ aí, se der
+   pra viabilizar reduzindo a distância, informe "suggested_max_km" (sempre
+   MENOR que o planejado; NUNCA em sessão medida por tempo/minutos).
+2. RITMO DE PROVA / contínuo no ritmo-alvo da meta prescrito MAIS RÁPIDO do que a
+   projeção sustenta hoje (ex.: prescrever ritmo de meia bem abaixo do que o
+   relógio projeta pra meia).
+
+NUNCA sinalize (isto é treino CORRETO, não erro):
+- tiros (VO2/intervalado), fartlek, limiar e tempo mais rápidos que o ritmo de
+  prova — SÃO pra ser mais rápidos, por definição;
+- qualquer ritmo de qualidade que esteja DENTRO ou perto da capacidade projetada;
+- dose de qualidade num atleta cuja projeção mostra que ele aguenta.
+
+Se o plano estiver adequado (o caso mais comum pra atleta em evolução), retorne
+lista VAZIA.
 
 Responda APENAS com JSON:
 {{"concerns": [{{"day": "Monday", "note": "...", "suggested_max_km": 5.0}}]}}
@@ -56,9 +72,16 @@ class PlanRealismReviewer:
         profile: str,
         runner: RunnerProfile,
         plan: TrainingPlan,
+        goal=None,
+        prediction=None,
     ) -> TrainingPlan:
         """Revisa o plano uma única vez por semana (idempotente) e
-        persiste os alertas. Falha da IA nunca quebra a entrega."""
+        persiste os alertas. Falha da IA nunca quebra a entrega.
+
+        `goal`/`prediction` (opcionais): a meta + a projeção de prova do Garmin
+        entram como ÂNCORA DE CAPACIDADE — o revisor pega quando o plano
+        prescreve ritmo de prova mais rápido do que a projeção sustenta hoje
+        (insumo, não decreto: só anota/apara, nunca reescreve o pace)."""
 
         if (
             plan.source != "runmind"
@@ -70,7 +93,9 @@ class PlanRealismReviewer:
 
         try:
 
-            concerns = await PlanRealismReviewer._ask(runner, plan)
+            concerns = await PlanRealismReviewer._ask(
+                runner, plan, goal, prediction,
+            )
 
         except Exception as e:
 
@@ -94,12 +119,17 @@ class PlanRealismReviewer:
     async def _ask(
         runner: RunnerProfile,
         plan: TrainingPlan,
+        goal=None,
+        prediction=None,
     ) -> list[dict]:
 
         settings = get_settings()
 
         prompt = PROMPT_TEMPLATE.format(
             athlete=PlanRealismReviewer._describe_athlete(runner),
+            capacity_section=PlanRealismReviewer._capacity_section(
+                goal, prediction,
+            ),
             sessions=PlanRealismReviewer._describe_sessions(plan),
         )
 
@@ -154,6 +184,55 @@ class PlanRealismReviewer:
         lines.append(f"- Objetivo: {runner.goal}")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _capacity_section(goal, prediction) -> str:
+        """Bloco de CAPACIDADE pro prompt: projeção de prova do Garmin + a meta.
+        String vazia (sem seção) quando não há projeção com dado — device sem o
+        dado não deve inventar âncora nenhuma."""
+
+        if prediction is None or not getattr(prediction, "has_data", False):
+
+            return ""
+
+        labels = [
+            f"{name} ~{value}"
+            for name, value in (
+                ("5K", prediction.time_5k),
+                ("10K", prediction.time_10k),
+                ("21K", prediction.time_half),
+                ("42K", prediction.time_marathon),
+            )
+            if value
+        ]
+
+        if not labels:
+
+            return ""
+
+        lines = [
+            "",
+            "CAPACIDADE ATUAL (referência de realismo — ESTIMATIVA do Garmin "
+            "pelo VO₂máx+treino, NÃO um decreto):",
+            "- Projeção do relógio: " + " · ".join(labels),
+        ]
+
+        if goal is not None:
+
+            target = getattr(goal, "target_time", None)
+
+            label = (
+                getattr(goal, "race_label", None)
+                or getattr(goal, "name", None)
+            )
+
+            if label:
+
+                suffix = f" em {target}" if target else ""
+
+                lines.append(f"- Meta do atleta: {label}{suffix}")
+
+        return "\n".join(lines) + "\n"
 
     @staticmethod
     def _describe_sessions(plan: TrainingPlan) -> str:

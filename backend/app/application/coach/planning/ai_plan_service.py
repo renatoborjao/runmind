@@ -124,6 +124,13 @@ class AIPlanService:
 
             repository.save(profile, plan)
 
+            # REVISÃO pós-geração: rede de segurança por cima do plano gerado —
+            # marca sessão irreal pra este atleta e, com a projeção do Garmin
+            # como âncora de capacidade, pega ritmo de prova acima do que ela
+            # sustenta (nota/ajuste, nunca reescreve o pace). Best-effort: falha
+            # da IA revisora nunca segura a entrega do plano.
+            plan = await AIPlanService._review_plan(profile, runner, plan, goal)
+
             return plan
 
         except Exception as e:
@@ -639,6 +646,33 @@ class AIPlanService:
             print(f"Diretriz de forma falhou p/ '{profile}': {e}")
 
             return ""
+
+    @staticmethod
+    async def _review_plan(profile, runner, plan, goal):
+        """Revisão de realismo pós-geração (PlanRealismReviewer) com a projeção
+        de prova do Garmin como âncora de capacidade. Best-effort: qualquer
+        falha devolve o plano intacto (o atleta nunca fica sem plano)."""
+
+        try:
+
+            from app.application.coach.planning.plan_realism_reviewer import (
+                PlanRealismReviewer,
+            )
+            from app.infrastructure.persistence.race_prediction_repository import (
+                RacePredictionRepository,
+            )
+
+            prediction = RacePredictionRepository().load(profile)
+
+            return await PlanRealismReviewer.ensure_reviewed(
+                profile, runner, plan, goal=goal, prediction=prediction,
+            )
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Revisão de plano falhou p/ '{profile}': {e}")
+
+            return plan
 
     @staticmethod
     def _race_projection_directive(profile: str, goal) -> str:

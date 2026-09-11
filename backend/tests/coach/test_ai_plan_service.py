@@ -104,6 +104,54 @@ def test_run_walk_also_goes_through_ai():
     assert plan.source == "runmind"
 
 
+def test_generated_plan_goes_through_realism_review_with_projection():
+    """Após gerar, o plano passa pela revisão de realismo — com a projeção do
+    Garmin carregada como âncora de capacidade."""
+
+    from app.domain.entities.race_prediction import RacePrediction
+
+    reviewed = _plan()
+
+    ensure = AsyncMock(return_value=reviewed)
+
+    prediction = RacePrediction(time_10k_sec=2830)
+
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as repo_cls,
+        patch(f"{MODULE}.CoachPlanEngine") as coach,
+        patch(f"{MODULE}.WeeklyPlanService") as wps,
+        patch.object(AIPlanService, "_build_context", return_value="ctx"),
+        patch(
+            "app.application.coach.planning.plan_realism_reviewer."
+            "PlanRealismReviewer.ensure_reviewed",
+            new=ensure,
+        ),
+        patch(
+            "app.infrastructure.persistence.race_prediction_repository."
+            "RacePredictionRepository"
+        ) as pred_repo,
+    ):
+
+        repo_cls.return_value.load.return_value = None
+        wps.active_week_start.return_value = WEEK
+        coach.generate = AsyncMock(return_value=_plan())
+        pred_repo.return_value.load.return_value = prediction
+
+        goal = MagicMock(race_date=None)
+
+        asyncio.run(
+            AIPlanService.ensure_plan(
+                "renato", make_runner(), _assessment(),
+                MagicMock(), goal, TrainingHistory([]), WEEK,
+            )
+        )
+
+    ensure.assert_awaited_once()
+    # a projeção carregada foi passada ao revisor
+    assert ensure.await_args.kwargs["prediction"] is prediction
+    assert ensure.await_args.kwargs["goal"] is goal
+
+
 def test_external_coach_skips_ai_and_uses_deterministic():
 
     plan, coach, repo, wps = _run(

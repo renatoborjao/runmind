@@ -1,11 +1,13 @@
 import asyncio
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.application.coach.planning.plan_realism_reviewer import (
     PlanRealismReviewer,
 )
 from app.domain.entities.planned_session import PlannedSession
+from app.domain.entities.race_prediction import RacePrediction
 from app.domain.entities.training_plan import TrainingPlan
 from tests.coach.factories import make_runner
 
@@ -206,3 +208,87 @@ def test_note_without_cap_only_flags():
     session = result.sessions[0]
     assert session.planned_distance_km == 9.1  # número intacto
     assert session.adjusted is True
+
+
+# ==========================================================
+# Projeção do Garmin como âncora de capacidade
+# ==========================================================
+
+
+def _prediction():
+    # 5K 22:30, 10K 47:10, 21K 1:45:00, 42K 3:40:00
+    return RacePrediction(
+        time_5k_sec=1350, time_10k_sec=2830,
+        time_half_sec=6300, time_marathon_sec=13200,
+    )
+
+
+def _goal():
+    return SimpleNamespace(
+        race_label="21K (Villa-Lobos)", target_time="1:15:00", name="meia",
+    )
+
+
+def test_capacity_section_lists_projection_and_goal():
+
+    section = PlanRealismReviewer._capacity_section(_goal(), _prediction())
+
+    assert "CAPACIDADE ATUAL" in section
+    assert "5K ~22:30" in section
+    assert "10K ~47:10" in section
+    assert "21K ~1:45:00" in section
+    assert "Meta do atleta: 21K (Villa-Lobos) em 1:15:00" in section
+
+
+def test_capacity_section_empty_without_prediction():
+
+    assert PlanRealismReviewer._capacity_section(_goal(), None) == ""
+    # projeção vazia (device sem o dado) também não inventa âncora
+    assert PlanRealismReviewer._capacity_section(_goal(), RacePrediction()) == ""
+
+
+def test_projection_reaches_the_review_prompt():
+    """A projeção entra no prompt do revisor — é o que permite pegar ritmo de
+    prova acima da capacidade de hoje."""
+
+    generate = AsyncMock(return_value='{"concerns": []}')
+
+    with (
+        patch(f"{MODULE}.generate_text", new=generate),
+        patch(f"{MODULE}.WeeklyPlanRepository"),
+    ):
+
+        asyncio.run(
+            PlanRealismReviewer.ensure_reviewed(
+                "renato2", make_runner(), _plan(),
+                goal=_goal(), prediction=_prediction(),
+            )
+        )
+
+    prompt = generate.await_args.kwargs["contents"]
+
+    assert "Projeção do relógio" in prompt
+    assert "21K ~1:45:00" in prompt
+    # a régua "insumo, não decreto" e a proteção contra falso-alarme de tiro
+    assert "ESTIMATIVA do Garmin" in prompt
+    assert "NUNCA sinalize" in prompt
+
+
+def test_no_projection_keeps_prompt_without_capacity_section():
+
+    generate = AsyncMock(return_value='{"concerns": []}')
+
+    with (
+        patch(f"{MODULE}.generate_text", new=generate),
+        patch(f"{MODULE}.WeeklyPlanRepository"),
+    ):
+
+        asyncio.run(
+            PlanRealismReviewer.ensure_reviewed(
+                "renato2", make_runner(), _plan(),
+            )
+        )
+
+    prompt = generate.await_args.kwargs["contents"]
+
+    assert "CAPACIDADE ATUAL" not in prompt
