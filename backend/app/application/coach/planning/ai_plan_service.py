@@ -300,6 +300,19 @@ class AIPlanService:
                 else projection
             )
 
+        # HIERARQUIA DE PROVAS: alvo de fundo mais longo que a prova próxima ->
+        # foca no fundo, trata a próxima como checkpoint (não encerra o ciclo
+        # nela). MAIS UM insumo, não decreto. Best-effort.
+        hierarchy = AIPlanService._race_hierarchy_directive(runner, goal)
+
+        if hierarchy:
+
+            fitness_directive = (
+                f"{fitness_directive}\n{hierarchy}"
+                if fitness_directive
+                else hierarchy
+            )
+
         # SUBJETIVO recente (RPE + check-ins): o que ELE SENTIU, fresco, direto
         # no plano — não só via aprendizado semanal. Ver [[feedback_base_historico_sempre]].
         subjective = AIPlanService._subjective(profile)
@@ -649,6 +662,25 @@ class AIPlanService:
         except Exception as e:
 
             print(f"Diretriz de projeção falhou p/ '{profile}': {e}")
+
+            return ""
+
+    @staticmethod
+    def _race_hierarchy_directive(runner, goal) -> str:
+        """Foco no alvo de fundo quando ele é mais longo que a próxima prova (a
+        próxima vira checkpoint). Best-effort — nunca deixa o atleta sem plano."""
+
+        try:
+
+            from app.application.coach.planning.race_hierarchy_directive import (
+                race_hierarchy_directive,
+            )
+
+            return race_hierarchy_directive(goal, getattr(runner, "goal", None))
+
+        except Exception as e:
+
+            print(f"Diretriz de hierarquia falhou p/ '{runner}': {e}")
 
             return ""
 
