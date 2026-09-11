@@ -4,13 +4,8 @@ from app.application.coach.conversation.goal_change_detector import (
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
-from app.application.garmin.watch_offer import watch_update_offer
 from app.application.onboarding.onboarding_answer_parser import (
     OnboardingAnswerParser,
-)
-from app.application.planner.current_plan_provider import CurrentPlanProvider
-from app.application.planner.weekly_plan_message_formatter import (
-    WeeklyPlanMessageFormatter,
 )
 from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.persistence.pending_goal_repository import (
@@ -34,12 +29,14 @@ class GoalChangeApplier:
     """Fluxo reativo de troca de OBJETIVO: o atleta pede pra mudar a meta
     no chat (texto livre, com ou sem prova/data/tempo-alvo).
 
-    Duas cabeças:
-    - COM cronograma (data de prova OU tempo-alvo): é uma meta concreta com
-      prazo — atualiza tudo e regera a semana pra bater o caminho.
+    Em qualquer caso, mudança de meta é ESTRUTURAL e NÃO remexe a semana ATUAL
+    (que já está rolando) — o plano já mirando a meta nova sai no domingo, na
+    próxima geração. Duas cabeças:
+    - COM cronograma (data de prova OU tempo-alvo): meta concreta com prazo —
+      atualiza o perfil e o caminho passa a mirar a prova a partir do domingo.
     - SEM cronograma (aspiração tipo "quero correr 21km, com saúde"): registra
-      a meta e a memória, mas NÃO vira a semana de cabeça pra baixo — a
-      progressão semanal leva o volume pra lá aos poucos ('progride devagar').
+      a meta e a memória; a progressão semanal leva o volume pra lá aos poucos
+      ('progride devagar').
 
     Estado: quando o atleta quer trocar mas ainda não disse qual, o coach
     pergunta e arma um pendente; a resposta seguinte cai aqui mesmo (sem
@@ -202,21 +199,15 @@ class GoalChangeApplier:
 
         if anchor_changed:
 
-            _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
-
-            plan_text = WeeklyPlanMessageFormatter.week_plan_message(
-                runner.name, plan, profile=profile
-            )
-
-            # a semana foi REGENERADA: o relógio ficou defasado -> oferece
-            # mandar a versão nova (o 'sim' empurra; o lembrete cobre se ele
-            # não responder). Sem isso a troca de meta virava limbo no relógio
-            # até o domingo. Ver [[WatchUpdateReminderNotifier]].
+            # a prova nova vira a âncora, MAS não remexe a semana ATUAL — ela já
+            # está rolando; o plano já mirando a prova nova sai no domingo (a
+            # próxima geração). Sem regen agora, sem oferta de relógio (nada
+            # mudou nesta semana). Ver [[project_preferencia_duravel_rotina]].
             return (
                 f"Anotado, {runner.name}! Somei esse objetivo aos seus — e "
-                "como a prova nova é a mais próxima, ajustei o plano pra mirar "
-                f"ela sem largar o resto. 🎯\n\n{plan_text}"
-                f"{watch_update_offer(profile)}"
+                "como a prova nova é a mais próxima, ela passa a ancorar teu "
+                "plano. Não mexo na tua semana atual; a partir de domingo eu "
+                "monto o caminho já mirando ela, sem largar o resto. 🎯"
             )
 
         return (
@@ -271,8 +262,9 @@ class GoalChangeApplier:
         goal: str,
         extracted: dict,
     ) -> str:
-        """Meta com prazo/tempo-alvo: atualiza o perfil e regera a semana já
-        na meta nova (o caminho passa a mirar a prova)."""
+        """Meta com prazo/tempo-alvo: atualiza o perfil. NÃO remexe a semana
+        ATUAL (mudança estrutural) — o caminho mirando a prova nova sai no
+        domingo, na próxima geração. Ver [[project_preferencia_duravel_rotina]]."""
 
         updates = {"goal": goal}
 
@@ -297,23 +289,11 @@ class GoalChangeApplier:
 
             return f"Anotado! Atualizei seu objetivo pra: {goal}. 🎯"
 
-        _, plan = await CurrentPlanProvider.for_profile(
-            profile,
-            force=True,
-        )
-
-        plan_text = WeeklyPlanMessageFormatter.week_plan_message(
-            runner.name,
-            plan,
-            profile=profile,
-        )
-
-        # a semana foi REGENERADA pra meta nova: o relógio ficou defasado ->
-        # oferece mandar a versão nova (o 'sim' empurra; o lembrete cobre se ele
-        # não responder). Sem isso a troca de meta ficava só no domingo — limbo
-        # no relógio a semana toda. Ver [[WatchUpdateReminderNotifier]].
+        # mudança ESTRUTURAL: não vira a semana atual de cabeça pra baixo — o
+        # plano já mirando a meta nova sai no domingo (próxima geração). Sem
+        # regen agora, sem oferta de relógio (nada mudou nesta semana).
         return (
             f"Fechou, {runner.name}! Atualizei seu objetivo pra: {goal}. 🎯 "
-            f"Já ajustei o plano da semana pra essa meta nova.\n\n{plan_text}"
-            f"{watch_update_offer(profile)}"
+            "Não viro tua semana atual de cabeça pra baixo — a partir de "
+            "domingo eu monto teu plano já mirando essa meta."
         )

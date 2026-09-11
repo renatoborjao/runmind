@@ -1,19 +1,15 @@
 """Resolve a resposta do atleta à oferta de OFICIALIZAR um dia a mais (o coach
 perguntou "quer 4 dias?" porque ele treina em rotina além do plano). "SIM" ->
-atualiza os dias no perfil, REGERA a semana com o dia novo e arma a oferta de
-relógio (nunca vira limbo); "não" -> mantém e reconhece. Só age quando há uma
-oferta PENDENTE (o "sim" é sobre isso, não uma afirmação solta).
+atualiza os dias no perfil; NÃO remexe a semana ATUAL (mudança estrutural entra
+no plano da PRÓXIMA semana, gerado no domingo) — sem regen na hora, sem oferta
+de relógio (nada mudou nesta semana); "não" -> mantém e reconhece. Só age quando
+há uma oferta PENDENTE (o "sim" é sobre isso, não uma afirmação solta).
 
-Ver [[project_reconciliacao_coach]] e [[project_rede_relogio]]."""
+Ver [[project_reconciliacao_coach]] e [[project_preferencia_duravel_rotina]]."""
 
 from app.application.coach.conversation.proposal_reply_detector import (
     ProposalReply,
     ProposalReplyDetector,
-)
-from app.application.garmin.watch_offer import watch_update_offer
-from app.application.planner.current_plan_provider import CurrentPlanProvider
-from app.application.planner.weekly_plan_message_formatter import (
-    WeeklyPlanMessageFormatter,
 )
 from app.core.weekdays import weekday_label
 from app.domain.entities.runner_profile import RunnerProfile
@@ -79,27 +75,25 @@ class FrequencyReconcileFlow:
 
         dia = weekday_label(weekday) if weekday else ""
 
+        extra = f" teu {dia}" if dia else ""
+
+        # oficializa o dia no perfil, mas NÃO remexe a semana ATUAL (ela já está
+        # rolando — mudança estrutural entra no plano da PRÓXIMA semana, gerado
+        # no domingo). Sem regeneração agora, sem oferta de relógio (nada mudou
+        # nesta semana). Ver [[project_preferencia_duravel_rotina]].
         if runner.external_coach:
 
             return (
-                f"Fechou, {runner.name}! Anotei teu {dia} — teu plano agora é "
+                f"Fechou, {runner.name}! Anotei{extra} — teu plano passa a ser "
                 f"{len(new_days)} dias/semana. 💪"
             )
 
-        _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
-
-        plan_text = WeeklyPlanMessageFormatter.week_plan_message(
-            runner.name, plan, profile=profile
+        return (
+            f"Isso, {runner.name}! Oficializei{extra} — teu plano passa a ser "
+            f"{len(new_days)} dias/semana. Não mexo na tua semana atual (já tá "
+            "rolando); a partir de domingo eu já monto o plano contando com "
+            "ele. 💪"
         )
-
-        head = (
-            f"Isso, {runner.name}! Oficializei teu {dia} — agora teu plano é "
-            f"{len(new_days)} dias/semana, montado já contando com ele. 💪"
-            if dia
-            else f"Fechou! Teu plano agora é {len(new_days)} dias/semana. 💪"
-        )
-
-        return f"{head}\n\n{plan_text}{watch_update_offer(profile)}"
 
     @staticmethod
     def _add_day(days: list[str], weekday: str | None) -> list[str]:

@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.application.coach.conversation.frequency_reconcile_flow import (
     FrequencyReconcileFlow,
@@ -20,16 +20,10 @@ def _runner(external=False):
 def _run(pending, text, external=False):
 
     repo = MagicMock()
-    plan = SimpleNamespace(sessions=[])
 
     with (
         patch(f"{MOD}.FrequencyOfferStore") as store,
         patch(f"{MOD}.RunnerProfileRepository", return_value=repo),
-        patch(f"{MOD}.CurrentPlanProvider.for_profile",
-              new=AsyncMock(return_value=(_runner(), plan))),
-        patch(f"{MOD}.WeeklyPlanMessageFormatter.week_plan_message",
-              return_value="<PLANO>"),
-        patch(f"{MOD}.watch_update_offer", return_value="\n\n⌚ oferta"),
     ):
         store.get_pending.return_value = pending
 
@@ -55,7 +49,7 @@ def test_unclear_keeps_offer_and_returns_none():
     store.clear.assert_not_called()
 
 
-def test_confirm_officializes_day_and_regenerates():
+def test_confirm_officializes_day_but_defers_to_next_week():
 
     msg, repo, store = _run({"days": 4, "weekday": "Friday"}, "sim, pode!")
 
@@ -65,8 +59,20 @@ def test_confirm_officializes_day_and_regenerates():
         "Monday", "Wednesday", "Friday", "Saturday"
     ]
     assert args["weekly_training_days"] == 4
-    assert "sexta" in msg and "<PLANO>" in msg and "oferta" in msg
+    # NÃO remexe a semana atual: defere pro domingo, sem oferta de relógio
+    assert "sexta" in msg
+    assert "domingo" in msg.lower()
+    assert "semana atual" in msg.lower()
     store.clear.assert_called_once()
+
+
+def test_confirm_does_not_regenerate_current_week():
+
+    msg, repo, _ = _run({"days": 4, "weekday": "Friday"}, "sim, pode!")
+
+    # nada de plano regenerado nem oferta de relógio nesta semana
+    assert "<PLANO>" not in msg
+    assert "oferta" not in msg
 
 
 def test_reject_keeps_days():
