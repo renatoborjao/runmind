@@ -50,10 +50,29 @@ _INTERVAL_NAME_CUES = (
 ON_TARGET = "ON_TARGET"    # correu na faixa (± tolerância): executou o estímulo
 TOO_SLOW = "TOO_SLOW"      # bem mais lento que o prescrito: pegou leve
 TOO_FAST = "TOO_FAST"      # bem mais rápido: forçou além (fura o fácil/descarga)
-STRUCTURED = "STRUCTURED"  # tem tiros: média não mede (precisa dos splits)
+STRUCTURED = "STRUCTURED"  # tem tiros e NÃO há veredito bloco-a-bloco (sem splits)
 NO_TARGET = "NO_TARGET"    # sessão sem pace-alvo: não dá pra cobrar ritmo
 
-_EVALUATED = {ON_TARGET, TOO_SLOW, TOO_FAST}
+# tiros medidos bloco-a-bloco (splits do Garmin, via StimulusResultStore)
+INTERVAL_HIT = "INTERVAL_HIT"          # executou os tiros no ritmo
+INTERVAL_PARTIAL = "INTERVAL_PARTIAL"  # parte dos tiros no alvo
+INTERVAL_MISS = "INTERVAL_MISS"        # furou os tiros (fora do ritmo/não fez)
+
+# veredito de tiro (StimulusResultStore) -> veredito da sessão
+_INTERVAL_VERDICT = {
+    "HIT": INTERVAL_HIT,
+    "PARTIAL": INTERVAL_PARTIAL,
+    "MISS": INTERVAL_MISS,
+}
+
+# entram na conta do rate (sessões que dá pra julgar o estímulo)
+_EVALUATED = {
+    ON_TARGET, TOO_SLOW, TOO_FAST,
+    INTERVAL_HIT, INTERVAL_PARTIAL, INTERVAL_MISS,
+}
+
+# contam como "executou o estímulo" (numerador do rate)
+_ON_TARGET_VERDICTS = {ON_TARGET, INTERVAL_HIT}
 
 
 @dataclass(slots=True)
@@ -67,6 +86,7 @@ class SessionStimulus:
     target: str | None      # "6:20–6:45"
     executed: str | None    # "6:38"
     delta_sec: int | None   # executado − limite mais próximo (+lento / −rápido)
+    detail: str | None = None  # tiros: "4/5 no alvo"
 
 
 @dataclass(slots=True)
@@ -85,7 +105,7 @@ class StimulusReport:
     @property
     def on_target(self) -> list[SessionStimulus]:
 
-        return [s for s in self.sessions if s.verdict == ON_TARGET]
+        return [s for s in self.sessions if s.verdict in _ON_TARGET_VERDICTS]
 
     @property
     def too_slow(self) -> list[SessionStimulus]:
@@ -101,6 +121,22 @@ class StimulusReport:
     def structured(self) -> list[SessionStimulus]:
 
         return [s for s in self.sessions if s.verdict == STRUCTURED]
+
+    @property
+    def interval_hit(self) -> list[SessionStimulus]:
+
+        return [s for s in self.sessions if s.verdict == INTERVAL_HIT]
+
+    @property
+    def interval_missed(self) -> list[SessionStimulus]:
+        """Tiros furados (fora do ritmo ou não feitos) — o caso que a média
+        escondia e agora os splits revelam."""
+
+        return [
+            s
+            for s in self.sessions
+            if s.verdict in (INTERVAL_MISS, INTERVAL_PARTIAL)
+        ]
 
     @property
     def rate(self) -> float | None:
@@ -119,9 +155,16 @@ class StimulusAdherence:
         until_week: date,
         weeks: int = LOOKBACK_WEEKS,
         reference_date: date | None = None,
+        interval_results: dict[int, dict] | None = None,
     ) -> StimulusReport:
+        """`interval_results`: mapa activity_id -> veredito de tiro bloco-a-bloco
+        (do StimulusResultStore, gravado no pós-treino). Quando presente pra um
+        treino de tiro, o veredito real entra no lugar de 'não medido'. Mantido
+        PURO: o report carrega o store e injeta aqui."""
 
         today = reference_date or today_local()
+
+        interval_results = interval_results or {}
 
         window = AdherenceAnalyzer._plans_in_window(plans, until_week, weeks)
 
@@ -153,7 +196,10 @@ class StimulusAdherence:
                     continue
 
                 sessions.append(
-                    StimulusAdherence._evaluate(plan, session, activity)
+                    StimulusAdherence._evaluate(
+                        plan, session, activity,
+                        interval_results.get(activity_id),
+                    )
                 )
 
         sessions.sort(key=lambda s: (s.week_start, s.day))
@@ -167,6 +213,7 @@ class StimulusAdherence:
         plan: TrainingPlan,
         session: PlannedSession,
         activity: Activity,
+        interval_result: dict | None = None,
     ) -> SessionStimulus:
 
         executed_sec = StimulusAdherence._executed_pace_sec(activity)
@@ -197,6 +244,20 @@ class StimulusAdherence:
 
         # tiro: o pace médio não representa o estímulo
         if StimulusAdherence._is_structured(session):
+
+            # há veredito bloco-a-bloco (splits do Garmin)? usa a verdade dos
+            # tiros no lugar de 'não medido'
+            if interval_result and interval_result.get("verdict") in _INTERVAL_VERDICT:
+
+                return SessionStimulus(
+                    verdict=_INTERVAL_VERDICT[interval_result["verdict"]],
+                    delta_sec=None,
+                    detail=(
+                        f"{interval_result.get('on_target', 0)}/"
+                        f"{interval_result.get('total', 0)} no alvo"
+                    ),
+                    **base,
+                )
 
             return SessionStimulus(verdict=STRUCTURED, delta_sec=None, **base)
 

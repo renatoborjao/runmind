@@ -32,11 +32,17 @@ from datetime import date, timedelta
 
 from app.application.history.adherence_analyzer import AdherenceAnalyzer
 from app.application.history.stimulus_adherence import (
+    INTERVAL_HIT,
+    INTERVAL_MISS,
+    INTERVAL_PARTIAL,
     ON_TARGET,
     STRUCTURED,
     TOO_FAST,
     TOO_SLOW,
     StimulusAdherence,
+)
+from app.infrastructure.persistence.stimulus_result_store import (
+    StimulusResultStore,
 )
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.core.clock import today_local, use_athlete_timezone
@@ -172,6 +178,7 @@ def _assess(profile: str) -> dict | None:
         until_week=until_week,
         weeks=WEEKS,
         reference_date=today,
+        interval_results=StimulusResultStore().all(profile),
     )
 
     last_plan = max(plan.week_start for plan in plans)
@@ -408,6 +415,9 @@ _STIMULUS_MARK = {
     ON_TARGET: "✅ no ritmo",
     TOO_SLOW: "🐢 pegou leve",
     TOO_FAST: "🔥 forçou além",
+    INTERVAL_HIT: "🎯 tiros no alvo",
+    INTERVAL_PARTIAL: "🟡 tiros parciais",
+    INTERVAL_MISS: "❌ furou os tiros",
     STRUCTURED: "· tiro (s/ splits)",
 }
 
@@ -455,9 +465,12 @@ def _print_stimulus(stimulus) -> None:
             else ""
         )
 
+        # tiros medidos: mostra "4/5 no alvo" em vez de pace médio (irrelevante)
+        info = session.detail if session.detail else f"{pace}{delta}"
+
         print(
             f"    {session.week_start} {session.day[:3]:<3} "
-            f"{session.workout_type[:26]:<26} {mark:<16} {pace}{delta}"
+            f"{session.workout_type[:26]:<26} {mark:<18} {info}"
         )
 
     print()

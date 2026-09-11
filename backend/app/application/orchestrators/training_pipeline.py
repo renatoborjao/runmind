@@ -60,6 +60,11 @@ class TrainingPipeline:
 
         TrainingPipeline._record_pace_calibration(profile, coach_context)
 
+        # ESTÍMULO de tiro: guarda o veredito bloco-a-bloco (executou os
+        # intervalados no ritmo?) pra o report de aderência ler em lote — o
+        # arquivo reduzido não tem splits pra recalcular depois. Best-effort.
+        TrainingPipeline._record_stimulus_result(profile, coach_context)
+
         # --------------------------------------------------
         # Âncora contínua de VDOT (nativa do Garmin): extrai o MELHOR esforço
         # sustentado de dentro deste treino a partir dos streams (distância +
@@ -195,6 +200,42 @@ class TrainingPipeline:
         except Exception as e:
 
             print(f"Calibração de pace falhou p/ '{profile}': {e}")
+
+    @staticmethod
+    def _record_stimulus_result(profile: str, coach_context) -> None:
+        """Extrai e guarda o veredito de estímulo (tiros no alvo?) deste treino,
+        a partir da comparação bloco-a-bloco. Best-effort — nunca derruba a
+        análise."""
+
+        try:
+
+            from app.application.history.stimulus_result import (
+                stimulus_result_from_comparison,
+            )
+            from app.infrastructure.persistence.stimulus_result_store import (
+                StimulusResultStore,
+            )
+
+            result = stimulus_result_from_comparison(
+                coach_context.block_comparison
+            )
+
+            if result is None:
+
+                return
+
+            activity = coach_context.executed.activity
+
+            StimulusResultStore().record(
+                profile,
+                activity.id,
+                activity.start_date.date().isoformat(),
+                result,
+            )
+
+        except Exception as e:
+
+            print(f"Registro de estímulo falhou p/ '{profile}': {e}")
 
     @staticmethod
     def _record_best_effort(profile: str, coach_context) -> None:

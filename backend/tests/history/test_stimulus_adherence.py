@@ -175,6 +175,67 @@ def test_tempo_continuo_nao_e_tratado_como_tiro():
     assert report.sessions[0].verdict == ON_TARGET
 
 
+def test_tiro_com_veredito_bloco_a_bloco_entra_na_conta():
+    """Quando há veredito de tiro (splits do Garmin), o intervalado deixa de ser
+    'não medido' e vira HIT/MISS de verdade — fecha o buraco da média."""
+
+    steps = [WorkoutStep(kind="repeat", reps=5,
+                         steps=[WorkoutStep(kind="interval", distance_m=1000.0)])]
+
+    plan = _plan([_session("Tuesday", "4:30", "4:40", steps=steps)])
+
+    activities = [_run_at_pace("Tuesday", 320, 7)]  # média lenta (aquec+trote)
+
+    # o relógio diz: executou os tiros no alvo (HIT)
+    report = StimulusAdherence.analyze(
+        [plan],
+        TrainingHistory(activities),
+        until_week=WEEK,
+        reference_date=REFERENCE,
+        interval_results={7: {"verdict": "HIT", "on_target": 5, "total": 5}},
+    )
+
+    session = report.sessions[0]
+
+    assert session.verdict == "INTERVAL_HIT"
+    assert session.detail == "5/5 no alvo"
+    assert report.rate == 1.0            # tiro no alvo conta como cumprido
+    assert len(report.on_target) == 1
+
+
+def test_tiro_furado_conta_como_desvio():
+    steps = [WorkoutStep(kind="repeat", reps=5,
+                         steps=[WorkoutStep(kind="interval", distance_m=1000.0)])]
+
+    plan = _plan([_session("Tuesday", "4:30", "4:40", steps=steps)])
+
+    report = StimulusAdherence.analyze(
+        [plan],
+        TrainingHistory([_run_at_pace("Tuesday", 320, 8)]),
+        until_week=WEEK,
+        reference_date=REFERENCE,
+        interval_results={8: {"verdict": "MISS", "on_target": 1, "total": 5}},
+    )
+
+    session = report.sessions[0]
+
+    assert session.verdict == "INTERVAL_MISS"
+    assert len(report.interval_missed) == 1
+    assert report.rate == 0.0            # avaliável, mas furou
+
+
+def test_tiro_sem_veredito_segue_nao_medido():
+    steps = [WorkoutStep(kind="repeat", reps=5,
+                         steps=[WorkoutStep(kind="interval", distance_m=1000.0)])]
+
+    plan = _plan([_session("Tuesday", "4:30", "4:40", steps=steps)])
+
+    report = _analyze(plan, [_run_at_pace("Tuesday", 320, 9)])  # sem interval_results
+
+    assert report.sessions[0].verdict == STRUCTURED
+    assert report.rate is None
+
+
 def test_sessao_sem_alvo_de_pace_e_no_target():
     # plano externo sem pace (Mauricio) → não dá pra cobrar ritmo
     report = _analyze(
