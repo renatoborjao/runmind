@@ -518,7 +518,11 @@ def test_structured_session_appends_pace_when_prose_omits_it():
         week_start=date(2026, 9, 7), sessions=[session],
     )
 
-    msg = WeeklyPlanMessageFormatter.week_plan_message("Renato", plan)
+    # referência = a segunda da semana do plano (a terça é FUTURA); sem isto o
+    # teste dependeria de "hoje" e venceria quando a data passasse
+    msg = WeeklyPlanMessageFormatter.week_plan_message(
+        "Renato", plan, reference_date=date(2026, 9, 7)
+    )
 
     assert "Ritmo alvo: 4:55–5:05/km" in msg
 
@@ -537,6 +541,9 @@ def test_structured_session_does_not_duplicate_pace_when_present():
         week_start=date(2026, 9, 7), sessions=[session],
     )
 
-    msg = WeeklyPlanMessageFormatter.week_plan_message("Renato", plan)
+    # referência fixa (a sessão de domingo é FUTURA) — não depende de "hoje"
+    msg = WeeklyPlanMessageFormatter.week_plan_message(
+        "Renato", plan, reference_date=date(2026, 9, 7)
+    )
 
     assert "Ritmo alvo:" not in msg  # a prosa já tinha o pace
