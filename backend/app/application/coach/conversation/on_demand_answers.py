@@ -67,6 +67,22 @@ class OnDemandAnswers:
     sistema — devolvidas sem passar pelo Gemini, para não resumir nem
     desconfigurar. None = não há resposta determinística (segue no chat)."""
 
+    # pontes entre os eixos IRMÃOS: FORMA = evolução de MESES (crônico); CORPO =
+    # recuperação/prontidão de HOJE (agudo). Sem isto, o atleta sente que "um
+    # anula o outro" (a forma elogia, o corpo cobra) quando na verdade leem
+    # relógios diferentes — os dois podem estar certos ao mesmo tempo.
+    _FORM_TO_BODY_BRIDGE = (
+        "🧭 Isso é a tua FORMA — a evolução ao longo de meses. Como o corpo "
+        "está pra treinar HOJE (recuperação, prontidão) é outra leitura: manda "
+        '"como tá meu corpo".'
+    )
+
+    _BODY_TO_FORM_BRIDGE = (
+        "🧭 Isso é o teu CORPO AGORA — recuperação e carga do momento, não a "
+        "tua forma. A evolução do arco longo é outra pergunta: manda "
+        '"como tá minha forma".'
+    )
+
     @staticmethod
     async def answer(
         intent: ChatIntent,
@@ -155,7 +171,10 @@ class OnDemandAnswers:
                 profile, runner, reading, trajectory,
             )
 
-            return f"{text}\n\n{offer}" if offer else text
+            body = f"{text}\n\n{offer}" if offer else text
+
+            # ponte pro eixo irmão (forma) — enquadra "isto é o agora"
+            return f"{body}\n\n{OnDemandAnswers._BODY_TO_FORM_BRIDGE}"
 
         if intent == ChatIntent.FITNESS_TREND:
 
@@ -169,12 +188,18 @@ class OnDemandAnswers:
             # Torna a evolução visível mesmo pra quem não tem EF com lastro.
             progress = ProgressReport.build(profile)
 
-            if progress:
+            # escada de tempo: curto prazo (semanas) em cima, arco longo (meses)
+            # embaixo — cada um já rotula sua janela, então os números param de
+            # brigar. None em ambos → cai no Gemini (sem a ponte solta).
+            parts = [p for p in (evo_msg, progress) if p]
 
-                return f"{evo_msg}\n\n{progress}" if evo_msg else progress
+            if not parts:
 
-            # None (nenhum sinal) cai no Gemini, que responde com naturalidade
-            return evo_msg
+                return None
+
+            parts.append(OnDemandAnswers._FORM_TO_BODY_BRIDGE)
+
+            return "\n\n".join(parts)
 
         if intent == ChatIntent.STATE_PORTRAIT:
 

@@ -179,8 +179,10 @@ class FitnessEvolutionWriter:
 
         if evo.ef_long is not None:
 
+            # a MESMA economia sustentada num horizonte maior — rótulo distinto
+            # do bloco "O arco longo" (VDOT/meses) logo abaixo, pra não repetir
             out.append(
-                f"• 📈 No arco longo (~{evo.ef_long.span_weeks} sem): "
+                f"• 📊 Economia sustentada (~{evo.ef_long.span_weeks} sem): "
                 f"{FitnessEvolutionWriter._word(evo.ef_long)}"
             )
 
@@ -207,11 +209,7 @@ class FitnessEvolutionWriter:
                 f"({FitnessEvolutionWriter._range(evo.rhr, 0)} bpm)"
             )
 
-        pending = FitnessEvolutionWriter._pending(evo)
-
-        if pending:
-
-            out.append(pending)
+        out.extend(FitnessEvolutionWriter._pending(evo))
 
         return out
 
@@ -219,6 +217,15 @@ class FitnessEvolutionWriter:
     def _ef_tangible(ef: AerobicEfficiency) -> str | None:
         """A tradução sentível do EF numa linha curta (a mais intuitiva: no
         mesmo esforço, quanto mais rápido); só quando o número tem tamanho."""
+
+        # rótulo de período: deixa EXPLÍCITO que esta é a janela CURTA (~X sem),
+        # pra não brigar com o número de arco longo do "você vs você" (que
+        # compara com meses atrás) — sem isso os dois "mais rápido" confundem
+        ago = (
+            f"~{ef.weeks_covered} semanas atrás"
+            if ef.weeks_covered
+            else "no começo"
+        )
 
         if ef.ref_hr and ef.pace_gain_sec and ef.pace_gain_sec > 0:
 
@@ -230,7 +237,7 @@ class FitnessEvolutionWriter:
 
             return (
                 f"na mesma FC (~{ef.ref_hr} bpm), {amount} s/km mais "
-                "rápido que no começo"
+                f"rápido que {ago}"
             )
 
         if ef.ref_pace and ef.hr_drop_bpm and ef.hr_drop_bpm < 0:
@@ -245,31 +252,50 @@ class FitnessEvolutionWriter:
 
             return (
                 f"no mesmo pace (~{pace}/km), FC {amount} bpm mais "
-                "alta que no começo"
+                f"alta que {ago}"
             )
 
         return None
 
     @staticmethod
-    def _pending(evo: FitnessEvolution) -> str | None:
-        """Deixa claro (uma vez) o que ainda está juntando histórico — responde
-        'por que só o EF conta hoje?' sem virar ruído."""
+    def _pending(evo: FitnessEvolution) -> list[str]:
+        """O que ainda não vira sinal — mas com o PORQUÊ acionável, não um
+        genérico 'juntando histórico'. O VO₂máx CONGELADO (parado há semanas =
+        esteira) ganha linha própria com a saída ('corre na rua que ele volta');
+        o resto agrupa como pendência simples."""
+
+        lines: list[str] = []
+
+        # VO₂máx congelado: a causa é ACIONÁVEL (o Garmin não lê na esteira)
+        if evo.vo2max_frozen:
+
+            lines.append(
+                f"• 🫁 VO₂máx: parado há ~{evo.vo2max_last_days} dias — teu "
+                "Garmin só recalcula em corrida de RUA (na esteira ele não "
+                "atualiza). Umas corridas a céu aberto e ele volta a subir. 👊"
+            )
 
         missing = []
 
-        if evo.vo2max is None:
+        if evo.vo2max is None and not evo.vo2max_frozen:
 
-            missing.append("VO₂máx")
+            reason = (
+                "teu relógio ainda não calculou"
+                if evo.vo2max_points == 0
+                else "ainda juntando histórico"
+            )
+
+            missing.append(f"VO₂máx ({reason})")
 
         if evo.rhr is None:
 
-            missing.append("FC de repouso")
+            missing.append("FC de repouso (juntando histórico)")
 
-        if not missing:
+        if missing:
 
-            return None
+            lines.append("• ⏳ " + " · ".join(missing))
 
-        return "• ⏳ " + " e ".join(missing) + ": ainda juntando histórico"
+        return lines
 
     @staticmethod
     def _closer(evo: FitnessEvolution) -> str:

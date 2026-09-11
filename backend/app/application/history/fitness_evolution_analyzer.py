@@ -113,6 +113,10 @@ class FitnessEvolutionAnalyzer:
             ef, ef_long, quality, vo2max, rhr
         )
 
+        points, last_days, span = FitnessEvolutionAnalyzer._vo2max_diagnosis(
+            health_series, ref
+        )
+
         return FitnessEvolution(
             direction=direction,
             confidence=confidence,
@@ -124,7 +128,44 @@ class FitnessEvolutionAnalyzer:
             days_since_last_run=(
                 FitnessEvolutionAnalyzer._days_since_last_run(activities, ref)
             ),
+            vo2max_points=points,
+            vo2max_last_days=last_days,
+            vo2max_span_days=span,
         )
+
+    @staticmethod
+    def _vo2max_diagnosis(
+        series: list[DailyHealth],
+        ref: date,
+    ) -> tuple[int, int | None, int]:
+        """(nº de leituras de VO₂máx na janela longa, dias desde a última,
+        alcance entre a 1ª e a última). Explica POR QUE o VO₂máx não virou
+        tendência: 0 leituras = o relógio não calcula; leituras concentradas
+        (span curto) = ainda juntando; última antiga = congelou (esteira)."""
+
+        start = ref - timedelta(days=_LONG_WINDOW_DAYS - 1)
+
+        days: list[date] = []
+
+        for h in series:
+
+            if getattr(h, "vo2max", None) is None:
+
+                continue
+
+            day = date.fromisoformat(h.date)
+
+            if start <= day <= ref:
+
+                days.append(day)
+
+        if not days:
+
+            return 0, None, 0
+
+        days.sort()
+
+        return len(days), (ref - days[-1]).days, (days[-1] - days[0]).days
 
     # ------------------------------------------------------------------
 

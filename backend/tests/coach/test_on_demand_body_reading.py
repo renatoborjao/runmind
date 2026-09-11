@@ -58,7 +58,9 @@ def test_body_reading_returns_narrative_when_data_exists():
 
     result = _answer(_reading(LOAD_HIGH, has_recovery=True))
 
-    assert result == "Seu corpo está absorvendo bem."
+    assert result.startswith("Seu corpo está absorvendo bem.")
+    # ponte pro eixo irmão (forma), pra corpo e forma não parecerem se anular
+    assert "como tá minha forma" in result
 
 
 def test_body_reading_falls_to_gemini_when_no_data():

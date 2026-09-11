@@ -152,6 +152,56 @@ def test_line_none_without_ef():
     assert FitnessEvolutionWriter.line(FitnessEvolution()) is None
 
 
+def test_ef_tangible_labels_the_period():
+    """A tradução do EF diz de QUANTO tempo é a comparação (~N semanas atrás) —
+    sem isso o '~8 s/km' briga com o '~65 s/km' do arco longo (meses)."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING,
+        ef=_ef(EFF_IMPROVING, pace_gain_sec=8),
+    )
+
+    msg = FitnessEvolutionWriter.write(evo, "Renato")
+
+    assert "~8 s/km" in msg
+    assert "8 semanas atrás" in msg  # weeks_covered=8 no _ef helper
+
+
+def test_vo2max_frozen_points_to_road_running():
+    """VO₂máx com leituras mas parado há semanas (esteira) → explica o PORQUÊ
+    acionável (Garmin só recalcula na rua), não um genérico 'juntando'."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING, ef=_ef(EFF_IMPROVING),
+        vo2max=None, vo2max_points=8, vo2max_last_days=47, vo2max_span_days=14,
+    )
+
+    assert evo.vo2max_frozen
+
+    msg = FitnessEvolutionWriter.write(evo, "Renato")
+
+    assert "VO₂máx: parado há ~47 dias" in msg
+    assert "RUA" in msg
+    assert "esteira" in msg
+    # não cai no genérico quando a causa é conhecida
+    assert "VO₂máx (juntando" not in msg
+
+
+def test_vo2max_never_calculated_says_so():
+    """Sem NENHUMA leitura de VO₂máx (relógio não calcula) → diz isso, não
+    'juntando histórico' (que sugere que só falta tempo)."""
+
+    evo = FitnessEvolution(
+        direction=EVO_STABLE, ef=_ef(),
+        vo2max=None, vo2max_points=0,
+    )
+
+    msg = FitnessEvolutionWriter.write(evo, "Renato")
+
+    assert "ainda não calculou" in msg
+    assert "esteira" not in msg  # não é o caso de congelado
+
+
 def _pending_part(msg: str) -> str:
     """Trecho da linha de pendência (entre parênteses), pra checar que um sinal
     presente NÃO aparece como pendente."""

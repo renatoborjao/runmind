@@ -56,7 +56,7 @@ def test_you_vs_you_shows_pace_gain_over_the_arc():
 
         out = ProgressReport.build("renato")
 
-    assert "você vs você" in out.lower()
+    assert "arco longo" in out.lower()  # header do horizonte de meses
     assert "MAIS RÁPIDO" in out
     assert "280 km" in out and "40 treinos" in out
 

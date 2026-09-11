@@ -55,10 +55,31 @@ class FitnessEvolution:
     # histórico). Alimenta o guard de dado velho (`stale`).
     days_since_last_run: int | None = None
 
+    # diagnóstico do VO₂máx quando NÃO virou tendência (vo2max is None) — pra o
+    # writer explicar o PORQUÊ acionável em vez de um genérico "juntando
+    # histórico". O VO₂máx do Garmin só recalcula em corrida de rua (GPS+FC);
+    # na esteira ele não atualiza e a leitura CONGELA.
+    vo2max_points: int = 0          # quantas leituras de VO₂máx há na janela
+    vo2max_last_days: int | None = None   # dias desde a última leitura (None=0)
+    vo2max_span_days: int = 0       # alcance entre a 1ª e a última leitura
+
     @property
     def has_data(self) -> bool:
 
         return self.direction != EVO_INSUFFICIENT
+
+    @property
+    def vo2max_frozen(self) -> bool:
+        """Tem leitura de VO₂máx, mas a última é ANTIGA (>~4 semanas) — clássico
+        de quem passou a correr na esteira (o Garmin não recalcula indoor).
+        Acionável: algumas corridas de rua reativam o número."""
+
+        return (
+            self.vo2max is None
+            and self.vo2max_points > 0
+            and self.vo2max_last_days is not None
+            and self.vo2max_last_days > 28
+        )
 
     @property
     def stale(self) -> bool:

@@ -90,7 +90,11 @@ class ProgressReport:
 
             return None
 
-        header = "📈 Seu progresso — você vs você"
+        # deixa EXPLÍCITO que este é o horizonte LONGO (meses) — o par do bloco
+        # de curto prazo (semanas). Sem o rótulo, o número daqui (~65s/km em
+        # meses) parece brigar com o de lá (~8s/km em semanas); com ele, viram
+        # uma escada de tempo: onde você está agora × de onde veio.
+        header = "📈 O arco longo — de onde você veio (meses)"
 
         closing = "Isso é evolução de verdade, construída teimosia por teimosia. 👊"
 
