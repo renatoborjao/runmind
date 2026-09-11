@@ -4,10 +4,17 @@ from pathlib import Path
 
 from app.core.clock import now_local
 
-# Só honra o estado por uma janela curta: se o atleta disse "quero trocar
-# meu objetivo" e some por horas, a resposta seguinte a uma pergunta ANTIGA
-# não deve ser tratada como a meta nova (evita sequestrar mensagem à toa).
+# Janela do fluxo REATIVO: o atleta disse "quero trocar meu objetivo" e o
+# coach perguntou "qual?". A resposta vem em SEGUIDA; se some por horas, a
+# mensagem seguinte a uma pergunta ANTIGA não deve virar a meta nova (evita
+# sequestrar mensagem à toa).
 PENDING_TTL_MINUTES = 20
+
+# Janela do fluxo PROATIVO: FOMOS nós que perguntamos (broadcast "confirma teu
+# objetivo"). O atleta responde quando puder — horas ou dias depois — e a
+# devolutiva NÃO PODE se perder. Por isso a validade é longa. Ver
+# [[project_reconciliacao_coach]].
+PROACTIVE_GOAL_TTL_MINUTES = 14 * 24 * 60
 
 
 class PendingGoalRepository:
@@ -35,13 +42,23 @@ class PendingGoalRepository:
 
         return self.storage / f"{profile}.json"
 
-    def mark(self, profile: str) -> None:
-        """Arma o estado: a partir de agora a próxima resposta é a meta."""
+    def mark(
+        self,
+        profile: str,
+        ttl_minutes: int = PENDING_TTL_MINUTES,
+    ) -> None:
+        """Arma o estado: a partir de agora a próxima resposta é a meta. O
+        `ttl_minutes` viaja GRAVADO com a marca — reativo usa o padrão curto;
+        o broadcast proativo passa `PROACTIVE_GOAL_TTL_MINUTES` (a devolutiva
+        pode chegar dias depois)."""
 
         with open(self._file(profile), "w", encoding="utf-8") as f:
 
             json.dump(
-                {"at": now_local().isoformat()},
+                {
+                    "at": now_local().isoformat(),
+                    "ttl_minutes": ttl_minutes,
+                },
                 f,
                 ensure_ascii=False,
                 indent=2,
@@ -61,7 +78,12 @@ class PendingGoalRepository:
 
             with open(file, encoding="utf-8") as f:
 
-                at = datetime.fromisoformat(json.load(f)["at"])
+                data = json.load(f)
+
+            at = datetime.fromisoformat(data["at"])
+
+            # dado legado (sem ttl gravado) cai no padrão curto reativo
+            ttl_minutes = int(data.get("ttl_minutes", PENDING_TTL_MINUTES))
 
         except (json.JSONDecodeError, KeyError, ValueError, TypeError):
 
@@ -71,7 +93,7 @@ class PendingGoalRepository:
 
         age_minutes = (now_local() - at).total_seconds() / 60
 
-        if age_minutes > PENDING_TTL_MINUTES:
+        if age_minutes > ttl_minutes:
 
             self.clear(profile)
 
