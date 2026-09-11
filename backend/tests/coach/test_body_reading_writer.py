@@ -192,3 +192,59 @@ def test_non_borderline_acwr_has_no_frontier_note():
     )
 
     assert "fronteira" not in facts
+
+
+# --- tier-2: tanque/respiração/SpO2 + carga de vida nos fatos e sinais ---
+
+
+def test_tier2_facts_include_tank_respiration_and_life_load():
+
+    facts = BodyReadingWriter._facts(
+        _reading(
+            body_battery_wake=22,
+            respiration_sleep=17.0, respiration_direction=FALLING,
+            spo2_sleep_avg=88,
+            steps_avg=13000, intensity_minutes_avg=25, active_calories_avg=450,
+        ),
+        "Renato",
+    )
+
+    assert "body battery ao acordar 22/100 (acordou no vermelho)" in facts
+    assert "respiração no sono 17.0 rpm (subindo, atenção)" in facts
+    assert "SpO2 média no sono 88% (baixa)" in facts
+    assert "Movimento do dia (treino incluso): 13000 passos/dia" in facts
+    assert "25 min intensos/dia" in facts
+
+
+def test_tier2_facts_full_tank_reads_positive_and_omits_normal_spo2():
+
+    facts = BodyReadingWriter._facts(
+        _reading(body_battery_wake=91, spo2_sleep_avg=96), "Renato"
+    )
+
+    assert "SpO2" not in facts                 # 96% não é flag
+    # tanque cheio lê como positivo, nunca como atenção
+    assert "body battery ao acordar 91/100 (acordou com o tanque cheio)" in facts
+
+
+def test_fallback_signals_flag_low_wake_battery_only():
+
+    # acordou no vermelho: entra como sinal
+    baixo = BodyReadingWriter._fallback_signals(_reading(body_battery_wake=28))
+
+    assert "acordando com pouca bateria no corpo" in baixo
+
+    # tanque cheio: NÃO vira sinal (nada de número/susto à toa)
+    cheio = BodyReadingWriter._fallback_signals(_reading(body_battery_wake=88))
+
+    assert "bateria" not in cheio
+
+
+def test_life_load_limiter_labeled_in_fallback():
+
+    text = BodyReadingWriter._fallback(
+        _reading(limiter="carga_vida"), "Renato"
+    )
+
+    assert "🎯" in text
+    assert "rotina fora do treino" in text

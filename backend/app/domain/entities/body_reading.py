@@ -32,6 +32,31 @@ class RecoveryTrend:
     vo2max: float | None = None
     days_covered: int = 0
 
+    # -- tier-2: contexto de recuperação além dos marcadores de ouro --
+
+    # body battery AO ACORDAR = o tanque com que o atleta começou o dia. Nos
+    # relógios que não computam prontidão (FR165), é o proxy mais próximo dela.
+    # O que pesa é o NÍVEL absoluto (acordar no vermelho = não recarregou); a
+    # direção é contexto. Acordar em 91 com leve queda NÃO é alerta.
+    body_battery_wake: int | None = None
+    body_battery_wake_direction: str = STABLE   # acordar mais carregado é bom
+
+    # respiração no SONO (rpm): sobe com stress/álcool/doença. Sinal narrado,
+    # NÃO dirige o veredito (subir pode ser gripe, não treino).
+    respiration_sleep: float | None = None
+    respiration_direction: str = STABLE          # subir é PIOR (POV recuperação)
+
+    # SpO2 MÉDIA no sono (%): a saturação SUSTENTADA da noite. Só narrada quando
+    # baixa de verdade (não o vale de 1 noite, que engana); nunca é conselho
+    # médico. Um mínimo transitório caindo a 86% é normal — a média conta.
+    spo2_sleep_avg: int | None = None
+
+    # carga de VIDA (esforço FORA do treino): recuperação não é só o que você
+    # treina — dia de 14k passos + faxina também cobra. Contexto/limitador.
+    steps_avg: int | None = None
+    active_calories_avg: int | None = None
+    intensity_minutes_avg: int | None = None     # (moderada + 2×vigorosa)/dia
+
     # Números que a PRÓPRIA Garmin computa (só relógios melhores; None no FR165).
     # Quando vêm, MANDAM — a leitura mostra/prefere o número do relógio a
     # derivar por conta. Ver [[project_analise_corpo_garmin]].

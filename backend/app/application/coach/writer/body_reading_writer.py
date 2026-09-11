@@ -37,6 +37,7 @@ _LIMITER_LABEL = {
     "sono": "o sono (várias noites curtas ultimamente)",
     "fc_repouso": "a FC de repouso, que vem subindo",
     "stress": "o nível de stress, que está alto",
+    "carga_vida": "a rotina fora do treino (muito tempo em pé/andando)",
 }
 
 _SYSTEM_PROMPT = """Você é o coach de corrida do Ritmind. Escreva pro atleta \
@@ -174,6 +175,20 @@ class BodyReadingWriter:
 
             lines.append("Recuperação: sem dados do Garmin ainda")
 
+        # tier-2: tanque/respiração/SpO2 + carga de vida (contexto que explica
+        # a recuperação — o corpo sente o estresse do dia inteiro, não só o treino)
+        tier2 = BodyReadingWriter._tier2_facts(rec)
+
+        if tier2:
+
+            lines.append(tier2)
+
+        life = BodyReadingWriter._life_load_facts(rec)
+
+        if life:
+
+            lines.append(life)
+
         # números que a PRÓPRIA Garmin computou (relógio melhor) — quando vêm,
         # são mais autoritativos que os derivados; a narração deve preferi-los
         garmin = BodyReadingWriter._garmin_facts(rec)
@@ -222,6 +237,87 @@ class BodyReadingWriter:
             "Números da PRÓPRIA Garmin (prefira estes ao derivado): "
             + ", ".join(parts)
         )
+
+    @staticmethod
+    def _wake_band(level: int) -> str:
+        """Rótulo qualitativo do body battery AO ACORDAR pelo NÍVEL absoluto —
+        o que importa. Acordar cheio é bom mesmo se a tendência caiu de leve;
+        acordar no vermelho é o sinal ruim."""
+
+        if level < 30:
+
+            return "acordou no vermelho"
+
+        if level < 50:
+
+            return "tanque moderado ao acordar"
+
+        if level < 75:
+
+            return "acordou bem"
+
+        return "acordou com o tanque cheio"
+
+    @staticmethod
+    def _tier2_facts(rec) -> str | None:
+        """Tanque/respiração/SpO2 — contexto de recuperação do tier-2. Body
+        battery lido pelo NÍVEL (não pela direção com tanque cheio, que engana);
+        respiração e SpO2 de sono entram como SINAL, não diagnóstico."""
+
+        parts = []
+
+        if rec.body_battery_wake is not None:
+
+            band = BodyReadingWriter._wake_band(rec.body_battery_wake)
+
+            parts.append(f"body battery ao acordar {rec.body_battery_wake}/100 ({band})")
+
+        if rec.respiration_sleep is not None:
+
+            # direção em POV de recuperação: FALLING = respiração subindo = pior
+            word = {RISING: "baixando, bom sinal", FALLING: "subindo, atenção"}.get(
+                rec.respiration_direction, "estável"
+            )
+
+            parts.append(f"respiração no sono {rec.respiration_sleep} rpm ({word})")
+
+        # SpO2 só quando a MÉDIA de sono é baixa de verdade (sustentada), nunca
+        # pelo vale de 1 noite e nunca como conselho médico
+        if rec.spo2_sleep_avg is not None and rec.spo2_sleep_avg < 90:
+
+            parts.append(f"SpO2 média no sono {rec.spo2_sleep_avg}% (baixa)")
+
+        if not parts:
+
+            return None
+
+        return "Tanque/respiração (Garmin): " + ", ".join(parts)
+
+    @staticmethod
+    def _life_load_facts(rec) -> str | None:
+        """Movimento do DIA — inclui o treino, mas mostra o quanto o corpo se
+        mexeu no total. Contexto: recuperação sente o dia inteiro, não só a
+        corrida (dia de muito passo/rotina cobra também)."""
+
+        parts = []
+
+        if rec.steps_avg is not None:
+
+            parts.append(f"{rec.steps_avg} passos/dia")
+
+        if rec.intensity_minutes_avg is not None:
+
+            parts.append(f"{rec.intensity_minutes_avg} min intensos/dia")
+
+        if rec.active_calories_avg is not None:
+
+            parts.append(f"{rec.active_calories_avg} kcal ativas/dia")
+
+        if not parts:
+
+            return None
+
+        return "Movimento do dia (treino incluso): " + ", ".join(parts)
 
     @staticmethod
     def _hrv_word(direction: str) -> str:
@@ -335,6 +431,12 @@ class BodyReadingWriter:
         if rec.sleep_avg_hours is not None:
 
             parts.append(f"sono médio de {rec.sleep_avg_hours}h")
+
+        # body battery ao acordar: só entra como sinal quando acordou baixo (o
+        # que importa é o nível; tanque cheio caindo de leve não é notícia)
+        if rec.body_battery_wake is not None and rec.body_battery_wake < 40:
+
+            parts.append("acordando com pouca bateria no corpo")
 
         if not parts:
 

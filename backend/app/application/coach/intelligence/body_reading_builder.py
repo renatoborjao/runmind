@@ -45,6 +45,14 @@ from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
 
+# média de passos/dia a partir da qual a carga de vida FORA do treino pesa na
+# recuperação (dia após dia muito em pé/andando cobra, mesmo sem treinar mais)
+_HIGH_LIFE_LOAD_STEPS = 12000
+
+# body battery ao acordar abaixo disto = acordou "no vermelho" (não recarregou)
+# — aí sim é sinal de recuperação ruim. Acordar cheio (mesmo caindo de leve) não.
+_LOW_WAKE_BATTERY = 30
+
 
 class BodyReadingBuilder:
 
@@ -159,10 +167,19 @@ class BodyReadingBuilder:
         """A régua central: cruza carga × recuperação."""
 
         # recuperação vem do Garmin em direção-de-recuperação (RISING=melhora,
-        # FALLING=piora); sem dado de recuperação, nada "caindo"
+        # FALLING=piora); sem dado de recuperação, nada "caindo". Marcadores de
+        # ouro: HRV e FC de repouso pela DIREÇÃO. Body battery entra pelo NÍVEL
+        # absoluto (acordar no vermelho = não recarregou) — nunca pela direção
+        # com tanque cheio (acordar em 91 caindo de leve não é alerta).
+        waking_drained = (
+            recovery.body_battery_wake is not None
+            and recovery.body_battery_wake < _LOW_WAKE_BATTERY
+        )
+
         recovery_declining = (
             recovery.hrv_direction == FALLING
             or recovery.rhr_direction == FALLING
+            or waking_drained
         )
 
         # sem histórico de carga suficiente: veredito puxado pela recuperação
@@ -215,5 +232,15 @@ class BodyReadingBuilder:
         if recovery.stress_avg is not None and recovery.stress_avg >= 40:
 
             return "stress"
+
+        # carga de vida alta: o atleta não está descansando FORA do treino
+        # (muito tempo em pé/andando) — nó real e acionável, mas de menor
+        # urgência que sono/FC/stress, então vem por último.
+        if (
+            recovery.steps_avg is not None
+            and recovery.steps_avg >= _HIGH_LIFE_LOAD_STEPS
+        ):
+
+            return "carga_vida"
 
         return None

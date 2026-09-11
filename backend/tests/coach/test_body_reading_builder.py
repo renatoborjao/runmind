@@ -27,7 +27,8 @@ from tests.coach.factories import make_activity
 MOD = "app.application.coach.intelligence.body_reading_builder"
 
 
-def _rec(hrv=STABLE, rhr=STABLE, sleep=7.5, short=0, nights=10, stress=25):
+def _rec(hrv=STABLE, rhr=STABLE, sleep=7.5, short=0, nights=10, stress=25,
+         bb_wake_level=None, steps=None):
 
     return RecoveryTrend(
         hrv_direction=hrv,
@@ -37,6 +38,8 @@ def _rec(hrv=STABLE, rhr=STABLE, sleep=7.5, short=0, nights=10, stress=25):
         nights_counted=nights,
         stress_avg=stress,
         days_covered=nights,
+        body_battery_wake=bb_wake_level,
+        steps_avg=steps,
     )
 
 
@@ -94,6 +97,24 @@ def test_insufficient_load_declining_recovery_flags_recovery():
     assert state == BODY_RECOVERY_FLAG
 
 
+def test_low_wake_battery_is_a_recovery_marker():
+    """Acordar 'no vermelho' (tanque baixo) conta como recuperação ruim (ao lado
+    de HRV/FC) — carga alta + acordou drenado = sobrecarga."""
+
+    state = BodyReadingBuilder._verdict(LOAD_HIGH, _rec(bb_wake_level=22))
+
+    assert state == BODY_STRAINED
+
+
+def test_full_wake_battery_does_not_flag_even_if_drifting():
+    """Acordar com tanque cheio (91) NÃO é alerta, mesmo caindo de leve — o que
+    conta é o nível, não a direção (o caso do joaosoares que se contradizia)."""
+
+    state = BodyReadingBuilder._verdict(LOAD_HIGH, _rec(bb_wake_level=91))
+
+    assert state == BODY_ABSORBING
+
+
 # ---------------- limitador acionável ----------------
 
 
@@ -115,6 +136,22 @@ def test_limiter_stress_when_high():
     rec = _rec(sleep=7.5, short=0, stress=45)
 
     assert BodyReadingBuilder._limiter(rec) == "stress"
+
+
+def test_limiter_life_load_when_steps_high():
+
+    # sono/FC/stress ok, mas média de passos alta -> rotina fora do treino
+    rec = _rec(sleep=7.5, short=0, steps=13500)
+
+    assert BodyReadingBuilder._limiter(rec) == "carga_vida"
+
+
+def test_limiter_sleep_beats_life_load():
+
+    # sono ruim E passos altos: sono é mais urgente
+    rec = _rec(sleep=5.3, short=7, nights=11, steps=15000)
+
+    assert BodyReadingBuilder._limiter(rec) == "sono"
 
 
 def test_no_limiter_when_all_good():

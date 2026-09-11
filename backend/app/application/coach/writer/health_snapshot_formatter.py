@@ -108,7 +108,28 @@ class HealthSnapshotFormatter:
 
             lines.append(f"• 🧠 Stress médio: {recovery.stress_avg}")
 
-        if recovery.body_battery_recent is not None:
+        # body battery: o tanque AO ACORDAR (proxy de prontidão), lido pelo
+        # NÍVEL (banda qualitativa) — não por seta de tendência, que num tanque
+        # cheio caindo de leve leria como "atenção" e se contradiz. A recarga da
+        # noite entra entre parênteses quando há.
+        if recovery.body_battery_wake is not None:
+
+            band = HealthSnapshotFormatter._wake_band(recovery.body_battery_wake)
+
+            recharge = ""
+
+            if recovery.body_battery_recent is not None:
+
+                sign = "+" if recovery.body_battery_recent >= 0 else ""
+
+                recharge = f" · recarga {sign}{recovery.body_battery_recent}/noite"
+
+            lines.append(
+                f"• 🔋 Body Battery ao acordar: {recovery.body_battery_wake}/100 "
+                f"({band}){recharge}"
+            )
+
+        elif recovery.body_battery_recent is not None:
 
             sign = "+" if recovery.body_battery_recent >= 0 else ""
 
@@ -116,11 +137,37 @@ class HealthSnapshotFormatter:
                 f"• 🔋 Body Battery: {sign}{recovery.body_battery_recent}/dia"
             )
 
+        if recovery.respiration_sleep is not None:
+
+            arrow = HealthSnapshotFormatter._arrow(
+                recovery.respiration_direction, good_word="baixando, bom sinal"
+            )
+
+            resp = HealthSnapshotFormatter._num(recovery.respiration_sleep)
+
+            lines.append(f"• 🌬️ Respiração no sono: {resp} rpm{arrow}")
+
+        # SpO2 só quando a MÉDIA de sono é baixa de verdade — não o vale de 1
+        # noite (transitório, engana) nem conselho médico
+        if recovery.spo2_sleep_avg is not None and recovery.spo2_sleep_avg < 90:
+
+            lines.append(
+                f"• 🩸 SpO₂ no sono: média {recovery.spo2_sleep_avg}% (baixa)"
+            )
+
         if recovery.vo2max is not None:
 
             vo2 = HealthSnapshotFormatter._num(recovery.vo2max)
 
             lines.append(f"• 🫁 VO₂máx: {vo2}")
+
+        # carga de vida: esforço FORA do treino (contexto — a recuperação sente
+        # o dia inteiro, não só a corrida)
+        life = HealthSnapshotFormatter._life_load(recovery)
+
+        if life:
+
+            lines.append(life)
 
         if not lines:
 
@@ -145,6 +192,47 @@ class HealthSnapshotFormatter:
             return " ↘️ atenção"
 
         return " → estável"
+
+    @staticmethod
+    def _wake_band(level: int) -> str:
+        """Rótulo qualitativo do body battery AO ACORDAR pelo NÍVEL absoluto."""
+
+        if level < 30:
+
+            return "acordou no vermelho"
+
+        if level < 50:
+
+            return "moderado"
+
+        if level < 75:
+
+            return "acordou bem"
+
+        return "tanque cheio"
+
+    @staticmethod
+    def _life_load(recovery: RecoveryTrend) -> str | None:
+        """Linha de movimento do dia (passos + minutos intensos/dia) — o quanto
+        o corpo se mexeu no total (treino incluso). None quando não há o dado."""
+
+        parts = []
+
+        if recovery.steps_avg is not None:
+
+            steps = f"{recovery.steps_avg:,}".replace(",", ".")
+
+            parts.append(f"~{steps} passos/dia")
+
+        if recovery.intensity_minutes_avg is not None:
+
+            parts.append(f"{recovery.intensity_minutes_avg} min intensos/dia")
+
+        if not parts:
+
+            return None
+
+        return "• 🚶 Movimento do dia: " + " · ".join(parts)
 
     @staticmethod
     def _num(value: float) -> str:

@@ -135,3 +135,92 @@ def test_basic_watch_leaves_garmin_scores_none():
     assert trend.readiness_score is None
     assert trend.training_status is None
     assert trend.sleep_score is None
+
+
+# --- tier-2: body battery ao acordar, respiração, SpO2, carga de vida ---
+
+
+def _tier2_series(wake=None, resp=None, spo2_sleep=None, steps=None,
+                  im_mod=None, im_vig=None, active_cal=None):
+
+    cols = (wake, resp, spo2_sleep, steps, im_mod, im_vig, active_cal)
+
+    n = max((len(x) for x in cols if x), default=0)
+
+    out = []
+
+    for i in range(n):
+
+        out.append(
+            DailyHealth(
+                date=f"2026-07-{i + 1:02d}",
+                body_battery_at_wake=wake[i] if wake else None,
+                respiration_sleep_avg=resp[i] if resp else None,
+                spo2_sleep_avg=spo2_sleep[i] if spo2_sleep else None,
+                steps=steps[i] if steps else None,
+                intensity_minutes_moderate=im_mod[i] if im_mod else None,
+                intensity_minutes_vigorous=im_vig[i] if im_vig else None,
+                active_calories=active_cal[i] if active_cal else None,
+            )
+        )
+
+    return out
+
+
+def test_body_battery_wake_recent_and_direction():
+    # tanque ao acordar caindo (60->35) = recuperação PIORANDO -> FALLING
+    trend = RecoveryTrendAnalyzer.analyze(
+        _tier2_series(wake=[62, 60, 58, 56, 40, 38, 36, 35])
+    )
+
+    assert trend.body_battery_wake == 35
+    assert trend.body_battery_wake_direction == FALLING
+
+
+def test_body_battery_wake_rising_is_recovery_improving():
+    trend = RecoveryTrendAnalyzer.analyze(
+        _tier2_series(wake=[30, 32, 34, 36, 50, 52, 54, 56])
+    )
+
+    assert trend.body_battery_wake_direction == RISING
+
+
+def test_sleep_respiration_rising_reads_as_worsening():
+    # respiração no sono SUBINDO (13->17) = pior -> FALLING (POV recuperação)
+    trend = RecoveryTrendAnalyzer.analyze(
+        _tier2_series(resp=[13.0, 13.0, 13.2, 13.4, 16.5, 16.8, 17.0, 17.2])
+    )
+
+    assert trend.respiration_sleep == 17.2
+    assert trend.respiration_direction == FALLING
+
+
+def test_life_load_averages_and_spo2_sleep():
+    trend = RecoveryTrendAnalyzer.analyze(
+        _tier2_series(
+            spo2_sleep=[95, 94, 96, 88],
+            steps=[10000, 12000, 14000, 16000],
+            im_mod=[10, 20, 0, 30],
+            im_vig=[5, 0, 10, 5],
+            active_cal=[300, 400, 500, 600],
+        )
+    )
+
+    assert trend.spo2_sleep_avg == 88                 # o mais recente
+    assert trend.steps_avg == 13000                   # média
+    assert trend.active_calories_avg == 450
+    # (mod + 2×vig)/dia: (20,20,20,40) -> média 25
+    assert trend.intensity_minutes_avg == 25
+
+
+def test_tier2_absent_stays_none():
+    trend = RecoveryTrendAnalyzer.analyze(
+        _series(hrv=[40, 42, 44, 46])
+    )
+
+    assert trend.body_battery_wake is None
+    assert trend.body_battery_wake_direction == STABLE
+    assert trend.respiration_sleep is None
+    assert trend.spo2_sleep_avg is None
+    assert trend.steps_avg is None
+    assert trend.intensity_minutes_avg is None

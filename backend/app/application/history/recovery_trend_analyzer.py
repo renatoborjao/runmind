@@ -24,6 +24,8 @@ _MIN_POINTS = 4
 # folga pra chamar de "mudou" (ruído natural do dia a dia)
 _HRV_DELTA = 2.0   # ms
 _RHR_DELTA = 1.5   # bpm
+_BB_WAKE_DELTA = 5.0   # body battery ao acordar (pontos) — evita ruído de 1 noite
+_RESP_DELTA = 1.0      # respiração no sono (rpm)
 
 # noite curta (limitador de recuperação)
 _SHORT_NIGHT_HOURS = 6.0
@@ -123,7 +125,59 @@ class RecoveryTrendAnalyzer:
             [h.hrv_status for h in window]
         )
 
+        RecoveryTrendAnalyzer._apply_tier2(trend, window)
+
         return trend
+
+    @staticmethod
+    def _apply_tier2(trend: RecoveryTrend, window) -> None:
+        """Sinais de contexto do tier-2: body battery ao acordar (marcador de
+        recuperação, com direção), respiração no sono (sinal), SpO2 mínima
+        (flag) e carga de vida (esforço fora do treino)."""
+
+        wake = [h.body_battery_at_wake for h in window]
+
+        trend.body_battery_wake = RecoveryTrendAnalyzer._last(wake)
+
+        trend.body_battery_wake_direction = RecoveryTrendAnalyzer._direction(
+            wake, _BB_WAKE_DELTA, higher_is_better=True
+        )
+
+        resp = [h.respiration_sleep_avg for h in window]
+
+        trend.respiration_sleep = RecoveryTrendAnalyzer._last(resp)
+
+        trend.respiration_direction = RecoveryTrendAnalyzer._direction(
+            resp, _RESP_DELTA, higher_is_better=False  # respiração subir = pior
+        )
+
+        # SpO2 da noite: a MÉDIA de sono sustentada (não o vale de 1 noite)
+        trend.spo2_sleep_avg = RecoveryTrendAnalyzer._last(
+            [h.spo2_sleep_avg for h in window]
+        )
+
+        # carga de vida = média/dia dos dias que têm o dado
+        trend.steps_avg = RecoveryTrendAnalyzer._avg(
+            [h.steps for h in window]
+        )
+
+        trend.active_calories_avg = RecoveryTrendAnalyzer._avg(
+            [h.active_calories for h in window]
+        )
+
+        # minutos intensos ponderados (vigorosa conta dobrado, como a Garmin):
+        # média/dia de (moderada + 2×vigorosa)
+        weighted = [
+            (h.intensity_minutes_moderate or 0)
+            + 2 * (h.intensity_minutes_vigorous or 0)
+            for h in window
+            if h.intensity_minutes_moderate is not None
+            or h.intensity_minutes_vigorous is not None
+        ]
+
+        trend.intensity_minutes_avg = (
+            round(sum(weighted) / len(weighted)) if weighted else None
+        )
 
     # ------------------------------------------------------------------
 
@@ -138,6 +192,14 @@ class RecoveryTrendAnalyzer:
                 return v
 
         return None
+
+    @staticmethod
+    def _avg(values):
+        """Média (inteiro) dos valores não-None, ou None se não houver."""
+
+        points = [v for v in values if v is not None]
+
+        return round(sum(points) / len(points)) if points else None
 
     @staticmethod
     def _direction(values, delta: float, higher_is_better: bool) -> str:

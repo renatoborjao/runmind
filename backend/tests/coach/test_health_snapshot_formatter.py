@@ -112,3 +112,67 @@ def test_only_present_fields_appear():
     assert "Body Battery" not in panel
     assert "VO₂máx" not in panel
     assert "HRV" not in panel
+
+
+# --- tier-2: body battery ao acordar, respiração, SpO2, carga de vida ---
+
+
+def test_body_battery_wake_shows_band_not_misleading_arrow():
+
+    # tanque cheio (91) caindo de leve NÃO pode virar "atenção" — banda por nível
+    cheio = HealthSnapshotFormatter.panel(
+        RecoveryTrend(
+            body_battery_wake=91, body_battery_wake_direction=FALLING,
+            body_battery_recent=78, days_covered=14,
+        )
+    )
+
+    assert "Body Battery ao acordar: 91/100 (tanque cheio)" in cheio
+    assert "recarga +78/noite" in cheio
+    assert "atenção" not in cheio            # nada de susto num tanque cheio
+
+    # acordar no vermelho (nível baixo) = o sinal ruim de verdade
+    vermelho = HealthSnapshotFormatter.panel(
+        RecoveryTrend(body_battery_wake=22, days_covered=14)
+    )
+
+    assert "22/100 (acordou no vermelho)" in vermelho
+
+
+def test_sleep_respiration_shows_with_attention_when_rising():
+
+    # respiração subindo = pior -> direção FALLING (POV recuperação)
+    rec = RecoveryTrend(
+        respiration_sleep=17.0, respiration_direction=FALLING, days_covered=14,
+    )
+
+    panel = HealthSnapshotFormatter.panel(rec)
+
+    assert "Respiração no sono: 17 rpm ↘️ atenção" in panel
+
+
+def test_spo2_only_shows_when_sleep_avg_low():
+
+    baixa = HealthSnapshotFormatter.panel(
+        RecoveryTrend(spo2_sleep_avg=88, days_covered=14)
+    )
+
+    assert "SpO₂ no sono: média 88%" in baixa
+
+    # média de sono normal não polui o painel (aqui, sem outras linhas)
+    normal = HealthSnapshotFormatter.panel(
+        RecoveryTrend(spo2_sleep_avg=96, hrv_recent=50.0, days_covered=14)
+    )
+
+    assert "SpO₂" not in normal
+
+
+def test_life_load_line():
+
+    rec = RecoveryTrend(
+        steps_avg=8500, intensity_minutes_avg=25, days_covered=14,
+    )
+
+    panel = HealthSnapshotFormatter.panel(rec)
+
+    assert "Movimento do dia: ~8.500 passos/dia · 25 min intensos/dia" in panel
