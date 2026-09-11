@@ -43,9 +43,20 @@ def main(profile: str) -> None:
 
     evo_msg = FitnessEvolutionWriter.write(evolution, runner.name)
 
+    from app.application.coach.writer.race_prediction_writer import (
+        RacePredictionWriter,
+    )
+    from app.infrastructure.persistence.race_prediction_repository import (
+        RacePredictionRepository,
+    )
+
+    race_block = RacePredictionWriter.block(
+        RacePredictionRepository().load(profile)
+    )
+
     progress = ProgressReport.build(profile)
 
-    parts = [p for p in (evo_msg, progress) if p]
+    parts = [p for p in (evo_msg, race_block, progress) if p]
 
     parts.append(OnDemandAnswers._FORM_TO_BODY_BRIDGE)
 

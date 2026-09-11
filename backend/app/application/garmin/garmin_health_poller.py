@@ -19,6 +19,9 @@ from app.infrastructure.integrations.garmin.garmin_health_source import (
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
+from app.infrastructure.persistence.race_prediction_repository import (
+    RacePredictionRepository,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -171,6 +174,39 @@ class GarminHealthPoller:
         return filled
 
     @staticmethod
+    def sync_race_predictions(
+        profile: str,
+        repo: RacePredictionRepository | None = None,
+    ) -> bool:
+        """Atualiza a previsão de prova (5K/10K/meia/maratona) do Garmin — o
+        ESTADO atual, não série. Mesmo gate do VO₂máx (dado do relógio, só pra
+        quem tem). Devolve se gravou uma projeção com dado."""
+
+        # dado do GARMIN: só quem tem o relógio conectado + análise ligada
+        if not (
+            GarminClient.is_connected(profile)
+            and GarminClient.analysis_enabled(profile)
+        ):
+
+            return False
+
+        garmin = GarminClient.connect(profile)
+
+        if garmin is None:
+
+            return False
+
+        prediction = GarminHealthSource.race_predictions_for(garmin)
+
+        if not prediction.has_data:
+
+            return False
+
+        (repo or RacePredictionRepository()).save(profile, prediction)
+
+        return True
+
+    @staticmethod
     async def poll_all() -> None:
 
         repo = GarminHealthRepository()
@@ -220,3 +256,7 @@ class GarminHealthPoller:
         # preenche as lacunas (barato: pula dias que já têm o valor). Sem isto o
         # coach fica cego pro VO₂máx real, que existe na API mas nunca entrava.
         GarminHealthPoller.sync_vo2max(profile, days=10, repo=repo)
+
+        # ESTADO: previsão de prova (5K/10K/meia/maratona) do Garmin — atualiza
+        # o snapshot atual (calibra meta/realismo do plano). Best-effort.
+        GarminHealthPoller.sync_race_predictions(profile)

@@ -184,14 +184,27 @@ class OnDemandAnswers:
 
             evo_msg = FitnessEvolutionWriter.write(evolution, runner.name)
 
+            # projeção de prova do Garmin (5K/10K/meia/maratona) — capacidade de
+            # HOJE, meta visível. Só aparece pra quem tem o dado (Garmin).
+            from app.application.coach.writer.race_prediction_writer import (
+                RacePredictionWriter,
+            )
+            from app.infrastructure.persistence.race_prediction_repository import (
+                RacePredictionRepository,
+            )
+
+            race_block = RacePredictionWriter.block(
+                RacePredictionRepository().load(profile)
+            )
+
             # ...+ o VOCÊ vs VOCÊ de arco LONGO (meses): de onde você veio.
             # Torna a evolução visível mesmo pra quem não tem EF com lastro.
             progress = ProgressReport.build(profile)
 
-            # escada de tempo: curto prazo (semanas) em cima, arco longo (meses)
-            # embaixo — cada um já rotula sua janela, então os números param de
-            # brigar. None em ambos → cai no Gemini (sem a ponte solta).
-            parts = [p for p in (evo_msg, progress) if p]
+            # escada de tempo: agora (semanas) → capacidade (projeção) → arco
+            # longo (meses). Cada um rotula sua janela, os números não brigam.
+            # None em tudo → cai no Gemini (sem a ponte solta).
+            parts = [p for p in (evo_msg, race_block, progress) if p]
 
             if not parts:
 

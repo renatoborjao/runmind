@@ -41,6 +41,7 @@ def test_pulls_and_stores_yesterday_when_missing():
         patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
         patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
         patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
+        patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
     ):
 
         GarminHealthPoller.poll_one("renato2", repo)
@@ -60,6 +61,7 @@ def test_skips_garmin_when_date_already_stored():
         patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
         patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
         patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
+        patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
     ):
 
         GarminHealthPoller.poll_one("renato2", repo)
@@ -281,6 +283,50 @@ def test_sync_vo2max_skips_athletes_without_garmin():
     connect.assert_not_called()      # nem tentou logar no Garmin
 
     repo.upsert.assert_not_called()  # nada inserido
+
+
+def test_sync_race_predictions_saves_when_data_and_connected():
+    """Com Garmin conectado e projeção disponível: salva o estado."""
+
+    from app.domain.entities.race_prediction import RacePrediction
+
+    repo = MagicMock()
+
+    pred = RacePrediction(time_10k_sec=3086)
+
+    with (
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=True),
+        patch(f"{MODULE}.GarminClient.connect", return_value=MagicMock()),
+        patch(f"{MODULE}.GarminHealthSource.race_predictions_for", return_value=pred),
+    ):
+
+        ok = GarminHealthPoller.sync_race_predictions("renato2", repo=repo)
+
+    assert ok is True
+
+    repo.save.assert_called_once()
+
+
+def test_sync_race_predictions_skips_without_garmin():
+
+    repo = MagicMock()
+
+    connect = MagicMock()
+
+    with (
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=False),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=False),
+        patch(f"{MODULE}.GarminClient.connect", connect),
+    ):
+
+        ok = GarminHealthPoller.sync_race_predictions("helio", repo=repo)
+
+    assert ok is False
+
+    connect.assert_not_called()
+
+    repo.save.assert_not_called()
 
 
 def test_poll_all_isolates_failure_per_athlete():

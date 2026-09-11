@@ -19,6 +19,7 @@ vêm vazios (None), sem quebrar."""
 import re
 
 from app.domain.entities.daily_health import DailyHealth
+from app.domain.entities.race_prediction import RacePrediction
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 
 
@@ -180,6 +181,37 @@ class GarminHealthSource:
         data = GarminHealthSource._safe(lambda: garmin.get_max_metrics(day))
 
         return GarminHealthSource._extract_vo2max(data)
+
+    @staticmethod
+    def race_predictions_for(garmin) -> RacePrediction:
+        """Previsão de prova ATUAL do Garmin (5K/10K/meia/maratona). Sem args:
+        a API devolve a projeção mais recente. Campos ausentes viram None."""
+
+        data = GarminHealthSource._safe(lambda: garmin.get_race_predictions())
+
+        return GarminHealthSource._extract_race_predictions(data)
+
+    @staticmethod
+    def _extract_race_predictions(data) -> RacePrediction:
+        """Payload de get_race_predictions -> RacePrediction. Puro/testável."""
+
+        if not isinstance(data, dict):
+
+            return RacePrediction()
+
+        def _int(key):
+
+            value = data.get(key)
+
+            return int(value) if isinstance(value, (int, float)) else None
+
+        return RacePrediction(
+            date=data.get("calendarDate"),
+            time_5k_sec=_int("time5K"),
+            time_10k_sec=_int("time10K"),
+            time_half_sec=_int("timeHalfMarathon"),
+            time_marathon_sec=_int("timeMarathon"),
+        )
 
     @staticmethod
     def _apply_readiness(health: DailyHealth, data) -> None:
