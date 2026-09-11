@@ -668,3 +668,80 @@ def test_brain_active_skips_deterministic_mutation_flows():
     # mas a sobrevivência sem-Gemini CONTINUA: cartões determinísticos + chat
     intent.detect.assert_called_once()
     assert reply == "resposta do chat"
+
+
+def test_pending_goal_reply_is_captured_before_brain():
+    """Devolutiva a uma pergunta de META do coach: com objetivo PENDENTE, a
+    resposta do atleta é capturada pelo GoalChangeApplier ANTES do cérebro — a
+    devolutiva NUNCA se perde (nem vira conversa solta). Ver
+    [[project_reconciliacao_coach]]."""
+
+    runner = make_runner(name="Hélio", phone="+5511999999999")
+
+    with (
+        patch(f"{MODULE}.LoadRunnerProfile") as load,
+        patch(f"{MODULE}.ConversationContextBuilder") as ctx,
+        patch(f"{MODULE}.ConversationRepository") as repo_cls,
+        patch(f"{MODULE}.CoachConversationEngine") as engine,
+        patch(f"{MODULE}.NotificationService") as notif,
+        patch(f"{MODULE}.RunnerMemoryRepository") as mem_repo,
+        patch(f"{MODULE}.MemoryExtractionEngine") as extraction,
+        patch(f"{MODULE}.RunnerMemoryService"),
+        patch(f"{MODULE}.get_settings") as settings,
+        patch(f"{MODULE}.CoachBrainExecutor") as brain,
+        patch(f"{MODULE}.RpeFlow") as rpe,
+        patch(f"{MODULE}.VoicePreferenceFlow") as voice,
+        patch(f"{MODULE}.GarminSync") as garmin,
+        patch(f"{MODULE}.OneOffWorkoutFlow") as oneoff,
+        patch(f"{MODULE}.IntentRouter") as intent,
+        patch(f"{MODULE}.GoalChangeApplier") as goal,
+        # importado localmente no fluxo + lê disco -> mocka pra teste hermético
+        patch(
+            "app.application.coach.conversation.frequency_reconcile_flow."
+            "FrequencyReconcileFlow"
+        ) as freq,
+        patch(
+            "app.infrastructure.persistence.pending_goal_repository."
+            "PendingGoalRepository"
+        ) as pending,
+    ):
+
+        load.execute.return_value = runner
+        ctx.build = AsyncMock(return_value="FATOS")
+
+        repo = MagicMock()
+        repo.recent_turns.return_value = []
+        repo_cls.return_value = repo
+
+        # cérebro ATIVO (é o cenário real: ligado pra todos)
+        settings.return_value.coach_brain_active_for.return_value = True
+        brain.handle = AsyncMock(return_value="CÉREBRO NÃO DEVIA RESPONDER")
+
+        rpe.resolve.return_value = None
+        voice.handle.return_value = None
+        garmin.handle_reply = AsyncMock(return_value=None)
+        oneoff.resolve_watch_reply = AsyncMock(return_value=None)
+        intent.detect.return_value = None
+        freq.resolve_reply = AsyncMock(return_value=None)
+
+        # há uma pergunta de META pendente -> a resposta é a devolutiva
+        pending.return_value.is_pending.return_value = True
+        goal.handle = AsyncMock(return_value="Fechou! Foco em 10 km, saúde. 🎯")
+
+        engine.reply = AsyncMock(return_value="chat genérico")
+        notif.send = AsyncMock()
+        mem_repo.return_value.active.return_value = []
+        extraction.extract = AsyncMock(return_value={"add": [], "archive": []})
+
+        reply = asyncio.run(
+            CoachConversationEvent.execute(
+                profile="helio",
+                incoming_text="quero focar em 10km com saúde, sem prova",
+                sender_name="Hélio",
+            )
+        )
+
+    # a devolutiva foi capturada pelo fluxo de meta, ANTES do cérebro
+    goal.handle.assert_awaited_once()
+    brain.handle.assert_not_awaited()
+    assert reply == "Fechou! Foco em 10 km, saúde. 🎯"

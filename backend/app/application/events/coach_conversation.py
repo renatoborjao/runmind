@@ -264,6 +264,37 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # DEVOLUTIVA a uma pergunta de META do coach (reconciliação/confirmação
+        # de objetivo): quando há um objetivo PENDENTE, a resposta do atleta é
+        # lida como a meta — ANTES do cérebro, pra a devolutiva NUNCA se perder
+        # (captura determinística; o cérebro sozinho poderia tratar como conversa
+        # solta). GoalChangeApplier aplica a troca OU libera o estado se for só um
+        # "tá certo, mantém". Só age com objetivo pendente armado. Ver
+        # [[project_reconciliacao_coach]].
+        if reply_text is None:
+
+            try:
+
+                from app.infrastructure.persistence.pending_goal_repository import (  # noqa: E501
+                    PendingGoalRepository,
+                )
+
+                if PendingGoalRepository().is_pending(profile):
+
+                    reply_text = await GoalChangeApplier.handle(
+                        profile,
+                        runner,
+                        incoming_text,
+                    )
+
+                    used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Devolutiva de meta de '{profile}': {e}")
+
+                reply_text = None
+
         # O cérebro está ativo pra este perfil? Além de escolher o caminho, isso
         # faz a cascata abaixo PULAR os fluxos de MUTAÇÃO que o cérebro já cobre
         # (mover/pular/ajustar/avulso/aversão/rotina/objetivo/preferência) —
