@@ -155,17 +155,31 @@ class GarminHealthSource:
     @staticmethod
     def _apply_vo2max(health: DailyHealth, data) -> None:
 
-        # get_max_metrics devolve uma lista; o VO2max de corrida está em
-        # [0]["generic"]["vo2MaxPreciseValue"]
+        health.vo2max = GarminHealthSource._extract_vo2max(data)
+
+    @staticmethod
+    def _extract_vo2max(data) -> float | None:
+        """VO₂máx de corrida do payload de get_max_metrics (uma lista;
+        [0]['generic']['vo2MaxPreciseValue']). Puro/testável. None quando o
+        dia não tem medição gravada (o Garmin só recalcula esporadicamente —
+        por isso a coleta precisa VARRER dias, não olhar só 'ontem')."""
+
         if not isinstance(data, list) or not data:
 
-            return
+            return None
 
         generic = (data[0] or {}).get("generic") or {}
 
-        health.vo2max = generic.get("vo2MaxPreciseValue") or generic.get(
-            "vo2MaxValue"
-        )
+        return generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue")
+
+    @staticmethod
+    def vo2max_for(garmin, day: str) -> float | None:
+        """Só o VO₂máx de um dia (chamada barata e isolada) — pra a varredura
+        que preenche as lacunas da série sem re-baixar sono/HRV/stress."""
+
+        data = GarminHealthSource._safe(lambda: garmin.get_max_metrics(day))
+
+        return GarminHealthSource._extract_vo2max(data)
 
     @staticmethod
     def _apply_readiness(health: DailyHealth, data) -> None:

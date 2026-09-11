@@ -40,6 +40,7 @@ def test_pulls_and_stores_yesterday_when_missing():
         patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
         patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
         patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
+        patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
     ):
 
         GarminHealthPoller.poll_one("renato2", repo)
@@ -58,12 +59,87 @@ def test_skips_garmin_when_date_already_stored():
         patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
         patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
         patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
+        patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
     ):
 
         GarminHealthPoller.poll_one("renato2", repo)
 
-    # já tinha o dia: nem bateu no Garmin
+    # já tinha o dia: nem bateu no Garmin (série); a varredura de VO₂máx roda à parte
     fetch.assert_not_called()
+
+    repo.upsert.assert_not_called()
+
+
+def test_sync_vo2max_fills_missing_days():
+    """A varredura preenche o VO₂máx dos dias que a série não tinha — o dado que
+    existe na API mas o poll de 'ontem, 1x' nunca capturava."""
+
+    repo = MagicMock()
+
+    repo.load.return_value = []  # série sem nenhum VO₂máx
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    # o Garmin só tem VO₂máx no dia 20 (esporádico); os outros vêm vazios
+    def vo2(garmin, day):
+
+        return 45.2 if day == "2026-07-20" else None
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=True),
+        patch(f"{MODULE}.GarminClient.connect", return_value=MagicMock()),
+        patch(f"{MODULE}.GarminHealthSource.vo2max_for", side_effect=vo2),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        filled = GarminHealthPoller.sync_vo2max("renato2", days=3, repo=repo)
+
+    assert filled == 1
+
+    saved = repo.upsert.call_args[0][1]
+
+    assert saved.date == "2026-07-20"
+    assert saved.vo2max == 45.2
+
+
+def test_sync_vo2max_skips_days_already_filled():
+    """Dia que já tem VO₂máx não bate na API (idempotente, gentil com a API)."""
+
+    repo = MagicMock()
+
+    repo.load.return_value = [DailyHealth(date="2026-07-20", vo2max=44.0)]
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    seen = []
+
+    def vo2(garmin, day):
+
+        seen.append(day)
+
+        return None
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=True),
+        patch(f"{MODULE}.GarminClient.connect", return_value=MagicMock()),
+        patch(f"{MODULE}.GarminHealthSource.vo2max_for", side_effect=vo2),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        GarminHealthPoller.sync_vo2max("renato2", days=3, repo=repo)
+
+    # o dia 20 (já com VO₂máx) não foi consultado na API
+    assert "2026-07-20" not in seen
 
     repo.upsert.assert_not_called()
 
@@ -182,6 +258,29 @@ def test_seed_skips_already_stored_days():
     # não buscou o dia já guardado (07-20 não entrou em calls)
     assert "2026-07-20" not in calls
     assert "2026-07-19" in calls
+
+
+def test_sync_vo2max_skips_athletes_without_garmin():
+    """Sem Garmin conectado: nem conecta, nem insere — VO₂máx é dado do relógio
+    (o alerta do Renato: só pra quem tem Garmin)."""
+
+    repo = MagicMock()
+
+    connect = MagicMock()
+
+    with (
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=False),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=False),
+        patch(f"{MODULE}.GarminClient.connect", connect),
+    ):
+
+        filled = GarminHealthPoller.sync_vo2max("helio", days=10, repo=repo)
+
+    assert filled == 0
+
+    connect.assert_not_called()      # nem tentou logar no Garmin
+
+    repo.upsert.assert_not_called()  # nada inserido
 
 
 def test_poll_all_isolates_failure_per_athlete():

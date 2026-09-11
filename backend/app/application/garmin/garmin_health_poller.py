@@ -11,6 +11,7 @@ import time
 from datetime import timedelta
 
 from app.core.clock import now_in
+from app.domain.entities.daily_health import DailyHealth
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.integrations.garmin.garmin_health_source import (
     GarminHealthSource,
@@ -90,6 +91,85 @@ class GarminHealthPoller:
 
         return pulled
 
+    # varredura do VO₂máx: quantos dias pra trás revisitar e o passo gentil.
+    # O Garmin recalcula o VO₂máx esporádico e às vezes com ATRASO — o poll de
+    # "ontem, 1x" perde esses valores pra sempre (o dado existe na API mas nunca
+    # entra na série). A varredura revisita os dias recentes e preenche a lacuna.
+    _VO2_SCAN_DAYS = 30
+    _VO2_SCAN_PACE_SECONDS = 1.0
+
+    @staticmethod
+    def sync_vo2max(
+        profile: str,
+        days: int = _VO2_SCAN_DAYS,
+        repo: GarminHealthRepository | None = None,
+    ) -> int:
+        """Preenche o VO₂máx faltante nos últimos `days`: varre get_max_metrics
+        dia a dia e, onde há medição, MESCLA o valor no snapshot do dia (sem
+        tocar em sono/HRV/stress já gravados). Conserta o buraco que fazia o
+        coach ficar cego pro VO₂máx real do atleta. Devolve quantos preencheu.
+
+        Ação idempotente: dia que já tem VO₂máx é pulado (nem bate na API)."""
+
+        repo = repo or GarminHealthRepository()
+
+        # VO₂máx é dado do GARMIN: só faz sentido pra quem tem o relógio
+        # conectado E a análise ligada (mesmo gate do poll_all) — nunca bater
+        # na API nem inserir dado pra quem não tem Garmin.
+        if not (
+            GarminClient.is_connected(profile)
+            and GarminClient.analysis_enabled(profile)
+        ):
+
+            return 0
+
+        garmin = GarminClient.connect(profile)
+
+        if garmin is None:
+
+            return 0
+
+        runner = RunnerProfileRepository().load(profile)
+
+        today = now_in(getattr(runner, "timezone", None)).date()
+
+        by_date = {h.date: h for h in repo.load(profile)}
+
+        filled = 0
+
+        for n in range(1, days + 1):
+
+            day = (today - timedelta(days=n)).isoformat()
+
+            existing = by_date.get(day)
+
+            # já temos o VO₂máx desse dia: nada a fazer, poupa a API
+            if existing is not None and existing.vo2max is not None:
+
+                continue
+
+            value = GarminHealthSource.vo2max_for(garmin, day)
+
+            time.sleep(GarminHealthPoller._VO2_SCAN_PACE_SECONDS)
+
+            if value is None:
+
+                continue
+
+            # mescla no snapshot do dia (ou cria um só com o VO₂máx, se o dia
+            # ainda não existir — has_data conta o VO₂máx, então vale guardar)
+            health = existing or DailyHealth(date=day)
+
+            health.vo2max = value
+
+            repo.upsert(profile, health)
+
+            by_date[day] = health
+
+            filled += 1
+
+        return filled
+
     @staticmethod
     async def poll_all() -> None:
 
@@ -129,11 +209,14 @@ class GarminHealthPoller:
             now_in(getattr(runner, "timezone", None)).date() - timedelta(days=1)
         ).isoformat()
 
-        # já temos esse dia: nem bate no Garmin (dedup + gentileza)
-        if repo.has_date(profile, yesterday):
+        # série diária (sono/HRV/stress/RHR): só puxa se ainda não tiver ontem
+        if not repo.has_date(profile, yesterday):
 
-            return
+            health = GarminHealthSource.fetch(profile, yesterday)
 
-        health = GarminHealthSource.fetch(profile, yesterday)
+            repo.upsert(profile, health)
 
-        repo.upsert(profile, health)
+        # ESTADO: o VO₂máx chega esporádico/atrasado — varre os dias recentes e
+        # preenche as lacunas (barato: pula dias que já têm o valor). Sem isto o
+        # coach fica cego pro VO₂máx real, que existe na API mas nunca entrava.
+        GarminHealthPoller.sync_vo2max(profile, days=10, repo=repo)
