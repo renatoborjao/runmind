@@ -48,6 +48,35 @@ class DailyHealth:
     resting_hr: int | None = None
     vo2max: float | None = None
 
+    # -- carga de VIDA (esforço FORA do treino no dia; contexto de recuperação:
+    #    dia parado recupera, dia de 15k passos + faxina não) --
+    steps: int | None = None
+    steps_goal: int | None = None
+    active_calories: int | None = None
+    intensity_minutes_moderate: int | None = None
+    intensity_minutes_vigorous: int | None = None
+    intensity_minutes_goal: int | None = None
+
+    # -- body battery ao longo do dia (o saldo da noite já é body_battery_change;
+    #    estes contam o TANQUE: com quanto acordou, pico, vale, agora) --
+    body_battery_most_recent: int | None = None
+    body_battery_at_wake: int | None = None
+    body_battery_high: int | None = None
+    body_battery_low: int | None = None
+
+    # -- respiração (rpm): a do SONO é sinal de recuperação (sobe com stress/
+    #    álcool/doença); vigília e pico dão contexto --
+    respiration_sleep_avg: float | None = None
+    respiration_waking_avg: float | None = None
+    respiration_high: float | None = None
+    respiration_low: float | None = None
+
+    # -- SpO2 (%): saturação; queda no sono = altitude/qualidade ruim/indício de
+    #    algo errado (nem todo relógio mede — vira None sem quebrar) --
+    spo2_avg: int | None = None
+    spo2_sleep_avg: int | None = None
+    spo2_low: int | None = None
+
     @property
     def has_data(self) -> bool:
         """True se o dia trouxe QUALQUER métrica de verdade. Um dia todo None

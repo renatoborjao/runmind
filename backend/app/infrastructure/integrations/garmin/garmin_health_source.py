@@ -38,6 +38,37 @@ def _hours(seconds) -> float | None:
         return None
 
 
+def _as_int(value) -> int | None:
+    """Número (int/float) arredondado pra int, ou None — passos, calorias e
+    SpO2 às vezes vêm como float na API."""
+
+    if not isinstance(value, (int, float)):
+
+        return None
+
+    return round(value)
+
+
+def _as_float(value) -> float | None:
+    """Número com 1 casa (respiração), ou None."""
+
+    if not isinstance(value, (int, float)):
+
+        return None
+
+    return round(float(value), 1)
+
+
+def _set_if(health: "DailyHealth", attr: str, value) -> None:
+    """Grava só quando há valor — assim um endpoint que não mediu (None) nunca
+    apaga um dado que outro já trouxe (user_summary × respiration × spo2 se
+    completam, ordem não importa)."""
+
+    if value is not None:
+
+        setattr(health, attr, value)
+
+
 class GarminHealthSource:
 
     @staticmethod
@@ -75,6 +106,24 @@ class GarminHealthSource:
         GarminHealthSource._apply_training_status(
             health,
             GarminHealthSource._safe(lambda: garmin.get_training_status(day)),
+        )
+
+        # tier-2: carga de vida + body battery + respiração + SpO2. O
+        # user_summary consolida quase tudo (1 chamada); os dedicados agregam
+        # só as médias de SONO (respiração/SpO2 dormindo = sinal de recuperação
+        # que o summary não traz). Cada um num _safe — device sem a métrica
+        # vira None, não derruba o snapshot.
+        GarminHealthSource._apply_user_summary(
+            health, GarminHealthSource._safe(lambda: garmin.get_user_summary(day))
+        )
+
+        GarminHealthSource._apply_respiration(
+            health,
+            GarminHealthSource._safe(lambda: garmin.get_respiration_data(day)),
+        )
+
+        GarminHealthSource._apply_spo2(
+            health, GarminHealthSource._safe(lambda: garmin.get_spo2_data(day))
         )
 
         return health
@@ -152,6 +201,114 @@ class GarminHealthSource:
         health.stress_avg = data.get("avgStressLevel")
 
         health.stress_max = data.get("maxStressLevel")
+
+    # ------------------------------------------------------------------
+    # tier-2: carga de vida, body battery, respiração, SpO2
+    # ------------------------------------------------------------------
+
+    # campos derivados do get_user_summary (usados no fetch diário E na
+    # varredura barata que enriquece dias recentes — uma chamada só).
+    _USER_SUMMARY_FIELDS = (
+        "steps", "steps_goal", "active_calories",
+        "intensity_minutes_moderate", "intensity_minutes_vigorous",
+        "intensity_minutes_goal", "body_battery_most_recent",
+        "body_battery_at_wake", "body_battery_high", "body_battery_low",
+        "respiration_waking_avg", "respiration_high", "respiration_low",
+        "spo2_avg", "spo2_low",
+    )
+
+    @staticmethod
+    def _apply_user_summary(health: DailyHealth, data) -> None:
+        """Resumo diário: carga de vida (passos/calorias/intensity minutes),
+        body battery ao longo do dia e — de brinde — respiração de vigília e
+        SpO2 (as médias de SONO vêm dos endpoints dedicados)."""
+
+        if not isinstance(data, dict):
+
+            return
+
+        # carga de vida (esforço fora do treino)
+        _set_if(health, "steps", _as_int(data.get("totalSteps")))
+        _set_if(health, "steps_goal", _as_int(data.get("dailyStepGoal")))
+        _set_if(health, "active_calories",
+                _as_int(data.get("activeKilocalories")))
+        _set_if(health, "intensity_minutes_moderate",
+                _as_int(data.get("moderateIntensityMinutes")))
+        _set_if(health, "intensity_minutes_vigorous",
+                _as_int(data.get("vigorousIntensityMinutes")))
+        _set_if(health, "intensity_minutes_goal",
+                _as_int(data.get("intensityMinutesGoal")))
+
+        # body battery: o tanque ao longo do dia
+        _set_if(health, "body_battery_most_recent",
+                _as_int(data.get("bodyBatteryMostRecentValue")))
+        _set_if(health, "body_battery_at_wake",
+                _as_int(data.get("bodyBatteryAtWakeTime")))
+        _set_if(health, "body_battery_high",
+                _as_int(data.get("bodyBatteryHighestValue")))
+        _set_if(health, "body_battery_low",
+                _as_int(data.get("bodyBatteryLowestValue")))
+
+        # respiração/SpO2 de vigília (o summary usa 'Spo2' minúsculo)
+        _set_if(health, "respiration_waking_avg",
+                _as_float(data.get("avgWakingRespirationValue")))
+        _set_if(health, "respiration_high",
+                _as_float(data.get("highestRespirationValue")))
+        _set_if(health, "respiration_low",
+                _as_float(data.get("lowestRespirationValue")))
+        _set_if(health, "spo2_avg", _as_int(data.get("averageSpo2")))
+        _set_if(health, "spo2_low", _as_int(data.get("lowestSpo2")))
+
+    @staticmethod
+    def _apply_respiration(health: DailyHealth, data) -> None:
+        """Endpoint dedicado: agrega a média de respiração no SONO (a de vigília
+        e pico o summary já traz; aqui refina/completa). Chaves com 'Respiration'
+        maiúsculo."""
+
+        if not isinstance(data, dict):
+
+            return
+
+        _set_if(health, "respiration_sleep_avg",
+                _as_float(data.get("avgSleepRespirationValue")))
+        _set_if(health, "respiration_waking_avg",
+                _as_float(data.get("avgWakingRespirationValue")))
+        _set_if(health, "respiration_high",
+                _as_float(data.get("highestRespirationValue")))
+        _set_if(health, "respiration_low",
+                _as_float(data.get("lowestRespirationValue")))
+
+    @staticmethod
+    def _apply_spo2(health: DailyHealth, data) -> None:
+        """Endpoint dedicado: SpO2 média/mínima e a média de SONO. Chaves com
+        'SpO2' maiúsculo (o summary usa 'Spo2' — API inconsistente, por isso os
+        dois mapeamentos)."""
+
+        if not isinstance(data, dict):
+
+            return
+
+        _set_if(health, "spo2_avg", _as_int(data.get("averageSpO2")))
+        _set_if(health, "spo2_sleep_avg", _as_int(data.get("avgSleepSpO2")))
+        _set_if(health, "spo2_low", _as_int(data.get("lowestSpO2")))
+
+    @staticmethod
+    def body_context_for(garmin, day: str) -> dict:
+        """Só a carga de vida + body battery de um dia (1 chamada,
+        get_user_summary), pra MESCLAR em snapshots recentes sem re-baixar
+        sono/HRV/stress. Devolve só os campos preenchidos (não-None)."""
+
+        data = GarminHealthSource._safe(lambda: garmin.get_user_summary(day))
+
+        tmp = DailyHealth(date=day)
+
+        GarminHealthSource._apply_user_summary(tmp, data)
+
+        return {
+            f: getattr(tmp, f)
+            for f in GarminHealthSource._USER_SUMMARY_FIELDS
+            if getattr(tmp, f) is not None
+        }
 
     @staticmethod
     def _apply_vo2max(health: DailyHealth, data) -> None:

@@ -48,6 +48,51 @@ def _max_metrics():
     return [{"generic": {"vo2MaxPreciseValue": 44.4, "vo2MaxValue": 44.0}}]
 
 
+def _user_summary():
+    """Formato real do get_user_summary (FR165). Consolida carga de vida, body
+    battery e — de brinde — respiração de vigília + SpO2 ('Spo2' minúsculo)."""
+
+    return {
+        "totalSteps": 2966,
+        "dailyStepGoal": 8890,
+        "activeKilocalories": 38.0,
+        "moderateIntensityMinutes": 0,
+        "vigorousIntensityMinutes": 0,
+        "intensityMinutesGoal": 150,
+        "bodyBatteryMostRecentValue": 11,
+        "bodyBatteryAtWakeTime": 37,
+        "bodyBatteryHighestValue": 37,
+        "bodyBatteryLowestValue": 5,
+        "avgWakingRespirationValue": 14.0,
+        "highestRespirationValue": 21.0,
+        "lowestRespirationValue": 7.0,
+        "averageSpo2": 95.0,
+        "lowestSpo2": 86,
+    }
+
+
+def _respiration():
+    """get_respiration_data (FR165): agrega a média de SONO ('Respiration'
+    maiúsculo)."""
+
+    return {
+        "avgSleepRespirationValue": 13.0,
+        "avgWakingRespirationValue": 14.0,
+        "highestRespirationValue": 21.0,
+        "lowestRespirationValue": 7.0,
+    }
+
+
+def _spo2():
+    """get_spo2_data (FR165): média/mínima/sono ('SpO2' maiúsculo)."""
+
+    return {
+        "averageSpO2": 95.0,
+        "avgSleepSpO2": 96.0,
+        "lowestSpO2": 86,
+    }
+
+
 def _fake_garmin(**overrides):
     """Objeto Garmin falso: métodos devolvem as fixtures (ou o override)."""
 
@@ -61,6 +106,9 @@ def _fake_garmin(**overrides):
             "mostRecentTrainingStatus": None,
             "mostRecentTrainingLoadBalance": None,
         },
+        "get_user_summary": _user_summary(),
+        "get_respiration_data": _respiration(),
+        "get_spo2_data": _spo2(),
     }
 
     defaults.update(overrides)
@@ -202,6 +250,9 @@ def test_no_data_returns_all_none():
         get_max_metrics=None,
         get_training_readiness=None,
         get_training_status=None,
+        get_user_summary=None,
+        get_respiration_data=None,
+        get_spo2_data=None,
     )
 
     health = _fetch(garmin)
@@ -209,4 +260,80 @@ def test_no_data_returns_all_none():
     assert health.sleep_hours is None
     assert health.hrv_last_night is None
     assert health.vo2max is None
+    assert health.steps is None
+    assert health.body_battery_most_recent is None
+    assert health.respiration_sleep_avg is None
+    assert health.spo2_avg is None
     assert health.date == "2026-07-21"
+
+
+# --- tier-2: carga de vida, body battery, respiração, SpO2 ---
+
+
+def test_maps_life_load_and_body_battery():
+
+    health = _fetch(_fake_garmin())
+
+    # carga de vida (esforço fora do treino) — dia parado
+    assert health.steps == 2966
+    assert health.steps_goal == 8890
+    assert health.active_calories == 38
+    assert health.intensity_minutes_moderate == 0
+    assert health.intensity_minutes_vigorous == 0
+    assert health.intensity_minutes_goal == 150
+
+    # body battery: tanque baixo no dia
+    assert health.body_battery_most_recent == 11
+    assert health.body_battery_at_wake == 37
+    assert health.body_battery_high == 37
+    assert health.body_battery_low == 5
+
+
+def test_maps_respiration_and_spo2_including_sleep_avgs():
+
+    health = _fetch(_fake_garmin())
+
+    # a média de SONO vem do endpoint dedicado (o summary não a tem)
+    assert health.respiration_sleep_avg == 13.0
+    assert health.respiration_waking_avg == 14.0
+    assert health.respiration_high == 21.0
+    assert health.respiration_low == 7.0
+
+    assert health.spo2_avg == 95           # 95.0 -> int
+    assert health.spo2_sleep_avg == 96
+    assert health.spo2_low == 86
+
+
+def test_sleep_avgs_survive_when_summary_present_but_dedicated_absent():
+
+    # user_summary traz vigília/pico; sem os dedicados, a média de SONO fica
+    # None mas o resto (do summary) sobrevive — set-if-present, sem apagar
+    garmin = _fake_garmin(get_respiration_data=None, get_spo2_data=None)
+
+    health = _fetch(garmin)
+
+    assert health.respiration_waking_avg == 14.0   # do summary
+    assert health.respiration_sleep_avg is None     # só vinha do dedicado
+    assert health.spo2_avg == 95                     # do summary
+    assert health.spo2_sleep_avg is None
+
+
+def test_body_context_for_returns_only_filled_fields():
+
+    garmin = _fake_garmin()
+
+    ctx = GarminHealthSource.body_context_for(garmin, "2026-07-21")
+
+    assert ctx["steps"] == 2966
+    assert ctx["body_battery_most_recent"] == 11
+    assert ctx["spo2_avg"] == 95
+    # a varredura barata NÃO traz média de sono (não chama o endpoint dedicado)
+    assert "respiration_sleep_avg" not in ctx
+    assert "spo2_sleep_avg" not in ctx
+
+
+def test_body_context_for_empty_when_no_summary():
+
+    garmin = _fake_garmin(get_user_summary=None)
+
+    assert GarminHealthSource.body_context_for(garmin, "2026-07-21") == {}

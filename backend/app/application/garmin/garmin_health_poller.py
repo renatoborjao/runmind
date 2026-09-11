@@ -173,6 +173,83 @@ class GarminHealthPoller:
 
         return filled
 
+    # varredura da carga-de-vida/body battery: dado DIÁRIO, então o fetch de
+    # ontem já o captura pra frente. Esta varredura só ENRIQUECE os dias
+    # recentes que já existiam ANTES de o campo existir (senão a leitura de
+    # recuperação ficaria semanas sem histórico). 1 chamada/dia (só o
+    # get_user_summary), idempotente, mesmo gate do VO₂máx.
+    _BODY_CTX_SCAN_DAYS = 7
+    _BODY_CTX_PACE_SECONDS = 1.0
+
+    @staticmethod
+    def sync_body_context(
+        profile: str,
+        days: int = _BODY_CTX_SCAN_DAYS,
+        repo: GarminHealthRepository | None = None,
+    ) -> int:
+        """Mescla carga de vida + body battery nos snapshots recentes que ainda
+        não têm (get_user_summary). Só ENRIQUECE dias já rastreados — contexto
+        não vale um dia novo. Idempotente: pula dia que já tem
+        body_battery_most_recent. Devolve quantos enriqueceu."""
+
+        repo = repo or GarminHealthRepository()
+
+        # dado do GARMIN: só quem tem o relógio conectado + análise ligada
+        if not (
+            GarminClient.is_connected(profile)
+            and GarminClient.analysis_enabled(profile)
+        ):
+
+            return 0
+
+        garmin = GarminClient.connect(profile)
+
+        if garmin is None:
+
+            return 0
+
+        runner = RunnerProfileRepository().load(profile)
+
+        today = now_in(getattr(runner, "timezone", None)).date()
+
+        by_date = {h.date: h for h in repo.load(profile)}
+
+        filled = 0
+
+        for n in range(1, days + 1):
+
+            day = (today - timedelta(days=n)).isoformat()
+
+            existing = by_date.get(day)
+
+            # contexto NÃO cria dia novo — só enriquece o que já é snapshot real
+            if existing is None:
+
+                continue
+
+            # já enriquecido: nada a fazer, poupa a API
+            if existing.body_battery_most_recent is not None:
+
+                continue
+
+            ctx = GarminHealthSource.body_context_for(garmin, day)
+
+            time.sleep(GarminHealthPoller._BODY_CTX_PACE_SECONDS)
+
+            if not ctx:
+
+                continue
+
+            for attr, value in ctx.items():
+
+                setattr(existing, attr, value)
+
+            repo.upsert(profile, existing)
+
+            filled += 1
+
+        return filled
+
     @staticmethod
     def sync_race_predictions(
         profile: str,
@@ -256,6 +333,11 @@ class GarminHealthPoller:
         # preenche as lacunas (barato: pula dias que já têm o valor). Sem isto o
         # coach fica cego pro VO₂máx real, que existe na API mas nunca entrava.
         GarminHealthPoller.sync_vo2max(profile, days=10, repo=repo)
+
+        # CONTEXTO: carga de vida + body battery. O fetch de ontem já traz pra
+        # frente; a varredura enriquece os dias recentes que existiam antes do
+        # campo (idempotente, pula os já preenchidos).
+        GarminHealthPoller.sync_body_context(profile, repo=repo)
 
         # ESTADO: previsão de prova (5K/10K/meia/maratona) do Garmin — atualiza
         # o snapshot atual (calibra meta/realismo do plano). Best-effort.

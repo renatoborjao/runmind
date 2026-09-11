@@ -41,6 +41,7 @@ def test_pulls_and_stores_yesterday_when_missing():
         patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
         patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
         patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
+        patch.object(GarminHealthPoller, "sync_body_context", return_value=0),
         patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
     ):
 
@@ -61,6 +62,7 @@ def test_skips_garmin_when_date_already_stored():
         patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
         patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
         patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
+        patch.object(GarminHealthPoller, "sync_body_context", return_value=0),
         patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
     ):
 
@@ -142,6 +144,144 @@ def test_sync_vo2max_skips_days_already_filled():
 
     # o dia 20 (já com VO₂máx) não foi consultado na API
     assert "2026-07-20" not in seen
+
+    repo.upsert.assert_not_called()
+
+
+def test_sync_body_context_enriches_existing_days():
+    """A varredura mescla carga de vida + body battery nos dias que já eram
+    snapshot mas ainda não tinham o campo (backfill do histórico recente)."""
+
+    repo = MagicMock()
+
+    repo.load.return_value = [DailyHealth(date="2026-07-20", sleep_score=70)]
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    def ctx(garmin, day):
+
+        if day == "2026-07-20":
+
+            return {"steps": 5000, "body_battery_most_recent": 40}
+
+        return {}
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=True),
+        patch(f"{MODULE}.GarminClient.connect", return_value=MagicMock()),
+        patch(f"{MODULE}.GarminHealthSource.body_context_for", side_effect=ctx),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        filled = GarminHealthPoller.sync_body_context("renato2", days=3, repo=repo)
+
+    assert filled == 1
+
+    saved = repo.upsert.call_args[0][1]
+
+    assert saved.date == "2026-07-20"
+    assert saved.steps == 5000
+    assert saved.body_battery_most_recent == 40
+    assert saved.sleep_score == 70  # não apagou o que já havia
+
+
+def test_sync_body_context_does_not_create_new_days():
+    """Contexto não vale um dia novo: dia sem snapshot é ignorado (nem chama a
+    API), diferente do VO₂máx que pode criar o dia."""
+
+    repo = MagicMock()
+
+    repo.load.return_value = []  # nenhum dia rastreado
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    seen = []
+
+    def ctx(garmin, day):
+
+        seen.append(day)
+
+        return {"steps": 5000, "body_battery_most_recent": 40}
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=True),
+        patch(f"{MODULE}.GarminClient.connect", return_value=MagicMock()),
+        patch(f"{MODULE}.GarminHealthSource.body_context_for", side_effect=ctx),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        filled = GarminHealthPoller.sync_body_context("renato2", days=3, repo=repo)
+
+    assert filled == 0
+    assert seen == []                 # nem bateu na API
+    repo.upsert.assert_not_called()
+
+
+def test_sync_body_context_skips_days_already_filled():
+    """Dia que já tem body battery não bate na API (idempotente)."""
+
+    repo = MagicMock()
+
+    repo.load.return_value = [
+        DailyHealth(date="2026-07-20", sleep_score=70,
+                    body_battery_most_recent=40)
+    ]
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    seen = []
+
+    def ctx(garmin, day):
+
+        seen.append(day)
+
+        return {}
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=True),
+        patch(f"{MODULE}.GarminClient.connect", return_value=MagicMock()),
+        patch(f"{MODULE}.GarminHealthSource.body_context_for", side_effect=ctx),
+        patch(f"{MODULE}.time.sleep"),
+    ):
+
+        GarminHealthPoller.sync_body_context("renato2", days=3, repo=repo)
+
+    assert "2026-07-20" not in seen
+    repo.upsert.assert_not_called()
+
+
+def test_sync_body_context_skips_athletes_without_garmin():
+
+    repo = MagicMock()
+
+    connect = MagicMock()
+
+    with (
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=False),
+        patch(f"{MODULE}.GarminClient.analysis_enabled", return_value=False),
+        patch(f"{MODULE}.GarminClient.connect", connect),
+    ):
+
+        filled = GarminHealthPoller.sync_body_context("helio", days=7, repo=repo)
+
+    assert filled == 0
+
+    connect.assert_not_called()
 
     repo.upsert.assert_not_called()
 
