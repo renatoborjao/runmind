@@ -288,6 +288,18 @@ class AIPlanService:
                 else calibration
             )
 
+        # PROJEÇÃO DE PROVA (Garmin): capacidade/realismo da meta como MAIS UM
+        # insumo (não decreto) — anexa ao mesmo eixo de forma/ritmo. Best-effort.
+        projection = AIPlanService._race_projection_directive(profile, goal)
+
+        if projection:
+
+            fitness_directive = (
+                f"{fitness_directive}\n{projection}"
+                if fitness_directive
+                else projection
+            )
+
         # SUBJETIVO recente (RPE + check-ins): o que ELE SENTIU, fresco, direto
         # no plano — não só via aprendizado semanal. Ver [[feedback_base_historico_sempre]].
         subjective = AIPlanService._subjective(profile)
@@ -612,6 +624,31 @@ class AIPlanService:
         except Exception as e:
 
             print(f"Diretriz de forma falhou p/ '{profile}': {e}")
+
+            return ""
+
+    @staticmethod
+    def _race_projection_directive(profile: str, goal) -> str:
+        """Projeção de prova do Garmin (5K/10K/meia/maratona) vs a meta: leitura
+        de capacidade/realismo pra o coach pesar — MAIS UM insumo, não decreto.
+        Best-effort — falhar aqui nunca deixa o atleta sem plano."""
+
+        try:
+
+            from app.application.coach.planning.race_projection_directive import (
+                race_projection_directive,
+            )
+            from app.infrastructure.persistence.race_prediction_repository import (
+                RacePredictionRepository,
+            )
+
+            prediction = RacePredictionRepository().load(profile)
+
+            return race_projection_directive(prediction, goal)
+
+        except Exception as e:
+
+            print(f"Diretriz de projeção falhou p/ '{profile}': {e}")
 
             return ""
 
