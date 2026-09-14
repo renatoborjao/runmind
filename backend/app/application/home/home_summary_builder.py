@@ -172,7 +172,21 @@ class HomeSummaryBuilder:
 
             return None
 
+        # o anel do herói: prontidão do Garmin quando existe; senão a bateria
+        # ao acordar (0-100 também) — assim o diferencial aparece com dado real
+        # mesmo em relógio que não reporta Training Readiness.
+        ring = None
+
+        if h.readiness_score is not None:
+
+            ring = {"value": h.readiness_score, "label": "PRONTIDÃO", "source": "readiness"}
+
+        elif h.body_battery_at_wake is not None:
+
+            ring = {"value": h.body_battery_at_wake, "label": "BATERIA", "source": "battery"}
+
         return {
+            "ring": ring,
             "readiness_score": h.readiness_score,
             "readiness_level": h.readiness_level,
             "sleep_hours": h.sleep_hours,
@@ -230,7 +244,7 @@ class HomeSummaryBuilder:
         threshold = shoe.alert_threshold_km or 1
 
         return {
-            "name": shoe.display_name,
+            "name": shoe.label,
             "total_km": shoe.total_km,
             "alert_threshold_km": shoe.alert_threshold_km,
             "pct": min(100, round(shoe.total_km / threshold * 100)),

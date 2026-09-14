@@ -148,21 +148,21 @@ export default function InicioPage() {
           <p>{home.today.weekday_pt} · {home.today.date_label}</p>
         </div>
 
-        {/* PRONTIDÃO */}
-        {body && body.readiness_score != null && (() => {
-          const v = readinessVerdict(body.readiness_score);
+        {/* PRONTIDÃO (anel: prontidão do Garmin ou, na falta, bateria ao acordar) */}
+        {body && body.ring && (() => {
+          const v = readinessVerdict(body.ring.value);
           return (
             <section className="card hero">
               <div className="hero-top">
-                <div className="ring" role="img" aria-label={`Prontidão ${body.readiness_score}`}>
+                <div className="ring" role="img" aria-label={`${body.ring.label} ${body.ring.value}`}>
                   <svg width="108" height="108" viewBox="0 0 108 108">
                     <circle cx="54" cy="54" r="47" fill="none" stroke="var(--line)" strokeWidth="9" />
                     <circle cx="54" cy="54" r="47" fill="none" stroke="var(--accent)" strokeWidth="9" strokeLinecap="round"
-                      strokeDasharray={RING_C} strokeDashoffset={RING_C * (1 - body.readiness_score / 100)} />
+                      strokeDasharray={RING_C} strokeDashoffset={RING_C * (1 - body.ring.value / 100)} />
                   </svg>
                   <div className="ring-center">
-                    <div className="num">{body.readiness_score}</div>
-                    <div className="den">PRONTIDÃO</div>
+                    <div className="num">{body.ring.value}</div>
+                    <div className="den">{body.ring.label}</div>
                   </div>
                 </div>
                 <div className="hero-verdict">
@@ -181,8 +181,8 @@ export default function InicioPage() {
           );
         })()}
 
-        {/* corpo sem readiness score, mas com métricas */}
-        {body && body.readiness_score == null && (body.sleep_hours != null || body.resting_hr != null) && (
+        {/* corpo sem anel, mas com métricas soltas */}
+        {body && !body.ring && (body.sleep_hours != null || body.resting_hr != null) && (
           <section className="card">
             <div className="card-head"><span className="eyebrow">Seu corpo hoje</span></div>
             <div className="vitals">
