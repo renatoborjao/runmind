@@ -1,10 +1,24 @@
 from __future__ import annotations
 
 import smtplib
+import sys
 from email.message import EmailMessage
 from email.utils import formataddr
 
 from app.core.config import get_settings
+
+
+def _safe_print(text: str) -> None:
+    """print() que não quebra em console sem UTF-8 (ex.: cp1252 no Windows não
+    encoda emoji). Um log de dev NUNCA pode derrubar o request."""
+
+    try:
+
+        print(text)
+
+    except UnicodeEncodeError:
+
+        sys.stdout.buffer.write((text + "\n").encode("utf-8", "replace"))
 
 
 class EmailSender:
@@ -23,11 +37,11 @@ class EmailSender:
 
         if not settings.smtp_host:
 
-            print("=" * 60)
-            print(f"[EMAIL DEV] para: {to}")
-            print(f"[EMAIL DEV] assunto: {subject}")
-            print(f"[EMAIL DEV] corpo:\n{body_text}")
-            print("=" * 60)
+            _safe_print("=" * 60)
+            _safe_print(f"[EMAIL DEV] para: {to}")
+            _safe_print(f"[EMAIL DEV] assunto: {subject}")
+            _safe_print(f"[EMAIL DEV] corpo:\n{body_text}")
+            _safe_print("=" * 60)
 
             return True
 
