@@ -13,6 +13,15 @@ export default function PWARegister() {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     };
 
+    // guarda o prompt nativo de instalar (Android/Chrome) pra o InstallBanner
+    // oferecer o botão "Instalar app" (1 toque). iOS não emite este evento.
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      (window as unknown as { __rmDeferredPrompt?: Event }).__rmDeferredPrompt = e;
+      window.dispatchEvent(new Event("rm-install-available"));
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+
     // a página estática carrega rápido: o evento 'load' pode já ter disparado
     // antes deste efeito rodar — nesse caso registra na hora.
     if (document.readyState === "complete") {

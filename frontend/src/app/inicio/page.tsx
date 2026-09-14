@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import NotifBell from "../notif-bell";
+import InstallBanner from "../install-banner";
 import {
   getBody,
   getHome,
@@ -238,6 +239,8 @@ export default function InicioPage() {
           <h1>Olá, {firstName}.</h1>
           <p>{home.today.weekday_pt} · {home.today.date_label}</p>
         </div>
+
+        <InstallBanner />
 
         {/* PRONTIDÃO (anel: prontidão do Garmin ou, na falta, bateria ao acordar) */}
         {body && body.ring && (() => {

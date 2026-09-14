@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
+import InstallBanner from "../install-banner";
 import {
   getNotifications,
   markNotificationsRead,
@@ -81,6 +82,8 @@ export default function NotificacoesPage() {
           <div className="title"><div className="t">Notificações</div></div>
           <span style={{ width: 34 }} />
         </header>
+
+        <InstallBanner />
 
         {/* CTA de push: só quando dá pra pedir permissão */}
         {pstate === "default" && (

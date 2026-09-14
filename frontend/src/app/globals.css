@@ -492,4 +492,15 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .empty-state .emoji { font-size: 34px; }
 .empty-state p { margin: 0; font-size: 13.5px; line-height: 1.45; max-width: 240px; }
 
+/* banner de instalação (Adicionar à Tela de Início / Instalar app) */
+.install-banner { position: relative; display: flex; gap: 11px; align-items: flex-start; padding: 13px 34px 13px 13px; border-radius: 14px; background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.install-banner .ib-ic { font-size: 20px; line-height: 1.2; flex: none; }
+.install-banner .ib-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.install-banner .ib-body strong { font-family: var(--font-display), sans-serif; font-size: 13.5px; color: var(--accent-ink); }
+.install-banner .ib-body span { font-size: 12.5px; line-height: 1.45; color: var(--ink-soft); }
+.install-banner .ib-body b { color: var(--ink); font-weight: 700; }
+.install-banner .ib-btn { align-self: flex-start; margin-top: 4px; border: none; cursor: pointer; background: var(--accent); color: #04231d; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: 11px; }
+.install-banner .ib-btn:active { transform: scale(.98); }
+.install-banner .ib-x { position: absolute; top: 8px; right: 10px; border: none; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
