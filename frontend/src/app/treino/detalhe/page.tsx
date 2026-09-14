@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getWorkouts, pushWatch, type TodaySession, type WorkoutDay, type WorkoutStep } from "@/lib/api";
+import { getWorkouts, moveWorkout, pushWatch, type TodaySession, type WorkoutDay, type WorkoutStep } from "@/lib/api";
 
 const STEP_PT: Record<string, string> = {
   warmup: "Aquecimento",
@@ -55,13 +55,30 @@ function DetalheInner() {
   const dayParam = params.get("day");
 
   const [day, setDay] = useState<WorkoutDay | null>(null);
+  const [week, setWeek] = useState<WorkoutDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [watch, setWatch] = useState<{ sending: boolean; msg: string | null }>({ sending: false, msg: null });
+  const [picking, setPicking] = useState(false);
+  const [moveMsg, setMoveMsg] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
 
   async function onPushWatch() {
     setWatch({ sending: true, msg: null });
     const res = await pushWatch();
     setWatch({ sending: false, msg: res.message });
+  }
+
+  async function onMove(toDay: string) {
+    if (!day) return;
+    setMoving(true);
+    const res = await moveWorkout(day.day_en, toDay);
+    setMoving(false);
+    if (res.ok) {
+      router.push("/treino");
+    } else {
+      setMoveMsg(res.message);
+      setPicking(false);
+    }
   }
 
   useEffect(() => {
@@ -71,6 +88,7 @@ function DetalheInner() {
         router.replace("/entrar");
         return;
       }
+      setWeek(w.week);
       const picked =
         (dayParam && w.week.find((d) => d.day_en === dayParam)) ||
         w.week.find((d) => d.is_today) ||
@@ -147,6 +165,30 @@ function DetalheInner() {
               {watch.sending ? "Enviando pro relógio…" : "Enviar pro relógio"}
             </button>
             {watch.msg && <div className="notice ok">{watch.msg}</div>}
+
+            <button className="btn-ghost" onClick={() => { setPicking((v) => !v); setMoveMsg(null); }}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /><path d="M14 15l2 2 4-4" /></svg>
+              Trocar de dia
+            </button>
+
+            {picking && (
+              <div className="card" style={{ padding: 14 }}>
+                <p className="eyebrow" style={{ margin: "0 0 10px" }}>Mover para um dia livre</p>
+                {week.filter((d) => !d.session && d.day_en !== day?.day_en).length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>Não há dia livre nesta semana. Pra abrir espaço, fala com o coach. 💬</p>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {week.filter((d) => !d.session && d.day_en !== day?.day_en).map((d) => (
+                      <button key={d.day_en} className="btn-ghost" style={{ flex: "0 0 auto", padding: "10px 14px" }}
+                        disabled={moving} onClick={() => onMove(d.day_en)}>
+                        {d.day_pt} {d.date_num}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {moveMsg && <div className="notice err">{moveMsg}</div>}
           </div>
         </>
       )}
