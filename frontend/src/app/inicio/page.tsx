@@ -4,13 +4,62 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
+  getBody,
   getHome,
   getMe,
+  type BodyReading,
   type HomeSummary,
+  type TodaySession,
   type WorkoutStep,
 } from "@/lib/api";
 
 const RING_C = 2 * Math.PI * 47; // circunferência do anel de prontidão
+
+const TONE_COLOR: Record<string, string> = {
+  good: "var(--accent)",
+  warn: "#F5A623",
+  bad: "var(--rose)",
+};
+
+// Veredito do herói. Preferimos SEMPRE a leitura REAL do corpo (backend, ciente
+// do histórico: estado + tom + limitador) e amarramos ao treino de hoje. Só
+// caímos no veredito raso pelo número do anel quando não há leitura de corpo —
+// assim a home nunca "decide no vácuo" nem diverge da tela /corpo.
+function heroVerdict(
+  bd: BodyReading | null,
+  session: TodaySession | null,
+  ringVal: number,
+): { badge: string; title: string; note: string; tone: string } {
+  if (bd?.has_data && bd.state_label) {
+    const tone = bd.tone ?? "warn";
+    const hard = !!session && (session.kind === "tiro" || session.kind === "long");
+    const title =
+      tone === "good"
+        ? "Corpo pronto pra treinar."
+        : tone === "warn"
+          ? "Dá pra treinar, com cautela."
+          : "Hoje é dia de segurar.";
+    let note: string;
+    if (tone === "bad") {
+      note = hard
+        ? "Treino forte no plano. Se o corpo não responder, fala com o coach pra ajustar."
+        : "Recuperação baixa — prioriza leveza ou descanso.";
+    } else if (tone === "warn") {
+      note = hard
+        ? "Treino forte hoje: começa no controle e vê como o corpo responde."
+        : "Corpo absorvendo carga. Treina sem forçar.";
+    } else {
+      note = session
+        ? "Recuperação em dia. Pode aproveitar o treino de hoje."
+        : "Recuperação em dia. Bom dia pra descansar bem.";
+    }
+    if (bd.limiter_label) note += ` Ponto de atenção: ${bd.limiter_label.toLowerCase()}.`;
+    return { badge: bd.state_label, title, note, tone };
+  }
+  const v = readinessVerdict(ringVal);
+  const tone = ringVal >= 75 ? "good" : ringVal >= 50 ? "warn" : "bad";
+  return { ...v, tone };
+}
 
 function fmtSleep(h: number | null): string {
   if (h == null) return "—";
@@ -99,6 +148,7 @@ function Mark() {
 export default function InicioPage() {
   const router = useRouter();
   const [home, setHome] = useState<HomeSummary | null>(null);
+  const [bodyR, setBodyR] = useState<BodyReading | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -108,7 +158,9 @@ export default function InicioPage() {
         router.replace("/entrar");
         return;
       }
-      setHome(await getHome());
+      const [h, bd] = await Promise.all([getHome(), getBody()]);
+      setHome(h);
+      setBodyR(bd);
       setLoading(false);
     })();
   }, [router]);
@@ -147,14 +199,14 @@ export default function InicioPage() {
 
         {/* PRONTIDÃO (anel: prontidão do Garmin ou, na falta, bateria ao acordar) */}
         {body && body.ring && (() => {
-          const v = readinessVerdict(body.ring.value);
+          const v = heroVerdict(bodyR, session, body.ring.value);
           return (
             <section className="card hero tap" onClick={() => router.push("/corpo")}>
               <div className="hero-top">
                 <div className="ring" role="img" aria-label={`${body.ring.label} ${body.ring.value}`}>
                   <svg width="108" height="108" viewBox="0 0 108 108">
                     <circle cx="54" cy="54" r="47" fill="none" stroke="var(--line)" strokeWidth="9" />
-                    <circle cx="54" cy="54" r="47" fill="none" stroke="var(--accent)" strokeWidth="9" strokeLinecap="round"
+                    <circle cx="54" cy="54" r="47" fill="none" stroke={TONE_COLOR[v.tone]} strokeWidth="9" strokeLinecap="round"
                       strokeDasharray={RING_C} strokeDashoffset={RING_C * (1 - body.ring.value / 100)} />
                   </svg>
                   <div className="ring-center">
@@ -163,7 +215,7 @@ export default function InicioPage() {
                   </div>
                 </div>
                 <div className="hero-verdict">
-                  <span className="badge"><span className="dot" />{v.badge}</span>
+                  <span className="badge"><span className="dot" style={{ background: TONE_COLOR[v.tone] }} />{v.badge}</span>
                   <h2>{v.title}</h2>
                   <p>{v.note}</p>
                 </div>
