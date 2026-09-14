@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import { getCalendar, type CalendarMonth } from "@/lib/api";
 
-const KIND_COLOR: Record<string, string> = {
-  tiro: "var(--rose)",
-  rod: "var(--accent)",
-  long: "#E1911A",
-};
+// Calendário padronizado em VERDE: cor não deve sugerir "faltou treino".
+// A diferença de tipo (tiro/rodagem/longão) fica no DETALHE do treino.
+const DONE_COLOR = "var(--accent)";
 
 const WEEKDAY_HEAD = ["D", "S", "T", "Q", "Q", "S", "S"];
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -157,11 +155,11 @@ export default function TreinoPage() {
                     >
                       {isRace && <span className="flag">🏁</span>}
                       {ex ? (
-                        <span className="daynum done" style={{ background: KIND_COLOR[ex.kind] ?? "var(--accent)" }}>{d}</span>
+                        <span className="daynum done" style={{ background: DONE_COLOR }}>{d}</span>
                       ) : (
                         <>
                           <span>{d}</span>
-                          {pl && <span className="cdot ring" style={{ borderColor: KIND_COLOR[pl.kind] ?? "var(--accent)" }} />}
+                          {pl && <span className="cdot ring" style={{ borderColor: DONE_COLOR }} />}
                         </>
                       )}
                     </div>
@@ -186,7 +184,7 @@ export default function TreinoPage() {
                   <div className="dn">{new Date(it.iso + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</div>
                   <div className="dd">{Number(it.iso.slice(-2))}</div>
                 </div>
-                <span className="kdot" style={{ background: it.done ? (KIND_COLOR[it.kind] ?? "var(--accent)") : "transparent", border: it.done ? "none" : `1.5px solid ${KIND_COLOR[it.kind] ?? "var(--muted)"}` }} />
+                <span className="kdot" style={{ background: it.done ? DONE_COLOR : "transparent", border: it.done ? "none" : `1.5px solid ${DONE_COLOR}` }} />
                 <div className="info">
                   <div className="wt">{it.title}{it.done ? "" : ""}</div>
                   <div className="wd">{it.sub}</div>
