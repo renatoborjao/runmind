@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "rm_session"
 
     # ==========================
+    # WEB PUSH (PWA) — notificações no celular
+    # ==========================
+
+    # Par de chaves VAPID (nosso servidor -> push service do navegador). Vazio =
+    # push DESLIGADO (a central do app e o Telegram seguem normais). Gerar uma
+    # vez com `vapid --gen` (py-vapid) e pôr no .env da VM. A pública também vai
+    # pro frontend (GET /push/public-key) pra o navegador se inscrever.
+    #   vapid_private_key: string base64url da chave privada (aceita pelo pywebpush)
+    #   vapid_public_key: application server key (base64url) que o browser usa
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    # contato do responsável exigido pelo protocolo VAPID (mailto: ou https:)
+    vapid_subject: str = "mailto:rbfrei14@gmail.com"
+
+    # ==========================
     # E-MAIL (SMTP) — envio dos magic links
     # ==========================
 

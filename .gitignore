@@ -16,6 +16,11 @@ eggs/
 .eggs/
 lib/
 lib64/
+# exceção: o código-fonte da lib do frontend (Next), não é build Python — o
+# `lib/` acima (ignore de empacotamento Python) o pegava por engano, deixando
+# api.ts/push.ts fora do versionamento.
+!frontend/src/lib/
+!frontend/src/lib/**
 parts/
 sdist/
 var/

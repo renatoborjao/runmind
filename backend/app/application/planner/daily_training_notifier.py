@@ -1,6 +1,7 @@
 from app.application.coach.intelligence.weather_advisor import (
     WeatherAdvisor as HeatWeatherAdvisor,
 )
+from app.application.notifications.app_inbox import AppInbox
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -62,6 +63,9 @@ class DailyTrainingNotifier:
             runner,
             message,
         )
+
+        # espelha no app (central + push) — mesmo toque do Telegram
+        await AppInbox.deliver(runner, message, kind="daily_training")
 
     @staticmethod
     async def build(

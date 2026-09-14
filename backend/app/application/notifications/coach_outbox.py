@@ -5,6 +5,7 @@ turnos (user/assistant); este outbox é só pras mensagens de FORA do fluxo de
 conversa, que não entrariam no histórico."""
 
 from app.application.coach.voice.coach_voice import CoachVoice
+from app.application.notifications.app_inbox import AppInbox
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -59,6 +60,10 @@ class CoachOutbox:
                 return
 
         await NotificationService.send(runner, message)
+
+        # espelha no APP: central de notificações + Web Push (celular buzina com
+        # o app fechado). Best-effort — o Telegram já saiu. Ver [[AppInbox]].
+        await AppInbox.deliver(runner, message, kind=kind)
 
         # áudio proativo: best-effort, respeita a preferência dinâmica
         if voice and (

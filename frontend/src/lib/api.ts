@@ -1,0 +1,612 @@
+// Cliente da API do Ritmind. Todas as chamadas mandam o cookie de sessão
+// (credentials: "include") — é assim que o backend sabe quem é o atleta.
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${API_BASE}/api/v1${path}`, {
+    ...init,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+}
+
+export interface Me {
+  profile: string;
+  name: string;
+  email: string | null;
+  goal: string;
+}
+
+/** Pede o magic link. Resposta sempre genérica (não revela se o e-mail existe). */
+export async function requestLogin(email: string): Promise<boolean> {
+  const r = await apiFetch("/auth/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  return r.ok;
+}
+
+/** Troca o magic token pela sessão (seta o cookie). */
+export async function verifyToken(token: string): Promise<boolean> {
+  const r = await apiFetch("/auth/verify", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+  return r.ok;
+}
+
+/** Quem está logado? null se não há sessão válida. */
+export async function getMe(): Promise<Me | null> {
+  const r = await apiFetch("/auth/me");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+export async function logout(): Promise<void> {
+  await apiFetch("/auth/logout", { method: "POST" });
+}
+
+export interface PlanSession {
+  day: string;
+  workout_type: string;
+  objective?: string;
+  target_pace_min?: string | null;
+  target_pace_max?: string | null;
+}
+
+export interface PlanResponse {
+  plan?: { sessions?: PlanSession[] };
+}
+
+export async function getPlan(): Promise<PlanResponse | null> {
+  const r = await apiFetch("/plan");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Home ----
+
+export interface WorkoutStep {
+  kind: string;
+  distance_m: number | null;
+  duration_sec: number | null;
+  pace_min: string | null;
+  pace_max: string | null;
+  reps: number | null;
+  steps?: WorkoutStep[];
+}
+
+export interface TodaySession {
+  workout_type: string;
+  objective: string;
+  distance_km: number | null;
+  duration_min: number | null;
+  pace_min: string | null;
+  pace_max: string | null;
+  kind: string;
+  steps: WorkoutStep[];
+}
+
+export interface WeekDay {
+  day_en: string;
+  day_pt: string;
+  date_num: number;
+  date_iso: string;
+  workout_type: string | null;
+  distance_km: number | null;
+  kind: string | null;
+  is_today: boolean;
+  done: boolean;
+}
+
+export interface HomeSummary {
+  athlete: { name: string; goal: string; avatar?: string | null };
+  today: {
+    weekday_pt: string;
+    date_label: string;
+    label: string;
+    day_en: string;
+    session_date_label: string | null;
+    session: TodaySession | null;
+  };
+  week: WeekDay[];
+  body: {
+    ring: { value: number; label: string; source: string } | null;
+    readiness_score: number | null;
+    readiness_level: string | null;
+    sleep_hours: number | null;
+    resting_hr: number | null;
+    respiration_sleep_avg: number | null;
+    body_battery_at_wake: number | null;
+    steps: number | null;
+    active_calories: number | null;
+    spo2_sleep_avg: number | null;
+    training_status: string | null;
+    date: string;
+  } | null;
+  fitness: {
+    vo2max: number | null;
+    projection_10k: string | null;
+    projection_5k: string | null;
+    projection_half: string | null;
+  } | null;
+  shoe: {
+    name: string;
+    total_km: number;
+    alert_threshold_km: number;
+    pct: number;
+    remaining_km: number;
+  } | null;
+}
+
+export async function getHome(): Promise<HomeSummary | null> {
+  const r = await apiFetch("/home");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Workouts (calendário/lista) ----
+
+export interface WorkoutDay {
+  day_en: string;
+  day_pt: string;
+  date_iso: string;
+  date_num: number;
+  is_today: boolean;
+  session: TodaySession | null;
+}
+
+export interface RaceInfo {
+  name: string;
+  date_iso: string;
+  target_time: string | null;
+  days_until: number;
+}
+
+export interface WorkoutsResponse {
+  week: WorkoutDay[];
+  race: RaceInfo | null;
+}
+
+export async function getWorkouts(): Promise<WorkoutsResponse | null> {
+  const r = await apiFetch("/workouts");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Calendário (mês + histórico + comparação) ----
+
+export interface CalExecuted {
+  date_iso: string;
+  km: number;
+  pace: string | null;
+  duration_min: number;
+  name: string;
+  kind: string;
+  is_ours: boolean;
+}
+
+export interface CalPlanned {
+  date_iso: string;
+  day_en: string;
+  workout_type: string;
+  kind: string;
+}
+
+export interface CalendarMonth {
+  month: string;
+  executed: CalExecuted[];
+  planned: CalPlanned[];
+  race: RaceInfo | null;
+}
+
+export async function getCalendar(year: number, month: number): Promise<CalendarMonth | null> {
+  const r = await apiFetch(`/calendar?year=${year}&month=${month}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+export interface DayDetail {
+  date_iso: string;
+  day_pt: string;
+  executed: {
+    km: number;
+    pace: string | null;
+    duration_min: number;
+    avg_hr: number | null;
+    elevation_gain: number | null;
+    name: string;
+    is_ours: boolean;
+  } | null;
+  planned: {
+    workout_type: string;
+    distance_km: number | null;
+    pace_min: string | null;
+    pace_max: string | null;
+    kind: string;
+  } | null;
+}
+
+export async function getDayDetail(dateIso: string): Promise<DayDetail | null> {
+  const r = await apiFetch(`/calendar/day?date=${dateIso}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Coach (chat nativo) ----
+
+export interface ChatMsg {
+  role: string; // "user" | "assistant"
+  text: string;
+  at: string | null;
+}
+
+export async function getCoachMessages(): Promise<ChatMsg[] | null> {
+  const r = await apiFetch("/coach/messages");
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.messages ?? [];
+}
+
+export async function sendCoachMessage(text: string): Promise<string | null> {
+  const r = await apiFetch("/coach/messages", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.reply ?? null;
+}
+
+// ---- Evolução (progresso) ----
+
+export interface Progress {
+  journey: { km_total: number; runs: number; biggest_km: number; since: string | null };
+  weekly_volume: { label: string; km: number }[];
+  fitness: {
+    vo2max: number | null;
+    resting_hr: number | null;
+    projection_5k: string | null;
+    projection_10k: string | null;
+    projection_half: string | null;
+    projection_marathon: string | null;
+  };
+}
+
+export async function getProgress(): Promise<Progress | null> {
+  const r = await apiFetch("/progress");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Perfil ----
+
+export interface Profile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  name: string;
+  email: string | null;
+  age: number;
+  weight: number;
+  height: number;
+  sex: string | null;
+  avatar: string | null;
+  timezone: string;
+  goal: string;
+  weekly_training_days: number;
+  preferred_running_days: string[];
+  target_race: string | null;
+  race_date: string | null;
+  target_time: string | null;
+}
+
+export async function getProfile(): Promise<Profile | null> {
+  const r = await apiFetch("/profile");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+export interface ProfilePatch {
+  first_name?: string;
+  last_name?: string;
+  email?: string | null;
+  age?: number;
+  weight?: number;
+  height?: number;
+  sex?: string | null;
+  avatar?: string | null;
+}
+
+export async function saveProfile(body: ProfilePatch): Promise<{ ok: boolean; profile?: Profile; message?: string }> {
+  const r = await apiFetch("/profile", { method: "PATCH", body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, message: data.detail || "Não consegui salvar." };
+  return { ok: true, profile: data };
+}
+
+// ---- Corrida gravada (GPS no app) ----
+
+export interface RunPayload {
+  started_at: string;
+  duration_s: number;
+  distance_m: number;
+  avg_pace: string | null;
+  points: { lat: number; lon: number; t: number }[];
+}
+
+export async function saveRun(run: RunPayload): Promise<boolean> {
+  const r = await apiFetch("/recorded-runs", {
+    method: "POST",
+    body: JSON.stringify(run),
+  });
+  return r.ok;
+}
+
+export interface RecordedRunSummary {
+  id: string;
+  saved_at: string | null;
+  started_at: string | null;
+  duration_s: number;
+  distance_m: number;
+  avg_pace: string | null;
+}
+
+export interface RunSplit {
+  km: number | null;
+  sec: number;
+  pace: string | null;
+  partial_km: number | null;
+  hr?: number | null;
+}
+
+export interface RecordedRunDetail extends RecordedRunSummary {
+  points: { lat: number; lon: number; t: number | null }[];
+  splits: RunSplit[];
+}
+
+export async function getRecordedRuns(): Promise<RecordedRunSummary[] | null> {
+  const r = await apiFetch("/recorded-runs");
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.runs ?? [];
+}
+
+export async function getRecordedRun(id: string): Promise<RecordedRunDetail | null> {
+  const r = await apiFetch(`/recorded-runs/${id}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Feed de atividades (todas as corridas) ----
+
+export interface FeedItem {
+  key: string;
+  source: "app" | "sync";
+  datetime: string | null;
+  date_iso: string;
+  distance_km: number;
+  duration_min: number;
+  pace: string | null;
+  avg_hr: number | null;
+  elevation_gain: number | null;
+  name: string;
+  has_track: boolean;
+  track_source: "app" | "arch" | null;
+  track_id: string | null;
+}
+
+export async function getFeed(): Promise<FeedItem[] | null> {
+  const r = await apiFetch("/feed");
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.activities ?? [];
+}
+
+export interface TrackData {
+  points: { lat: number; lon: number; t?: number | null }[];
+  splits: RunSplit[];
+}
+
+/** Traçado de uma atividade do feed — app (recorded-runs) ou sincronizada (feed/track). */
+export async function getTrack(item: FeedItem): Promise<TrackData | null> {
+  if (!item.has_track || !item.track_id) return null;
+  if (item.track_source === "app") {
+    const d = await getRecordedRun(item.track_id);
+    return d ? { points: d.points, splits: d.splits } : null;
+  }
+  const r = await apiFetch(`/feed/track/${item.track_id}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Leitura do corpo ----
+
+export interface BodyTrend {
+  dates: string[];
+  readiness: (number | null)[] | null;
+  battery: (number | null)[] | null;
+  sleep_hours: (number | null)[] | null;
+  resting_hr: (number | null)[] | null;
+  hrv: (number | null)[] | null;
+}
+
+export interface BodyReading {
+  has_data: boolean;
+  body_state?: string;
+  state_label?: string;
+  tone?: "good" | "warn" | "bad";
+  limiter?: string | null;
+  limiter_label?: string | null;
+  trend?: BodyTrend | null;
+  acwr?: number | null;
+  acwr_status?: string | null;
+  recovery?: {
+    hrv_recent: number | null;
+    hrv_direction: string;
+    rhr_recent: number | null;
+    rhr_direction: string;
+    sleep_avg_hours: number | null;
+    short_nights: number;
+    nights_counted: number;
+    stress_avg: number | null;
+    body_battery_wake: number | null;
+    respiration_sleep: number | null;
+    readiness_score: number | null;
+    readiness_level: string | null;
+    sleep_score: number | null;
+  };
+}
+
+export async function getBody(): Promise<BodyReading | null> {
+  const r = await apiFetch("/body");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Armário de tênis ----
+
+export interface Shoe {
+  id: string;
+  name: string;
+  nickname: string | null;
+  label: string;
+  category: string | null;
+  is_default: boolean;
+  retired: boolean;
+  total_km: number;
+  initial_km: number;
+  accumulated_km: number;
+  alert_threshold_km: number;
+  pct: number;
+  remaining_km: number;
+  worn: boolean;
+}
+
+export interface ShoeInput {
+  name: string;
+  nickname?: string | null;
+  category?: string | null;
+  initial_km?: number | null;
+  alert_threshold_km?: number | null;
+  is_default?: boolean;
+}
+
+export interface ShoePatch {
+  name?: string;
+  nickname?: string | null;
+  category?: string | null;
+  total_km?: number | null;
+  alert_threshold_km?: number | null;
+  is_default?: boolean;
+  retired?: boolean;
+}
+
+export async function getShoes(): Promise<Shoe[] | null> {
+  const r = await apiFetch("/shoes");
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.shoes ?? [];
+}
+
+export async function addShoe(body: ShoeInput): Promise<{ ok: boolean; shoe?: Shoe; message?: string }> {
+  const r = await apiFetch("/shoes", { method: "POST", body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, message: data.detail || "Não consegui adicionar." };
+  return { ok: true, shoe: data };
+}
+
+export async function editShoe(id: string, body: ShoePatch): Promise<{ ok: boolean; shoe?: Shoe; message?: string }> {
+  const r = await apiFetch(`/shoes/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, message: data.detail || "Não consegui salvar." };
+  return { ok: true, shoe: data };
+}
+
+export async function deleteShoe(id: string): Promise<boolean> {
+  const r = await apiFetch(`/shoes/${id}`, { method: "DELETE" });
+  return r.ok;
+}
+
+// ---- Enviar plano pro relógio ----
+
+export async function pushWatch(): Promise<{ ok: boolean; message: string }> {
+  const r = await apiFetch("/plan/push-watch", { method: "POST" });
+  if (!r.ok) return { ok: false, message: "Não consegui enviar agora. Tenta de novo." };
+  return r.json();
+}
+
+// ---- Notificações (central no app) ----
+
+export interface AppNotification {
+  id: string;
+  kind: string | null;
+  title: string | null;
+  text: string;
+  created_at: string | null;
+  read: boolean;
+}
+
+export interface NotificationsResponse {
+  items: AppNotification[];
+  unread: number;
+}
+
+export async function getNotifications(): Promise<NotificationsResponse | null> {
+  const r = await apiFetch("/notifications");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+/** Marca notificações como lidas (todas, ou as `ids` informadas). Devolve o novo unread. */
+export async function markNotificationsRead(ids?: string[]): Promise<number> {
+  const r = await apiFetch("/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(ids ? { ids } : {}),
+  });
+  if (!r.ok) return 0;
+  const data = await r.json().catch(() => ({ unread: 0 }));
+  return data.unread ?? 0;
+}
+
+// ---- Web Push (notificação no celular) ----
+
+export async function getPushPublicKey(): Promise<string> {
+  const r = await apiFetch("/push/public-key");
+  if (!r.ok) return "";
+  const data = await r.json().catch(() => ({ key: "" }));
+  return data.key ?? "";
+}
+
+export async function subscribePush(sub: PushSubscriptionJSON): Promise<boolean> {
+  const r = await apiFetch("/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys }),
+  });
+  return r.ok;
+}
+
+export async function unsubscribePush(endpoint: string): Promise<boolean> {
+  const r = await apiFetch("/push/unsubscribe", {
+    method: "POST",
+    body: JSON.stringify({ endpoint }),
+  });
+  return r.ok;
+}
+
+// ---- Trocar treino de dia ----
+
+export async function moveWorkout(fromDay: string, toDay: string): Promise<{ ok: boolean; message: string }> {
+  const r = await apiFetch("/plan/move", {
+    method: "POST",
+    body: JSON.stringify({ from_day: fromDay, to_day: toDay }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, message: data.detail || "Não consegui trocar o dia." };
+  return { ok: true, message: data.message || "Treino movido." };
+}

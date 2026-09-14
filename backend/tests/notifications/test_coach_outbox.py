@@ -52,9 +52,11 @@ def test_send_delivers_and_records():
     with (
         patch(f"{MODULE}.NotificationService") as notif,
         patch(f"{MODULE}.CoachOutboxRepository") as repo_cls,
+        patch(f"{MODULE}.AppInbox") as app_inbox,
     ):
 
         notif.send = AsyncMock()
+        app_inbox.deliver = AsyncMock()
 
         asyncio.run(CoachOutbox.send(runner, "análise do treino"))
 
@@ -72,9 +74,11 @@ def test_send_survives_record_failure():
     with (
         patch(f"{MODULE}.NotificationService") as notif,
         patch(f"{MODULE}.CoachOutboxRepository") as repo_cls,
+        patch(f"{MODULE}.AppInbox") as app_inbox,
     ):
 
         notif.send = AsyncMock()
+        app_inbox.deliver = AsyncMock()
         repo_cls.return_value.append.side_effect = OSError("disco cheio")
 
         # não levanta

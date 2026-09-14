@@ -11,6 +11,7 @@ from app.application.coach.intelligence.personal_record_detector import (
     PersonalRecordDetector,
 )
 from app.application.garmin.garmin_sync import GarminSync
+from app.application.notifications.app_inbox import AppInbox
 from app.application.notifications.notification_service import (
     NotificationService,
 )
@@ -132,6 +133,9 @@ class StravaConnectRefresh:
             GarminOfferStore.set_pending(profile)
 
         await NotificationService.send(runner, message)
+
+        # espelha no app (central + push) — plano atualizado é notificação
+        await AppInbox.deliver(runner, message, kind="strava_connect")
 
         StravaRefreshStore.mark(profile)
 

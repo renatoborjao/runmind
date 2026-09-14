@@ -2,10 +2,11 @@
 //  - /api/* NUNCA é cacheado (dado do atleta vem sempre da rede).
 //  - assets do Next (/_next/static, hasheados) = cache-first (imutáveis).
 //  - navegação = network-first, cai pra casca cacheada quando offline.
-const CACHE = "ritmind-v1";
+const CACHE = "ritmind-v2";
 const SHELL = [
   "/inicio/",
   "/entrar/",
+  "/notificacoes/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
@@ -65,6 +66,42 @@ self.addEventListener("fetch", (e) => {
         return res;
       }).catch(() => hit);
       return hit || net;
+    })
+  );
+});
+
+// --- Web Push: notificação no celular mesmo com o app fechado ---
+self.addEventListener("push", (e) => {
+  let data = {};
+  try {
+    data = e.data ? e.data.json() : {};
+  } catch {
+    data = { body: e.data ? e.data.text() : "" };
+  }
+  const title = data.title || "Ritmind";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: data.url || "/inicio/" },
+    tag: data.tag || undefined,
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// tocar na notificação abre (ou foca) o app na tela certa
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || "/inicio/";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ("focus" in client) {
+          client.navigate(target).catch(() => {});
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
     })
   );
 });

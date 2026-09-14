@@ -13,6 +13,7 @@ from app.presentation.api.v1 import health
 from app.presentation.api.v1 import history
 from app.presentation.api.v1 import home
 from app.presentation.api.v1 import insights
+from app.presentation.api.v1 import notifications
 from app.presentation.api.v1 import plan
 from app.presentation.api.v1 import profile as profile_route
 from app.presentation.api.v1 import progress
@@ -64,6 +65,8 @@ router.include_router(recorded_runs.router)
 router.include_router(shoes.router)
 
 router.include_router(feed.router)
+
+router.include_router(notifications.router)
 
 router.include_router(debug.router)
 

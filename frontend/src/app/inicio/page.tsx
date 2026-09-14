@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
+import NotifBell from "../notif-bell";
 import {
   getBody,
   getHome,
@@ -221,13 +222,16 @@ export default function InicioPage() {
 
         <div className="topbar">
           <div className="brand"><Mark /><span className="word">Rit<b>mind</b></span></div>
-          <button className="avatar-sm" aria-label="Perfil" onClick={() => router.push("/perfil")}>
-            {home.athlete.avatar ? (
-              <img className="avatar-img" src={home.athlete.avatar} alt="Perfil" />
-            ) : (
-              (home.athlete.name || "").trim().split(" ").map((w) => w[0]).slice(0, 2).join("") || "🏃"
-            )}
-          </button>
+          <div className="topbar-actions">
+            <NotifBell />
+            <button className="avatar-sm" aria-label="Perfil" onClick={() => router.push("/perfil")}>
+              {home.athlete.avatar ? (
+                <img className="avatar-img" src={home.athlete.avatar} alt="Perfil" />
+              ) : (
+                (home.athlete.name || "").trim().split(" ").map((w) => w[0]).slice(0, 2).join("") || "🏃"
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="greet">

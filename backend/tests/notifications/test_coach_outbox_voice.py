@@ -13,10 +13,12 @@ def _send(voice, profile, wants_audio=True):
         patch(f"{MODULE}.CoachVoice") as coach_voice,
         patch(f"{MODULE}.VoicePreferenceRepository") as pref,
         patch(f"{MODULE}.CoachOutboxRepository"),
+        patch(f"{MODULE}.AppInbox") as app_inbox,
     ):
 
         notif.send = AsyncMock()
         coach_voice.voice_only = AsyncMock()
+        app_inbox.deliver = AsyncMock()
         pref.wants_audio.return_value = wants_audio
 
         asyncio.run(
