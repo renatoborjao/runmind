@@ -1,0 +1,26 @@
+{
+  "name": "Ritmind",
+  "short_name": "Ritmind",
+  "description": "Seu treinador de corrida com inteligência de verdade.",
+  "start_url": "/inicio/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0C0D16",
+  "theme_color": "#0C0D16",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
