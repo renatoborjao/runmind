@@ -156,19 +156,21 @@ export default function TreinoPage() {
                       onClick={clickable ? () => openDay(iso, !!ex, pl?.day_en) : undefined}
                     >
                       {isRace && <span className="flag">🏁</span>}
-                      <span>{d}</span>
                       {ex ? (
-                        <span className="cdot" style={{ background: KIND_COLOR[ex.kind] ?? "var(--accent)" }} />
-                      ) : pl ? (
-                        <span className="cdot ring" style={{ borderColor: KIND_COLOR[pl.kind] ?? "var(--accent)" }} />
-                      ) : null}
+                        <span className="daynum done" style={{ background: KIND_COLOR[ex.kind] ?? "var(--accent)" }}>{d}</span>
+                      ) : (
+                        <>
+                          <span>{d}</span>
+                          {pl && <span className="cdot ring" style={{ borderColor: KIND_COLOR[pl.kind] ?? "var(--accent)" }} />}
+                        </>
+                      )}
                     </div>
                   );
                 })}
               </div>
               <div className="legend">
-                <span><i style={{ background: "var(--ink-soft)" }} />Feito</span>
-                <span><i style={{ background: "transparent", border: "1.5px solid var(--muted)" }} />Planejado</span>
+                <span><i style={{ background: "var(--accent)", borderRadius: "50%", width: 12, height: 12 }} />Feito (cheio)</span>
+                <span><i style={{ background: "transparent", border: "1.5px solid var(--muted)", borderRadius: "50%" }} />Planejado (anel)</span>
               </div>
             </>
           )}
