@@ -211,7 +211,7 @@ export default function CorrerPage() {
               <div className="card center" style={{ marginTop: 8 }}>
                 <div className="badge" style={{ margin: "0 auto 10px" }}><span className="dot" />Corrida salva</div>
                 <p style={{ margin: 0, fontSize: 15 }}>Boa! {km} km em {fmtTime(elapsed)} · {paceStr(dist, elapsed)}/km 🏃</p>
-                <button className="btn" style={{ marginTop: 16 }} onClick={() => router.push("/corridas")}>Ver minhas corridas</button>
+                <button className="btn" style={{ marginTop: 16 }} onClick={() => router.push("/atividades")}>Ver minhas atividades</button>
                 <button className="btn-ghost" style={{ marginTop: 10 }} onClick={() => router.push("/inicio")}>Voltar pro início</button>
               </div>
             )}

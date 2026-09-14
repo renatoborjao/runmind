@@ -8,6 +8,7 @@ from app.presentation.api.v1 import coach
 from app.presentation.api.v1 import debug
 from app.presentation.api.v1 import events
 from app.presentation.api.v1 import evolution
+from app.presentation.api.v1 import feed
 from app.presentation.api.v1 import health
 from app.presentation.api.v1 import history
 from app.presentation.api.v1 import home
@@ -61,6 +62,8 @@ router.include_router(profile_route.router)
 router.include_router(recorded_runs.router)
 
 router.include_router(shoes.router)
+
+router.include_router(feed.router)
 
 router.include_router(debug.router)
 
