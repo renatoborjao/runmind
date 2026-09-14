@@ -28,6 +28,8 @@ class ChatIntent(str, Enum):
 
     HELP = "HELP"
 
+    APP_LINK = "APP_LINK"
+
 
 # Pedido claro sobre o treino JÁ FEITO (quer a análise completa).
 _LAST_PATTERNS = [
@@ -176,7 +178,19 @@ _HELP_PATTERNS = [
     r"\bpra que (voce|vc) serve\b",
 ]
 
+# Pedido do APP / link de acesso ("/app", "quero o app", "link do aplicativo",
+# "como entro no app"). Manda o magic link pelo próprio chat.
+_APP_PATTERNS = [
+    r"^/?app\b",
+    r"^/?aplicativo\b",
+    r"\b(link|acesso|entrar|acessar|abrir|baixar|instalar|quero|usar)\b.*\b(app|aplicativo)\b",
+    r"\b(app|aplicativo)\b.*\b(link|acesso|entrar|acessar|abrir|login|logar)\b",
+    r"\bcomo (entro|acesso|uso|abro)\b.*\b(app|aplicativo)\b",
+]
+
 _LAST_REGEXES = [re.compile(p) for p in _LAST_PATTERNS]
+
+_APP_REGEXES = [re.compile(p) for p in _APP_PATTERNS]
 
 _NEXT_REGEXES = [re.compile(p) for p in _NEXT_PATTERNS]
 
@@ -250,6 +264,10 @@ class IntentRouter:
         if any(regex.search(normalized) for regex in _HELP_REGEXES):
 
             matched.append(ChatIntent.HELP)
+
+        if any(regex.search(normalized) for regex in _APP_REGEXES):
+
+            matched.append(ChatIntent.APP_LINK)
 
         # pedido de MUDANÇA não pode acionar um card que só recita a agenda:
         # tira os cards passivos do páreo e deixa a mensagem seguir pros fluxos

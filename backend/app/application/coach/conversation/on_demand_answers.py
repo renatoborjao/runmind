@@ -289,7 +289,40 @@ class OnDemandAnswers:
             # cardápio de descoberta — o que dá pra perguntar ao bot
             return HelpMenu.card(runner.name)
 
+        if intent == ChatIntent.APP_LINK:
+
+            return OnDemandAnswers._app_link(profile, runner)
+
         return None
+
+    @staticmethod
+    def _app_link(profile: str, runner: RunnerProfile) -> str:
+        """Gera um magic link de acesso ao app e o entrega no próprio chat —
+        login sem senha e sem depender de e-mail configurado. Uso único, expira."""
+
+        from app.core.config import get_settings
+        from app.infrastructure.persistence.auth_token_repository import (
+            AuthTokenRepository,
+        )
+
+        settings = get_settings()
+
+        token = AuthTokenRepository().issue(
+            profile, ttl_minutes=settings.auth_magic_ttl_minutes
+        )
+
+        link = f"{settings.app_base_url.rstrip('/')}/entrar?token={token}"
+
+        first = (runner.name or "").split(" ")[0] or "corredor"
+
+        return (
+            f"📱 Seu acesso ao app Ritmind\n\n"
+            f"Fala, {first}! Toque no link pra entrar (vale por "
+            f"{settings.auth_magic_ttl_minutes} min, uso único):\n\n"
+            f"{link}\n\n"
+            "No celular, depois de entrar, dá pra instalar: Compartilhar → "
+            "Adicionar à Tela de Início. 🏃"
+        )
 
     @staticmethod
     async def _sleep_impact(profile: str):

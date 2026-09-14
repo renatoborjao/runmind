@@ -40,6 +40,11 @@ class HelpMenu:
                 '• "Quantos km corri em maio?" ou "como foi meu treino em '
                 'junho?" — seu histórico mês a mês',
                 "",
+                "📱 Nosso app",
+                '• "Quero o app" ou "/app" — te mando um link de acesso na hora '
+                "(sem senha) pra abrir o Ritmind no celular: seus treinos, "
+                "calendário, corridas com mapa, evolução e o coach na tela.",
+                "",
                 "👟 Seus tênis",
                 '• "Meus tênis são o Boston e o Vaporfly" (e a km de cada um, '
                 "se souber) — é só me mandar a lista, eu cuido do resto",
@@ -91,6 +96,9 @@ class HelpMenu:
         'peça "monta um treino pra domingo" que eu crio um pros seus dados.',
         "💡 Você sabia? Pode me mandar áudio em vez de digitar — eu te entendo. "
         "E nos momentos especiais (dia da prova, recorde) eu te falo em áudio.",
+        '💡 Você sabia? Temos app! Mande "quero o app" que eu te envio um link '
+        "de acesso (sem senha) pra abrir o Ritmind no celular — treinos, "
+        "calendário, corridas com mapa e sua evolução na tela.",
     ]
 
     @staticmethod

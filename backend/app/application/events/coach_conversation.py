@@ -15,6 +15,7 @@ from app.application.coach.conversation.goal_change_applier import (
     GoalChangeApplier,
 )
 from app.application.coach.conversation.intent_router import (
+    ChatIntent,
     IntentRouter,
 )
 from app.application.coach.conversation.move_skip_flow import MoveSkipFlow
@@ -142,6 +143,30 @@ class CoachConversationEvent:
             print(f"Falha ao capturar RPE de '{profile}': {e}")
 
             reply_text = None
+
+        # intenção analítica/comando detectada UMA vez e reusada mais abaixo (o
+        # cartão determinístico) — evita re-detectar.
+        chat_intent = IntentRouter.detect(incoming_text)
+
+        # Pedido do APP ("/app", "quero o app", "link do aplicativo"): entrega o
+        # magic link de acesso NO PRÓPRIO CHAT — login sem senha, sem depender de
+        # e-mail/SMTP. Fast-path ANTES do cérebro: um pedido de acesso sempre
+        # devolve o link, não vira conversa. Ver [[project_app_atleta]].
+        if reply_text is None and chat_intent == ChatIntent.APP_LINK:
+
+            try:
+
+                reply_text = await OnDemandAnswers.answer(
+                    ChatIntent.APP_LINK, profile, runner
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha ao gerar link do app p/ '{profile}': {e}")
+
+                reply_text = None
 
         # Resposta a uma proposta pendente ("sim/não" a uma troca que o coach
         # ofereceu): resolve ANTES de tudo — o "sim" é resposta à proposta.
@@ -412,11 +437,7 @@ class CoachConversationEvent:
 
                 reply_text = None
 
-        intent = (
-            IntentRouter.detect(incoming_text)
-            if reply_text is None
-            else None
-        )
+        intent = chat_intent if reply_text is None else None
 
         if intent is not None:
 
