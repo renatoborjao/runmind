@@ -483,6 +483,9 @@ class GarminActivitySource:
             "sumDistance": "distance",
             "directRunCadence": "cadence",
             "directDoubleCadence": "cadence",
+            # GPS pro traçado do app (mapa) — extra, não usado pela análise
+            "directLatitude": "lat",
+            "directLongitude": "lon",
         }
 
         index: dict[int, str] = {}

@@ -277,6 +277,30 @@ class GarminActivityPoller:
 
                 return
 
+            # traçado (mapa + parciais) direto do Garmin — independência do
+            # Strava. Aditivo/best-effort: falhar aqui nunca afeta a análise.
+            try:
+
+                from app.infrastructure.persistence.activity_track_repository import (
+                    ActivityTrackRepository,
+                    track_from_garmin_raw,
+                )
+
+                track = track_from_garmin_raw(activity.raw or {})
+
+                if track:
+
+                    ActivityTrackRepository().save(profile, activity_id, track)
+
+                    print(
+                        f"Garmin {activity_id}: traçado guardado "
+                        f"({len(track['points'])} pts, {len(track['splits'])} splits)"
+                    )
+
+            except Exception as track_error:
+
+                print(f"Garmin {activity_id}: traçado indisponível: {track_error}")
+
             await TrainingCompletedEvent.execute(
                 profile=profile,
                 activity=activity,

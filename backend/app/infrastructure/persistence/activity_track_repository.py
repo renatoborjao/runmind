@@ -65,6 +65,64 @@ def track_from_strava_raw(raw: dict) -> dict | None:
     return {"points": points, "splits": splits}
 
 
+def track_from_garmin_raw(raw: dict) -> dict | None:
+    """Extrai {points, splits} do bundle do Garmin (sem passar pelo Strava) —
+    o caminho de independência: GPS dos streams (directLatitude/Longitude) e os
+    parciais por km já calculados (splits_metric: average_speed + FC média).
+    None se não há traçado nem parciais. points é reduzido a no máx. ~600 pontos."""
+
+    if not raw:
+
+        return None
+
+    streams = raw.get("_streams") or {}
+    lats = streams.get("lat") or []
+    lons = streams.get("lon") or []
+
+    points = []
+
+    n = min(len(lats), len(lons))
+
+    if n >= 2:
+
+        step = max(1, n // 600)  # limita o tamanho do arquivo/carga
+
+        for i in range(0, n, step):
+
+            lat, lon = lats[i], lons[i]
+
+            if lat and lon:
+
+                points.append({"lat": round(float(lat), 6), "lon": round(float(lon), 6)})
+
+    splits = []
+
+    for i, s in enumerate(raw.get("splits_metric") or []):
+
+        speed = float(s.get("average_speed") or 0)
+
+        if speed <= 0:
+
+            continue
+
+        sec = 1000 / speed  # tempo do km (s) a partir da velocidade média
+        hr = s.get("average_heartrate")
+
+        splits.append({
+            "km": i + 1,
+            "sec": round(sec, 1),
+            "pace": _fmt_pace(sec),
+            "partial_km": None,
+            "hr": int(round(hr)) if hr else None,
+        })
+
+    if not points and not splits:
+
+        return None
+
+    return {"points": points, "splits": splits}
+
+
 class ActivityTrackRepository:
 
     def __init__(self):

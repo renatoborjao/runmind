@@ -338,11 +338,8 @@ async def _process_strava_activity(
 
             print(f"Garmin ligado: analisando '{profile}' via Garmin")
 
-            # captura o TRAÇADO (mapa+parciais) do Strava mesmo analisando via
-            # Garmin — o relógio sincroniza pro Strava, que tem o polyline. É
-            # aditivo (acervo separado), nunca interfere na análise/carga.
-            await _capture_track(profile, activity_id)
-
+            # o traçado (mapa+parciais) é capturado DENTRO do poll do Garmin,
+            # com o id do Garmin (mesmo id do arquivo) — independe do Strava.
             await GarminActivityPoller.poll_one(profile)
 
             return
