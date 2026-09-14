@@ -30,6 +30,9 @@ function EntrarInner() {
   const [status, setStatus] = useState<Status>(token ? "verifying" : "form");
   const [showEmail, setShowEmail] = useState(false);
 
+  const [code, setCode] = useState("");
+  const [codeStatus, setCodeStatus] = useState<"idle" | "verifying" | "error">("idle");
+
   // Veio de um magic link (?token=): troca por sessão e entra.
   useEffect(() => {
     if (!token) return;
@@ -49,6 +52,19 @@ function EntrarInner() {
     setStatus("sending");
     await requestLogin(email.trim());
     setStatus("sent");
+  }
+
+  async function onCode(e: React.FormEvent) {
+    e.preventDefault();
+    const c = code.trim();
+    if (!c) return;
+    setCodeStatus("verifying");
+    const ok = await verifyToken(c);
+    if (ok) {
+      router.replace("/inicio");
+    } else {
+      setCodeStatus("error");
+    }
   }
 
   if (token) {
@@ -74,19 +90,49 @@ function EntrarInner() {
     <div className="card">
       <h1 className="auth-title">Entrar no Ritmind</h1>
       <p className="auth-sub">
-        Seu acesso é <b>sem senha</b>. Peça o link ao coach no Telegram — chega na
-        hora, no chat.
+        Seu acesso é <b>sem senha</b>. Peça seu código ao coach no Telegram e
+        digite aqui.
+      </p>
+
+      <form onSubmit={onCode}>
+        <div className="field">
+          <label htmlFor="code">Código de acesso</label>
+          <input
+            id="code"
+            type="text"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="one-time-code"
+            placeholder="Ex.: ABC-DEF"
+            value={code}
+            onChange={(e) => {
+              setCode(e.target.value);
+              if (codeStatus === "error") setCodeStatus("idle");
+            }}
+            style={{ textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "var(--font-mono), monospace" }}
+            required
+          />
+        </div>
+        {codeStatus === "error" && (
+          <p className="notice err" style={{ marginTop: 0 }}>
+            Código inválido ou expirado. Peça um novo no Telegram.
+          </p>
+        )}
+        <button className="btn" type="submit" disabled={codeStatus === "verifying"}>
+          {codeStatus === "verifying" ? "Entrando…" : "Entrar"}
+        </button>
+      </form>
+
+      <p className="auth-hint">
+        Não tem código? Abra o coach e mande <b>&quot;quero o app&quot;</b>. 📲
       </p>
 
       <a className="btn btn-tg" href={TELEGRAM_COACH} target="_blank" rel="noopener noreferrer">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
           <path d="M9.8 15.6l-.4 4c.5 0 .7-.2 1-.5l2.4-2.3 5 3.6c.9.5 1.6.2 1.8-.8l3.3-15.3c.3-1.3-.5-1.8-1.4-1.5L1.2 9.4C-.1 9.9 0 10.6 1 10.9l5.2 1.6L18.3 5c.6-.4 1.1-.2.7.2z" />
         </svg>
-        Receber link no Telegram
+        Abrir o coach no Telegram
       </a>
-      <p className="auth-hint">
-        No coach, é só mandar <b>&quot;quero o app&quot;</b> que eu te envio o link. 📲
-      </p>
 
       <div className="auth-or"><span>ou</span></div>
 

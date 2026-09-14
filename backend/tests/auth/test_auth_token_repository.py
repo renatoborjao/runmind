@@ -56,3 +56,34 @@ def test_unknown_token_is_none():
 
         assert repo.consume("nao-existe") is None
         assert repo.consume("") is None
+
+
+def test_issue_code_is_short_typeable_and_single_use():
+
+    with tempfile.TemporaryDirectory() as tmp:
+
+        repo = _repo(tmp)
+
+        code = repo.issue_code("helio", ttl_minutes=20)
+
+        # 6 chars, só do alfabeto sem ambiguidade (nada de 0/O/1/I/L)
+        assert len(code) == 6
+        assert all(c in AuthTokenRepository._CODE_ALPHABET for c in code)
+        assert "0" not in code and "O" not in code and "1" not in code
+
+        assert repo.consume(code) == "helio"
+        assert repo.consume(code) is None  # uso único
+
+
+def test_code_and_token_coexist():
+
+    with tempfile.TemporaryDirectory() as tmp:
+
+        repo = _repo(tmp)
+
+        token = repo.issue("helio", ttl_minutes=20)
+        code = repo.issue_code("helio", ttl_minutes=20)
+
+        # os dois valem (formas diferentes de resgatar o mesmo acesso)
+        assert repo.consume(code) == "helio"
+        assert repo.consume(token) == "helio"

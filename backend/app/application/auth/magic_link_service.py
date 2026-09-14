@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.core.config import get_settings
 from app.infrastructure.integrations.email.email_sender import EmailSender
 from app.infrastructure.persistence.auth_token_repository import (
@@ -79,9 +81,30 @@ class MagicLinkService:
     @staticmethod
     def verify(token: str) -> str | None:
         """Consome o magic token e, se válido, devolve o TOKEN DE SESSÃO
-        (cookie) do atleta. None se o token é inválido/vencido/já usado."""
+        (cookie) do atleta. None se o token é inválido/vencido/já usado.
 
-        profile = AuthTokenRepository().consume(token)
+        Aceita as DUAS formas: o token longo do link (?token=) E o CÓDIGO curto
+        que o atleta digita no app (ex.: "ABC-DEF" → "ABCDEF"). Tenta o valor
+        cru primeiro (link); se falhar, normaliza como código (maiúsculas, só
+        alfanumérico) e tenta de novo."""
+
+        raw = (token or "").strip()
+
+        if not raw:
+
+            return None
+
+        repo = AuthTokenRepository()
+
+        profile = repo.consume(raw)
+
+        if not profile:
+
+            code = re.sub(r"[^A-Za-z0-9]", "", raw).upper()
+
+            if code and code != raw:
+
+                profile = repo.consume(code)
 
         if not profile:
 

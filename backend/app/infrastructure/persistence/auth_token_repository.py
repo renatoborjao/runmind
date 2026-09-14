@@ -76,6 +76,49 @@ class AuthTokenRepository:
 
         return token
 
+    def issue_code(self, profile: str, ttl_minutes: int, length: int = 6) -> str:
+        """Como `issue`, mas gera um CÓDIGO curto e digitável (só letras/dígitos
+        sem ambiguidade — nada de 0/O/1/I/L) pro atleta digitar DENTRO do app.
+        Resolve o iOS: o magic link abre no navegador do Telegram/num contexto
+        diferente do PWA instalado, então o cookie não vale onde ele usa o app;
+        o código digitado na própria tela loga no contexto certo. Guardado igual
+        ao token (mesma consumação de uso único)."""
+
+        now = now_local()
+
+        data = self._load()
+
+        data = {
+            tok: rec
+            for tok, rec in data.items()
+            if not rec.get("used") and self._still_valid(rec, now)
+        }
+
+        # gera um código único entre os pendentes (colisão é rara, mas garante)
+        code = self._new_code(length)
+
+        while code in data:
+
+            code = self._new_code(length)
+
+        data[code] = {
+            "profile": profile,
+            "expires_at": (now + timedelta(minutes=ttl_minutes)).isoformat(),
+            "used": False,
+        }
+
+        self._save(data)
+
+        return code
+
+    # alfabeto sem caracteres ambíguos (0/O, 1/I/L) — fácil de ler e digitar
+    _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+    @classmethod
+    def _new_code(cls, length: int) -> str:
+
+        return "".join(secrets.choice(cls._CODE_ALPHABET) for _ in range(length))
+
     def consume(self, token: str) -> str | None:
         """Valida e QUEIMA o token (uso único). Devolve o perfil se válido;
         None se inexistente, já usado ou vencido."""

@@ -99,3 +99,27 @@ def test_verify_bad_token_returns_none():
     with patch(f"{MOD}.AuthTokenRepository", _FakeTokens):
 
         assert MagicLinkService.verify("nao-existe") is None
+
+
+def test_verify_accepts_formatted_code(tmp_path):
+    """O atleta digita o código com traço e minúsculas ('abc-def') — verify
+    normaliza (maiúsculas, só alfanumérico) e casa com o código guardado."""
+
+    from app.infrastructure.persistence.auth_token_repository import (
+        AuthTokenRepository,
+    )
+
+    repo = AuthTokenRepository()
+    repo.storage = tmp_path
+    repo.file = tmp_path / "magic_tokens.json"
+
+    code = repo.issue_code("renato2", ttl_minutes=20)  # ex.: "ABCDEF"
+
+    with patch(f"{MOD}.AuthTokenRepository", lambda: repo):
+
+        typed = f"{code[:3].lower()} {code[3:].lower()}"  # espaço + minúsculas
+
+        session = MagicLinkService.verify(typed)
+
+    assert session is not None
+    assert SessionToken.verify(session) == "renato2"

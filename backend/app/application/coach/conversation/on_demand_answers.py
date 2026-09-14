@@ -307,21 +307,33 @@ class OnDemandAnswers:
 
         settings = get_settings()
 
-        token = AuthTokenRepository().issue(
-            profile, ttl_minutes=settings.auth_magic_ttl_minutes
-        )
+        repo = AuthTokenRepository()
+
+        ttl = settings.auth_magic_ttl_minutes
+
+        # CÓDIGO (digitado no app) é o caminho à prova de iOS: o link abre no
+        # navegador do Telegram/num contexto diferente do app instalado e o
+        # login não "gruda" onde ele usa o app; o código digitado na própria
+        # tela loga no contexto certo. Link fica como atalho (desktop/1ª vez).
+        code = repo.issue_code(profile, ttl_minutes=ttl)
+
+        token = repo.issue(profile, ttl_minutes=ttl)
 
         link = f"{settings.app_base_url.rstrip('/')}/entrar?token={token}"
+
+        pretty = f"{code[:3]}-{code[3:]}" if len(code) == 6 else code
 
         first = (runner.name or "").split(" ")[0] or "corredor"
 
         return (
-            f"📱 Seu acesso ao app Ritmind\n\n"
-            f"Fala, {first}! Toque no link pra entrar (vale por "
-            f"{settings.auth_magic_ttl_minutes} min, uso único):\n\n"
-            f"{link}\n\n"
-            "No celular, depois de entrar, dá pra instalar: Compartilhar → "
-            "Adicionar à Tela de Início. 🏃"
+            "📱 Seu acesso ao app Ritmind\n\n"
+            f"Fala, {first}! Abra o app ({settings.app_base_url}) e digite "
+            "este código pra entrar:\n\n"
+            f"🔑 {pretty}\n\n"
+            f"(vale por {ttl} min, uso único)\n\n"
+            "No iPhone, se você já instalou o app na tela inicial, abra por ali "
+            "e digite o código — é o jeito certo.\n\n"
+            f"Se preferir, dá pra tocar no link (funciona melhor no computador): {link}"
         )
 
     @staticmethod
