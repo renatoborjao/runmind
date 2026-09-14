@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import BottomNav from "../bottom-nav";
 import {
   getHome,
   getMe,
@@ -136,7 +137,7 @@ export default function InicioPage() {
 
   return (
     <main className="stage">
-      <div className="phone">
+      <div className="phone has-nav">
 
         <div className="topbar">
           <div className="brand"><Mark /><span className="word">Rit<b>mind</b></span></div>
@@ -296,6 +297,7 @@ export default function InicioPage() {
         <p className="muted center" style={{ marginTop: 2 }}>Ritmind · {home.athlete.goal}</p>
 
       </div>
+      <BottomNav />
     </main>
   );
 }

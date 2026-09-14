@@ -208,6 +208,26 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 
 .topbar { display: flex; align-items: center; justify-content: space-between; }
 
+/* barra de navegação inferior */
+.has-nav { padding-bottom: 80px; }
+.bottomnav {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 0;
+  width: 100%; max-width: 430px; z-index: 50;
+  display: flex; justify-content: space-around;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+  padding: 9px 6px calc(9px + env(safe-area-inset-bottom, 0px));
+}
+.bottomnav a {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  color: var(--muted); text-decoration: none; cursor: pointer;
+  font-size: 10px; font-weight: 600; font-family: var(--font-body), sans-serif;
+  flex: 1; padding: 2px 0;
+}
+.bottomnav a.on { color: var(--accent-ink); }
+.bottomnav svg { width: 22px; height: 22px; }
+
 /* clicável */
 .tap { cursor: pointer; }
 .tap:active { transform: scale(.995); }

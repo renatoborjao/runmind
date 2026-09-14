@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import BottomNav from "../bottom-nav";
 import { getHome, type TodaySession, type WorkoutStep } from "@/lib/api";
 
 const STEP_PT: Record<string, string> = {
@@ -107,7 +108,7 @@ export default function TreinoPage() {
 
   return (
     <main className="stage">
-      <div className="phone treino-screen">
+      <div className="phone treino-screen has-nav">
 
         <header className="appbar">
           <button className="icon-btn" aria-label="Voltar" onClick={() => router.push("/inicio")}>
@@ -159,6 +160,7 @@ export default function TreinoPage() {
         )}
 
       </div>
+      <BottomNav />
     </main>
   );
 }
