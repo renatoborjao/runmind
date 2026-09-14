@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.presentation.api.v1 import activities
+from app.presentation.api.v1 import auth
 from app.presentation.api.v1 import debug
 from app.presentation.api.v1 import events
 from app.presentation.api.v1 import evolution
@@ -15,6 +16,8 @@ from app.presentation.api.v1 import webhooks
 router = APIRouter()
 
 router.include_router(health.router)
+
+router.include_router(auth.router)
 
 router.include_router(strava.router)
 

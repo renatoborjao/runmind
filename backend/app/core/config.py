@@ -35,6 +35,39 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # ==========================
+    # APP WEB (PWA) + AUTH
+    # ==========================
+
+    # URL pública do app do atleta (frontend) — base dos links de magic login
+    # que vão no e-mail. Em produção vem do .env (ex.: https://app.ritmind.com).
+    app_base_url: str = "http://localhost:3000"
+
+    # Segredo que assina o cookie de sessão (HMAC). TROCAR no .env em produção
+    # (vazio em dev usa um piso de desenvolvimento — nunca em produção).
+    auth_session_secret: str = ""
+
+    # Validade da sessão logada (dias) e do link mágico (minutos).
+    auth_session_ttl_days: int = 30
+    auth_magic_ttl_minutes: int = 20
+
+    # nome do cookie de sessão
+    auth_cookie_name: str = "rm_session"
+
+    # ==========================
+    # E-MAIL (SMTP) — envio dos magic links
+    # ==========================
+
+    # Vazio = modo DEV: o link é impresso no log em vez de enviado (dá pra
+    # testar sem SMTP). Preenchido = envia de verdade (ex.: Gmail com app
+    # password, grátis: smtp.gmail.com:587).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_from_name: str = "Ritmind"
+
+    # ==========================
     # SUPABASE
     # ==========================
 

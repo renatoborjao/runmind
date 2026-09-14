@@ -118,6 +118,26 @@ class RunnerProfileRepository:
 
         return None
 
+    def find_by_email(
+        self,
+        email: str,
+    ) -> str | None:
+        """Perfil dono deste e-mail (case-insensitive). None se ninguém."""
+
+        target = email.strip().lower()
+
+        if not target:
+
+            return None
+
+        for profile, runner in self._valid_profiles():
+
+            if runner.email and runner.email.strip().lower() == target:
+
+                return profile
+
+        return None
+
     def find_by_telegram_id(
         self,
         telegram_id: str,

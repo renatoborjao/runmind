@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
@@ -14,6 +14,7 @@ from app.application.use_cases.load_runner_profile import (
     LoadRunnerProfile,
 )
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
+from app.presentation.api.deps import current_profile
 
 router = APIRouter(
     prefix="/plan",
@@ -22,7 +23,7 @@ router = APIRouter(
 
 
 @router.get("")
-async def get_plan(profile: str):
+async def get_plan(profile: str = Depends(current_profile)):
 
     try:
 

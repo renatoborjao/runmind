@@ -85,6 +85,10 @@ class RunnerProfile:
 
     telegram_id: str | None = None
 
+    # E-mail do atleta — identidade de acesso ao app (login por magic link).
+    # Opcional: quem só usa o bot pode não ter. Único por atleta.
+    email: str | None = None
+
     # Fuso horário do atleta (IANA, ex.: "Europe/Lisbon"). Guia as datas do
     # coach (hoje/amanhã, semana) e o horário dos disparos. Default Brasil;
     # ajustável por atleta (ex.: amigo em Portugal).
