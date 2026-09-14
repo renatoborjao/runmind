@@ -242,7 +242,8 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .run-v { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 26px; font-variant-numeric: tabular-nums; }
 .run-l { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
 .run-actions { display: flex; gap: 10px; }
-.run-btn { flex: 1; border: none; cursor: pointer; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; padding: 16px; border-radius: 16px; transition: transform .1s ease, opacity .1s ease; }
+.run-actions .run-btn { flex: 1; }
+.run-btn { width: 100%; flex: none; border: none; cursor: pointer; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; padding: 18px; border-radius: 16px; transition: transform .1s ease, opacity .1s ease; }
 .run-btn:active { transform: scale(.98); }
 .run-btn.go { background: var(--accent); color: #04231d; }
 .run-btn.hold { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
