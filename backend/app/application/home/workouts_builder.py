@@ -7,6 +7,7 @@ from app.application.home.home_summary_builder import (
     _WEEK_EN,
     _kind,
     HomeSummaryBuilder,
+    planned_km,
 )
 from app.core.clock import now_local
 from app.infrastructure.persistence.runner_profile_repository import (
@@ -72,7 +73,7 @@ class WorkoutsBuilder:
         return {
             "workout_type": s.workout_type,
             "objective": s.objective,
-            "distance_km": s.planned_distance_km,
+            "distance_km": planned_km(s),
             "duration_min": s.planned_duration_minutes,
             "pace_min": s.target_pace_min,
             "pace_max": s.target_pace_max,

@@ -12,6 +12,7 @@ from app.infrastructure.persistence.race_prediction_repository import (
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+from app.domain.entities.workout_step import total_distance_km
 from app.infrastructure.persistence.shoe_repository import ShoeRepository
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
@@ -52,6 +53,25 @@ def _kind(workout_type: str) -> str:
         return "long"
 
     return "rod"
+
+
+def planned_km(session) -> float | None:
+    """Distância PLANEJADA que o atleta vê — a soma dos BLOCOS (aquecimento +
+    principal + recuperações + desaquecimento), que é o número real do treino e
+    o que o coach comunica. Cai no campo solto planned_distance_km só quando os
+    passos são por tempo/ausentes (soma não confiável)."""
+
+    steps = getattr(session, "steps", None)
+
+    if steps:
+
+        total = total_distance_km(steps)
+
+        if total is not None:
+
+            return total
+
+    return session.planned_distance_km
 
 
 class HomeSummaryBuilder:
@@ -126,7 +146,7 @@ class HomeSummaryBuilder:
         return {
             "workout_type": session.workout_type,
             "objective": session.objective,
-            "distance_km": session.planned_distance_km,
+            "distance_km": planned_km(session),
             "duration_min": session.planned_duration_minutes,
             "pace_min": session.target_pace_min,
             "pace_max": session.target_pace_max,

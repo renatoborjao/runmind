@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.presentation.api.v1 import activities
 from app.presentation.api.v1 import auth
+from app.presentation.api.v1 import calendar
 from app.presentation.api.v1 import debug
 from app.presentation.api.v1 import events
 from app.presentation.api.v1 import evolution
@@ -40,6 +41,8 @@ router.include_router(plan.router)
 router.include_router(home.router)
 
 router.include_router(workouts.router)
+
+router.include_router(calendar.router)
 
 router.include_router(debug.router)
 

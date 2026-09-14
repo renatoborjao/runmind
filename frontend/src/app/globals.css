@@ -232,7 +232,12 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .tap { cursor: pointer; }
 .tap:active { transform: scale(.995); }
 
+/* navegação de mês */
+.month-nav { display: flex; align-items: center; justify-content: space-between; }
+.month-nav .mlabel { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; }
+
 /* calendário */
+.cal-cell .cdot.ring { background: transparent !important; border: 1.5px solid var(--accent); }
 .cal-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
 .cal-head span { text-align: center; font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--muted); letter-spacing: .04em; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
@@ -253,6 +258,16 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .wrow .info .wt { font-weight: 600; font-size: 14px; }
 .wrow .info .wd { font-size: 12px; color: var(--muted); }
 .wrow .kdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* comparação planejado × executado */
+.cmp { display: flex; flex-direction: column; }
+.cmp-row { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; padding: 10px 0; gap: 8px; }
+.cmp-row + .cmp-row { border-top: 1px solid var(--line); }
+.cmp-head { padding: 0 0 8px; }
+.cmp-head span { font-family: var(--font-mono), monospace; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cmp-row .cl { font-weight: 600; font-size: 13px; }
+.cmp-row .mono { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 13.5px; }
+.cmp-row span:nth-child(2), .cmp-row span:nth-child(3) { text-align: right; }
 
 /* card de prova */
 .race { display: flex; align-items: center; gap: 14px; }
