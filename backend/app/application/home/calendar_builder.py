@@ -103,11 +103,11 @@ class CalendarBuilder:
                     }
                 )
 
-        executed_dates = {e["date_iso"] for e in executed}
-
-        # corridas gravadas no APP (GPS) — pintam o dia SÓ quando não há um treino
-        # arquivado (Strava/Garmin) na mesma data, pra não contar 2x quem
-        # sincroniza. Ver [[project_independencia_strava]].
+        # corridas gravadas no APP (GPS) — são só MAIS UMA base (como Garmin↔
+        # Strava). Entram no calendário normalmente; o único dedup é por CORRIDA
+        # (mesma data + distância ~igual = a mesma corrida vinda de outra fonte,
+        # não repete). A análise do treino segue no Garmin pra quem tem conectado
+        # — isso é decidido em outra camada, não aqui.
         for r in CalendarBuilder._safe(
             lambda: RecordedRunRepository().load(profile)
         ) or []:
@@ -118,14 +118,20 @@ class CalendarBuilder:
 
                 continue
 
-            if d.isoformat() in executed_dates:
+            km = round((r.get("distance_m") or 0) / 1000, 1)
+            iso = d.isoformat()
+
+            # mesma corrida já presente por outra base? (data + distância ~igual)
+            if any(
+                e["date_iso"] == iso and abs(e["km"] - km) < 0.6 for e in executed
+            ):
 
                 continue
 
             executed.append(
                 {
-                    "date_iso": d.isoformat(),
-                    "km": round((r.get("distance_m") or 0) / 1000, 1),
+                    "date_iso": iso,
+                    "km": km,
                     "pace": r.get("avg_pace"),
                     "duration_min": round((r.get("duration_s") or 0) / 60),
                     "name": "Corrida no app",
@@ -135,7 +141,7 @@ class CalendarBuilder:
                 }
             )
 
-            executed_dates.add(d.isoformat())
+        executed_dates = {e["date_iso"] for e in executed}
 
         # planejados FUTUROS (>= hoje) do plano atual que caem no mês — dias
         # passados já mostram o executado, não faz sentido "planejar" o passado
