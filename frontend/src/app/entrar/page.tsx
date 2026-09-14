@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { requestLogin, verifyToken } from "@/lib/api";
 
+const TELEGRAM_COACH = "https://t.me/runmind_coach_bot";
+
 function Wordmark() {
   return (
     <div className="brand">
@@ -26,6 +28,7 @@ function EntrarInner() {
 
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>(token ? "verifying" : "form");
+  const [showEmail, setShowEmail] = useState(false);
 
   // Veio de um magic link (?token=): troca por sessão e entra.
   useEffect(() => {
@@ -71,41 +74,62 @@ function EntrarInner() {
     <div className="card">
       <h1 className="auth-title">Entrar no Ritmind</h1>
       <p className="auth-sub">
-        Digite seu e-mail que a gente manda um link de acesso — sem senha.
+        Seu acesso é <b>sem senha</b>. Peça o link ao coach no Telegram — chega na
+        hora, no chat.
       </p>
 
-      {status === "sent" ? (
-        <>
-          <div className="notice ok">
-            Se este e-mail estiver cadastrado, o link de acesso já está a caminho.
-            Confira sua caixa de entrada. 📬
-          </div>
-          <p className="muted center" style={{ marginTop: 16 }}>
-            Não chegou?{" "}
-            <a className="link" onClick={() => setStatus("form")}>
-              Tentar de novo
-            </a>
-          </p>
-        </>
+      <a className="btn btn-tg" href={TELEGRAM_COACH} target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
+          <path d="M9.8 15.6l-.4 4c.5 0 .7-.2 1-.5l2.4-2.3 5 3.6c.9.5 1.6.2 1.8-.8l3.3-15.3c.3-1.3-.5-1.8-1.4-1.5L1.2 9.4C-.1 9.9 0 10.6 1 10.9l5.2 1.6L18.3 5c.6-.4 1.1-.2.7.2z" />
+        </svg>
+        Receber link no Telegram
+      </a>
+      <p className="auth-hint">
+        No coach, é só mandar <b>&quot;quero o app&quot;</b> que eu te envio o link. 📲
+      </p>
+
+      <div className="auth-or"><span>ou</span></div>
+
+      {showEmail ? (
+        status === "sent" ? (
+          <>
+            <div className="notice ok">
+              Se este e-mail estiver cadastrado, o link de acesso já está a caminho.
+              Confira sua caixa de entrada. 📬
+            </div>
+            <p className="muted center" style={{ marginTop: 16 }}>
+              Não chegou?{" "}
+              <a className="link" onClick={() => setStatus("form")}>
+                Tentar de novo
+              </a>
+            </p>
+          </>
+        ) : (
+          <form onSubmit={onSubmit}>
+            <div className="field">
+              <label htmlFor="email">Seu e-mail</label>
+              <input
+                id="email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="voce@exemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <button className="btn" type="submit" disabled={status === "sending"}>
+              {status === "sending" ? "Enviando…" : "Enviar link por e-mail"}
+            </button>
+          </form>
+        )
       ) : (
-        <form onSubmit={onSubmit}>
-          <div className="field">
-            <label htmlFor="email">Seu e-mail</label>
-            <input
-              id="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              placeholder="voce@exemplo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <button className="btn" type="submit" disabled={status === "sending"}>
-            {status === "sending" ? "Enviando…" : "Enviar link de acesso"}
-          </button>
-        </form>
+        <p className="muted center" style={{ margin: 0 }}>
+          <a className="link" onClick={() => setShowEmail(true)}>
+            Entrar por e-mail
+          </a>
+        </p>
       )}
     </div>
   );

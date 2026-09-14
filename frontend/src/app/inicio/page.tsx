@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import NotifBell from "../notif-bell";
 import InstallBanner from "../install-banner";
+import EmailCapture from "../email-capture";
 import {
   getBody,
   getHome,
@@ -241,6 +242,7 @@ export default function InicioPage() {
         </div>
 
         <InstallBanner />
+        <EmailCapture />
 
         {/* PRONTIDÃO (anel: prontidão do Garmin ou, na falta, bateria ao acordar) */}
         {body && body.ring && (() => {

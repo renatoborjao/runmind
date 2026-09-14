@@ -503,4 +503,23 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .install-banner .ib-btn:active { transform: scale(.98); }
 .install-banner .ib-x { position: absolute; top: 8px; right: 10px; border: none; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 4px; }
 
+/* captar e-mail no app */
+.email-capture { position: relative; display: flex; gap: 11px; align-items: flex-start; padding: 13px 34px 13px 13px; }
+.email-capture .ec-ic { font-size: 20px; line-height: 1.2; flex: none; }
+.email-capture .ec-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.email-capture .ec-body strong { font-family: var(--font-display), sans-serif; font-size: 13.5px; }
+.email-capture .ec-body > span { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.email-capture .ec-row { display: flex; gap: 8px; margin-top: 6px; }
+.email-capture .ec-row input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-size: 14px; }
+.email-capture .ec-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+.email-capture .ec-row .ib-btn { margin: 0; flex: none; }
+.email-capture .ec-err { font-size: 12px; color: var(--rose); }
+
+/* login: botão Telegram + divisor */
+.btn-tg { background: #229ED9; color: #fff; display: flex; align-items: center; justify-content: center; gap: 9px; text-decoration: none; }
+.btn-tg:active { transform: scale(.99); }
+.auth-hint { margin: 10px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); text-align: center; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; color: var(--muted); font-size: 12px; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
