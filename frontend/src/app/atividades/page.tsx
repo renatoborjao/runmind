@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
   getFeed,
-  getRecordedRun,
+  getTrack,
   type FeedItem,
-  type RecordedRunDetail,
+  type TrackData,
 } from "@/lib/api";
 
 function Mark() {
@@ -62,7 +62,7 @@ export default function AtividadesPage() {
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState<FeedItem | null>(null);
-  const [track, setTrack] = useState<RecordedRunDetail | null>(null);
+  const [track, setTrack] = useState<TrackData | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
 
   useEffect(() => {
@@ -77,9 +77,9 @@ export default function AtividadesPage() {
   async function open(it: FeedItem) {
     setSel(it);
     setTrack(null);
-    if (it.has_track && it.run_id) {
+    if (it.has_track) {
       setLoadingTrack(true);
-      setTrack(await getRecordedRun(it.run_id));
+      setTrack(await getTrack(it));
       setLoadingTrack(false);
     }
   }

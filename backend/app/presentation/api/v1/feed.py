@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
+)
+from app.infrastructure.persistence.activity_track_repository import (
+    ActivityTrackRepository,
 )
 from app.infrastructure.persistence.recorded_run_repository import (
     RecordedRunRepository,
@@ -59,9 +62,13 @@ async def activity_feed(profile: str = Depends(current_profile)):
         if _is_run(a.sport)
     ]
 
+    tracks = ActivityTrackRepository().load(profile)  # id_str -> {points,splits}
+
     items: list[dict] = []
 
     for a in archived:
+
+        has_arch_track = str(a.id) in tracks
 
         items.append(
             {
@@ -75,8 +82,9 @@ async def activity_feed(profile: str = Depends(current_profile)):
                 "avg_hr": int(a.average_heartrate) if a.average_heartrate else None,
                 "elevation_gain": round(a.elevation_gain) if a.elevation_gain else None,
                 "name": a.name,
-                "has_track": False,
-                "run_id": None,
+                "has_track": has_arch_track,
+                "track_source": "arch" if has_arch_track else None,
+                "track_id": str(a.id) if has_arch_track else None,
             }
         )
 
@@ -102,8 +110,11 @@ async def activity_feed(profile: str = Depends(current_profile)):
 
         if match is not None:
 
+            # mesma corrida: mantém os stats da arquivada e anexa o traçado do
+            # app (tem pontos km-a-km, mais rico que o polyline resumido)
             match["has_track"] = True
-            match["run_id"] = r["id"]
+            match["track_source"] = "app"
+            match["track_id"] = r["id"]
 
             continue
 
@@ -120,10 +131,28 @@ async def activity_feed(profile: str = Depends(current_profile)):
                 "elevation_gain": None,
                 "name": "Corrida no app",
                 "has_track": True,
-                "run_id": r["id"],
+                "track_source": "app",
+                "track_id": r["id"],
             }
         )
 
     items.sort(key=lambda x: x.get("datetime") or "", reverse=True)
 
     return {"activities": items}
+
+
+@router.get("/track/{activity_id}")
+async def activity_track(activity_id: str, profile: str = Depends(current_profile)):
+    """Traçado (pontos + parciais) de uma atividade sincronizada (Strava/Garmin)
+    guardado no acervo de traçados. Corridas do app vêm por /recorded-runs/{id}."""
+
+    track = ActivityTrackRepository().get(profile, activity_id)
+
+    if track is None:
+
+        raise HTTPException(status_code=404, detail="Sem traçado pra esta atividade.")
+
+    return {
+        "points": track.get("points", []),
+        "splits": track.get("splits", []),
+    }

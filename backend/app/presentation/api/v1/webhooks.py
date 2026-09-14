@@ -276,6 +276,43 @@ async def _send_deletion_retraction(
         )
 
 
+async def _capture_track(profile: str, activity_id: int, activity=None) -> None:
+    """Guarda o traçado (mapa + parciais) da atividade no acervo de traçados —
+    aditivo e best-effort: qualquer falha só loga, nunca derruba o webhook nem
+    toca a análise/carga. `activity` já buscada é reaproveitada; senão busca do
+    Strava (o Garmin sincroniza pra lá, que tem o polyline)."""
+
+    try:
+
+        from app.infrastructure.persistence.activity_track_repository import (
+            ActivityTrackRepository,
+            track_from_strava_raw,
+        )
+
+        if activity is None:
+
+            activity = await StravaClient(profile).get_activity(activity_id)
+
+        if not is_foot_sport(activity.sport):
+
+            return
+
+        track = track_from_strava_raw(activity.raw or {})
+
+        if track:
+
+            ActivityTrackRepository().save(profile, activity_id, track)
+
+            print(
+                f"Traçado guardado p/ {activity_id} ({profile}): "
+                f"{len(track['points'])} pontos, {len(track['splits'])} splits"
+            )
+
+    except Exception as e:
+
+        print(f"Traçado indisponível p/ {activity_id} ({profile}): {e}")
+
+
 async def _process_strava_activity(
     owner_id: int,
     activity_id: int,
@@ -301,6 +338,11 @@ async def _process_strava_activity(
 
             print(f"Garmin ligado: analisando '{profile}' via Garmin")
 
+            # captura o TRAÇADO (mapa+parciais) do Strava mesmo analisando via
+            # Garmin — o relógio sincroniza pro Strava, que tem o polyline. É
+            # aditivo (acervo separado), nunca interfere na análise/carga.
+            await _capture_track(profile, activity_id)
+
             await GarminActivityPoller.poll_one(profile)
 
             return
@@ -308,6 +350,9 @@ async def _process_strava_activity(
         client = StravaClient(profile)
 
         activity = await client.get_activity(activity_id)
+
+        # guarda o traçado pra aba Atividades (best-effort)
+        await _capture_track(profile, activity_id, activity)
 
         # stream segundo-a-segundo (velocidade/FC): revela tiros curtos
         # que os splits por km borram. Indisponível NUNCA derruba o fluxo.
