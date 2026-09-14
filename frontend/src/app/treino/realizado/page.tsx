@@ -59,7 +59,7 @@ function RealizadoInner() {
                 {ex.is_ours ? "Treino Ritmind" : "Treino avulso"}
               </span>
             </div>
-            <h1>{ex.name.replace(/^.*ritmind\s*·?\s*/i, "").trim() || ex.name}</h1>
+            <h1>{ex.name.replace(/^.*(ritmind|runmind)\s*·?\s*/i, "").trim() || ex.name}</h1>
           </div>
 
           {/* o que foi feito */}

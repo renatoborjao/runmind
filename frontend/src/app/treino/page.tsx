@@ -81,7 +81,7 @@ export default function TreinoPage() {
     if (!cal) return [] as { iso: string; kind: string; title: string; sub: string; done: boolean; day_en?: string }[];
     const ex = cal.executed.map((e) => ({
       iso: e.date_iso, kind: e.kind, done: true, day_en: undefined as string | undefined,
-      title: e.name.replace(/^.*ritmind\s*·?\s*/i, "").trim() || e.name,
+      title: e.name.replace(/^.*(ritmind|runmind)\s*·?\s*/i, "").trim() || e.name,
       sub: `${e.km.toString().replace(".", ",")} km${e.pace ? ` · ${e.pace}/km` : ""}`,
     }));
     const pl = cal.planned.map((p) => ({
