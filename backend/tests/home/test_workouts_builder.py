@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -67,7 +67,7 @@ def test_anchors_to_plan_week_start_not_current_week():
     Os treinos têm que cair NESSA semana, não na atual."""
 
     plan = SimpleNamespace(
-        week_start="2026-09-14",  # próxima segunda
+        week_start=date(2026, 9, 14),  # próxima segunda (entidade usa date)
         sessions=[_session("Tuesday", "Fartlek")],
     )
     runner = SimpleNamespace(target_race=None, race_date=None, target_time=None)

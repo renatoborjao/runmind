@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -87,7 +87,7 @@ def test_today_shows_next_workout_when_plan_is_future_week():
     card destaca o PRÓXIMO treino, não um treino no dia errado."""
 
     plan = SimpleNamespace(
-        week_start="2026-09-14",
+        week_start=date(2026, 9, 14),  # entidade real usa date
         sessions=[_session("Tuesday", "Fartlek")],
     )
     profiles = SimpleNamespace(load=lambda p: SimpleNamespace(name="R", goal="x"))

@@ -103,13 +103,18 @@ class HomeSummaryBuilder:
 
         ws = getattr(plan, "week_start", None) if plan else None
 
-        if ws:
+        # week_start pode vir como date (entidade) ou str (JSON) — aceita os dois
+        if isinstance(ws, date):
+
+            return ws
+
+        if isinstance(ws, str):
 
             try:
 
                 return date.fromisoformat(ws)
 
-            except (ValueError, TypeError):
+            except ValueError:
 
                 pass
 
