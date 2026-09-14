@@ -232,6 +232,36 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .tap { cursor: pointer; }
 .tap:active { transform: scale(.995); }
 
+/* calendário */
+.cal-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+.cal-head span { text-align: center; font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--muted); letter-spacing: .04em; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-cell { aspect-ratio: 1; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--ink-soft); position: relative; }
+.cal-cell.empty { visibility: hidden; }
+.cal-cell.has { background: var(--surface-2); cursor: pointer; }
+.cal-cell.today { outline: 1.5px solid var(--accent); color: var(--ink); }
+.cal-cell .cdot { width: 6px; height: 6px; border-radius: 50%; }
+.cal-cell .flag { position: absolute; top: 4px; right: 6px; font-size: 11px; line-height: 1; }
+
+/* lista de treinos */
+.wrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; cursor: pointer; }
+.wrow + .wrow { border-top: 1px solid var(--line); }
+.wrow .date { text-align: center; flex: none; width: 42px; }
+.wrow .date .dn { font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--muted); text-transform: uppercase; }
+.wrow .date .dd { font-weight: 700; font-size: 16px; }
+.wrow .info { flex: 1; min-width: 0; }
+.wrow .info .wt { font-weight: 600; font-size: 14px; }
+.wrow .info .wd { font-size: 12px; color: var(--muted); }
+.wrow .kdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* card de prova */
+.race { display: flex; align-items: center; gap: 14px; }
+.race .cd { text-align: center; flex: none; background: color-mix(in srgb, var(--rose) 14%, var(--surface)); border-radius: 14px; padding: 10px 12px; }
+.race .cd .n { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: var(--rose); line-height: 1; }
+.race .cd .l { font-family: var(--font-mono), monospace; font-size: 8.5px; color: var(--rose); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
+.race .info .rn { font-weight: 700; font-size: 14px; }
+.race .info .rd { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
 /* ===== tela de treino (escopada em .treino-screen) ===== */
 .appbar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .icon-btn { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; cursor: pointer; flex: none; color: var(--ink); }

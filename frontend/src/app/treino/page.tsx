@@ -1,77 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
-import { getHome, type TodaySession, type WorkoutStep } from "@/lib/api";
+import { getWorkouts, type WorkoutsResponse } from "@/lib/api";
 
-const STEP_PT: Record<string, string> = {
-  warmup: "Aquecimento",
-  cooldown: "Desaquecimento",
-  run: "Rodagem",
-  interval: "Tiro forte",
-  recovery: "Recuperação",
-  rest: "Descanso",
+const KIND_COLOR: Record<string, string> = {
+  tiro: "var(--rose)",
+  rod: "var(--accent)",
+  long: "#E1911A",
 };
 
-function kindColor(kind: string): string {
-  if (kind === "interval") return "hard";
-  if (kind === "recovery") return "rec";
-  if (kind === "rest") return "walk";
-  return "warm";
-}
+const WEEKDAY_HEAD = ["D", "S", "T", "Q", "Q", "S", "S"];
+const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
-function amount(s: WorkoutStep): string {
-  if (s.distance_m != null)
-    return s.distance_m >= 1000
-      ? `${(s.distance_m / 1000).toString().replace(".", ",")} km`
-      : `${s.distance_m} m`;
-  if (s.duration_sec != null)
-    return s.duration_sec >= 60 ? `${Math.round(s.duration_sec / 60)} min` : `${s.duration_sec}s`;
-  return "livre";
-}
-
-function pace(s: WorkoutStep): string {
-  if (s.pace_min && s.pace_max) return `${s.pace_min}–${s.pace_max}`;
-  if (s.pace_min) return s.pace_min;
-  return "leve";
-}
-
-function Step({ s, n }: { s: WorkoutStep; n: number }) {
-  const c = kindColor(s.kind);
+function Mark() {
   return (
-    <div className="tstep">
-      <span className={`stripe ${c}`} />
-      <span className="idx">{n}</span>
-      <div className="main">
-        <div className="t">{STEP_PT[s.kind] ?? s.kind}</div>
-        <div className="d">{amount(s)}</div>
-      </div>
-      <span className={`chip ${c}`}>{pace(s)}</span>
-    </div>
+    <span className="mark" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h4l2.5-7 4 15 2.5-8H22" /></svg>
+    </span>
   );
 }
 
 export default function TreinoPage() {
   const router = useRouter();
-  const [session, setSession] = useState<TodaySession | null>(null);
+  const [w, setW] = useState<WorkoutsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [place, setPlace] = useState<"livre" | "esteira">("livre");
-  const [startMsg, setStartMsg] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const home = await getHome();
-      if (!home) {
+      const data = await getWorkouts();
+      if (!data) {
         router.replace("/entrar");
         return;
       }
-      setSession(home.today.session);
+      setW(data);
       setLoading(false);
     })();
   }, [router]);
 
-  if (loading) {
+  // mapa data_iso -> {kind, day_en} pros dias com treino
+  const byDate = useMemo(() => {
+    const m = new Map<string, { kind: string; day_en: string }>();
+    w?.week.forEach((d) => {
+      if (d.session) m.set(d.date_iso, { kind: d.session.kind, day_en: d.day_en });
+    });
+    return m;
+  }, [w]);
+
+  if (loading || !w) {
     return (
       <main className="stage">
         <div className="phone center" style={{ justifyContent: "center", flex: 1 }}>
@@ -81,83 +58,106 @@ export default function TreinoPage() {
     );
   }
 
-  // numeração contínua dos passos (incluindo dentro do "repetir")
-  let n = 0;
-  const rows: React.ReactNode[] = [];
-  for (const s of session?.steps ?? []) {
-    if (s.kind === "repeat" && s.steps) {
-      rows.push(
-        <div className="repeat" key={`r${rows.length}`}>
-          <div className="repeat-head">
-            <span className="rp">Repetir</span>
-            <span className="xn">{s.reps}×</span>
-          </div>
-          <div className="blocks">
-            {s.steps.map((c) => {
-              n += 1;
-              return <Step key={n} s={c} n={n} />;
-            })}
-          </div>
-        </div>
-      );
-    } else {
-      n += 1;
-      rows.push(<Step key={n} s={s} n={n} />);
-    }
-  }
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const todayIso = `${year}-${String(month + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const raceIso = w.race?.date_iso ?? null;
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const sessions = w.week.filter((d) => d.session);
 
   return (
     <main className="stage">
-      <div className="phone treino-screen has-nav">
+      <div className="phone has-nav">
 
-        <header className="appbar">
-          <button className="icon-btn" aria-label="Voltar" onClick={() => router.push("/inicio")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <div className="title"><div className="k">Treino de hoje</div><div className="t">Corrida</div></div>
-          <span style={{ width: 34 }} />
-        </header>
+        <div className="topbar">
+          <div className="brand"><Mark /><span className="word">Rit<b>mind</b></span></div>
+        </div>
 
-        {!session ? (
-          <div className="card center">
-            <h2 style={{ fontFamily: "var(--font-display)", margin: "0 0 6px" }}>Dia de descanso</h2>
-            <p className="muted" style={{ margin: 0 }}>Sem treino no plano hoje. Recuperar também é treinar. 😴</p>
-          </div>
-        ) : (
-          <>
-            <div>
-              <div className="kicker"><span className="pill">{session.workout_type}</span></div>
-              <h1>{session.workout_type}{session.distance_km ? ` · ${String(session.distance_km).replace(".", ",")} km` : ""}</h1>
-              <p className="intro">{session.objective}</p>
-            </div>
+        <div className="greet">
+          <h1>Treinos</h1>
+          <p style={{ textTransform: "capitalize" }}>{MONTHS[month]} de {year}</p>
+        </div>
 
-            <div className="qstats">
-              <div className="qstat"><div className="v">{session.distance_km ? String(session.distance_km).replace(".", ",") : "—"}<small> km</small></div><div className="k">Distância</div></div>
-              <div className="qstat"><div className="v">{session.pace_min ?? "—"}<small>{session.pace_min ? "/km" : ""}</small></div><div className="k">Pace-alvo</div></div>
-              <div className="qstat"><div className="v">{session.steps.length}</div><div className="k">Blocos</div></div>
-            </div>
-
-            <div className="topbar" style={{ marginTop: 2 }}>
-              <span className="eyebrow">Blocos de treino</span>
-              <div className="toggle" role="group" aria-label="Local do treino">
-                <button className={place === "livre" ? "on" : ""} onClick={() => setPlace("livre")}>Ar livre</button>
-                <button className={place === "esteira" ? "on" : ""} onClick={() => setPlace("esteira")}>Esteira</button>
+        {/* prova */}
+        {w.race && (
+          <section className="card">
+            <div className="race">
+              <div className="cd">
+                <div className="n">{w.race.days_until >= 0 ? w.race.days_until : "—"}</div>
+                <div className="l">{w.race.days_until === 1 ? "dia" : "dias"}</div>
+              </div>
+              <div className="info">
+                <div className="rn">🏁 {w.race.name}</div>
+                <div className="rd">
+                  {new Date(w.race.date_iso + "T00:00:00").toLocaleDateString("pt-BR")}
+                  {w.race.target_time ? ` · alvo ${w.race.target_time}` : ""}
+                </div>
               </div>
             </div>
-
-            <div className="blocks">{rows}</div>
-
-            <div className="actions">
-              <button className="btn-primary" onClick={() => setStartMsg(true)}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4" /></svg>
-                Começar treino
-              </button>
-              {startMsg && (
-                <div className="notice ok">Em breve: cronômetro guiado no app. Por enquanto, manda ver e o coach analisa depois pelo relógio/Strava. 👊</div>
-              )}
-            </div>
-          </>
+          </section>
         )}
+
+        {/* calendário do mês */}
+        <section className="card">
+          <div className="cal-head">
+            {WEEKDAY_HEAD.map((h, i) => <span key={i}>{h}</span>)}
+          </div>
+          <div className="cal-grid">
+            {cells.map((d, i) => {
+              if (d === null) return <div key={i} className="cal-cell empty" />;
+              const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+              const s = byDate.get(iso);
+              const isToday = iso === todayIso;
+              const isRace = iso === raceIso;
+              return (
+                <div
+                  key={i}
+                  className={`cal-cell${s ? " has" : ""}${isToday ? " today" : ""}`}
+                  onClick={s ? () => router.push(`/treino/detalhe?day=${s.day_en}`) : undefined}
+                >
+                  {isRace && <span className="flag">🏁</span>}
+                  <span>{d}</span>
+                  {s && <span className="cdot" style={{ background: KIND_COLOR[s.kind] ?? "var(--accent)" }} />}
+                </div>
+              );
+            })}
+          </div>
+          <div className="legend">
+            <span><i style={{ background: "var(--rose)" }} />Tiro</span>
+            <span><i style={{ background: "var(--accent)" }} />Rodagem</span>
+            <span><i style={{ background: "#E1911A" }} />Longão</span>
+          </div>
+        </section>
+
+        {/* lista da semana */}
+        <section className="card">
+          <div className="card-head"><span className="eyebrow">Treinos da semana</span></div>
+          {sessions.length > 0 ? (
+            sessions.map((d) => (
+              <div key={d.day_en} className="wrow" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
+                <div className="date">
+                  <div className="dn">{d.day_pt}</div>
+                  <div className="dd">{d.date_num}</div>
+                </div>
+                <span className="kdot" style={{ background: KIND_COLOR[d.session!.kind] ?? "var(--accent)" }} />
+                <div className="info">
+                  <div className="wt">{d.session!.workout_type}{d.session!.distance_km ? ` · ${String(d.session!.distance_km).replace(".", ",")} km` : ""}</div>
+                  <div className="wd">{d.session!.pace_min && d.session!.pace_max ? `${d.session!.pace_min}–${d.session!.pace_max}/km` : "no seu ritmo"}</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+              </div>
+            ))
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>Sem treinos planejados nesta semana.</p>
+          )}
+        </section>
 
       </div>
       <BottomNav />

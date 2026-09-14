@@ -12,6 +12,7 @@ from app.presentation.api.v1 import insights
 from app.presentation.api.v1 import plan
 from app.presentation.api.v1 import strava
 from app.presentation.api.v1 import telegram
+from app.presentation.api.v1 import workouts
 from app.presentation.api.v1 import webhooks
 
 router = APIRouter()
@@ -37,6 +38,8 @@ router.include_router(insights.router)
 router.include_router(plan.router)
 
 router.include_router(home.router)
+
+router.include_router(workouts.router)
 
 router.include_router(debug.router)
 
