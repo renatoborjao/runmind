@@ -191,6 +191,12 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .ev-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .ev-chip { font-family: var(--font-mono), monospace; font-size: 12px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 6px 11px; }
 .ev-chip b { color: var(--ink); font-weight: 700; margin-left: 3px; }
+
+.trend-list { display: flex; flex-direction: column; }
+.trow { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.trow:last-child { border-bottom: none; }
+.trow .tl { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.trow .tv { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 14px; min-width: 48px; text-align: right; }
 .sesh.tiro { background: var(--rose); }
 .sesh.rod { background: var(--accent); }
 .sesh.long { background: #E1911A; }

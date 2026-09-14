@@ -3,9 +3,44 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.infrastructure.persistence.garmin_health_repository import (
+    GarminHealthRepository,
+)
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/body", tags=["Body"])
+
+
+def _trend(profile: str) -> dict | None:
+    """Série dos últimos 7 dias COM dado, pra desenhar as tendências de
+    recuperação (sparklines). Só entra métrica que tem pelo menos 2 pontos reais
+    na janela — o resto vem None e o app esconde. Nada é calculado aqui: é só a
+    série crua que o Garmin já gravou."""
+
+    days = [h for h in GarminHealthRepository().load(profile) if h.has_data][-7:]
+
+    if len(days) < 2:
+
+        return None
+
+    dates = [h.date for h in days]
+
+    def series(attr: str) -> list[float | None] | None:
+
+        vals = [getattr(h, attr) for h in days]
+
+        real = [v for v in vals if v is not None]
+
+        return vals if len(real) >= 2 else None
+
+    return {
+        "dates": dates,
+        "readiness": series("readiness_score"),
+        "battery": series("body_battery_at_wake"),
+        "sleep_hours": series("sleep_hours"),
+        "resting_hr": series("resting_hr"),
+        "hrv": series("hrv_last_night"),
+    }
 
 _STATE = {
     "STRAINED": ("Sobrecarga", "bad"),
@@ -47,8 +82,17 @@ async def get_body(profile: str = Depends(current_profile)):
 
     label, tone = _STATE.get(reading.body_state, (reading.body_state.title(), "warn"))
 
+    try:
+
+        trend = _trend(profile)
+
+    except Exception:
+
+        trend = None
+
     return {
         "has_data": True,
+        "trend": trend,
         "body_state": reading.body_state,
         "state_label": label,
         "tone": tone,

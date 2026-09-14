@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getBody, type BodyReading } from "@/lib/api";
+import { getBody, type BodyReading, type BodyTrend } from "@/lib/api";
 
 function fmtSleep(h: number | null | undefined): string {
   if (h == null) return "—";
@@ -10,6 +10,43 @@ function fmtSleep(h: number | null | undefined): string {
   const mm = Math.round((h - hh) * 60);
   return `${hh}:${String(mm).padStart(2, "0")}`;
 }
+
+function lastReal(a: (number | null)[]): number | null {
+  for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i];
+  return null;
+}
+
+// linha fina dos últimos dias; cor pela DIREÇÃO (verde=melhora, âmbar=piora)
+// conforme upIsGood — a mesma convenção das setas de HRV/FC.
+function Sparkline({ data, upIsGood }: { data: (number | null)[]; upIsGood: boolean }) {
+  const W = 92, H = 30, pad = 4;
+  const real = data.map((v, i) => ({ v, i })).filter((p) => p.v != null) as { v: number; i: number }[];
+  if (real.length < 2) return null;
+  const vs = real.map((p) => p.v);
+  const min = Math.min(...vs), max = Math.max(...vs), span = max - min || 1;
+  const n = data.length;
+  const x = (i: number) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = (v: number) => H - pad - ((v - min) / span) * (H - 2 * pad);
+  const pts = real.map((p) => `${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const first = real[0].v, last = real[real.length - 1].v;
+  const good = last === first ? null : (last > first) === upIsGood;
+  const stroke = good == null ? "var(--muted)" : good ? "var(--accent)" : "#F5A623";
+  const lp = real[real.length - 1];
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden>
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(lp.i)} cy={y(lp.v)} r="2.6" fill={stroke} />
+    </svg>
+  );
+}
+
+const TREND_ROWS: { key: keyof BodyTrend; label: string; upIsGood: boolean; fmt: (v: number) => string }[] = [
+  { key: "readiness", label: "Prontidão", upIsGood: true, fmt: (v) => String(Math.round(v)) },
+  { key: "battery", label: "Bateria ao acordar", upIsGood: true, fmt: (v) => String(Math.round(v)) },
+  { key: "sleep_hours", label: "Sono", upIsGood: true, fmt: (v) => fmtSleep(v) },
+  { key: "hrv", label: "HRV", upIsGood: true, fmt: (v) => `${Math.round(v)} ms` },
+  { key: "resting_hr", label: "FC repouso", upIsGood: false, fmt: (v) => `${Math.round(v)} bpm` },
+];
 
 // conduta curta que apenas ROTULA a conclusão do backend (tom do estado),
 // sem inventar julgamento — mesma leitura que a home mostra no herói.
@@ -97,6 +134,29 @@ export default function CorpoPage() {
                 )}
               </div>
             </section>
+
+            {b.trend && TREND_ROWS.some((row) => b.trend![row.key]) && (
+              <section className="card">
+                <div className="card-head"><span className="eyebrow">Últimos 7 dias</span></div>
+                <div className="trend-list">
+                  {TREND_ROWS.map((row) => {
+                    const s = b.trend![row.key] as (number | null)[] | null;
+                    if (!s) return null;
+                    const lv = lastReal(s);
+                    return (
+                      <div className="trow" key={row.key}>
+                        <span className="tl">{row.label}</span>
+                        <Sparkline data={s} upIsGood={row.upIsGood} />
+                        <span className="tv">{lv != null ? row.fmt(lv) : "—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
+                  Verde = tendência boa, âmbar = de olho. O ponto é o dia mais recente.
+                </p>
+              </section>
+            )}
 
             <section className="card">
               <div className="card-head"><span className="eyebrow">Carga de treino</span></div>
