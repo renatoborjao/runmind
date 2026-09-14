@@ -232,6 +232,22 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .tap { cursor: pointer; }
 .tap:active { transform: scale(.995); }
 
+/* gravador de corrida (GPS) */
+.run-metrics { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 28px 0 18px; }
+.run-main { text-align: center; }
+.run-km { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 72px; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.run-unit { font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.run-sub { display: flex; gap: 40px; }
+.run-sub > div { text-align: center; }
+.run-v { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 26px; font-variant-numeric: tabular-nums; }
+.run-l { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.run-actions { display: flex; gap: 10px; }
+.run-btn { flex: 1; border: none; cursor: pointer; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; padding: 16px; border-radius: 16px; transition: transform .1s ease, opacity .1s ease; }
+.run-btn:active { transform: scale(.98); }
+.run-btn.go { background: var(--accent); color: #04231d; }
+.run-btn.hold { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.run-btn.stop { background: var(--rose); color: #fff; }
+
 /* perfil */
 .avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }
 .avatar-sm { width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 14px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); cursor: pointer; border: none; }

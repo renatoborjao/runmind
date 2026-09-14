@@ -233,6 +233,12 @@ export default function InicioPage() {
           )}
         </section>
 
+        {/* CORRER AGORA */}
+        <button className="cta-btn" onClick={() => router.push("/correr")}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" /></svg>
+          Correr agora (GPS)
+        </button>
+
         {/* SEMANA */}
         <section className="card">
           <div className="card-head"><span className="eyebrow">Sua semana</span></div>
