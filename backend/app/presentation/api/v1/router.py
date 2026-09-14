@@ -7,6 +7,7 @@ from app.presentation.api.v1 import events
 from app.presentation.api.v1 import evolution
 from app.presentation.api.v1 import health
 from app.presentation.api.v1 import history
+from app.presentation.api.v1 import home
 from app.presentation.api.v1 import insights
 from app.presentation.api.v1 import plan
 from app.presentation.api.v1 import strava
@@ -34,6 +35,8 @@ router.include_router(evolution.router)
 router.include_router(insights.router)
 
 router.include_router(plan.router)
+
+router.include_router(home.router)
 
 router.include_router(debug.router)
 
