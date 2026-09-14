@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TELEGRAM_COACH = "https://t.me/runmind_coach_bot";
-
 function Icon({ name }: { name: string }) {
   const common = {
     width: 22,
@@ -34,7 +32,7 @@ export default function BottomNav() {
       <Link href="/inicio" className={on("/inicio")}><Icon name="inicio" />Início</Link>
       <Link href="/treino" className={on("/treino")}><Icon name="treino" />Treino</Link>
       <Link href="/evolucao" className={on("/evolucao")}><Icon name="evolucao" />Evolução</Link>
-      <a href={TELEGRAM_COACH} target="_blank" rel="noopener noreferrer"><Icon name="coach" />Coach</a>
+      <Link href="/coach" className={on("/coach")}><Icon name="coach" />Coach</Link>
     </nav>
   );
 }

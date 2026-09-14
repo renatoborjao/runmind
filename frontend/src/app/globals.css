@@ -232,6 +232,32 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .tap { cursor: pointer; }
 .tap:active { transform: scale(.995); }
 
+/* ===== chat do coach ===== */
+.has-composer { padding-bottom: 150px; }
+.chat-msgs { display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 82%; padding: 10px 13px; font-size: 14px; line-height: 1.5; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent); color: #04231d; border-bottom-right-radius: 5px; }
+.msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-bottom-left-radius: 5px; }
+.msg.typing { color: var(--muted); font-style: italic; }
+.chat-empty { text-align: center; color: var(--muted); font-size: 13px; margin: 30px 12px; }
+.composer {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 62px;
+  width: 100%; max-width: 430px; z-index: 51;
+  display: flex; gap: 8px; align-items: flex-end;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(12px); border-top: 1px solid var(--line);
+}
+.composer textarea {
+  flex: 1; resize: none; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); border-radius: 14px; padding: 11px 13px; font-size: 14px;
+  font-family: inherit; outline: none; max-height: 110px; line-height: 1.4;
+}
+.composer textarea:focus { border-color: var(--accent); }
+.composer .send-btn { width: 42px; height: 42px; border-radius: 12px; border: none; background: var(--accent); display: grid; place-items: center; cursor: pointer; flex: none; }
+.composer .send-btn:disabled { opacity: .45; cursor: default; }
+.composer .send-btn svg { width: 18px; height: 18px; }
+
 /* navegação de mês */
 .month-nav { display: flex; align-items: center; justify-content: space-between; }
 .month-nav .mlabel { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; }

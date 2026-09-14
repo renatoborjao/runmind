@@ -100,7 +100,12 @@ class CoachConversationEvent:
         incoming_text: str,
         sender_name: str = "",
         send_fallback: bool = True,
+        notify: bool = True,
     ) -> str:
+        """`notify=False` (chat pelo APP): roda o MESMO pipeline e persiste o
+        histórico, mas NÃO reenvia a resposta pelo canal (Telegram/WhatsApp) —
+        o app já mostra o retorno na tela. A conversa fica compartilhada entre
+        app e canal (mesmo ConversationRepository)."""
 
         # medidor de tokens: atribui todo Gemini deste turno ao atleta
         from app.application.monitoring.token_meter import TokenMeter
@@ -600,10 +605,13 @@ class CoachConversationEvent:
             text=reply_text,
         )
 
-        await NotificationService.send(
-            runner,
-            reply_text,
-        )
+        # chat pelo app: o retorno vai pra tela; não reenvia pelo canal
+        if notify:
+
+            await NotificationService.send(
+                runner,
+                reply_text,
+            )
 
         # A resposta já foi enviada: falha na memória nunca chega ao corredor.
         # Pergunta respondida por card (último/próximo treino) não carrega
