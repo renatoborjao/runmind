@@ -181,7 +181,79 @@ export default function TenisPage() {
 
   const active = shoes.filter((s) => !s.retired);
   const retired = shoes.filter((s) => s.retired);
+  const editing = editId ? shoes.find((s) => s.id === editId) ?? null : null;
 
+  // TELA: adicionar
+  if (adding) {
+    return (
+      <main className="stage">
+        <div className="phone">
+          <header className="appbar">
+            <button className="icon-btn" aria-label="Voltar" onClick={() => { setAdding(false); setErr(null); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <div className="title"><div className="t">Adicionar tênis</div></div>
+            <span style={{ width: 34 }} />
+          </header>
+          {err && <div className="notice err">{err}</div>}
+          <ShoeForm mode="add" initial={emptyForm()} saving={saving}
+            onCancel={() => { setAdding(false); setErr(null); }} onSubmit={onAdd} />
+        </div>
+      </main>
+    );
+  }
+
+  // TELA: editar um par (abre de fato, não expande a lista)
+  if (editing) {
+    const s = editing;
+    return (
+      <main className="stage">
+        <div className="phone">
+          <header className="appbar">
+            <button className="icon-btn" aria-label="Voltar" onClick={() => { setEditId(null); setErr(null); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <div className="title"><div className="t">{s.label}</div></div>
+            <span style={{ width: 34 }} />
+          </header>
+          {err && <div className="notice err">{err}</div>}
+
+          <section className="card">
+            <div className="shoe">
+              <ShoeIcon />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="n">{s.label}</span>
+                  {s.is_default && <span className="tag ok">em uso</span>}
+                  {s.worn && !s.retired && <span className="tag warn">trocar</span>}
+                  {s.retired && <span className="tag warn">aposentado</span>}
+                </div>
+                <div className="km">
+                  {String(s.total_km).replace(".", ",")} / {s.alert_threshold_km} km
+                  {!s.retired && !s.worn ? ` · faltam ~${s.remaining_km} km` : ""}
+                </div>
+                <div className="wear"><i style={{ width: `${s.pct}%` }} /></div>
+              </div>
+            </div>
+          </section>
+
+          <ShoeForm mode="edit" saving={saving}
+            initial={{ name: s.name, nickname: s.nickname ?? "", category: s.category ?? "", km: String(s.total_km), threshold: String(s.alert_threshold_km), isDefault: s.is_default }}
+            onCancel={() => { setEditId(null); setErr(null); }}
+            onSubmit={(f) => onEdit(s.id, f)} />
+
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <button className="btn-ghost" style={{ flex: 1 }} disabled={saving} onClick={() => onRetire(s)}>
+              {s.retired ? "Reativar" : "Aposentar"}
+            </button>
+            <button className="btn-ghost danger" style={{ flex: 1 }} disabled={saving} onClick={() => onDelete(s)}>Excluir</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // TELA: armário (lista)
   return (
     <main className="stage">
       <div className="phone">
@@ -193,62 +265,27 @@ export default function TenisPage() {
           <span style={{ width: 34 }} />
         </header>
 
-        {err && <div className="notice err">{err}</div>}
+        <button className="btn-primary" style={{ marginBottom: 4 }} onClick={() => { setAdding(true); setEditId(null); setErr(null); }}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+          Adicionar tênis
+        </button>
 
-        {!adding && (
-          <button className="btn-primary" style={{ marginBottom: 4 }} onClick={() => { setAdding(true); setEditId(null); setErr(null); }}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-            Adicionar tênis
-          </button>
-        )}
-
-        {adding && (
-          <ShoeForm mode="add" initial={emptyForm()} saving={saving}
-            onCancel={() => { setAdding(false); setErr(null); }} onSubmit={onAdd} />
-        )}
-
-        {shoes.length === 0 && !adding && (
+        {shoes.length === 0 && (
           <div className="card center">
             <p className="muted" style={{ margin: 0 }}>Seu armário está vazio. Adiciona teu primeiro par pra começar a contar a rodagem. 👟</p>
           </div>
         )}
 
-        {active.map((s) =>
-          editId === s.id ? (
-            <div key={s.id}>
-              <ShoeForm mode="edit" saving={saving}
-                initial={{ name: s.name, nickname: s.nickname ?? "", category: s.category ?? "", km: String(s.total_km), threshold: String(s.alert_threshold_km), isDefault: s.is_default }}
-                onCancel={() => { setEditId(null); setErr(null); }}
-                onSubmit={(f) => onEdit(s.id, f)} />
-              <div style={{ display: "flex", gap: 10, margin: "-4px 2px 8px" }}>
-                <button className="btn-ghost" style={{ flex: 1 }} disabled={saving} onClick={() => onRetire(s)}>Aposentar</button>
-                <button className="btn-ghost danger" style={{ flex: 1 }} disabled={saving} onClick={() => onDelete(s)}>Excluir</button>
-              </div>
-            </div>
-          ) : (
-            <ShoeCard key={s.id} s={s} onEdit={() => { setEditId(s.id); setAdding(false); setErr(null); }} />
-          )
-        )}
+        {active.map((s) => (
+          <ShoeCard key={s.id} s={s} onEdit={() => { setEditId(s.id); setErr(null); }} />
+        ))}
 
         {retired.length > 0 && (
           <>
             <div className="topbar" style={{ marginTop: 8 }}><span className="eyebrow">Aposentados</span></div>
-            {retired.map((s) =>
-              editId === s.id ? (
-                <div key={s.id}>
-                  <ShoeForm mode="edit" saving={saving}
-                    initial={{ name: s.name, nickname: s.nickname ?? "", category: s.category ?? "", km: String(s.total_km), threshold: String(s.alert_threshold_km), isDefault: false }}
-                    onCancel={() => { setEditId(null); setErr(null); }}
-                    onSubmit={(f) => onEdit(s.id, f)} />
-                  <div style={{ display: "flex", gap: 10, margin: "-4px 2px 8px" }}>
-                    <button className="btn-ghost" style={{ flex: 1 }} disabled={saving} onClick={() => onRetire(s)}>Reativar</button>
-                    <button className="btn-ghost danger" style={{ flex: 1 }} disabled={saving} onClick={() => onDelete(s)}>Excluir</button>
-                  </div>
-                </div>
-              ) : (
-                <ShoeCard key={s.id} s={s} onEdit={() => { setEditId(s.id); setAdding(false); setErr(null); }} />
-              )
-            )}
+            {retired.map((s) => (
+              <ShoeCard key={s.id} s={s} onEdit={() => { setEditId(s.id); setErr(null); }} />
+            ))}
           </>
         )}
       </div>
