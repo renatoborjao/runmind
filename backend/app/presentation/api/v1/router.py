@@ -12,6 +12,8 @@ from app.presentation.api.v1 import history
 from app.presentation.api.v1 import home
 from app.presentation.api.v1 import insights
 from app.presentation.api.v1 import plan
+from app.presentation.api.v1 import profile as profile_route
+from app.presentation.api.v1 import progress
 from app.presentation.api.v1 import strava
 from app.presentation.api.v1 import telegram
 from app.presentation.api.v1 import workouts
@@ -46,6 +48,10 @@ router.include_router(workouts.router)
 router.include_router(calendar.router)
 
 router.include_router(coach.router)
+
+router.include_router(progress.router)
+
+router.include_router(profile_route.router)
 
 router.include_router(debug.router)
 

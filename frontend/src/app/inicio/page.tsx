@@ -6,7 +6,6 @@ import BottomNav from "../bottom-nav";
 import {
   getHome,
   getMe,
-  logout,
   type HomeSummary,
   type WorkoutStep,
 } from "@/lib/api";
@@ -114,11 +113,6 @@ export default function InicioPage() {
     })();
   }, [router]);
 
-  async function onLogout() {
-    await logout();
-    router.replace("/entrar");
-  }
-
   if (loading || !home) {
     return (
       <main className="stage">
@@ -141,7 +135,9 @@ export default function InicioPage() {
 
         <div className="topbar">
           <div className="brand"><Mark /><span className="word">Rit<b>mind</b></span></div>
-          <a className="link" onClick={onLogout}>Sair</a>
+          <button className="avatar-sm" aria-label="Perfil" onClick={() => router.push("/perfil")}>
+            {(home.athlete.name || "").trim().split(" ").map((w) => w[0]).slice(0, 2).join("") || "🏃"}
+          </button>
         </div>
 
         <div className="greet">

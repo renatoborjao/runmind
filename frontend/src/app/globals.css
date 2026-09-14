@@ -232,6 +232,15 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .tap { cursor: pointer; }
 .tap:active { transform: scale(.995); }
 
+/* perfil */
+.avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }
+.avatar-sm { width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 14px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); cursor: pointer; border: none; }
+.prow { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; gap: 12px; }
+.prow + .prow { border-top: 1px solid var(--line); }
+.prow .pl { color: var(--muted); font-size: 13px; }
+.prow .pv { font-weight: 600; font-size: 14px; text-align: right; }
+.btn-danger { width: 100%; border: 1px solid color-mix(in srgb, var(--rose) 40%, var(--line)); background: transparent; color: var(--rose); cursor: pointer; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; padding: 13px; border-radius: 13px; }
+
 /* ===== chat do coach ===== */
 .has-composer { padding-bottom: 150px; }
 .chat-msgs { display: flex; flex-direction: column; gap: 10px; }
