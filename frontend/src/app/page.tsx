@@ -1,9 +1,5 @@
-import CoachChat from "@/components/CoachChat";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return (
-    <main>
-      <CoachChat />
-    </main>
-  );
+  redirect("/inicio");
 }
