@@ -404,8 +404,9 @@ export default function InicioPage() {
         )}
 
         {/* TÊNIS */}
-        {shoe && (
-          <section className="card">
+        {shoe ? (
+          <section className="card tap" onClick={() => router.push("/tenis")}>
+            <div className="card-head"><span className="eyebrow">Tênis em uso</span><a className="link" onClick={(e) => { e.stopPropagation(); router.push("/tenis"); }}>Armário</a></div>
             <div className="shoe">
               <span className="shoe-ico" aria-hidden>
                 <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--accent-ink)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 17h18a2 2 0 0 0 2-2c0-1-.7-1.7-1.7-2L13 10 9.5 6 6 6l-.5 4.5L2 13z" /><path d="M2 13v4" /></svg>
@@ -417,6 +418,11 @@ export default function InicioPage() {
               </div>
             </div>
           </section>
+        ) : (
+          <button className="cta-btn" onClick={() => router.push("/tenis")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 17h18a2 2 0 0 0 2-2c0-1-.7-1.7-1.7-2L13 10 9.5 6 6 6l-.5 4.5L2 13z" /><path d="M2 13v4" /></svg>
+            Montar meu armário de tênis
+          </button>
         )}
 
         <p className="muted center" style={{ marginTop: 2 }}>Ritmind · {home.athlete.goal}</p>
