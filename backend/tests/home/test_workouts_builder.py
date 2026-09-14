@@ -8,6 +8,7 @@ HMOD = "app.application.home.home_summary_builder"
 WMOD = "app.application.home.workouts_builder"
 
 _TUE = datetime(2026, 9, 15, 8, 0, 0)
+_SUN = datetime(2026, 9, 13, 8, 0, 0)  # domingo, ANTES do week_start do plano
 
 
 def _session(day, wtype):
@@ -59,3 +60,27 @@ def test_no_race_when_profile_has_none():
     runner = SimpleNamespace(target_race=None, race_date=None, target_time=None)
 
     assert _build(plan, runner)["race"] is None
+
+
+def test_anchors_to_plan_week_start_not_current_week():
+    """BUG DO RENATO: no domingo, o plano já é o da semana que vem (week_start).
+    Os treinos têm que cair NESSA semana, não na atual."""
+
+    plan = SimpleNamespace(
+        week_start="2026-09-14",  # próxima segunda
+        sessions=[_session("Tuesday", "Fartlek")],
+    )
+    runner = SimpleNamespace(target_race=None, race_date=None, target_time=None)
+
+    with (
+        patch(f"{WMOD}.now_local", return_value=_SUN),
+        patch(f"{HMOD}.now_local", return_value=_SUN),
+        patch(f"{WMOD}.WeeklyPlanRepository", lambda: SimpleNamespace(load=lambda p: plan)),
+        patch(f"{HMOD}.WeeklyPlanRepository", lambda: SimpleNamespace(load=lambda p: plan)),
+        patch(f"{WMOD}.RunnerProfileRepository", lambda: SimpleNamespace(load=lambda p: runner)),
+    ):
+        out = WorkoutsBuilder.build("tester")
+
+    tue = [d for d in out["week"] if d["day_en"] == "Tuesday"][0]
+    assert tue["date_iso"] == "2026-09-15"  # terça da PRÓXIMA semana, não 09-08
+    assert tue["session"]["workout_type"] == "Fartlek"

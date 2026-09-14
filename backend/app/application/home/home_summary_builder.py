@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from app.core.clock import now_local
 from app.infrastructure.persistence.garmin_health_repository import (
@@ -64,7 +64,6 @@ class HomeSummaryBuilder:
     def build(profile: str) -> dict:
 
         now = now_local()
-        today_en = now.strftime("%A")
 
         runner = RunnerProfileRepository().load(profile)
 
@@ -74,10 +73,15 @@ class HomeSummaryBuilder:
 
         sessions = {s.day: s for s in plan.sessions} if plan else {}
 
+        # a semana do plano é ancorada no week_start DO PLANO (pode ser a próxima
+        # semana — o plano regenera no domingo), NÃO na segunda do calendário
+        # atual. Sem isso os treinos caíam na semana errada.
+        monday = HomeSummaryBuilder._week_monday(plan, now)
+
         return {
             "athlete": {"name": runner.name, "goal": runner.goal},
-            "today": HomeSummaryBuilder._today(sessions.get(today_en), now),
-            "week": HomeSummaryBuilder._week(sessions, today_en, now),
+            "today": HomeSummaryBuilder._today(sessions, monday, now),
+            "week": HomeSummaryBuilder._week(sessions, monday, now),
             "body": HomeSummaryBuilder._safe(
                 lambda: HomeSummaryBuilder._body(profile)
             ),
@@ -92,20 +96,29 @@ class HomeSummaryBuilder:
     # ---- blocos ----
 
     @staticmethod
-    def _today(session, now) -> dict:
+    def _week_monday(plan, now) -> date:
+        """A segunda-feira da semana do plano: do `week_start` gravado no plano
+        (fonte de verdade — pode ser a semana que vem); só cai na segunda do
+        calendário atual se o plano não disser."""
 
-        base = {
-            "weekday_pt": _DAY_PT.get(now.strftime("%A"), ""),
-            "date_label": now.strftime("%d/%m"),
-        }
+        ws = getattr(plan, "week_start", None) if plan else None
 
-        if session is None:
+        if ws:
 
-            base["session"] = None
+            try:
 
-            return base
+                return date.fromisoformat(ws)
 
-        base["session"] = {
+            except (ValueError, TypeError):
+
+                pass
+
+        return (now - timedelta(days=now.weekday())).date()
+
+    @staticmethod
+    def _session_dict(session) -> dict:
+
+        return {
             "workout_type": session.workout_type,
             "objective": session.objective,
             "distance_km": session.planned_distance_km,
@@ -117,6 +130,55 @@ class HomeSummaryBuilder:
                 HomeSummaryBuilder._step(s) for s in (session.steps or [])
             ],
         }
+
+    @staticmethod
+    def _today(sessions: dict, monday: date, now) -> dict:
+        """O card de destaque: o treino de HOJE quando hoje cai na semana do
+        plano; senão (plano é da próxima semana) o PRÓXIMO treino dela. weekday_pt
+        /date_label são sempre o dia REAL de hoje (pro cabeçalho)."""
+
+        today_date = now.date()
+        week_end = monday + timedelta(days=6)
+
+        base = {
+            "weekday_pt": _DAY_PT.get(now.strftime("%A"), ""),
+            "date_label": now.strftime("%d/%m"),
+            "label": "Treino de hoje",
+            "day_en": now.strftime("%A"),
+            "session_date_label": None,
+            "session": None,
+        }
+
+        # hoje está dentro da semana do plano
+        if monday <= today_date <= week_end:
+
+            s = sessions.get(now.strftime("%A"))
+
+            if s:
+
+                base["session"] = HomeSummaryBuilder._session_dict(s)
+
+            return base
+
+        # plano é de uma semana futura: mostra o PRÓXIMO treino dela
+        if today_date < monday:
+
+            for i, day_en in enumerate(_WEEK_EN):
+
+                s = sessions.get(day_en)
+
+                if s:
+
+                    d = monday + timedelta(days=i)
+
+                    base["label"] = "Próximo treino"
+                    base["day_en"] = day_en
+                    base["session_date_label"] = (
+                        f"{_DAY_PT[day_en]} {d.strftime('%d/%m')}"
+                    )
+                    base["session"] = HomeSummaryBuilder._session_dict(s)
+
+                    return base
 
         return base
 
@@ -141,23 +203,25 @@ class HomeSummaryBuilder:
         return out
 
     @staticmethod
-    def _week(sessions: dict, today_en: str, now) -> list[dict]:
+    def _week(sessions: dict, monday: date, now) -> list[dict]:
 
-        monday = (now - timedelta(days=now.weekday())).date()
+        today_date = now.date()
 
         week = []
 
         for i, day_en in enumerate(_WEEK_EN):
+
+            d = monday + timedelta(days=i)
 
             s = sessions.get(day_en)
 
             week.append(
                 {
                     "day_pt": _DAY_PT[day_en],
-                    "date_num": (monday + timedelta(days=i)).day,
+                    "date_num": d.day,
                     "workout_type": s.workout_type if s else None,
                     "kind": _kind(s.workout_type) if s else None,
-                    "is_today": day_en == today_en,
+                    "is_today": d == today_date,
                 }
             )
 

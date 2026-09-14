@@ -26,14 +26,17 @@ class WorkoutsBuilder:
     def build(profile: str) -> dict:
 
         now = now_local()
-        today_en = now.strftime("%A")
-        monday = (now - timedelta(days=now.weekday())).date()
+        today_date = now.date()
 
         plan = HomeSummaryBuilder._safe(
             lambda: WeeklyPlanRepository().load(profile)
         )
 
         sessions = {s.day: s for s in plan.sessions} if plan else {}
+
+        # ancora no week_start DO PLANO (pode ser a próxima semana), não na
+        # segunda do calendário atual — senão os treinos caem na semana errada.
+        monday = HomeSummaryBuilder._week_monday(plan, now)
 
         week = []
 
@@ -49,7 +52,7 @@ class WorkoutsBuilder:
                     "day_pt": _DAY_PT[day_en],
                     "date_iso": day_date.isoformat(),
                     "date_num": day_date.day,
-                    "is_today": day_en == today_en,
+                    "is_today": day_date == today_date,
                     "session": WorkoutsBuilder._session(s),
                 }
             )
