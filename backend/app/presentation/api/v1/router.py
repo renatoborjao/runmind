@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.presentation.api.v1 import activities
 from app.presentation.api.v1 import auth
+from app.presentation.api.v1 import body
 from app.presentation.api.v1 import calendar
 from app.presentation.api.v1 import coach
 from app.presentation.api.v1 import debug
@@ -49,6 +50,8 @@ router.include_router(workouts.router)
 router.include_router(calendar.router)
 
 router.include_router(coach.router)
+
+router.include_router(body.router)
 
 router.include_router(progress.router)
 

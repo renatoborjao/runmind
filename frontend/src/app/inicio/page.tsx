@@ -149,7 +149,7 @@ export default function InicioPage() {
         {body && body.ring && (() => {
           const v = readinessVerdict(body.ring.value);
           return (
-            <section className="card hero">
+            <section className="card hero tap" onClick={() => router.push("/corpo")}>
               <div className="hero-top">
                 <div className="ring" role="img" aria-label={`${body.ring.label} ${body.ring.value}`}>
                   <svg width="108" height="108" viewBox="0 0 108 108">
@@ -180,7 +180,7 @@ export default function InicioPage() {
 
         {/* corpo sem anel, mas com métricas soltas */}
         {body && !body.ring && (body.sleep_hours != null || body.resting_hr != null) && (
-          <section className="card">
+          <section className="card tap" onClick={() => router.push("/corpo")}>
             <div className="card-head"><span className="eyebrow">Seu corpo hoje</span></div>
             <div className="vitals">
               <div className="vital"><div className="k">Bateria</div><div className="v">{body.body_battery_at_wake ?? "—"}</div><div className="u">ao acordar</div></div>

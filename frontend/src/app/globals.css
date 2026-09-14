@@ -249,6 +249,26 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .run-btn.hold { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
 .run-btn.stop { background: var(--rose); color: #fff; }
 
+/* leitura de corpo */
+.state-card { padding: 18px; border-radius: 18px; border: 1px solid var(--line); }
+.state-card.good { background: var(--accent-wash); }
+.state-card.warn { background: color-mix(in srgb, #E1911A 14%, var(--surface)); }
+.state-card.bad { background: color-mix(in srgb, var(--rose) 14%, var(--surface)); }
+.state-card .st { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.state-card h2 { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 22px; margin: 6px 0 4px; letter-spacing: -.02em; }
+.state-card.good h2 { color: var(--accent-ink); }
+.state-card.warn h2 { color: #E1911A; }
+.state-card.bad h2 { color: var(--rose); }
+.state-card p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.bgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bmetric { background: var(--surface-2); border-radius: 13px; padding: 12px; }
+.bmetric .k { font-family: var(--font-mono), monospace; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bmetric .v { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 18px; margin-top: 4px; display: flex; align-items: baseline; gap: 6px; }
+.bmetric .v small { font-size: 11px; color: var(--muted); font-family: var(--font-body); }
+.bmetric .dir { font-size: 12px; font-weight: 700; }
+.dir.good { color: var(--accent-ink); }
+.dir.warn { color: #E1911A; }
+
 /* perfil */
 .avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }
 .avatar-sm { width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 14px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); cursor: pointer; border: none; }

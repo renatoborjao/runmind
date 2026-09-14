@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getWorkouts, type TodaySession, type WorkoutDay, type WorkoutStep } from "@/lib/api";
+import { getWorkouts, pushWatch, type TodaySession, type WorkoutDay, type WorkoutStep } from "@/lib/api";
 
 const STEP_PT: Record<string, string> = {
   warmup: "Aquecimento",
@@ -56,6 +56,13 @@ function DetalheInner() {
 
   const [day, setDay] = useState<WorkoutDay | null>(null);
   const [loading, setLoading] = useState(true);
+  const [watch, setWatch] = useState<{ sending: boolean; msg: string | null }>({ sending: false, msg: null });
+
+  async function onPushWatch() {
+    setWatch({ sending: true, msg: null });
+    const res = await pushWatch();
+    setWatch({ sending: false, msg: res.message });
+  }
 
   useEffect(() => {
     (async () => {
@@ -130,10 +137,17 @@ function DetalheInner() {
 
           <div className="blocks">{rows}</div>
 
-          <button className="btn-primary" style={{ marginTop: 6 }} onClick={() => router.push("/correr")}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4" /></svg>
-            Começar corrida
-          </button>
+          <div className="actions" style={{ marginTop: 6 }}>
+            <button className="btn-primary" onClick={() => router.push("/correr")}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+              Começar corrida
+            </button>
+            <button className="btn-ghost" onClick={onPushWatch} disabled={watch.sending}>
+              <svg className="accent" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="3" width="12" height="18" rx="3" /><path d="M12 7v4l2 1" /></svg>
+              {watch.sending ? "Enviando pro relógio…" : "Enviar pro relógio"}
+            </button>
+            {watch.msg && <div className="notice ok">{watch.msg}</div>}
+          </div>
         </>
       )}
     </>

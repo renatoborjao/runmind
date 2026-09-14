@@ -1,0 +1,109 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getBody, type BodyReading } from "@/lib/api";
+
+function fmtSleep(h: number | null | undefined): string {
+  if (h == null) return "—";
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return `${hh}:${String(mm).padStart(2, "0")}`;
+}
+
+// arrow + cor conforme a direção; upIsGood diz se subir é bom pra essa métrica
+function Dir({ direction, upIsGood }: { direction?: string; upIsGood: boolean }) {
+  if (!direction || direction === "stable") return null;
+  const rising = direction === "rising";
+  const good = rising === upIsGood;
+  return <span className={`dir ${good ? "good" : "warn"}`}>{rising ? "↑" : "↓"}</span>;
+}
+
+export default function CorpoPage() {
+  const router = useRouter();
+  const [b, setB] = useState<BodyReading | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const data = await getBody();
+      if (!data) { router.replace("/entrar"); return; }
+      setB(data);
+      setLoading(false);
+    })();
+  }, [router]);
+
+  if (loading || !b) {
+    return (
+      <main className="stage">
+        <div className="phone center" style={{ justifyContent: "center", flex: 1 }}>
+          <p className="auth-sub" style={{ margin: 0 }}>Carregando…</p>
+        </div>
+      </main>
+    );
+  }
+
+  const r = b.recovery;
+
+  return (
+    <main className="stage">
+      <div className="phone">
+        <header className="appbar">
+          <button className="icon-btn" aria-label="Voltar" onClick={() => router.push("/inicio")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <div className="title"><div className="t">Leitura do corpo</div></div>
+          <span style={{ width: 34 }} />
+        </header>
+
+        {!b.has_data || !r ? (
+          <div className="card center">
+            <p className="muted" style={{ margin: 0 }}>Ainda não temos dados de recuperação suficientes. Conecta o Garmin e usa o relógio à noite pra leitura do corpo. ⌚</p>
+          </div>
+        ) : (
+          <>
+            <div className={`state-card ${b.tone}`}>
+              <div className="st">Estado do corpo 🩺</div>
+              <h2>{b.state_label}</h2>
+              {b.limiter_label && <p>Ponto de atenção principal: <b>{b.limiter_label}</b>.</p>}
+            </div>
+
+            <section className="card">
+              <div className="card-head"><span className="eyebrow">Recuperação</span></div>
+              <div className="bgrid">
+                {r.readiness_score != null && (
+                  <div className="bmetric"><div className="k">Prontidão</div><div className="v">{r.readiness_score}<small>/100</small></div></div>
+                )}
+                {r.body_battery_wake != null && (
+                  <div className="bmetric"><div className="k">Bateria ao acordar</div><div className="v">{r.body_battery_wake}</div></div>
+                )}
+                <div className="bmetric"><div className="k">Sono (média)</div><div className="v">{fmtSleep(r.sleep_avg_hours)}<small>h · {r.short_nights}/{r.nights_counted} curtas</small></div></div>
+                <div className="bmetric"><div className="k">HRV</div><div className="v">{r.hrv_recent ?? "—"}{r.hrv_recent != null && <small>ms</small>}<Dir direction={r.hrv_direction} upIsGood={true} /></div></div>
+                <div className="bmetric"><div className="k">FC repouso</div><div className="v">{r.rhr_recent ?? "—"}{r.rhr_recent != null && <small>bpm</small>}<Dir direction={r.rhr_direction} upIsGood={false} /></div></div>
+                {r.stress_avg != null && (
+                  <div className="bmetric"><div className="k">Estresse médio</div><div className="v">{r.stress_avg}</div></div>
+                )}
+                {r.respiration_sleep != null && (
+                  <div className="bmetric"><div className="k">Respiração (sono)</div><div className="v">{Math.round(r.respiration_sleep)}<small>rpm</small></div></div>
+                )}
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="card-head"><span className="eyebrow">Carga de treino</span></div>
+              <div className="prow">
+                <span className="pl">ACWR (aguda ÷ crônica)</span>
+                <span className="pv">{b.acwr ?? "—"} {b.acwr_status ? `· ${b.acwr_status}` : ""}</span>
+              </div>
+              <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
+                Perto de 1,0 = carga equilibrada. Bem acima = risco de sobrecarga; bem abaixo = destreino.
+              </p>
+            </section>
+
+            <p className="muted center" style={{ marginTop: 2 }}>Quer o papo completo? Fala com o coach 💬</p>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}
