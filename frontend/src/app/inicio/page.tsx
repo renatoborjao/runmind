@@ -241,22 +241,48 @@ export default function InicioPage() {
 
         {/* SEMANA */}
         <section className="card">
-          <div className="card-head"><span className="eyebrow">Sua semana</span></div>
+          <div className="card-head">
+            <span className="eyebrow">Sua semana</span>
+            <a className="link" onClick={() => router.push("/treino")}>Calendário</a>
+          </div>
+
           <div className="week">
             {home.week.map((d, i) => (
-              <div key={i} className={`day${d.is_today ? " today" : ""}${d.workout_type ? "" : " rest"}`}>
+              <div
+                key={i}
+                className={`day${d.is_today ? " today" : ""}${d.workout_type ? " tap" : " rest"}`}
+                onClick={d.workout_type ? () => router.push(`/treino/detalhe?day=${d.day_en}`) : undefined}
+              >
                 <div className="dn">{d.day_pt.toUpperCase()}</div>
                 <div className="dd">{d.date_num}</div>
-                <span className={`sesh ${d.kind ?? "off"}`} />
+                {d.workout_type ? (
+                  <span className="sesh" style={{ background: d.done ? "var(--accent)" : "#F5A623" }} />
+                ) : (
+                  <span className="sesh" style={{ background: "transparent" }} />
+                )}
               </div>
             ))}
           </div>
-          <div className="legend">
-            <span><i style={{ background: "var(--rose)" }} />Tiro</span>
-            <span><i style={{ background: "var(--accent)" }} />Rodagem</span>
-            <span><i style={{ background: "#E1911A" }} />Longão</span>
-            <span><i style={{ background: "var(--muted)" }} />Descanso</span>
+
+          <div className="legend" style={{ marginBottom: 6 }}>
+            <span><i style={{ background: "var(--accent)" }} />Feito</span>
+            <span><i style={{ background: "#F5A623" }} />A fazer</span>
           </div>
+
+          {home.week.filter((d) => d.workout_type).map((d) => (
+            <div key={d.day_en} className="wrow" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
+              <div className="date">
+                <div className="dn">{d.day_pt}</div>
+                <div className="dd">{d.date_num}</div>
+              </div>
+              <span className="kdot" style={{ background: d.done ? "var(--accent)" : "#F5A623" }} />
+              <div className="info">
+                <div className="wt">{d.workout_type}{d.distance_km ? ` · ${String(d.distance_km).replace(".", ",")} km` : ""}</div>
+                <div className="wd">{d.done ? "feito ✓" : d.is_today ? "é hoje" : "a fazer"}</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+            </div>
+          ))}
         </section>
 
         {/* EVOLUÇÃO */}

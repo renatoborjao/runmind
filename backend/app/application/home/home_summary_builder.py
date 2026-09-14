@@ -13,6 +13,9 @@ from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
 from app.domain.entities.workout_step import total_distance_km
+from app.infrastructure.persistence.activity_archive_repository import (
+    ActivityArchiveRepository,
+)
 from app.infrastructure.persistence.shoe_repository import ShoeRepository
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
@@ -37,6 +40,11 @@ _DAY_PT = {
     "Saturday": "Sáb",
     "Sunday": "Dom",
 }
+
+
+def _is_run(sport: str) -> bool:
+
+    return any(h in (sport or "").lower() for h in ("run", "corrida", "trail"))
 
 
 def _kind(workout_type: str) -> str:
@@ -98,10 +106,19 @@ class HomeSummaryBuilder:
         # atual. Sem isso os treinos caíam na semana errada.
         monday = HomeSummaryBuilder._week_monday(plan, now)
 
+        # dias com corrida REALIZADA (arquivo local) pra pintar de verde
+        executed = HomeSummaryBuilder._safe(
+            lambda: {
+                a.start_date.date().isoformat()
+                for a in ActivityArchiveRepository().load_activities(profile)
+                if _is_run(a.sport)
+            }
+        ) or set()
+
         return {
             "athlete": {"name": runner.name, "goal": runner.goal},
             "today": HomeSummaryBuilder._today(sessions, monday, now),
-            "week": HomeSummaryBuilder._week(sessions, monday, now),
+            "week": HomeSummaryBuilder._week(sessions, monday, now, executed),
             "body": HomeSummaryBuilder._safe(
                 lambda: HomeSummaryBuilder._body(profile)
             ),
@@ -228,7 +245,7 @@ class HomeSummaryBuilder:
         return out
 
     @staticmethod
-    def _week(sessions: dict, monday: date, now) -> list[dict]:
+    def _week(sessions: dict, monday: date, now, executed: set) -> list[dict]:
 
         today_date = now.date()
 
@@ -242,11 +259,15 @@ class HomeSummaryBuilder:
 
             week.append(
                 {
+                    "day_en": day_en,
                     "day_pt": _DAY_PT[day_en],
                     "date_num": d.day,
+                    "date_iso": d.isoformat(),
                     "workout_type": s.workout_type if s else None,
+                    "distance_km": planned_km(s) if s else None,
                     "kind": _kind(s.workout_type) if s else None,
                     "is_today": d == today_date,
+                    "done": d.isoformat() in executed,
                 }
             )
 
