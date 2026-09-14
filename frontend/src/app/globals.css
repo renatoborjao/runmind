@@ -218,6 +218,20 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .avatar-edit { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .avatar-actions { display: flex; flex-direction: column; gap: 8px; }
 .avatar-actions .btn-ghost { width: auto; }
+
+/* corridas gravadas */
+.run-row { display: flex; align-items: center; gap: 12px; }
+.rr-date { font-family: var(--font-mono), monospace; font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.rr-km { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 22px; margin: 2px 0; }
+.rr-meta { font-size: 12.5px; color: var(--ink-soft); }
+.splits { display: flex; flex-direction: column; gap: 8px; }
+.split { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; }
+.split .sk { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13px; }
+.split .sk small { color: var(--muted); font-weight: 600; }
+.split .sbar { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.split .sbar > i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.split .sp { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13px; }
+.split .sp small { color: var(--muted); font-weight: 600; font-size: 10px; }
 .sesh.tiro { background: var(--rose); }
 .sesh.rod { background: var(--accent); }
 .sesh.long { background: #E1911A; }

@@ -8,6 +8,9 @@ from app.core.clock import now_local
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
+from app.infrastructure.persistence.recorded_run_repository import (
+    RecordedRunRepository,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -31,6 +34,26 @@ def _is_ours(name: str) -> bool:
     n = (name or "").lower()
 
     return "ritmind" in n or "runmind" in n
+
+
+def _run_date(r: dict) -> date | None:
+    """Data de uma corrida gravada no app (started_at; cai no saved_at)."""
+
+    for key in ("started_at", "saved_at"):
+
+        v = r.get(key)
+
+        if v:
+
+            try:
+
+                return date.fromisoformat(str(v)[:10])
+
+            except ValueError:
+
+                continue
+
+    return None
 
 
 def _pace_str(distance_m: float, moving_time_s: int) -> str | None:
@@ -81,6 +104,38 @@ class CalendarBuilder:
                 )
 
         executed_dates = {e["date_iso"] for e in executed}
+
+        # corridas gravadas no APP (GPS) — pintam o dia SÓ quando não há um treino
+        # arquivado (Strava/Garmin) na mesma data, pra não contar 2x quem
+        # sincroniza. Ver [[project_independencia_strava]].
+        for r in CalendarBuilder._safe(
+            lambda: RecordedRunRepository().load(profile)
+        ) or []:
+
+            d = _run_date(r)
+
+            if d is None or not (first <= d <= last):
+
+                continue
+
+            if d.isoformat() in executed_dates:
+
+                continue
+
+            executed.append(
+                {
+                    "date_iso": d.isoformat(),
+                    "km": round((r.get("distance_m") or 0) / 1000, 1),
+                    "pace": r.get("avg_pace"),
+                    "duration_min": round((r.get("duration_s") or 0) / 60),
+                    "name": "Corrida no app",
+                    "kind": "rod",
+                    "is_ours": False,
+                    "source": "app",
+                }
+            )
+
+            executed_dates.add(d.isoformat())
 
         # planejados FUTUROS (>= hoje) do plano atual que caem no mês — dias
         # passados já mostram o executado, não faz sentido "planejar" o passado
@@ -152,6 +207,27 @@ class CalendarBuilder:
                 }
 
                 break
+
+        # sem treino arquivado no dia? usa a corrida gravada no app, se houver
+        if executed is None:
+
+            for r in CalendarBuilder._safe(
+                lambda: RecordedRunRepository().load(profile)
+            ) or []:
+
+                if _run_date(r) == d:
+
+                    executed = {
+                        "km": round((r.get("distance_m") or 0) / 1000, 1),
+                        "pace": r.get("avg_pace"),
+                        "duration_min": round((r.get("duration_s") or 0) / 60),
+                        "avg_hr": None,
+                        "elevation_gain": None,
+                        "name": "Corrida no app",
+                        "is_ours": False,
+                    }
+
+                    break
 
         planned = CalendarBuilder._planned_for(profile, d)
 
