@@ -48,12 +48,14 @@ def track_from_strava_raw(raw: dict) -> dict | None:
             continue
 
         partial = round(dist / 1000, 2) if dist < 950 else None
+        hr = s.get("average_heartrate")
 
         splits.append({
             "km": None if partial else int(s.get("split") or (len(splits) + 1)),
             "sec": round(sec, 1),
             "pace": _fmt_pace(sec / (dist / 1000)),
             "partial_km": partial,
+            "hr": int(round(hr)) if hr else None,
         })
 
     if not points and not splits:

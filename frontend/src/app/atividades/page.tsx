@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
@@ -9,6 +9,72 @@ import {
   type FeedItem,
   type TrackData,
 } from "@/lib/api";
+
+// Carrega o Leaflet (mapa real, tiles do OpenStreetMap — grátis, sem chave) sob
+// demanda via CDN. Resolve quando window.L está pronto.
+declare global { interface Window { L?: any } }
+
+function loadLeaflet(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (window.L) return resolve(window.L);
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      document.head.appendChild(link);
+    }
+    const existing = document.getElementById("leaflet-js") as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.L));
+      existing.addEventListener("error", () => reject(new Error("leaflet")));
+      if (window.L) resolve(window.L);
+      return;
+    }
+    const s = document.createElement("script");
+    s.id = "leaflet-js";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    s.onload = () => resolve(window.L);
+    s.onerror = () => reject(new Error("leaflet"));
+    document.head.appendChild(s);
+  });
+}
+
+// Mapa real com o trajeto (Leaflet + OSM). Cai pro traçado em SVG se o mapa não
+// carregar (offline/tiles bloqueados).
+function MapView({ points }: { points: { lat: number; lon: number }[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const pts = points.filter((p) => p.lat && p.lon).map((p) => [p.lat, p.lon]);
+    if (pts.length < 2 || !ref.current) return;
+    let map: any;
+    let cancelled = false;
+    loadLeaflet()
+      .then((L: any) => {
+        if (cancelled || !ref.current) return;
+        map = L.map(ref.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "© OpenStreetMap",
+        }).addTo(map);
+        const line = L.polyline(pts, { color: "#0FB499", weight: 4 }).addTo(map);
+        L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
+        L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#E24666", fillOpacity: 1 }).addTo(map);
+        map.fitBounds(line.getBounds(), { padding: [22, 22] });
+        setTimeout(() => map && map.invalidateSize(), 120);
+      })
+      .catch(() => setFailed(true));
+    return () => {
+      cancelled = true;
+      if (map) map.remove();
+    };
+  }, [points]);
+
+  if (failed) return <TrackMapSVG points={points} />;
+  return <div ref={ref} className="map-box" />;
+}
 
 function Mark() {
   return (
@@ -31,8 +97,8 @@ function km(v: number): string {
   return v.toFixed(2).replace(".", ",");
 }
 
-// Traçado do GPS como polyline (sem mapa base — só a forma do percurso).
-function TrackMap({ points }: { points: { lat: number; lon: number }[] }) {
+// Fallback: traçado como polyline em SVG (sem mapa base) quando o Leaflet falha.
+function TrackMapSVG({ points }: { points: { lat: number; lon: number }[] }) {
   const pts = points.filter((p) => p.lat && p.lon);
   if (pts.length < 2) return null;
   const lats = pts.map((p) => p.lat), lons = pts.map((p) => p.lon);
@@ -131,26 +197,36 @@ export default function AtividadesPage() {
             ) : (
               <>
                 {track.points.length >= 2 && (
-                  <section className="card" style={{ padding: 12 }}><TrackMap points={track.points} /></section>
+                  <section className="card" style={{ padding: 0, overflow: "hidden" }}><MapView points={track.points} /></section>
                 )}
-                {track.splits.length > 0 && (
-                  <section className="card">
-                    <div className="card-head"><span className="eyebrow">Parciais por km</span></div>
-                    <div className="splits">
-                      {track.splits.map((s, i) => {
-                        const paceSec = s.sec / (s.partial_km || 1);
-                        const w = Math.max(8, Math.round((paceSec / maxPace) * 100));
-                        return (
-                          <div className="split" key={i}>
-                            <span className="sk">{s.km ?? `${String(s.partial_km).replace(".", ",")}`}<small>{s.km ? "" : " km"}</small></span>
-                            <span className="sbar"><i style={{ width: `${w}%` }} /></span>
-                            <span className="sp">{s.pace ?? "—"}<small>/km</small></span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                )}
+                {track.splits.length > 0 && (() => {
+                  const hasHr = track.splits.some((s) => s.hr != null);
+                  return (
+                    <section className="card">
+                      <div className="card-head"><span className="eyebrow">Parciais por km</span></div>
+                      <div className={`splits${hasHr ? " with-hr" : ""}`}>
+                        <div className="split head">
+                          <span className="sk">km</span>
+                          <span className="sbar" />
+                          <span className="sp">pace</span>
+                          {hasHr && <span className="shr">FC</span>}
+                        </div>
+                        {track.splits.map((s, i) => {
+                          const paceSec = s.sec / (s.partial_km || 1);
+                          const w = Math.max(8, Math.round((paceSec / maxPace) * 100));
+                          return (
+                            <div className="split" key={i}>
+                              <span className="sk">{s.km ?? `${String(s.partial_km).replace(".", ",")}`}<small>{s.km ? "" : " km"}</small></span>
+                              <span className="sbar"><i style={{ width: `${w}%` }} /></span>
+                              <span className="sp">{s.pace ?? "—"}<small>/km</small></span>
+                              {hasHr && <span className="shr">{s.hr != null ? s.hr : "—"}<small>{s.hr != null ? " bpm" : ""}</small></span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })()}
               </>
             )
           ) : (

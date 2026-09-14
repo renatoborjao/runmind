@@ -66,6 +66,7 @@ def _splits(points: list[dict]) -> list[dict]:
                 "sec": round(mark_t - last_t, 1),
                 "pace": _fmt_pace(mark_t - last_t),
                 "partial_km": None,
+                "hr": None,
             })
             last_t = mark_t
             next_mark += 1000
@@ -85,6 +86,7 @@ def _splits(points: list[dict]) -> list[dict]:
             "sec": round(sec, 1),
             "pace": _fmt_pace(sec / pk) if pk > 0 else None,
             "partial_km": round(pk, 2),
+            "hr": None,
         })
 
     return splits
