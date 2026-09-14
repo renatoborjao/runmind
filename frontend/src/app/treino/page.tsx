@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import { getCalendar, type CalendarMonth } from "@/lib/api";
 
-// Calendário padronizado em VERDE: cor não deve sugerir "faltou treino".
+// Status por cor (não por tipo): verde = feito, amarelo = a realizar.
 // A diferença de tipo (tiro/rodagem/longão) fica no DETALHE do treino.
 const DONE_COLOR = "var(--accent)";
+const PLANNED_COLOR = "#F5A623";
 
 const WEEKDAY_HEAD = ["D", "S", "T", "Q", "Q", "S", "S"];
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -155,20 +156,19 @@ export default function TreinoPage() {
                     >
                       {isRace && <span className="flag">🏁</span>}
                       {ex ? (
-                        <span className="daynum done" style={{ background: DONE_COLOR }}>{d}</span>
+                        <span className="daynum" style={{ background: DONE_COLOR }}>{d}</span>
+                      ) : pl ? (
+                        <span className="daynum" style={{ background: PLANNED_COLOR }}>{d}</span>
                       ) : (
-                        <>
-                          <span>{d}</span>
-                          {pl && <span className="cdot ring" style={{ borderColor: DONE_COLOR }} />}
-                        </>
+                        <span>{d}</span>
                       )}
                     </div>
                   );
                 })}
               </div>
               <div className="legend">
-                <span><i style={{ background: "var(--accent)", borderRadius: "50%", width: 12, height: 12 }} />Feito (cheio)</span>
-                <span><i style={{ background: "transparent", border: "1.5px solid var(--muted)", borderRadius: "50%" }} />Planejado (anel)</span>
+                <span><i style={{ background: DONE_COLOR, borderRadius: "50%", width: 12, height: 12 }} />Feito</span>
+                <span><i style={{ background: PLANNED_COLOR, borderRadius: "50%", width: 12, height: 12 }} />A realizar</span>
               </div>
             </>
           )}
@@ -184,7 +184,7 @@ export default function TreinoPage() {
                   <div className="dn">{new Date(it.iso + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</div>
                   <div className="dd">{Number(it.iso.slice(-2))}</div>
                 </div>
-                <span className="kdot" style={{ background: it.done ? DONE_COLOR : "transparent", border: it.done ? "none" : `1.5px solid ${DONE_COLOR}` }} />
+                <span className="kdot" style={{ background: it.done ? DONE_COLOR : PLANNED_COLOR }} />
                 <div className="info">
                   <div className="wt">{it.title}{it.done ? "" : ""}</div>
                   <div className="wd">{it.sub}</div>
