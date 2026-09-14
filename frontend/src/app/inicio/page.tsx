@@ -7,8 +7,10 @@ import {
   getBody,
   getHome,
   getMe,
+  getProgress,
   type BodyReading,
   type HomeSummary,
+  type Progress,
   type TodaySession,
   type WorkoutStep,
 } from "@/lib/api";
@@ -145,10 +147,42 @@ function Mark() {
   );
 }
 
+// mini-gráfico de volume semanal pra home: barras compactas, última semana
+// esmaecida (em curso). Mesmo desenho da tela de evolução, só que menor.
+function MiniVolume({ data }: { data: { label: string; km: number }[] }) {
+  const W = 320, H = 88, padB = 16, padT = 14;
+  const max = Math.max(10, ...data.map((d) => d.km));
+  const n = data.length;
+  const gap = 8;
+  const bw = (W - gap * (n - 1)) / n;
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Volume por semana">
+        {data.map((d, i) => {
+          const h = d.km > 0 ? ((H - padB - padT) * d.km) / max : 0;
+          const x = i * (bw + gap);
+          const y = H - padB - h;
+          const last = i === n - 1;
+          return (
+            <g key={i}>
+              {d.km > 0 && (
+                <text x={x + bw / 2} y={y - 3} textAnchor="middle" fontSize="8" fontFamily="var(--font-mono)" fill="var(--ink-soft)">{d.km}</text>
+              )}
+              <rect x={x} y={y} width={bw} height={Math.max(h, 1)} rx="3" fill={last ? "var(--muted)" : "var(--accent)"} opacity={last ? 0.5 : 1} />
+              <text x={x + bw / 2} y={H - 5} textAnchor="middle" fontSize="7.5" fontFamily="var(--font-mono)" fill="var(--muted)">{d.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function InicioPage() {
   const router = useRouter();
   const [home, setHome] = useState<HomeSummary | null>(null);
   const [bodyR, setBodyR] = useState<BodyReading | null>(null);
+  const [prog, setProg] = useState<Progress | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -158,9 +192,10 @@ export default function InicioPage() {
         router.replace("/entrar");
         return;
       }
-      const [h, bd] = await Promise.all([getHome(), getBody()]);
+      const [h, bd, pr] = await Promise.all([getHome(), getBody(), getProgress()]);
       setHome(h);
       setBodyR(bd);
+      setProg(pr);
       setLoading(false);
     })();
   }, [router]);
@@ -178,7 +213,6 @@ export default function InicioPage() {
   const firstName = (home.athlete.name ?? "").split(" ")[0] || "corredor";
   const body = home.body;
   const session = home.today.session;
-  const fitness = home.fitness;
   const shoe = home.shoe;
 
   return (
@@ -337,24 +371,35 @@ export default function InicioPage() {
           ))}
         </section>
 
-        {/* EVOLUÇÃO */}
-        {fitness && (fitness.vo2max != null || fitness.projection_10k) && (
-          <section className="card">
-            <div className="card-head"><span className="eyebrow">Evolução</span></div>
-            <div className="prog-grid">
-              {fitness.projection_10k && (
-                <div className="stat">
-                  <div className="k">Projeção 10 km</div>
-                  <div className="big">{fitness.projection_10k}</div>
-                </div>
-              )}
-              {fitness.vo2max != null && (
-                <div className="stat">
-                  <div className="k">VO₂max</div>
-                  <div className="big">{fitness.vo2max} <small>ml/kg</small></div>
-                </div>
-              )}
+        {/* EVOLUÇÃO — teaser com substância: jornada + volume + projeções */}
+        {prog && (prog.journey.runs > 0 || prog.fitness.vo2max != null) && (
+          <section className="card tap" onClick={() => router.push("/evolucao")}>
+            <div className="card-head">
+              <span className="eyebrow">Evolução</span>
+              <a className="link" onClick={(e) => { e.stopPropagation(); router.push("/evolucao"); }}>Ver tudo</a>
             </div>
+
+            <div className="prog-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+              <div className="stat"><div className="k">Km no Ritmind</div><div className="big">{prog.journey.km_total}</div></div>
+              <div className="stat"><div className="k">Treinos</div><div className="big">{prog.journey.runs}</div></div>
+              <div className="stat"><div className="k">Maior</div><div className="big">{String(prog.journey.biggest_km).replace(".", ",")}<small> km</small></div></div>
+            </div>
+
+            {prog.weekly_volume && prog.weekly_volume.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <span className="eyebrow" style={{ display: "block", marginBottom: 2 }}>Volume por semana (km)</span>
+                <MiniVolume data={prog.weekly_volume.slice(-6)} />
+              </div>
+            )}
+
+            {(prog.fitness.vo2max != null || prog.fitness.projection_5k || prog.fitness.projection_10k || prog.fitness.projection_half) && (
+              <div className="ev-foot">
+                {prog.fitness.vo2max != null && <span className="ev-chip">VO₂max <b>{prog.fitness.vo2max}</b></span>}
+                {prog.fitness.projection_5k && <span className="ev-chip">5k <b>{prog.fitness.projection_5k}</b></span>}
+                {prog.fitness.projection_10k && <span className="ev-chip">10k <b>{prog.fitness.projection_10k}</b></span>}
+                {prog.fitness.projection_half && <span className="ev-chip">Meia <b>{prog.fitness.projection_half}</b></span>}
+              </div>
+            )}
           </section>
         )}
 

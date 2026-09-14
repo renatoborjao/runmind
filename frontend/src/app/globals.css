@@ -184,7 +184,13 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .day.today { background: var(--accent-wash); outline: 1.5px solid var(--accent); }
 .day .dn { font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--muted); }
 .day .dd { font-weight: 700; font-size: 14px; margin: 2px 0 6px; }
-.day .sesh { height: 5px; width: 5px; border-radius: 50%; margin: 0 auto; }
+.day .sesh { display: block; height: 8px; width: 8px; border-radius: 50%; margin: 2px auto 0; }
+.day.tap .sesh { box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.day.today .dd { color: var(--accent-ink); }
+
+.ev-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ev-chip { font-family: var(--font-mono), monospace; font-size: 12px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 6px 11px; }
+.ev-chip b { color: var(--ink); font-weight: 700; margin-left: 3px; }
 .sesh.tiro { background: var(--rose); }
 .sesh.rod { background: var(--accent); }
 .sesh.long { background: #E1911A; }
