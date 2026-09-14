@@ -98,3 +98,7 @@ class RunnerProfile:
     # Banister tem fator diferente por sexo). None = desconhecido (a carga cai
     # no %FCR linear). Coletado no onboarding.
     sex: str | None = None
+
+    # Foto do atleta pro app — data URL (base64, imagem já redimensionada no
+    # cliente pra ficar leve). Opcional; None = usa as iniciais. Só o app usa.
+    avatar: str | None = None

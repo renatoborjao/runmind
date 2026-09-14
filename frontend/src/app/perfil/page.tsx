@@ -1,10 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, logout, saveProfile, type Profile } from "@/lib/api";
 
 const SEX_PT: Record<string, string> = { M: "Masculino", F: "Feminino" };
+
+// Lê a foto escolhida e devolve um data URL leve: recorta quadrado central e
+// reduz pra 256px em JPEG — fica com poucos KB, sem precisar de upload/servidor.
+function fileToAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("img"));
+      img.onload = () => {
+        const S = 256;
+        const canvas = document.createElement("canvas");
+        canvas.width = S; canvas.height = S;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("ctx")); return; }
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -23,6 +50,7 @@ type Form = {
   weight: string;
   height: string;
   sex: string;
+  avatar: string; // data URL ou "" (sem foto)
 };
 
 function toForm(p: Profile): Form {
@@ -34,6 +62,7 @@ function toForm(p: Profile): Form {
     weight: p.weight ? String(p.weight) : "",
     height: p.height ? String(p.height) : "",
     sex: p.sex ?? "",
+    avatar: p.avatar ?? "",
   };
 }
 
@@ -45,6 +74,7 @@ export default function PerfilPage() {
   const [f, setF] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -78,6 +108,7 @@ export default function PerfilPage() {
       weight: f.weight ? Number(f.weight.replace(",", ".")) : undefined,
       height: f.height ? Number(f.height.replace(",", ".")) : undefined,
       sex: f.sex || null,
+      avatar: f.avatar,
     });
     setSaving(false);
     if (!res.ok) { setErr(res.message ?? "Não consegui salvar."); return; }
@@ -112,6 +143,35 @@ export default function PerfilPage() {
           {err && <div className="notice err">{err}</div>}
 
           <div className="card" style={{ padding: 16 }}>
+            <input ref={fileRef} type="file" accept="image/*" hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                try {
+                  const av = await fileToAvatar(file);
+                  up({ avatar: av });
+                } catch {
+                  setErr("Não consegui ler essa imagem. Tenta outra.");
+                }
+              }} />
+
+            <div className="avatar-edit">
+              {f.avatar ? (
+                <img className="avatar-preview" src={f.avatar} alt="Foto do perfil" />
+              ) : (
+                <span className="avatar-lg">{(f.first_name?.[0] ?? "") + (f.last_name?.[0] ?? "") || "🏃"}</span>
+              )}
+              <div className="avatar-actions">
+                <button type="button" className="btn-ghost" onClick={() => fileRef.current?.click()}>
+                  {f.avatar ? "Trocar foto" : "Adicionar foto"}
+                </button>
+                {f.avatar && (
+                  <button type="button" className="btn-ghost danger" onClick={() => up({ avatar: "" })}>Remover</button>
+                )}
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
               <div className="field" style={{ flex: 1 }}>
                 <label>Nome</label>
@@ -183,7 +243,11 @@ export default function PerfilPage() {
 
         {/* cabeçalho */}
         <section className="card" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span className="avatar-lg">{initials || "🏃"}</span>
+          {p.avatar ? (
+            <img className="avatar-preview sm" src={p.avatar} alt="Foto do perfil" />
+          ) : (
+            <span className="avatar-lg">{initials || "🏃"}</span>
+          )}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20 }}>{p.name}</div>
             {p.email && <div className="muted" style={{ fontSize: 13 }}>{p.email}</div>}

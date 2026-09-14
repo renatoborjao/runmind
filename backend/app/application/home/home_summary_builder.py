@@ -116,7 +116,11 @@ class HomeSummaryBuilder:
         ) or set()
 
         return {
-            "athlete": {"name": runner.name, "goal": runner.goal},
+            "athlete": {
+                "name": runner.name,
+                "goal": runner.goal,
+                "avatar": getattr(runner, "avatar", None),
+            },
             "today": HomeSummaryBuilder._today(sessions, monday, now),
             "week": HomeSummaryBuilder._week(sessions, monday, now, executed),
             "body": HomeSummaryBuilder._safe(

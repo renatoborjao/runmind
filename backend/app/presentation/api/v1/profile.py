@@ -30,6 +30,7 @@ def _serialize(r) -> dict:
         "weight": r.weight,
         "height": r.height,
         "sex": r.sex,
+        "avatar": r.avatar,
         "timezone": r.timezone,
         "goal": r.goal,
         "weekly_training_days": r.weekly_training_days,
@@ -69,6 +70,7 @@ class ProfilePatch(BaseModel):
     weight: float | None = None
     height: float | None = None
     sex: str | None = None
+    avatar: str | None = None   # data URL de imagem, ou "" pra remover
 
 
 @router.patch("")
@@ -118,9 +120,9 @@ async def update_profile(
 
                 raise HTTPException(status_code=422, detail="E-mail inválido.")
 
-            other = repo.find_by_email(email)
+            owner = repo.find_by_email(email)  # chave do perfil dono, ou None
 
-            if other is not None and other.id != r.id:
+            if owner is not None and owner != profile:
 
                 raise HTTPException(
                     status_code=409, detail="Esse e-mail já está em uso por outra conta."
@@ -171,6 +173,28 @@ async def update_profile(
         else:
 
             raise HTTPException(status_code=422, detail="Sexo deve ser M ou F.")
+
+    if body.avatar is not None:
+
+        av = body.avatar.strip()
+
+        if not av:
+
+            updates["avatar"] = None
+
+        elif not av.startswith("data:image/"):
+
+            raise HTTPException(status_code=422, detail="Foto inválida.")
+
+        elif len(av) > 400_000:
+
+            raise HTTPException(
+                status_code=413, detail="Foto muito grande — tenta outra."
+            )
+
+        else:
+
+            updates["avatar"] = av
 
     if updates:
 
