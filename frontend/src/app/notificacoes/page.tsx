@@ -38,6 +38,17 @@ function iconFor(kind: string | null): string {
   return "🔔";
 }
 
+function actionLabel(url?: string | null): string {
+  if (!url) return "Abrir";
+  if (url.startsWith("/treino")) return "Ver treino";
+  if (url.startsWith("/atividades")) return "Ver atividade";
+  if (url.startsWith("/evolucao")) return "Ver evolução";
+  if (url.startsWith("/provas")) return "Ver provas";
+  if (url.startsWith("/tenis")) return "Ver tênis";
+  if (url.startsWith("/corpo")) return "Ver meu corpo";
+  return "Abrir";
+}
+
 export default function NotificacoesPage() {
   const router = useRouter();
   const [items, setItems] = useState<AppNotification[] | null>(null);
@@ -108,19 +119,28 @@ export default function NotificacoesPage() {
           </div>
         ) : (
           <div className="notif-list">
-            {items.map((n) => (
-              <div key={n.id} className={`notif-row${unreadIds.has(n.id) ? " unread" : ""}`}>
-                <div className="notif-ic">{iconFor(n.kind)}</div>
-                <div className="notif-body">
-                  <div className="notif-head">
-                    <span className="notif-title">{n.title || "Mensagem do coach"}</span>
-                    <span className="notif-when">{fmtWhen(n.created_at)}</span>
+            {items.map((n) => {
+              const target = n.url && n.url !== "/inicio/" ? n.url : null;
+              return (
+                <div
+                  key={n.id}
+                  className={`notif-row${unreadIds.has(n.id) ? " unread" : ""}${target ? " tappable" : ""}`}
+                  onClick={target ? () => router.push(target) : undefined}
+                  role={target ? "button" : undefined}
+                >
+                  <div className="notif-ic">{iconFor(n.kind)}</div>
+                  <div className="notif-body">
+                    <div className="notif-head">
+                      <span className="notif-title">{n.title || "Mensagem do coach"}</span>
+                      <span className="notif-when">{fmtWhen(n.created_at)}</span>
+                    </div>
+                    <p className="notif-text">{n.text}</p>
+                    {target && <span className="notif-go">{actionLabel(target)} ›</span>}
                   </div>
-                  <p className="notif-text">{n.text}</p>
+                  {unreadIds.has(n.id) && <span className="notif-dot" aria-label="não lida" />}
                 </div>
-                {unreadIds.has(n.id) && <span className="notif-dot" aria-label="não lida" />}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

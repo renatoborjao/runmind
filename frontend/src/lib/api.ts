@@ -242,9 +242,12 @@ export async function getDayDetail(dateIso: string): Promise<DayDetail | null> {
 // ---- Coach (chat nativo) ----
 
 export interface ChatMsg {
-  role: string; // "user" | "assistant"
+  role: string; // "user" | "assistant" | "coach" (proativo)
   text: string;
   at: string | null;
+  kind?: string | null;
+  title?: string | null;
+  url?: string | null;
 }
 
 export async function getCoachMessages(): Promise<ChatMsg[] | null> {
@@ -587,6 +590,7 @@ export interface AppNotification {
   text: string;
   created_at: string | null;
   read: boolean;
+  url?: string | null;
 }
 
 export interface NotificationsResponse {

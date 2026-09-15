@@ -1,7 +1,12 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.application.notifications.app_inbox import AppInbox, _push_body, _title_for
+from app.application.notifications.app_inbox import (
+    AppInbox,
+    _push_body,
+    _title_for,
+    deep_link_for,
+)
 from app.infrastructure.persistence.app_notification_repository import (
     AppNotificationRepository,
 )
@@ -119,6 +124,18 @@ def test_push_body_truncates_long_text():
 
     assert len(body) <= 140
     assert body.endswith("…")
+
+
+def test_deep_link_for_maps_kind_to_screen():
+
+    assert deep_link_for("daily_training") == "/treino/detalhe/"
+    assert deep_link_for("feedback") == "/atividades/"
+    assert deep_link_for("wear_alert") == "/tenis/"
+    assert deep_link_for("race_day") == "/provas/"
+    assert deep_link_for("personal_record") == "/evolucao/"
+    # kind desconhecido / None -> início (sem beco sem saída)
+    assert deep_link_for("desconhecido") == "/inicio/"
+    assert deep_link_for(None) == "/inicio/"
 
 
 # ---------- AppInbox.deliver ----------

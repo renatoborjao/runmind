@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.application.notifications.app_inbox import deep_link_for
 from app.core.config import get_settings
 from app.infrastructure.persistence.app_notification_repository import (
     AppNotificationRepository,
@@ -26,6 +27,11 @@ async def list_notifications(profile: str = Depends(current_profile)):
     repo = AppNotificationRepository()
 
     items = repo.load(profile)
+
+    # atalho por tipo: tocar leva pra tela certa (treino do dia, atividade…)
+    for it in items:
+
+        it["url"] = deep_link_for(it.get("kind"))
 
     unread = sum(1 for i in items if not i.get("read"))
 

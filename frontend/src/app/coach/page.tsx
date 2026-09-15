@@ -15,6 +15,18 @@ function Mark() {
   );
 }
 
+// rótulo do botão do cartão pelo destino
+function actionLabel(url?: string | null): string {
+  if (!url) return "Ver";
+  if (url.startsWith("/treino")) return "Ver treino";
+  if (url.startsWith("/atividades")) return "Ver atividade";
+  if (url.startsWith("/evolucao")) return "Ver evolução";
+  if (url.startsWith("/provas")) return "Ver provas";
+  if (url.startsWith("/tenis")) return "Ver tênis";
+  if (url.startsWith("/corpo")) return "Ver meu corpo";
+  return "Abrir";
+}
+
 export default function CoachPage() {
   const router = useRouter();
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
@@ -72,9 +84,26 @@ export default function CoachPage() {
           <p className="chat-empty">Fala com teu coach 👋<br />Pergunta sobre teu treino, como tá teu corpo, ou peça um ajuste.</p>
         ) : (
           <div className="chat-msgs">
-            {msgs.map((m, i) => (
-              <div key={i} className={`msg ${m.role === "user" ? "user" : "bot"}`}>{m.text}</div>
-            ))}
+            {msgs.map((m, i) => {
+              if (m.role === "coach") {
+                const hasAction = !!m.url && m.url !== "/inicio/";
+                return (
+                  <div key={i} className="coach-card">
+                    {m.title && <div className="cc-title">{m.title}</div>}
+                    <div className="cc-text">{m.text}</div>
+                    {hasAction && (
+                      <button className="cc-action" onClick={() => router.push(m.url!)}>
+                        {actionLabel(m.url)}
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+              return (
+                <div key={i} className={`msg ${m.role === "user" ? "user" : "bot"}`}>{m.text}</div>
+              );
+            })}
             {sending && <div className="msg bot typing">Coach digitando…</div>}
             <div ref={endRef} />
           </div>

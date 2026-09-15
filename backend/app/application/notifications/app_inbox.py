@@ -48,6 +48,40 @@ _TITLES = {
 
 _DEFAULT_TITLE = "Mensagem do coach"
 
+# kind -> tela do app que o toque abre (atalho com contexto). Barra final por
+# causa do export estático (trailingSlash) e do openWindow do service worker.
+# Reaproveitado no push, na central e na timeline do Coach.
+_LINKS = {
+    "feedback": "/atividades/",
+    "race_debrief": "/atividades/",
+    "personal_record": "/evolucao/",
+    "pace_progress": "/evolucao/",
+    "cadence_progress": "/evolucao/",
+    "monthly_recap": "/evolucao/",
+    "state_portrait": "/corpo/",
+    "wellbeing_followup": "/corpo/",
+    "morning_briefing": "/treino/detalhe/",
+    "daily_training": "/treino/detalhe/",
+    "weekly_review": "/treino/",
+    "weekly_plan": "/treino/",
+    "strava_connect": "/treino/",
+    "external_plan": "/treino/",
+    "wear_alert": "/tenis/",
+    "race_day": "/provas/",
+    "race_eve": "/provas/",
+    "race_journey": "/provas/",
+    "race_week": "/provas/",
+    "race_taper": "/provas/",
+    "goal_projection": "/provas/",
+}
+
+
+def deep_link_for(kind: str | None) -> str:
+    """Tela que o toque na notificação/cartão abre, pelo tipo. Fallback: início."""
+
+    return _LINKS.get(kind or "", "/inicio/")
+
+
 # tamanho do corpo do push (o card no app mostra o texto inteiro)
 _PUSH_BODY_MAX = 140
 
@@ -114,7 +148,7 @@ class AppInbox:
                 profile,
                 title,
                 _push_body(message),
-                "/inicio",
+                deep_link_for(kind),
             )
 
         except Exception as e:

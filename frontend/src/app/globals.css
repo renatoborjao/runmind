@@ -488,6 +488,17 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .notif-text { margin: 3px 0 0; font-size: 13px; line-height: 1.4; color: var(--ink-soft); white-space: pre-wrap; word-break: break-word; }
 .notif-dot { position: absolute; top: 13px; right: 11px; width: 8px; height: 8px; border-radius: 999px; background: var(--accent); flex: none; }
 
+.notif-row.tappable { cursor: pointer; }
+.notif-row.tappable:active { transform: scale(.995); }
+.notif-go { display: inline-block; margin-top: 6px; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 12px; color: var(--accent-ink); }
+
+/* cartão proativo do coach (na aba Coach) */
+.coach-card { align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 14px; padding: 12px 13px; }
+.coach-card .cc-title { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 13px; color: var(--accent-ink); margin-bottom: 5px; }
+.coach-card .cc-text { font-size: 13.5px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.coach-card .cc-action { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; border: none; cursor: pointer; background: var(--accent-wash); color: var(--accent-ink); font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 12.5px; padding: 8px 13px; border-radius: 10px; }
+.coach-card .cc-action:active { transform: scale(.98); }
+
 .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 48px 24px; color: var(--muted); }
 .empty-state .emoji { font-size: 34px; }
 .empty-state p { margin: 0; font-size: 13.5px; line-height: 1.45; max-width: 240px; }
