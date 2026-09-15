@@ -1,10 +1,6 @@
 import unicodedata
 from datetime import UTC, datetime, timedelta
 
-from app.application.assessment.training_assessment_builder import (
-    TrainingAssessmentBuilder,
-)
-from app.application.coach.planning.ai_plan_service import AIPlanService
 from app.application.events.assistant_errors import AssistantUnavailable
 from app.application.external_plan.external_plan_extraction_engine import (
     ExternalPlanExtractionEngine,
@@ -12,7 +8,7 @@ from app.application.external_plan.external_plan_extraction_engine import (
 from app.application.external_plan.external_plan_service import (
     ExternalPlanService,
 )
-from app.application.history.metrics_resolver import MetricsResolver
+from app.application.onboarding.initial_plan import ensure_initial_plan
 from app.application.onboarding.onboarding_answer_parser import (
     OnboardingAnswerParser,
 )
@@ -20,14 +16,9 @@ from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
 from app.application.planner.weekly_plan_service import WeeklyPlanService
-from app.application.use_cases.load_training_history import (
-    LoadTrainingHistory,
-)
 from app.core.clock import today_local
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
-from app.application.use_cases.build_training_goal import BuildTrainingGoal
-from app.domain.entities.training_history import TrainingHistory
 from app.infrastructure.integrations.media_download import (
     download_media,
 )
@@ -1218,56 +1209,13 @@ class OnboardingFlow:
         start_next_week: bool = False,
     ) -> str:
 
-        repository = RunnerProfileRepository()
-
-        runner = repository.load(slug)
-
-        try:
-
-            history = await LoadTrainingHistory.execute(
-                profile=slug,
-            )
-
-        except Exception:
-
-            # sem Strava conectado ainda: plano inicial conservador
-            history = TrainingHistory(activities=[])
-
-        assessment = TrainingAssessmentBuilder.build(
-            runner,
-            history,
+        # miolo compartilhado com o wizard do app (mesma inteligência)
+        plan, runner, history, _ = await ensure_initial_plan(
+            slug,
+            start_next_week=start_next_week,
         )
-
-        metrics = MetricsResolver.resolve(
-            runner,
-            history,
-        )
-
-        goal = BuildTrainingGoal.execute(runner)
 
         today = today_local()
-
-        if start_next_week:
-
-            monday = today - timedelta(days=today.weekday())
-
-            reference_date = monday + timedelta(days=7)
-
-        else:
-
-            reference_date = today
-
-        # IA-treinadora gera o plano a partir do retrato real do atleta;
-        # run/walk, treinador externo e falha da IA caem no determinístico.
-        plan = await AIPlanService.ensure_plan(
-            profile=slug,
-            runner=runner,
-            assessment=assessment,
-            metrics=metrics,
-            goal=goal,
-            history=history,
-            reference_date=reference_date,
-        )
 
         # dias já passados desta semana ficam marcados como "já passou"
         # (não realizado) — nada de data passada como se fosse fazer

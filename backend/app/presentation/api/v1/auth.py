@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.application.auth.magic_link_service import MagicLinkService
+from app.application.auth.signup_service import SignupError, SignupService
 from app.core.config import get_settings
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
@@ -16,6 +17,13 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 class LoginRequest(BaseModel):
 
     email: str
+
+
+class SignupRequest(BaseModel):
+
+    email: str
+
+    invite_code: str
 
 
 class VerifyRequest(BaseModel):
@@ -51,6 +59,26 @@ async def request_login(body: LoginRequest):
     }
 
 
+@router.post("/signup")
+async def signup(body: SignupRequest):
+    """Auto-cadastro por convite. Só o convite inválido vira erro visível (não
+    vaza nada do e-mail); o resto responde genérico. Depois é só digitar o
+    código que chegou por e-mail em /entrar (ou /cadastro)."""
+
+    try:
+
+        SignupService.start(body.email, body.invite_code)
+
+    except SignupError as e:
+
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return {
+        "ok": True,
+        "message": "Enviamos um código de acesso pro seu e-mail.",
+    }
+
+
 @router.post("/verify")
 async def verify_login(body: VerifyRequest, response: Response):
     """Troca o magic token por uma sessão logada (cookie). O frontend chama isto
@@ -78,6 +106,7 @@ async def me(profile: str = Depends(current_profile)):
         "name": runner.name,
         "email": runner.email,
         "goal": runner.goal,
+        "onboarding_complete": runner.onboarding_complete,
     }
 
 

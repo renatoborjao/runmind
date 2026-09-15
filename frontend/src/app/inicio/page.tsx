@@ -207,6 +207,11 @@ export default function InicioPage() {
         router.replace("/entrar");
         return;
       }
+      // cadastro ainda não terminou (nasceu no app e parou no meio): wizard
+      if (!who.onboarding_complete) {
+        router.replace("/onboarding");
+        return;
+      }
       const [h, bd, pr] = await Promise.all([getHome(), getBody(), getProgress()]);
       setHome(h);
       setBodyR(bd);

@@ -102,3 +102,9 @@ class RunnerProfile:
     # Foto do atleta pro app — data URL (base64, imagem já redimensionada no
     # cliente pra ficar leve). Opcional; None = usa as iniciais. Só o app usa.
     avatar: str | None = None
+
+    # Cadastro concluído? Só o self-cadastro pelo APP nasce com isto False
+    # (perfil-esqueleto entre o cadastro e o fim do onboarding wizard). Default
+    # True: todo atleta que veio pelo bot (ou legado) já está completo — o app
+    # usa este flag pra decidir se manda pro wizard de onboarding.
+    onboarding_complete: bool = True

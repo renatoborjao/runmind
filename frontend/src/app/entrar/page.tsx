@@ -124,7 +124,14 @@ function EntrarInner() {
       </form>
 
       <p className="auth-hint">
-        Não tem código? Abra o coach e mande <b>&quot;quero o app&quot;</b>. 📲
+        Primeira vez no Ritmind?{" "}
+        <a className="link" onClick={() => router.push("/cadastro")}>
+          Criar conta
+        </a>
+      </p>
+
+      <p className="auth-hint" style={{ marginTop: 4 }}>
+        Já é atleta pelo Telegram? Mande <b>&quot;quero o app&quot;</b> ao coach. 📲
       </p>
 
       <a className="btn btn-tg" href={TELEGRAM_COACH} target="_blank" rel="noopener noreferrer">

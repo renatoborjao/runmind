@@ -20,6 +20,7 @@ export interface Me {
   name: string;
   email: string | null;
   goal: string;
+  onboarding_complete: boolean;
 }
 
 /** Pede o magic link. Resposta sempre genérica (não revela se o e-mail existe). */
@@ -29,6 +30,68 @@ export async function requestLogin(email: string): Promise<boolean> {
     body: JSON.stringify({ email }),
   });
   return r.ok;
+}
+
+/** Auto-cadastro por convite. Devolve {ok} ou {error} (convite inválido). */
+export async function signup(
+  email: string,
+  inviteCode: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, invite_code: inviteCode }),
+  });
+  if (r.ok) return { ok: true };
+  let error = "Não consegui te cadastrar. Confere o convite e tenta de novo.";
+  try {
+    const body = await r.json();
+    if (body?.detail) error = body.detail;
+  } catch {
+    /* mantém o genérico */
+  }
+  return { ok: false, error };
+}
+
+/** Payload do wizard de onboarding (dados estruturados). */
+export interface OnboardingPayload {
+  name: string;
+  age: number;
+  sex: "M" | "F" | null;
+  weight: number;
+  height: number;
+  days: number[]; // 0=segunda .. 6=domingo
+  goal: string;
+  target_race?: string | null;
+  target_time?: string | null;
+  race_date?: string | null;
+  runs_today: boolean;
+  runs_per_week?: number | null;
+  typical_km?: number | null;
+  pace_distance_km?: number | null;
+  pace_minutes?: number | null;
+  mobility?: "walker" | "run_walker" | "runner" | null;
+  continuous_run_minutes?: number | null;
+  walk_speed_kmh?: number | null;
+  external_coach: boolean;
+}
+
+/** Conclui o onboarding no app: grava o perfil e gera o plano. */
+export async function completeOnboarding(
+  payload: OnboardingPayload,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/onboarding/complete", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (r.ok) return { ok: true };
+  let error = "Não consegui finalizar. Confere os dados e tenta de novo.";
+  try {
+    const body = await r.json();
+    if (body?.detail) error = body.detail;
+  } catch {
+    /* mantém o genérico */
+  }
+  return { ok: false, error };
 }
 
 /** Troca o magic token pela sessão (seta o cookie). */

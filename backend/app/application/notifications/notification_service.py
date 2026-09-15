@@ -10,6 +10,11 @@ TELEGRAM = "telegram"
 
 WHATSAPP = "whatsapp"
 
+# Atleta que nasceu no próprio app (self-cadastro): não tem Telegram/WhatsApp.
+# O coach chega nele por Web Push + central de notificações do app (que já
+# espelham os proativos), então o envio externo aqui é no-op de propósito.
+APP = "app"
+
 
 class NotificationService:
     """Envio multicanal: escolhe WhatsApp ou Telegram pelo canal do
@@ -40,6 +45,11 @@ class NotificationService:
     ) -> None:
         """Resposta a uma mensagem de entrada quando ainda não há
         perfil (onboarding) — endereço bruto do canal."""
+
+        # atleta só-app: nada a enviar por canal externo (push+central cobrem)
+        if channel == APP:
+
+            return
 
         if channel == TELEGRAM:
 
