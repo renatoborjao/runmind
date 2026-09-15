@@ -54,7 +54,20 @@ function MapView({ points }: { points: { lat: number; lon: number }[] }) {
     loadLeaflet()
       .then((L: any) => {
         if (cancelled || !ref.current) return;
-        map = L.map(ref.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
+        // Mapa TRAVADO no percurso: encostar o dedo não arrasta/gira o mapa —
+        // ele fica focado no traçado (o atleta pediu "só no percurso"). Os
+        // botões de zoom seguem valendo pra aproximar/afastar.
+        map = L.map(ref.current, {
+          zoomControl: true,
+          attributionControl: true,
+          scrollWheelZoom: false,
+          dragging: false,
+          touchZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false,
+          keyboard: false,
+          tap: false,
+        });
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: "© OpenStreetMap",
@@ -62,7 +75,9 @@ function MapView({ points }: { points: { lat: number; lon: number }[] }) {
         const line = L.polyline(pts, { color: "#0FB499", weight: 4 }).addTo(map);
         L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
         L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#E24666", fillOpacity: 1 }).addTo(map);
-        map.fitBounds(line.getBounds(), { padding: [22, 22] });
+        const b = line.getBounds();
+        map.fitBounds(b, { padding: [22, 22] });
+        map.setMaxBounds(b.pad(0.25));  // não deixa o mapa vagar pra longe do percurso
         setTimeout(() => map && map.invalidateSize(), 120);
       })
       .catch(() => setFailed(true));
@@ -95,6 +110,45 @@ function fmtTime(iso: string | null): string {
 }
 function km(v: number): string {
   return v.toFixed(2).replace(".", ",");
+}
+function fmtPaceSec(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Zonas de FC (Z1..Z5, por %FCmáx) — mesma leitura que o Strava mostra: quanto
+// tempo o atleta passou em cada intensidade. Os valores vêm em MINUTOS.
+const ZONE_META = [
+  { n: "Z1", t: "Recuperação", c: "#6FCF97" },
+  { n: "Z2", t: "Leve", c: "#0FB499" },
+  { n: "Z3", t: "Moderado", c: "#F2C94C" },
+  { n: "Z4", t: "Limiar", c: "#F2994A" },
+  { n: "Z5", t: "Máximo", c: "#E24666" },
+];
+function HrZones({ zones }: { zones: number[] }) {
+  const total = zones.reduce((a, b) => a + (b || 0), 0);
+  if (total <= 0 || zones.length !== 5) return null;
+  const max = Math.max(...zones, 0.01);
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Zonas de FC</span></div>
+      <div className="hrz">
+        {zones.map((z, i) => {
+          const meta = ZONE_META[i];
+          const pct = Math.round((z / total) * 100);
+          const w = Math.max(3, Math.round((z / max) * 100));
+          return (
+            <div className="hrz-row" key={i}>
+              <span className="hrz-tag"><b>{meta.n}</b> {meta.t}</span>
+              <span className="hrz-bar"><i style={{ width: `${w}%`, background: meta.c }} /></span>
+              <span className="hrz-val">{pct}%<small>{z >= 1 ? ` ${Math.round(z)} min` : " <1 min"}</small></span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 // Fallback: traçado como polyline em SVG (sem mapa base) quando o Leaflet falha.
@@ -372,6 +426,24 @@ export default function AtividadesPage() {
     const maxPace = track && track.splits.length
       ? Math.max(...track.splits.map((s) => s.sec / (s.partial_km || 1)), 1)
       : 1;
+
+    // melhor km = km cheio mais rápido (parcial final de fora) — leitura estilo
+    // Strava, calculada dos splits quando o traçado carrega
+    const fullKm = track ? track.splits.filter((s) => s.km != null && s.sec > 0) : [];
+    const bestSec = fullKm.length
+      ? Math.min(...fullKm.map((s) => s.sec / (s.partial_km || 1)))
+      : null;
+
+    // estatísticas extras (só as que existem) em blocos de 3, tipo Strava
+    const extras: { v: string; unit: string; k: string }[] = [];
+    if (it.avg_hr != null) extras.push({ v: String(it.avg_hr), unit: " bpm", k: "FC média" });
+    if (it.max_hr != null) extras.push({ v: String(it.max_hr), unit: " bpm", k: "FC máx" });
+    if (bestSec != null) extras.push({ v: fmtPaceSec(bestSec), unit: "/km", k: "Melhor km" });
+    if (it.elevation_gain != null) extras.push({ v: String(it.elevation_gain), unit: " m", k: "Ganho" });
+    if (it.air_temp_c != null) extras.push({ v: String(it.air_temp_c), unit: "°C", k: "Temp." });
+    extras.push({ v: it.source === "app" ? "App" : "Strava/Garmin", unit: "", k: "Fonte" });
+    const extraRows: typeof extras[] = [];
+    for (let i = 0; i < extras.length; i += 3) extraRows.push(extras.slice(i, i + 3));
     return (
       <main className="stage">
         <div className="phone">
@@ -426,13 +498,18 @@ export default function AtividadesPage() {
             <div className="qstat"><div className="v">{it.pace ?? "—"}<small>{it.pace ? "/km" : ""}</small></div><div className="k">Pace</div></div>
           </div>
 
-          {(it.avg_hr != null || it.elevation_gain != null) && (
-            <div className="qstats">
-              <div className="qstat"><div className="v">{it.avg_hr ?? "—"}<small>{it.avg_hr ? " bpm" : ""}</small></div><div className="k">FC média</div></div>
-              <div className="qstat"><div className="v">{it.elevation_gain ?? "—"}<small>{it.elevation_gain ? " m" : ""}</small></div><div className="k">Ganho</div></div>
-              <div className="qstat"><div className="v" style={{ fontSize: 14 }}>{it.source === "app" ? "App" : "Strava/Garmin"}</div><div className="k">Fonte</div></div>
+          {extraRows.map((row, ri) => (
+            <div className="qstats" key={ri}>
+              {row.map((s, ci) => (
+                <div className="qstat" key={ci}>
+                  <div className="v" style={s.v.length > 6 ? { fontSize: 13.5 } : undefined}>{s.v}<small>{s.unit}</small></div>
+                  <div className="k">{s.k}</div>
+                </div>
+              ))}
             </div>
-          )}
+          ))}
+
+          {it.hr_zones && <HrZones zones={it.hr_zones} />}
 
           {it.has_track ? (
             loadingTrack || !track ? (

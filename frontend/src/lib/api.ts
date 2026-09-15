@@ -404,7 +404,10 @@ export interface FeedItem {
   duration_min: number;
   pace: string | null;
   avg_hr: number | null;
+  max_hr: number | null;
   elevation_gain: number | null;
+  hr_zones: number[] | null;
+  air_temp_c: number | null;
   name: string;
   has_track: boolean;
   track_source: "app" | "arch" | null;

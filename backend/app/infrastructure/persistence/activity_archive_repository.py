@@ -302,6 +302,20 @@ class ActivityArchiveRepository:
             "elevation_gain": activity.elevation_gain,
         }
 
+        # métricas ricas da atividade (detalhe estilo Strava no app) — só quando
+        # o device gravou, pra não poluir registros antigos/reduzidos com null
+        if activity.max_heartrate is not None:
+
+            record["max_heartrate"] = activity.max_heartrate
+
+        if activity.max_speed:
+
+            record["max_speed"] = activity.max_speed
+
+        if activity.elapsed_time and activity.elapsed_time > activity.moving_time:
+
+            record["elapsed_time"] = activity.elapsed_time
+
         # zonas de FC (carga de Edwards) só quando calculadas — não polui os
         # registros antigos/sem stream com null à toa
         if activity.hr_zone_minutes is not None:
