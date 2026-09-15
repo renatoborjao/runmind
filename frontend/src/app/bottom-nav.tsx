@@ -36,8 +36,8 @@ export default function BottomNav() {
       <Link href="/inicio" className={on("/inicio")}><Icon name="inicio" />Início</Link>
       <Link href="/treino" className={on("/treino")}><Icon name="treino" />Treino</Link>
       <Link href="/atividades" className={on("/atividades")}><Icon name="atividades" />Atividades</Link>
-      <Link href="/comunidade" className={on("/comunidade")}><Icon name="social" />Social</Link>
       <Link href="/evolucao" className={on("/evolucao")}><Icon name="evolucao" />Evolução</Link>
+      <Link href="/comunidade" className={on("/comunidade")}><Icon name="social" />Social</Link>
       <Link href="/coach" className={on("/coach")}><Icon name="coach" />Coach</Link>
     </nav>
   );
