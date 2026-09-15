@@ -161,4 +161,6 @@ async def activity_track(activity_id: str, profile: str = Depends(current_profil
     return {
         "points": track.get("points", []),
         "splits": track.get("splits", []),
+        "metrics": track.get("metrics"),
+        "series": track.get("series"),
     }

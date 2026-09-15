@@ -120,7 +120,106 @@ def track_from_garmin_raw(raw: dict) -> dict | None:
 
         return None
 
-    return {"points": points, "splits": splits}
+    result: dict = {"points": points, "splits": splits}
+
+    metrics = _display_metrics(raw)
+
+    if metrics:
+
+        result["metrics"] = metrics
+
+    series = _series_from_streams(streams)
+
+    if series:
+
+        result["series"] = series
+
+    return result
+
+
+# métricas ricas do Garmin pro DETALHE no app (leitura estilo Strava). Só o que
+# o relógio mediu entra — cada treino/sensor traz um subconjunto. Não infla o
+# registro enxuto da análise; vive no bundle do traçado.
+_DISPLAY_METRICS = (
+    ("calories", 0), ("avg_cadence", 0), ("max_cadence", 0),
+    ("avg_power", 0), ("max_power", 0), ("ground_contact_ms", 0),
+    ("stride_length_cm", 0), ("vertical_oscillation_cm", 1),
+    ("vertical_ratio", 1), ("elevation_loss", 0), ("avg_temperature", 0),
+    ("steps", 0), ("training_effect", 1), ("anaerobic_effect", 1),
+)
+
+
+def _display_metrics(raw: dict) -> dict:
+    """Extrai as métricas ricas (cadência, potência, dinâmica de corrida,
+    efeito de treino, calorias...) do bundle do Garmin pro app exibir."""
+
+    gm = raw.get("_garmin_metrics") or {}
+
+    out: dict = {}
+
+    for key, nd in _DISPLAY_METRICS:
+
+        v = gm.get(key)
+
+        if v is None:
+
+            continue
+
+        out[key] = round(float(v), nd) if nd else round(float(v))
+
+    label = gm.get("training_effect_label")
+
+    if label:
+
+        out["training_effect_label"] = str(label)
+
+    return out
+
+
+def _series_from_streams(streams: dict) -> dict | None:
+    """Séries reduzidas (~200 pontos) pro app desenhar os gráficos de FC,
+    altimetria e ritmo ao longo da distância — o que dá o "cara de Strava".
+    Descarta séries totalmente vazias; None se não há nada plotável."""
+
+    dist = streams.get("distance") or []
+    hr = streams.get("heartrate") or []
+    elev = streams.get("elevation") or []
+    speed = streams.get("velocity_smooth") or []
+
+    n = len(dist)
+
+    if n < 8:
+
+        return None
+
+    step = max(1, n // 200)
+
+    out: dict[str, list] = {"dist": [], "hr": [], "elev": [], "pace": []}
+
+    for i in range(0, n, step):
+
+        out["dist"].append(round((dist[i] or 0) / 1000, 3))
+
+        h = hr[i] if i < len(hr) else None
+        out["hr"].append(round(h) if h else None)
+
+        e = elev[i] if i < len(elev) else None
+        out["elev"].append(round(float(e), 1) if isinstance(e, (int, float)) else None)
+
+        sp = speed[i] if i < len(speed) else None
+        out["pace"].append(round((1000 / sp) / 60, 3) if sp else None)
+
+    for k in ("hr", "elev", "pace"):
+
+        if not any(v is not None for v in out[k]):
+
+            out[k] = []
+
+    if not any(out[k] for k in ("hr", "elev", "pace")):
+
+        return None
+
+    return out
 
 
 class ActivityTrackRepository:

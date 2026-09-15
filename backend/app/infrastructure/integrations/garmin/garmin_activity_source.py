@@ -486,6 +486,10 @@ class GarminActivitySource:
             # GPS pro traçado do app (mapa) — extra, não usado pela análise
             "directLatitude": "lat",
             "directLongitude": "lon",
+            # altimetria pro gráfico de perfil no app (extra, não usado pela
+            # análise) — chave varia por device, pegamos a que aparecer
+            "directElevation": "elevation",
+            "directElevationOfCurrentLocation": "elevation",
         }
 
         index: dict[int, str] = {}

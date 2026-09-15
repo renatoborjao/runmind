@@ -249,6 +249,16 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .hrz-bar > i { display: block; height: 100%; border-radius: 999px; }
 .hrz-val { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13px; min-width: 40px; text-align: right; }
 .hrz-val small { color: var(--muted); font-weight: 600; font-size: 10px; }
+
+/* gráficos de altimetria / FC (estilo Strava) */
+.chart { width: 100%; height: 108px; display: block; }
+.chart-range { font-family: var(--font-mono), monospace; font-size: 10px; color: var(--muted); font-weight: 600; }
+
+/* dinâmica de corrida (Garmin) */
+.dyn { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dyn-cell { text-align: center; }
+.dyn-cell .v { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 16px; letter-spacing: -.02em; }
+.dyn-cell .k { font-family: var(--font-mono), monospace; font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
 .src-tag { font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
 .src-tag.app { color: var(--accent-ink); background: var(--accent-wash); }
 .src-tag.sync { color: var(--muted); background: var(--surface-2); }
@@ -593,5 +603,10 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .se-photo { display: flex; gap: 8px; padding: 6px 0 10px; }
 .se-photo .btn-ghost { flex: 1; margin: 0; padding: 12px; }
 .se-share { margin: 0; }
+.se-result { position: fixed; inset: 0; z-index: 70; background: rgba(6,7,12,.92); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.se-result-in { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; max-height: 100%; }
+.se-result-in img { max-width: 100%; max-height: 62vh; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.se-result-in p { margin: 0; color: var(--ink-soft); font-size: 13.5px; text-align: center; }
+.se-result-in .btn, .se-result-in .btn-ghost { width: 100%; text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

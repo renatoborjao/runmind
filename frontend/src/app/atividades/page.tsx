@@ -151,6 +151,73 @@ function HrZones({ zones }: { zones: number[] }) {
   );
 }
 
+// Gráfico simples (área/linha) de uma métrica ao longo da distância — a "cara
+// de Strava": altimetria e FC plotadas. Só desenha os pontos com valor.
+function Chart({ title, dist, values, color, area, unit, fmt }: {
+  title: string;
+  dist: number[];
+  values: (number | null)[];
+  color: string;
+  area?: boolean;
+  unit?: string;
+  fmt?: (v: number) => string;
+}) {
+  const pairs: [number, number][] = [];
+  for (let i = 0; i < dist.length; i++) {
+    const v = values[i];
+    if (v != null && !isNaN(v)) pairs.push([dist[i], v]);
+  }
+  if (pairs.length < 2) return null;
+  const W = 320, H = 108, padL = 4, padR = 4, padT = 10, padB = 14;
+  const xs = pairs.map((p) => p[0]), ys = pairs.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = maxX - minX || 1, spanY = maxY - minY || 1;
+  const X = (x: number) => padL + ((x - minX) / spanX) * (W - padL - padR);
+  const Y = (y: number) => padT + ((maxY - y) / spanY) * (H - padT - padB);
+  const line = pairs.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(" ");
+  const areaPath = `${line} L${X(maxX).toFixed(1)} ${H - padB} L${X(minX).toFixed(1)} ${H - padB} Z`;
+  const show = (v: number) => (fmt ? fmt(v) : String(Math.round(v))) + (unit ?? "");
+  return (
+    <section className="card">
+      <div className="card-head">
+        <span className="eyebrow">{title}</span>
+        <span className="chart-range">{show(maxY)} · {show(minY)}</span>
+      </div>
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+        {area && <path d={areaPath} fill={color} opacity={0.14} />}
+        <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </section>
+  );
+}
+
+// Dinâmica de corrida (Garmin): cadência máx, contato com o solo, oscilação e
+// comprimento de passada — o pacote "avançado" que o atleta via só no Garmin.
+function RunDynamics({ m }: { m: NonNullable<TrackData["metrics"]> }) {
+  const cells: { v: string; k: string }[] = [];
+  if (m.max_cadence) cells.push({ v: `${m.max_cadence} spm`, k: "Cadência máx" });
+  if (m.ground_contact_ms) cells.push({ v: `${m.ground_contact_ms} ms`, k: "Contato solo" });
+  if (m.vertical_oscillation_cm) cells.push({ v: `${m.vertical_oscillation_cm} cm`, k: "Oscilação vert." });
+  if (m.stride_length_cm) {
+    const s = m.stride_length_cm > 10 ? m.stride_length_cm / 100 : m.stride_length_cm;
+    cells.push({ v: `${s.toFixed(2)} m`, k: "Passada" });
+  }
+  if (m.vertical_ratio) cells.push({ v: `${m.vertical_ratio}%`, k: "Razão vertical" });
+  if (m.max_power) cells.push({ v: `${m.max_power} W`, k: "Potência máx" });
+  if (!cells.length) return null;
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Dinâmica de corrida</span></div>
+      <div className="dyn">
+        {cells.map((c, i) => (
+          <div className="dyn-cell" key={i}><div className="v">{c.v}</div><div className="k">{c.k}</div></div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // Fallback: traçado como polyline em SVG (sem mapa base) quando o Leaflet falha.
 function TrackMapSVG({ points }: { points: { lat: number; lon: number }[] }) {
   const pts = points.filter((p) => p.lat && p.lon);
@@ -246,80 +313,102 @@ function kmBig(ctx: CanvasRenderingContext2D, x: number, baseY: number, kmTxt: s
   ctx.fillStyle = "#C9CAD6"; ctx.font = `600 ${Math.round(size * 0.27)}px system-ui, sans-serif`;
   ctx.fillText(" km", x + w + 8, baseY);
 }
+// células de estatística no padrão Strava: número em cima (grande), rótulo em
+// caixa-alta embaixo (pequeno). Distância/Ritmo/Tempo (+FC quando tem).
 function statCells(it: FeedItem): [string, string][] {
-  const c: [string, string][] = [[it.pace ? `${it.pace}` : "—", "pace /km"], [`${it.duration_min}`, "min"]];
-  if (it.avg_hr != null) c.push([`${it.avg_hr}`, "bpm"]);
+  const c: [string, string][] = [
+    [it.distance_km.toFixed(2).replace(".", ","), "DISTÂNCIA (KM)"],
+    [it.pace ?? "—", "RITMO /KM"],
+    [`${it.duration_min}`, "TEMPO (MIN)"],
+  ];
+  if (it.avg_hr != null) c.push([`${it.avg_hr}`, "FC MÉDIA"]);
   return c;
 }
-function header(ctx: CanvasRenderingContext2D, W: number, d: CardData) {
-  markAt(ctx, 64, 100);
-  ctx.font = "600 26px system-ui, sans-serif"; ctx.fillStyle = "#C9CAD6"; ctx.textAlign = "right";
-  ctx.fillText(d.date, W - 64, 96); ctx.textAlign = "left";
-  ctx.font = "700 32px system-ui, sans-serif"; ctx.fillStyle = "#EDEEF5";
-  ctx.fillText(d.name.slice(0, 30), 64, 150);
+// desenha a fileira de estatísticas com LARGURA AUTOMÁTICA por coluna (número
+// e rótulo nunca se sobrepõem, não importa o tamanho do texto).
+function drawStatRow(
+  ctx: CanvasRenderingContext2D, x: number, baseY: number,
+  cells: [string, string][], gap: number, valSize: number, labSize: number,
+) {
+  let cx = x;
+  for (const [v, l] of cells) {
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px system-ui, sans-serif`;
+    ctx.fillText(v, cx, baseY);
+    const w1 = ctx.measureText(v).width;
+    ctx.fillStyle = "#D4D5E0"; ctx.font = `600 ${labSize}px system-ui, sans-serif`;
+    ctx.fillText(l, cx, baseY + labSize + 12);
+    const w2 = ctx.measureText(l).width;
+    cx += Math.max(w1, w2) + gap;
+  }
+}
+function brandDate(ctx: CanvasRenderingContext2D, W: number, d: CardData) {
+  markAt(ctx, 64, 104, 44);
+  ctx.font = "600 28px system-ui, sans-serif"; ctx.fillStyle = "#E7E8F0"; ctx.textAlign = "right";
+  ctx.fillText(d.date, W - 64, 100); ctx.textAlign = "left";
 }
 function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  ctx.fillStyle = "#8A8B9E"; ctx.font = "600 24px system-ui, sans-serif"; ctx.textAlign = "center";
-  ctx.fillText("runmind.duckdns.org", W / 2, H - 28); ctx.textAlign = "left";
+  ctx.fillStyle = "#9A9BAE"; ctx.font = "600 22px system-ui, sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
 }
 
+// CLÁSSICO — overlay estilo Strava: foto + degradê + fileira de stats embaixo.
+// Sem foto, o traçado vira o herói do fundo.
 function styleClassico(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   drawBg(ctx, W, H, d.photo);
-  if (d.photo) { topScrim(ctx, W); bottomScrim(ctx, W, H, H - 560); }
-  header(ctx, W, d);
-  if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, W - 300, 120, 236, 168, "#1FD9B8", 5);
-  kmBig(ctx, 60, H - 200, d.kmTxt);
-  const cells = statCells(d.it), cw = (W - 120) / cells.length;
-  cells.forEach(([v, l], i) => {
-    const cx = 60 + cw * i;
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "800 60px system-ui, sans-serif"; ctx.fillText(v, cx, H - 110);
-    ctx.fillStyle = "#C9CAD6"; ctx.font = "600 28px system-ui, sans-serif"; ctx.fillText(l, cx, H - 66);
-  });
+  if (d.photo) { topScrim(ctx, W); bottomScrim(ctx, W, H, H - 430); }
+  else if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 96, 300, W - 192, 560, "#1FD9B8", 9);
+  brandDate(ctx, W, d);
+  if (d.photo && d.pts.length >= 2) drawRouteInBox(ctx, d.pts, W - 296, 150, 232, 150, "#FFFFFF", 5);
+  drawStatRow(ctx, 64, H - 150, statCells(d.it), 60, 82, 24);
   footer(ctx, W, H);
 }
 
+// MINIMAL — barra de vidro embaixo: km grande à esquerda, ritmo/tempo à direita.
 function styleMinimal(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   drawBg(ctx, W, H, d.photo);
   if (d.photo) topScrim(ctx, W);
-  markAt(ctx, 64, 100);
-  ctx.font = "600 26px system-ui, sans-serif"; ctx.fillStyle = "#C9CAD6"; ctx.textAlign = "right";
-  ctx.fillText(d.date, W - 64, 96); ctx.textAlign = "left";
-  const barH = 168, y = H - 64 - barH;
-  roundRect(ctx, 48, y, W - 96, barH, 26); ctx.fillStyle = "rgba(10,11,18,0.72)"; ctx.fill();
-  kmBig(ctx, 84, y + 106, d.kmTxt, 92);
-  const line = `${d.it.pace ? d.it.pace + " /km    " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? "    " + d.it.avg_hr + " bpm" : ""}`;
-  ctx.fillStyle = "#EDEEF5"; ctx.font = "700 34px system-ui, sans-serif"; ctx.textAlign = "right";
-  ctx.fillText(line, W - 84, y + 100); ctx.textAlign = "left";
+  else if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 96, 320, W - 192, 520, "#1FD9B8", 8);
+  brandDate(ctx, W, d);
+  const barH = 176, y = H - 72 - barH;
+  roundRect(ctx, 48, y, W - 96, barH, 28); ctx.fillStyle = "rgba(10,11,18,0.74)"; ctx.fill();
+  kmBig(ctx, 88, y + 112, d.kmTxt, 96);
+  const line = `${d.it.pace ? d.it.pace + " /km" : ""}${d.it.pace ? "    " : ""}${d.it.duration_min} min`;
+  ctx.fillStyle = "#EDEEF5"; ctx.font = "700 36px system-ui, sans-serif"; ctx.textAlign = "right";
+  ctx.fillText(line, W - 88, y + 106); ctx.textAlign = "left";
+  if (d.it.avg_hr != null) {
+    ctx.fillStyle = "#C9CAD6"; ctx.font = "600 30px system-ui, sans-serif"; ctx.textAlign = "right";
+    ctx.fillText(`${d.it.avg_hr} bpm`, W - 88, y + 150); ctx.textAlign = "left";
+  }
 }
 
+// TRAJETO — o mapa é o herói (grande), stats embaixo.
 function styleTrajeto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   drawBg(ctx, W, H, d.photo);
-  if (d.photo) { ctx.fillStyle = "rgba(6,7,12,0.4)"; ctx.fillRect(0, 0, W, H); }
-  header(ctx, W, d);
-  if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 100, 250, 880, 700, "#1FD9B8", 11);
+  if (d.photo) { ctx.fillStyle = "rgba(6,7,12,0.45)"; ctx.fillRect(0, 0, W, H); }
+  brandDate(ctx, W, d);
+  if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 100, 240, W - 200, 700, "#1FD9B8", 11);
   else { ctx.fillStyle = "#3A3B49"; ctx.font = "600 120px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("🏃", W / 2, 640); ctx.textAlign = "left"; }
-  bottomScrim(ctx, W, H, H - 300);
-  kmBig(ctx, 60, H - 150, d.kmTxt, 128);
-  ctx.fillStyle = "#EDEEF5"; ctx.font = "700 40px system-ui, sans-serif"; ctx.textAlign = "right";
-  ctx.fillText(`${d.it.pace ? d.it.pace + " /km   " : ""}${d.it.duration_min} min`, W - 64, H - 165); ctx.textAlign = "left";
+  bottomScrim(ctx, W, H, H - 320);
+  drawStatRow(ctx, 64, H - 150, statCells(d.it), 60, 78, 24);
   footer(ctx, W, H);
 }
 
+// SELO — cartão de vidro compacto (canto inferior) pra colar em qualquer foto/story.
 function styleSelo(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   drawBg(ctx, W, H, d.photo);
-  const bw = 600, bh = 300, bx = 48, by = H - 56 - bh;
-  roundRect(ctx, bx, by, bw, bh, 30); ctx.fillStyle = "rgba(10,11,18,0.84)"; ctx.fill();
-  markAt(ctx, bx + 34, by + 64, 36);
-  kmBig(ctx, bx + 34, by + 178, d.kmTxt, 96);
+  const bw = 640, bh = 316, bx = 48, by = H - 60 - bh;
+  roundRect(ctx, bx, by, bw, bh, 32); ctx.fillStyle = "rgba(10,11,18,0.85)"; ctx.fill();
+  markAt(ctx, bx + 36, by + 68, 38);
+  kmBig(ctx, bx + 36, by + 188, d.kmTxt, 100);
   ctx.fillStyle = "#C9CAD6"; ctx.font = "600 30px system-ui, sans-serif";
-  ctx.fillText(`${d.it.pace ? d.it.pace + " /km · " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? " · " + d.it.avg_hr + " bpm" : ""}`, bx + 34, by + 240);
+  ctx.fillText(`${d.it.pace ? d.it.pace + " /km · " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? " · " + d.it.avg_hr + " bpm" : ""}`, bx + 36, by + 254);
   if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, W - 250, 110, 190, 150, "#1FD9B8", 5);
 }
 
 const CARD_STYLES: { key: string; label: string; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void }[] = [
   { key: "classico", label: "Clássico", draw: styleClassico },
-  { key: "minimal", label: "Minimal", draw: styleMinimal },
   { key: "trajeto", label: "Trajeto", draw: styleTrajeto },
+  { key: "minimal", label: "Minimal", draw: styleMinimal },
   { key: "selo", label: "Selo", draw: styleSelo },
 ];
 
@@ -334,6 +423,7 @@ export default function AtividadesPage() {
   const [editor, setEditor] = useState(false);
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
   const [styleIdx, setStyleIdx] = useState(0);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
 
@@ -357,7 +447,7 @@ export default function AtividadesPage() {
   }
 
   function openEditor() {
-    setPhotoImg(null); setStyleIdx(0); setEditor(true);
+    setPhotoImg(null); setStyleIdx(0); setResultUrl(null); setEditor(true);
   }
 
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -395,18 +485,22 @@ export default function AtividadesPage() {
     if (!cv || !sel) return;
     setSharing(true);
     try {
-      const blob: Blob = await new Promise((res) => cv.toBlob((b) => res(b as Blob), "image/jpeg", 0.9));
+      const blob: Blob = await new Promise((res) => cv.toBlob((b) => res(b as Blob), "image/jpeg", 0.92));
       const file = new File([blob], "ritmind-corrida.jpg", { type: "image/jpeg" });
       const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
       if (navShare.canShare && navShare.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], text: `${km(sel.distance_km)} km no Ritmind 🏃` });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = "ritmind-corrida.jpg"; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        try {
+          await navigator.share({ files: [file], text: `${km(sel.distance_km)} km no Ritmind 🏃` });
+          setSharing(false);
+          return;
+        } catch (err) {
+          // usuário cancelou o menu de compartilhar: não mostra fallback
+          if (err instanceof DOMException && err.name === "AbortError") { setSharing(false); return; }
+        }
       }
-    } catch { /* cancelou ou indisponível */ }
+      // sem share nativo (ou falhou): mostra a imagem pra salvar/segurar
+      setResultUrl(URL.createObjectURL(blob));
+    } catch { /* indisponível */ }
     setSharing(false);
   }
 
@@ -435,12 +529,20 @@ export default function AtividadesPage() {
       : null;
 
     // estatísticas extras (só as que existem) em blocos de 3, tipo Strava
+    const m = track?.metrics;
     const extras: { v: string; unit: string; k: string }[] = [];
     if (it.avg_hr != null) extras.push({ v: String(it.avg_hr), unit: " bpm", k: "FC média" });
     if (it.max_hr != null) extras.push({ v: String(it.max_hr), unit: " bpm", k: "FC máx" });
     if (bestSec != null) extras.push({ v: fmtPaceSec(bestSec), unit: "/km", k: "Melhor km" });
+    if (m?.avg_cadence) extras.push({ v: String(m.avg_cadence), unit: " spm", k: "Cadência" });
+    if (m?.avg_power) extras.push({ v: String(m.avg_power), unit: " W", k: "Potência" });
+    if (m?.calories) extras.push({ v: String(m.calories), unit: " kcal", k: "Calorias" });
     if (it.elevation_gain != null) extras.push({ v: String(it.elevation_gain), unit: " m", k: "Ganho" });
+    if (m?.elevation_loss) extras.push({ v: String(m.elevation_loss), unit: " m", k: "Perda" });
+    if (m?.training_effect) extras.push({ v: m.training_effect.toFixed(1), unit: "", k: "Efeito aeróbico" });
+    if (m?.anaerobic_effect) extras.push({ v: m.anaerobic_effect.toFixed(1), unit: "", k: "Efeito anaeróbico" });
     if (it.air_temp_c != null) extras.push({ v: String(it.air_temp_c), unit: "°C", k: "Temp." });
+    else if (m?.avg_temperature != null) extras.push({ v: String(m.avg_temperature), unit: "°C", k: "Temp." });
     extras.push({ v: it.source === "app" ? "App" : "Strava/Garmin", unit: "", k: "Fonte" });
     const extraRows: typeof extras[] = [];
     for (let i = 0; i < extras.length; i += 3) extraRows.push(extras.slice(i, i + 3));
@@ -462,7 +564,7 @@ export default function AtividadesPage() {
           {editor && (
             <div className="share-editor">
               <header className="appbar">
-                <button className="icon-btn" aria-label="Fechar" onClick={() => setEditor(false)}>
+                <button className="icon-btn" aria-label="Fechar" onClick={() => { setEditor(false); setResultUrl(null); }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
                 <div className="title"><div className="t">Compartilhar</div></div>
@@ -487,8 +589,20 @@ export default function AtividadesPage() {
               </div>
 
               <button className="btn se-share" onClick={shareCurrent} disabled={sharing}>
-                {sharing ? "Abrindo…" : "Compartilhar"}
+                {sharing ? "Gerando…" : "Compartilhar"}
               </button>
+
+              {resultUrl && (
+                <div className="se-result" onClick={() => setResultUrl(null)}>
+                  <div className="se-result-in" onClick={(e) => e.stopPropagation()}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={resultUrl} alt="Card da corrida" />
+                    <p>Segure a imagem para salvar ou compartilhar 📲</p>
+                    <a className="btn" href={resultUrl} download="ritmind-corrida.jpg">Baixar imagem</a>
+                    <button className="btn-ghost" onClick={() => setResultUrl(null)}>Voltar</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -519,6 +633,13 @@ export default function AtividadesPage() {
                 {track.points.length >= 2 && (
                   <section className="card" style={{ padding: 0, overflow: "hidden" }}><MapView points={track.points} /></section>
                 )}
+                {track.series?.elev?.length ? (
+                  <Chart title="Altimetria" dist={track.series.dist} values={track.series.elev} color="#8B7BE8" area unit=" m" />
+                ) : null}
+                {track.series?.hr?.length ? (
+                  <Chart title="Frequência cardíaca" dist={track.series.dist} values={track.series.hr} color="#E24666" unit=" bpm" />
+                ) : null}
+                {track.metrics && <RunDynamics m={track.metrics} />}
                 {track.splits.length > 0 && (() => {
                   const hasHr = track.splits.some((s) => s.hr != null);
                   return (

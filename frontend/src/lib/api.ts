@@ -421,9 +421,36 @@ export async function getFeed(): Promise<FeedItem[] | null> {
   return data.activities ?? [];
 }
 
+export interface ActivityMetrics {
+  calories?: number;
+  avg_cadence?: number;
+  max_cadence?: number;
+  avg_power?: number;
+  max_power?: number;
+  ground_contact_ms?: number;
+  stride_length_cm?: number;
+  vertical_oscillation_cm?: number;
+  vertical_ratio?: number;
+  elevation_loss?: number;
+  avg_temperature?: number;
+  steps?: number;
+  training_effect?: number;
+  anaerobic_effect?: number;
+  training_effect_label?: string;
+}
+
+export interface ActivitySeries {
+  dist: number[];
+  hr: (number | null)[];
+  elev: (number | null)[];
+  pace: (number | null)[];
+}
+
 export interface TrackData {
   points: { lat: number; lon: number; t?: number | null }[];
   splits: RunSplit[];
+  metrics?: ActivityMetrics | null;
+  series?: ActivitySeries | null;
 }
 
 /** Traçado de uma atividade do feed — app (recorded-runs) ou sincronizada (feed/track). */
