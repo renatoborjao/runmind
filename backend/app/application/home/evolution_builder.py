@@ -91,37 +91,57 @@ class EvolutionBuilder:
 
         snaps = GarminHealthRepository().load(profile)
 
-        health = snaps[-1] if snaps else None
-
         pred = RacePredictionRepository().load(profile)
         has_pred = pred and pred.has_data
+
+        # ATENÇÃO: várias métricas de FORMA são ESPARSAS — o VO2max não é medido
+        # todo dia (atualiza a cada poucos dias), então o snapshot de HOJE quase
+        # sempre vem sem ele. Pegamos o ÚLTIMO valor NÃO-NULO da série, não o de
+        # hoje — senão o VO2max some da tela mesmo o relógio tendo.
+        vo2max = EvolutionBuilder._last(snaps, "vo2max")
+        resting_hr = EvolutionBuilder._last(snaps, "resting_hr")
+        hrv = EvolutionBuilder._last(snaps, "hrv_weekly_avg") or (
+            EvolutionBuilder._last(snaps, "hrv_last_night")
+        )
+        hrv_status = EvolutionBuilder._last(snaps, "hrv_status")
+        training_status = EvolutionBuilder._last(snaps, "training_status")
 
         # tendências recentes (janela de ~21 dias com dado): direção do que
         # importa pra FORMA — VO2max subindo, FC de repouso caindo, HRV subindo
         # = evoluindo. Direção crua ("up"/"down"/"flat"); o app pinta o tom.
         recent = snaps[-21:]
 
-        hrv = None
-
-        if health:
-
-            hrv = health.hrv_weekly_avg or health.hrv_last_night
-
         return {
-            "vo2max": health.vo2max if health else None,
+            "vo2max": vo2max,
             "vo2max_trend": EvolutionBuilder._trend(recent, "vo2max"),
-            "resting_hr": health.resting_hr if health else None,
+            "resting_hr": resting_hr,
             "resting_hr_trend": EvolutionBuilder._trend(recent, "resting_hr"),
             "hrv": hrv,
             "hrv_trend": EvolutionBuilder._trend(recent, "hrv_weekly_avg")
             or EvolutionBuilder._trend(recent, "hrv_last_night"),
-            "hrv_status": health.hrv_status if health else None,
-            "training_status": health.training_status if health else None,
+            "hrv_status": hrv_status,
+            "training_status": training_status,
             "projection_5k": pred.time_5k if has_pred else None,
             "projection_10k": pred.time_10k if has_pred else None,
             "projection_half": pred.time_half if has_pred else None,
             "projection_marathon": pred.time_marathon if has_pred else None,
         }
+
+    @staticmethod
+    def _last(snaps: list, attr: str):
+        """Último valor NÃO-NULO de uma métrica na série (do mais recente pro
+        mais antigo). Métricas esparsas (VO2max, training status) só vêm em
+        alguns dias — pegar o de hoje as perderia."""
+
+        for s in reversed(snaps):
+
+            val = getattr(s, attr, None)
+
+            if val is not None:
+
+                return val
+
+        return None
 
     @staticmethod
     def _trend(snaps: list, attr: str) -> str | None:
