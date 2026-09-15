@@ -309,7 +309,10 @@ class OnDemandAnswers:
 
         repo = AuthTokenRepository()
 
-        ttl = settings.auth_magic_ttl_minutes
+        # janela GENEROSA pro onboarding: 24h. O código de 20 min expirava antes
+        # do atleta instalar o app/digitar (causava "código inválido"). Uso único,
+        # entregue no Telegram privado do atleta — 24h é seguro e sem fricção.
+        ttl = 24 * 60
 
         # CÓDIGO (digitado no app) é o caminho à prova de iOS: o link abre no
         # navegador do Telegram/num contexto diferente do app instalado e o
@@ -330,7 +333,7 @@ class OnDemandAnswers:
             f"Fala, {first}! Abra o app ({settings.app_base_url}) e digite "
             "este código pra entrar:\n\n"
             f"🔑 {pretty}\n\n"
-            f"(vale por {ttl} min, uso único)\n\n"
+            "(vale por 24h, uso único)\n\n"
             "No iPhone, se você já instalou o app na tela inicial, abra por ali "
             "e digite o código — é o jeito certo.\n\n"
             f"Se preferir, dá pra tocar no link (funciona melhor no computador): {link}"
