@@ -761,6 +761,11 @@ export default function AtividadesPage() {
             </div>
           )}
 
+          {/* MAPA no topo (herói), estilo Strava — rola pra baixo pra ver as infos */}
+          {it.has_track && track && track.points.length >= 2 && (
+            <section className="map-section map-hero"><MapView points={track.points} /></section>
+          )}
+
           <div className="qstats">
             <div className="qstat"><div className="v">{km(it.distance_km)}<small> km</small></div><div className="k">Distância</div></div>
             <div className="qstat"><div className="v">{it.duration_min}<small> min</small></div><div className="k">Tempo</div></div>
@@ -785,9 +790,6 @@ export default function AtividadesPage() {
               <div className="card center"><p className="auth-sub" style={{ margin: 0 }}>Carregando traçado…</p></div>
             ) : (
               <>
-                {track.points.length >= 2 && (
-                  <section className="map-section"><MapView points={track.points} /></section>
-                )}
                 {track.series?.elev?.length ? (
                   <Chart title="Altimetria" dist={track.series.dist} values={track.series.elev} color="#8B7BE8" area unit=" m" />
                 ) : null}
