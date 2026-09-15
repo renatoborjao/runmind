@@ -50,6 +50,7 @@ function MapView({ points }: { points: { lat: number; lon: number }[] }) {
     const pts = points.filter((p) => p.lat && p.lon).map((p) => [p.lat, p.lon]);
     if (pts.length < 2 || !ref.current) return;
     let map: any;
+    let anim: ReturnType<typeof setInterval> | undefined;
     let cancelled = false;
     loadLeaflet()
       .then((L: any) => {
@@ -72,17 +73,28 @@ function MapView({ points }: { points: { lat: number; lon: number }[] }) {
           maxZoom: 19,
           attribution: "© OpenStreetMap",
         }).addTo(map);
-        const line = L.polyline(pts, { color: "#0FB499", weight: 4 }).addTo(map);
+        const line = L.polyline(pts, { color: "#0FB499", weight: 5 }).addTo(map);
         L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
         L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#E24666", fillOpacity: 1 }).addTo(map);
         const b = line.getBounds();
         map.fitBounds(b, { padding: [22, 22] });
         map.setMaxBounds(b.pad(0.25));  // não deixa o mapa vagar pra longe do percurso
         setTimeout(() => map && map.invalidateSize(), 120);
+
+        // bolinha "correndo" o percurso (playback, estilo Strava)
+        const dot = L.circleMarker(pts[0], { radius: 7, color: "#fff", weight: 3, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
+        const step = Math.max(1, Math.round(pts.length / 240));
+        let i = 0;
+        anim = setInterval(() => {
+          i += step;
+          if (i >= pts.length) i = 0;  // recomeça o trajeto
+          dot.setLatLng(pts[i]);
+        }, 45);
       })
       .catch(() => setFailed(true));
     return () => {
       cancelled = true;
+      if (anim) clearInterval(anim);
       if (map) map.remove();
     };
   }, [points]);
@@ -749,7 +761,7 @@ export default function AtividadesPage() {
             ) : (
               <>
                 {track.points.length >= 2 && (
-                  <section className="card" style={{ padding: 0, overflow: "hidden" }}><MapView points={track.points} /></section>
+                  <section className="map-section"><MapView points={track.points} /></section>
                 )}
                 {track.series?.elev?.length ? (
                   <Chart title="Altimetria" dist={track.series.dist} values={track.series.elev} color="#8B7BE8" area unit=" m" />

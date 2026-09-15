@@ -262,7 +262,9 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 /* isolation cria um contexto de empilhamento próprio: prende os z-index altos
    internos do Leaflet (tiles/controles ~1000) DENTRO da caixa do mapa, senão
    eles "flutuam" por cima dos outros cards ao rolar a página. */
-.map-box { height: 230px; width: 100%; background: var(--surface-2); position: relative; z-index: 0; isolation: isolate; }
+/* mapa do detalhe edge-to-edge (estilo Strava): sangra pras bordas do frame */
+.map-section { margin: 4px -16px; }
+.map-box { height: 300px; width: 100%; background: var(--surface-2); position: relative; z-index: 0; isolation: isolate; }
 .leaflet-container { font-family: var(--font-body), sans-serif; z-index: 0; }
 
 /* zonas de FC (estilo Strava) */
