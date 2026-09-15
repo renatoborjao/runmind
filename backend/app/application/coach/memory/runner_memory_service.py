@@ -247,6 +247,27 @@ class RunnerMemoryService:
             updates,
         )
 
+        # espelha na LISTA de provas do app (fonte estruturada multi-prova), pra
+        # a prova que o coach registrou também aparecer em /provas. Best-effort.
+        if race.get("clear") is not True and race.get("name") and race.get("date"):
+
+            try:
+
+                from app.infrastructure.persistence.race_repository import (
+                    RaceRepository,
+                )
+
+                RaceRepository().upsert(
+                    profile,
+                    race["name"],
+                    race["date"],
+                    race.get("target_time"),
+                )
+
+            except Exception as e:
+
+                print(f"[memory] espelhar prova em RaceRepository falhou: {e}")
+
     @staticmethod
     def _sync_injuries(
         profile: str,

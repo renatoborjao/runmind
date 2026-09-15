@@ -80,6 +80,35 @@ class RaceRepository:
 
         return record
 
+    def upsert(
+        self,
+        profile: str,
+        name: str,
+        date: str,
+        target_time: str | None = None,
+    ) -> dict:
+        """Adiciona a prova se ainda não existe (dedup por data + nome
+        normalizado); se existir, completa o tempo-alvo que faltava. Usado pra
+        espelhar a prova que o coach registrou por conversa na LISTA do app."""
+
+        def _norm(s: str) -> str:
+            return " ".join((s or "").lower().split())
+
+        races = self.load(profile)
+
+        for r in races:
+
+            if r.get("date") == date and _norm(r.get("name")) == _norm(name):
+
+                if target_time and not r.get("target_time"):
+
+                    r["target_time"] = target_time
+                    self.save(profile, races)
+
+                return r
+
+        return self.add(profile, name, date, target_time)
+
     def remove(self, profile: str, race_id: str) -> bool:
 
         races = self.load(profile)

@@ -178,16 +178,24 @@ function Chart({ title, dist, values, color, area, unit, fmt }: {
   const line = pairs.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(" ");
   const areaPath = `${line} L${X(maxX).toFixed(1)} ${H - padB} L${X(minX).toFixed(1)} ${H - padB} Z`;
   const show = (v: number) => (fmt ? fmt(v) : String(Math.round(v))) + (unit ?? "");
+  const avg = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const midY = padT + (H - padT - padB) / 2;
   return (
     <section className="card">
       <div className="card-head">
         <span className="eyebrow">{title}</span>
-        <span className="chart-range">{show(maxY)} · {show(minY)}</span>
+        <span className="chart-range">méd {show(avg)}</span>
       </div>
-      <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
-        {area && <path d={areaPath} fill={color} opacity={0.14} />}
-        <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      </svg>
+      <div className="chart-wrap">
+        <span className="chart-y chart-y-top">{show(maxY)}</span>
+        <span className="chart-y chart-y-bot">{show(minY)}</span>
+        <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+          <line x1={padL} y1={midY} x2={W - padR} y2={midY} stroke="var(--line)" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.6} />
+          {area && <path d={areaPath} fill={color} opacity={0.14} />}
+          <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+      </div>
+      <div className="chart-x"><span>0 km</span><span>{maxX.toFixed(1).replace(".", ",")} km</span></div>
     </section>
   );
 }

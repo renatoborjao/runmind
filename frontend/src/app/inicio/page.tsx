@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
+import MiniMap from "../mini-map";
 import NotifBell from "../notif-bell";
 import InstallBanner from "../install-banner";
 import EmailCapture from "../email-capture";
@@ -25,25 +26,6 @@ function fmtDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
-
-// mini-traçado da última corrida (estilo Strava) — normaliza os pontos numa caixa
-function RouteMini({ points }: { points: { lat: number; lon: number }[] }) {
-  const pts = points.filter((p) => p.lat && p.lon);
-  if (pts.length < 2) return null;
-  const W = 300, H = 128, pad = 12;
-  let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
-  for (const p of pts) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
-  const kx = Math.cos(((minLa + maxLa) / 2 * Math.PI) / 180);
-  const spanLo = Math.max(1e-6, (maxLo - minLo) * kx), spanLa = Math.max(1e-6, maxLa - minLa);
-  const scale = Math.min((W - 2 * pad) / spanLo, (H - 2 * pad) / spanLa);
-  const ox = (W - spanLo * scale) / 2, oy = (H - spanLa * scale) / 2;
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${(ox + (p.lon - minLo) * kx * scale).toFixed(1)} ${(oy + (maxLa - p.lat) * scale).toFixed(1)}`).join(" ");
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="128" preserveAspectRatio="xMidYMid meet" aria-hidden>
-      <path d={d} fill="none" stroke="var(--accent)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 const RING_C = 2 * Math.PI * 47; // circunferência do anel de prontidão
@@ -396,7 +378,7 @@ export default function InicioPage() {
         {lastRun && (
           <section className="card tap lastrun" style={{ padding: 0, overflow: "hidden" }} onClick={() => router.push("/atividades")}>
             {lastRoute.length >= 2 && (
-              <div className="lastrun-map"><RouteMini points={lastRoute} /></div>
+              <MiniMap points={lastRoute} height={158} />
             )}
             <div style={{ padding: 18 }}>
               <div className="card-head" style={{ marginBottom: 8 }}>
