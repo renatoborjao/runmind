@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getHome, saveRun, type TodaySession, type WorkoutStep } from "@/lib/api";
+import { getHome, saveRun, type RunPayload, type TodaySession, type WorkoutStep } from "@/lib/api";
 
 type Phase = "idle" | "recording" | "paused" | "saving" | "done" | "error";
+
+// corrida em andamento guardada localmente — se o app fechar/for pro fundo no
+// meio, dá pra recuperar e salvar depois (o GPS da web para com a tela apagada)
+const RUN_KEY = "rm_run_progress";
 
 // ---- treino guiado: achatar os blocos numa sequência linear ----
 interface Segment {
@@ -170,9 +174,12 @@ export default function CorrerPage() {
   const [livePace, setLivePace] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [recoverable, setRecoverable] = useState<RunPayload | null>(null);
+  const [savingRec, setSavingRec] = useState(false);
 
   const voiceRef = useRef(true);
   const lastNudge = useRef(0);
+  const lastPersist = useRef(0);
   useEffect(() => { voiceRef.current = voiceOn; }, [voiceOn]);
 
   const segments = useRef<Segment[]>([]);
@@ -198,6 +205,25 @@ export default function CorrerPage() {
       const h = await getHome();
       if (h?.today?.session && (h.today.session.steps?.length ?? 0) > 0) setSession(h.today.session);
     })();
+    // corrida não salva de uma sessão anterior (app fechou/foi pro fundo no meio)?
+    try {
+      const raw = localStorage.getItem(RUN_KEY);
+      if (raw) {
+        const r = JSON.parse(raw);
+        if (r && r.distance_m > 50 && r.duration_s > 30) setRecoverable(r);
+        else localStorage.removeItem(RUN_KEY);
+      }
+    } catch { /* ok */ }
+  }, []);
+
+  // mantém a tela ligada de novo quando o app volta ao foco durante a corrida
+  // (o wake lock se solta sozinho quando a aba fica oculta)
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible" && phaseRef.current === "recording") requestWake();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
   function nowElapsedSec(): number {
@@ -211,6 +237,9 @@ export default function CorrerPage() {
       if (phaseRef.current !== "recording") return;
       const e = nowElapsedSec();
       setElapsed(e);
+
+      // guarda o progresso local a cada ~5s (rede de segurança se o app fechar)
+      if (e - lastPersist.current >= 5) { persistProgress(e); lastPersist.current = e; }
 
       // pace ao vivo (janela ~25s)
       let lp: number | null = null;
@@ -316,6 +345,22 @@ export default function CorrerPage() {
     try { wakeLock.current?.release(); wakeLock.current = null; } catch { /* ok */ }
   }
 
+  function persistProgress(durS: number) {
+    try {
+      const payload: RunPayload = {
+        started_at: new Date(startTs.current).toISOString(),
+        duration_s: durS,
+        distance_m: Math.round(distRef.current),
+        avg_pace: paceStr(distRef.current, durS),
+        points: points.current,
+      };
+      localStorage.setItem(RUN_KEY, JSON.stringify(payload));
+    } catch { /* ok */ }
+  }
+  function clearProgress() {
+    try { localStorage.removeItem(RUN_KEY); } catch { /* ok */ }
+  }
+
   function begin(useGuide: boolean) {
     if (useGuide && session) {
       segments.current = flatten(session.steps);
@@ -332,7 +377,8 @@ export default function CorrerPage() {
     elapsedBase.current = 0;
     distRef.current = 0; setDist(0); setElapsed(0);
     last.current = null; points.current = []; recent.current = [];
-    lastNudge.current = 0;
+    lastNudge.current = 0; lastPersist.current = 0;
+    setRecoverable(null); clearProgress();
     setPhase("recording"); phaseRef.current = "recording";
     startWatch();
     requestWake();
@@ -363,9 +409,28 @@ export default function CorrerPage() {
       avg_pace: paceStr(distRef.current, durS),
       points: points.current,
     });
+    clearProgress();
     setElapsed(durS);
     if (guided && voiceRef.current) speak("Treino concluído! Mandou bem.");
     setPhase("done"); phaseRef.current = "done";
+  }
+
+  // recupera uma corrida interrompida (salva localmente) e manda pro servidor
+  async function saveRecovered() {
+    if (!recoverable) return;
+    setSavingRec(true);
+    try {
+      await saveRun(recoverable);
+      clearProgress();
+      setRecoverable(null);
+      router.push("/atividades");
+    } finally {
+      setSavingRec(false);
+    }
+  }
+  function discardRecovered() {
+    clearProgress();
+    setRecoverable(null);
   }
 
   const km = (dist / 1000).toFixed(2).replace(".", ",");
@@ -451,6 +516,22 @@ export default function CorrerPage() {
                 <div><div className="run-v">{paceStr(dist, elapsed)}</div><div className="run-l">pace /km</div></div>
               </div>
             </div>
+
+            {phase === "idle" && recoverable && (
+              <div className="card" style={{ marginTop: 8 }}>
+                <p className="notice" style={{ margin: 0 }}>
+                  Achei uma corrida que não foi salva:{" "}
+                  <strong>{(recoverable.distance_m / 1000).toFixed(2).replace(".", ",")} km</strong>{" "}
+                  em <strong>{fmtTime(recoverable.duration_s)}</strong>. Quer salvar?
+                </p>
+                <div className="run-actions" style={{ marginTop: 12 }}>
+                  <button className="run-btn go" disabled={savingRec} onClick={saveRecovered}>
+                    {savingRec ? "Salvando…" : "Salvar"}
+                  </button>
+                  <button className="run-btn hold" disabled={savingRec} onClick={discardRecovered}>Descartar</button>
+                </div>
+              </div>
+            )}
 
             {phase === "idle" && (
               <>
