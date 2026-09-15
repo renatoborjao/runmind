@@ -123,6 +123,35 @@ function TrackMapSVG({ points }: { points: { lat: number; lon: number }[] }) {
   );
 }
 
+// desenha o traçado dentro de uma caixa do canvas (fit + início/fim)
+function drawRouteInBox(
+  ctx: CanvasRenderingContext2D,
+  pts: { lat: number; lon: number }[],
+  bx: number, by: number, bw: number, bh: number,
+  color: string, lw: number,
+) {
+  const good = pts.filter((p) => p.lat && p.lon);
+  if (good.length < 2) return false;
+  let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+  for (const p of good) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
+  const midLa = (minLa + maxLa) / 2;
+  const kx = Math.cos((midLa * Math.PI) / 180);
+  const spanLo = Math.max(1e-6, (maxLo - minLo) * kx);
+  const spanLa = Math.max(1e-6, maxLa - minLa);
+  const scale = Math.min(bw / spanLo, bh / spanLa);
+  const ox = bx + (bw - spanLo * scale) / 2, oy = by + (bh - spanLa * scale) / 2;
+  const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
+  const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath();
+  good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
+  const r = Math.max(6, lw * 1.4);
+  ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px(good[0]), py(good[0]), r, 0, 7); ctx.fill();
+  ctx.fillStyle = "#E24666"; ctx.beginPath(); ctx.arc(px(good[good.length - 1]), py(good[good.length - 1]), r, 0, 7); ctx.fill();
+  return true;
+}
+
 export default function AtividadesPage() {
   const router = useRouter();
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
@@ -131,6 +160,8 @@ export default function AtividadesPage() {
   const [track, setTrack] = useState<TrackData | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -151,109 +182,104 @@ export default function AtividadesPage() {
     }
   }
 
-  async function shareRun(it: FeedItem, tk: TrackData | null) {
+  async function doShare(cv: HTMLCanvasElement, kmTxt: string) {
+    const blob: Blob = await new Promise((res) => cv.toBlob((b) => res(b as Blob), "image/jpeg", 0.9));
+    const file = new File([blob], "ritmind-corrida.jpg", { type: "image/jpeg" });
+    const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
+    if (navShare.canShare && navShare.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text: `${kmTxt} km no Ritmind 🏃` });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "ritmind-corrida.jpg"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+  }
+
+  // desenha o card (com FOTO de fundo, estilo Strava, ou card escuro do Ritmind)
+  async function renderCard(it: FeedItem, tk: TrackData | null, photo: HTMLImageElement | null) {
+    setShareOpen(false);
     setSharing(true);
     try {
-      const S = 1080;
+      const W = 1080, H = 1350;
       const cv = document.createElement("canvas");
-      cv.width = S; cv.height = S;
+      cv.width = W; cv.height = H;
       const ctx = cv.getContext("2d");
       if (!ctx) { setSharing(false); return; }
-
-      // fundo
-      ctx.fillStyle = "#0C0D16";
-      ctx.fillRect(0, 0, S, S);
-
-      // marca + data
       ctx.textBaseline = "alphabetic";
-      ctx.font = "800 46px system-ui, -apple-system, Segoe UI, sans-serif";
-      ctx.fillStyle = "#1FD9B8";
-      ctx.fillText("Rit", 64, 96);
-      const rw = ctx.measureText("Rit").width;
-      ctx.fillStyle = "#EDEEF5";
-      ctx.fillText("mind", 64 + rw, 96);
-      ctx.font = "600 26px system-ui, sans-serif";
-      ctx.fillStyle = "#8A8B9E";
-      const dateTxt = fmtDate(it.datetime ?? it.date_iso);
-      ctx.textAlign = "right";
-      ctx.fillText(dateTxt, S - 64, 92);
-      ctx.textAlign = "left";
-      ctx.font = "700 30px system-ui, sans-serif";
-      ctx.fillStyle = "#EDEEF5";
-      ctx.fillText((it.name || "Corrida").slice(0, 30), 64, 150);
+      const pts = tk?.points || [];
 
-      // mapa do trajeto
-      const pts = (tk?.points || []).filter((p) => p.lat && p.lon);
-      const mapY = 200, mapH = 560, mapX = 64, mapW = S - 128;
-      if (pts.length >= 2) {
-        let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
-        for (const p of pts) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
-        const midLa = (minLa + maxLa) / 2;
-        const spanLo = Math.max(1e-6, (maxLo - minLo) * Math.cos((midLa * Math.PI) / 180));
-        const spanLa = Math.max(1e-6, maxLa - minLa);
-        const pad = 40;
-        const scale = Math.min((mapW - pad * 2) / spanLo, (mapH - pad * 2) / spanLa);
-        const ox = mapX + (mapW - spanLo * scale) / 2;
-        const oy = mapY + (mapH - spanLa * scale) / 2;
-        const px = (p: { lat: number; lon: number }) => ox + ((p.lon - minLo) * Math.cos((midLa * Math.PI) / 180)) * scale;
-        const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
-        ctx.strokeStyle = "#1FD9B8";
-        ctx.lineWidth = 7; ctx.lineJoin = "round"; ctx.lineCap = "round";
-        ctx.beginPath();
-        pts.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
-        ctx.stroke();
-        // início/fim
-        ctx.fillStyle = "#EDEEF5"; ctx.beginPath(); ctx.arc(px(pts[0]), py(pts[0]), 11, 0, 7); ctx.fill();
-        ctx.fillStyle = "#E24666"; ctx.beginPath(); ctx.arc(px(pts[pts.length - 1]), py(pts[pts.length - 1]), 11, 0, 7); ctx.fill();
+      if (photo) {
+        // foto cobrindo o quadro (cover-fit)
+        const s = Math.max(W / photo.width, H / photo.height);
+        const dw = photo.width * s, dh = photo.height * s;
+        ctx.drawImage(photo, (W - dw) / 2, (H - dh) / 2, dw, dh);
+        // escurece topo e base pra leitura
+        const gTop = ctx.createLinearGradient(0, 0, 0, 240);
+        gTop.addColorStop(0, "rgba(6,7,12,0.75)"); gTop.addColorStop(1, "rgba(6,7,12,0)");
+        ctx.fillStyle = gTop; ctx.fillRect(0, 0, W, 240);
+        const gBot = ctx.createLinearGradient(0, H - 560, 0, H);
+        gBot.addColorStop(0, "rgba(6,7,12,0)"); gBot.addColorStop(0.55, "rgba(6,7,12,0.78)"); gBot.addColorStop(1, "rgba(6,7,12,0.96)");
+        ctx.fillStyle = gBot; ctx.fillRect(0, H - 560, W, 560);
+        // traçado pequeno no canto superior direito
+        if (pts.length >= 2) drawRouteInBox(ctx, pts, W - 300, 120, 236, 168, "#1FD9B8", 5);
       } else {
-        ctx.fillStyle = "#14151F";
-        ctx.fillRect(mapX, mapY, mapW, mapH);
-        ctx.fillStyle = "#3A3B49"; ctx.font = "600 28px system-ui, sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("🏃", S / 2, mapY + mapH / 2);
-        ctx.textAlign = "left";
+        ctx.fillStyle = "#0C0D16"; ctx.fillRect(0, 0, W, H);
+        // traçado grande no meio
+        if (pts.length >= 2) drawRouteInBox(ctx, pts, 90, 250, 900, 640, "#1FD9B8", 8);
+        else {
+          ctx.fillStyle = "#3A3B49"; ctx.font = "600 120px system-ui, sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("🏃", W / 2, 620); ctx.textAlign = "left";
+        }
       }
 
-      // stats
-      const statY = 880;
-      ctx.fillStyle = "#1FD9B8";
-      ctx.font = "800 120px system-ui, sans-serif";
+      // marca + data + nome
+      ctx.font = "800 46px system-ui, -apple-system, Segoe UI, sans-serif";
+      ctx.fillStyle = "#1FD9B8"; ctx.fillText("Rit", 64, 100);
+      const rw = ctx.measureText("Rit").width;
+      ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", 64 + rw, 100);
+      ctx.font = "600 26px system-ui, sans-serif"; ctx.fillStyle = "#C9CAD6";
+      ctx.textAlign = "right"; ctx.fillText(fmtDate(it.datetime ?? it.date_iso), W - 64, 96); ctx.textAlign = "left";
+      ctx.font = "700 32px system-ui, sans-serif"; ctx.fillStyle = "#EDEEF5";
+      ctx.fillText((it.name || "Corrida").slice(0, 30), 64, 150);
+
+      // bloco de stats (ancorado embaixo)
       const kmTxt = km(it.distance_km);
-      ctx.fillText(kmTxt, 60, statY);
+      ctx.fillStyle = "#1FD9B8"; ctx.font = "800 150px system-ui, sans-serif";
+      ctx.fillText(kmTxt, 60, H - 200);
       const kmW = ctx.measureText(kmTxt).width;
-      ctx.fillStyle = "#8A8B9E"; ctx.font = "600 34px system-ui, sans-serif";
-      ctx.fillText(" km", 60 + kmW + 6, statY);
+      ctx.fillStyle = "#C9CAD6"; ctx.font = "600 40px system-ui, sans-serif";
+      ctx.fillText(" km", 60 + kmW + 8, H - 200);
 
       const cells: [string, string][] = [
         [it.pace ? `${it.pace}` : "—", "pace /km"],
         [`${it.duration_min}`, "min"],
       ];
       if (it.avg_hr != null) cells.push([`${it.avg_hr}`, "bpm"]);
-      const cw = (S - 120) / cells.length;
+      const cw = (W - 120) / cells.length;
       cells.forEach(([v, l], i) => {
         const cx = 60 + cw * i;
-        ctx.fillStyle = "#EDEEF5"; ctx.font = "800 52px system-ui, sans-serif";
-        ctx.fillText(v, cx, statY + 78);
-        ctx.fillStyle = "#8A8B9E"; ctx.font = "600 26px system-ui, sans-serif";
-        ctx.fillText(l, cx, statY + 116);
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "800 60px system-ui, sans-serif";
+        ctx.fillText(v, cx, H - 110);
+        ctx.fillStyle = "#C9CAD6"; ctx.font = "600 28px system-ui, sans-serif";
+        ctx.fillText(l, cx, H - 66);
       });
+      ctx.fillStyle = "#7C7D8C"; ctx.font = "600 24px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("runmind.duckdns.org", W / 2, H - 28); ctx.textAlign = "left";
 
-      ctx.fillStyle = "#4A4B59"; ctx.font = "600 24px system-ui, sans-serif"; ctx.textAlign = "center";
-      ctx.fillText("runmind.duckdns.org", S / 2, S - 40);
-      ctx.textAlign = "left";
-
-      const blob: Blob = await new Promise((res) => cv.toBlob((b) => res(b as Blob), "image/png", 0.92));
-      const file = new File([blob], "ritmind-corrida.png", { type: "image/png" });
-      const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
-      if (navShare.canShare && navShare.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], text: `${kmTxt} km no Ritmind 🏃` });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = "ritmind-corrida.png"; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      }
-    } catch { /* usuário cancelou ou share indisponível */ }
+      await doShare(cv, kmTxt);
+    } catch { /* cancelou ou indisponível */ }
     setSharing(false);
+  }
+
+  function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !sel) return;
+    const img = new Image();
+    img.onload = () => renderCard(sel, track, img);
+    img.onerror = () => renderCard(sel, track, null);
+    img.src = URL.createObjectURL(file);
   }
 
   if (loading || !feed) {
@@ -280,7 +306,7 @@ export default function AtividadesPage() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             </button>
             <div className="title"><div className="k">{fmtDate(it.datetime ?? it.date_iso)}</div><div className="t">{it.name}</div></div>
-            <button className="icon-btn" aria-label="Compartilhar" onClick={() => shareRun(it, track)} disabled={sharing}>
+            <button className="icon-btn" aria-label="Compartilhar" onClick={() => setShareOpen(true)} disabled={sharing}>
               {sharing ? (
                 <span style={{ fontSize: 12 }}>…</span>
               ) : (
@@ -288,6 +314,25 @@ export default function AtividadesPage() {
               )}
             </button>
           </header>
+
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
+
+          {shareOpen && (
+            <div className="share-overlay" onClick={() => setShareOpen(false)}>
+              <div className="share-sheet" onClick={(e) => e.stopPropagation()}>
+                <div className="ss-title">Compartilhar corrida</div>
+                <button className="ss-opt" onClick={() => fileRef.current?.click()}>
+                  <span className="ss-ic">📷</span>
+                  <span><b>Com sua foto</b><small>Stats e trajeto por cima da foto</small></span>
+                </button>
+                <button className="ss-opt" onClick={() => renderCard(it, track, null)}>
+                  <span className="ss-ic">🎨</span>
+                  <span><b>Card do Ritmind</b><small>Fundo do app, sem foto</small></span>
+                </button>
+                <button className="ss-cancel" onClick={() => setShareOpen(false)}>Cancelar</button>
+              </div>
+            </div>
+          )}
 
           <div className="qstats">
             <div className="qstat"><div className="v">{km(it.distance_km)}<small> km</small></div><div className="k">Distância</div></div>

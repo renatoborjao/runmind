@@ -573,4 +573,15 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .voice-toggle { display: block; margin: 8px auto 0; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-family: var(--font-display), sans-serif; font-weight: 600; font-size: 12.5px; padding: 7px 14px; border-radius: 999px; cursor: pointer; }
 .voice-toggle:active { transform: scale(.98); }
 
+/* folha de compartilhar corrida */
+.share-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(6,7,12,.55); backdrop-filter: blur(3px); display: flex; align-items: flex-end; justify-content: center; }
+.share-sheet { width: 100%; max-width: 430px; background: var(--surface); border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); border: 1px solid var(--line); }
+.ss-title { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 15px; text-align: center; margin-bottom: 12px; }
+.ss-opt { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 14px; padding: 13px; margin-bottom: 10px; cursor: pointer; color: var(--ink); }
+.ss-opt:active { transform: scale(.99); }
+.ss-ic { font-size: 24px; flex: none; }
+.ss-opt b { display: block; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; }
+.ss-opt small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.ss-cancel { width: 100%; border: none; background: transparent; color: var(--muted); font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; padding: 12px; cursor: pointer; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
