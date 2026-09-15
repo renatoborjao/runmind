@@ -9,8 +9,19 @@ export default function PWARegister() {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
 
+    // quando um service worker NOVO assume o controle, recarrega uma vez pra
+    // pegar o visual/código novos na hora (sem o atleta precisar fechar o app).
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+
     const register = () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/sw.js").then((reg) => {
+        reg.update().catch(() => {});
+      }).catch(() => {});
     };
 
     // guarda o prompt nativo de instalar (Android/Chrome) pra o InstallBanner
