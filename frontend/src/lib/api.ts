@@ -32,16 +32,26 @@ export async function requestLogin(email: string): Promise<boolean> {
   return r.ok;
 }
 
-/** Auto-cadastro por convite. Devolve {ok} ou {error} (convite inválido). */
+/**
+ * Auto-cadastro por convite. Convite válido de atleta NOVO já loga (`loggedIn`);
+ * e-mail que já tem conta volta `loggedIn:false` (o app manda pra tela Entrar).
+ */
 export async function signup(
   email: string,
   inviteCode: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; loggedIn?: boolean; message?: string; error?: string }> {
   const r = await apiFetch("/auth/signup", {
     method: "POST",
     body: JSON.stringify({ email, invite_code: inviteCode }),
   });
-  if (r.ok) return { ok: true };
+  if (r.ok) {
+    try {
+      const body = await r.json();
+      return { ok: true, loggedIn: !!body?.logged_in, message: body?.message };
+    } catch {
+      return { ok: true, loggedIn: false };
+    }
+  }
   let error = "Não consegui te cadastrar. Confere o convite e tenta de novo.";
   try {
     const body = await r.json();

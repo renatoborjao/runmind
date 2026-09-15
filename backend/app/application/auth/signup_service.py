@@ -38,11 +38,18 @@ class SignupError(Exception):
 class SignupService:
 
     @staticmethod
-    def start(email: str, invite_code: str) -> None:
-        """Dispara o código por e-mail. Levanta `SignupError` só quando o
-        CONVITE é inválido (isso a gente pode revelar — não vaza nada do
-        e-mail). Se o e-mail já existe, manda código de login e volta em
-        silêncio (sem revelar que a conta existe)."""
+    def start(email: str, invite_code: str) -> dict:
+        """Processa o cadastro. Levanta `SignupError` se o CONVITE é inválido.
+        Devolve:
+          {"status": "created", "profile": slug} — atleta NOVO: perfil-esqueleto
+             criado, convite consumido; o endpoint loga direto (o convite é a
+             garantia do beta fechado — não depende de SMTP).
+          {"status": "exists", "profile": slug} — e-mail JÁ tem conta: não loga
+             (evita alguém logar como outro só com um convite); manda código de
+             login por e-mail (quando o SMTP estiver ligado).
+
+        Em ambos os casos também dispara o código por e-mail — inócuo sem SMTP
+        (só loga), e quando o SMTP entrar vira verificação/segundo fator."""
 
         email = (email or "").strip().lower()
 
@@ -62,13 +69,13 @@ class SignupService:
 
         if existing:
 
-            # já tem conta: manda código de LOGIN (não consome convite, não
-            # revela que existe — o endpoint responde igual pros dois casos)
+            # já tem conta: NÃO loga direto (um convite não pode virar acesso à
+            # conta de outra pessoa). Manda código de login por e-mail.
             SignupService._send_code(existing, email)
 
-            return
+            return {"status": "exists", "profile": existing}
 
-        # novo atleta: cria o esqueleto, consome o convite e manda o código
+        # novo atleta: cria o esqueleto, consome o convite
         slug = SignupService._unique_slug(email)
 
         repo.save(slug, SignupService._skeleton(slug, email))
@@ -77,7 +84,10 @@ class SignupService:
         # convite não é queimado à toa)
         invites.consume(invite_code)
 
+        # backup por e-mail (quando houver SMTP); o endpoint loga direto
         SignupService._send_code(slug, email)
+
+        return {"status": "created", "profile": slug}
 
     @staticmethod
     def _send_code(profile: str, email: str) -> None:
