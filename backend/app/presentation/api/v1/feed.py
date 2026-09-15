@@ -29,9 +29,13 @@ def _pace(distance_m: float, moving_time_s: int) -> str | None:
 
         return None
 
-    p = (moving_time_s / 60) / km
+    # segundos por km INTEIROS + divmod: evita o "5:60" (arredondar 59.6s -> 60
+    # sem virar o minuto). round primeiro, depois separa minuto/segundo.
+    total = round(moving_time_s / km)
 
-    return f"{int(p)}:{int(round((p % 1) * 60)):02d}"
+    m, s = divmod(total, 60)
+
+    return f"{m}:{s:02d}"
 
 
 def _run_date_iso(r: dict) -> str | None:
@@ -76,8 +80,9 @@ async def activity_feed(profile: str = Depends(current_profile)):
                 "source": "sync",
                 "datetime": a.start_date.isoformat(),
                 "date_iso": a.start_date.date().isoformat(),
-                "distance_km": round(a.distance / 1000, 1),
+                "distance_km": round(a.distance / 1000, 2),
                 "duration_min": round(a.moving_time / 60),
+                "duration_s": round(a.moving_time),
                 "pace": _pace(a.distance, a.moving_time),
                 "avg_hr": int(a.average_heartrate) if a.average_heartrate else None,
                 "max_hr": int(a.max_heartrate) if a.max_heartrate else None,
@@ -99,7 +104,7 @@ async def activity_feed(profile: str = Depends(current_profile)):
 
             continue
 
-        km = round((r.get("distance_m") or 0) / 1000, 1)
+        km = round((r.get("distance_m") or 0) / 1000, 2)
 
         # mesma corrida já veio de outra base? anexa o traçado nela, não duplica
         match = next(
@@ -129,6 +134,7 @@ async def activity_feed(profile: str = Depends(current_profile)):
                 "date_iso": d_iso,
                 "distance_km": km,
                 "duration_min": round((r.get("duration_s") or 0) / 60),
+                "duration_s": round(r.get("duration_s") or 0),
                 "pace": r.get("avg_pace"),
                 "avg_hr": None,
                 "max_hr": None,

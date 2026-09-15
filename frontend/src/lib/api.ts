@@ -402,6 +402,7 @@ export interface FeedItem {
   date_iso: string;
   distance_km: number;
   duration_min: number;
+  duration_s: number;
   pace: string | null;
   avg_hr: number | null;
   max_hr: number | null;

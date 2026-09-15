@@ -332,51 +332,55 @@ function bottomScrim(ctx: CanvasRenderingContext2D, W: number, H: number, fromY:
   g.addColorStop(0, "rgba(6,7,12,0)"); g.addColorStop(0.55, "rgba(6,7,12,0.78)"); g.addColorStop(1, "rgba(6,7,12,0.96)");
   ctx.fillStyle = g; ctx.fillRect(0, fromY, W, H - fromY);
 }
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-}
 function markAt(ctx: CanvasRenderingContext2D, x: number, baseY: number, size = 46) {
   ctx.font = `800 ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
   ctx.fillStyle = "#1FD9B8"; ctx.fillText("Rit", x, baseY);
   const rw = ctx.measureText("Rit").width;
   ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", x + rw, baseY);
 }
-function kmBig(ctx: CanvasRenderingContext2D, x: number, baseY: number, kmTxt: string, size = 150) {
-  ctx.fillStyle = "#1FD9B8"; ctx.font = `800 ${size}px system-ui, sans-serif`;
-  ctx.fillText(kmTxt, x, baseY);
-  const w = ctx.measureText(kmTxt).width;
-  ctx.fillStyle = "#C9CAD6"; ctx.font = `600 ${Math.round(size * 0.27)}px system-ui, sans-serif`;
-  ctx.fillText(" km", x + w + 8, baseY);
+function brandCentered(ctx: CanvasRenderingContext2D, cx: number, baseY: number, size: number) {
+  ctx.font = `800 ${size}px system-ui, sans-serif`;
+  const rw = ctx.measureText("Rit").width, mw = ctx.measureText("mind").width;
+  const start = cx - (rw + mw) / 2;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#1FD9B8"; ctx.fillText("Rit", start, baseY);
+  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", start + rw, baseY);
 }
-// células de estatística no padrão Strava: número em cima (grande), rótulo em
-// caixa-alta embaixo (pequeno). Distância/Ritmo/Tempo (+FC quando tem).
-function statCells(it: FeedItem): [string, string][] {
-  const c: [string, string][] = [
-    [it.distance_km.toFixed(2).replace(".", ","), "DISTÂNCIA (KM)"],
-    [it.pace ?? "—", "RITMO /KM"],
-    [`${it.duration_min}`, "TEMPO (MIN)"],
-  ];
-  if (it.avg_hr != null) c.push([`${it.avg_hr}`, "FC MÉDIA"]);
-  return c;
+// sombra suave: deixa texto/rota legíveis sobre QUALQUER foto (o card é
+// transparente e vai ser colado por cima da foto do atleta no Instagram).
+function withShadow(ctx: CanvasRenderingContext2D, fn: () => void) {
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
+  fn();
+  ctx.restore();
 }
-// desenha a fileira de estatísticas com LARGURA AUTOMÁTICA por coluna (número
-// e rótulo nunca se sobrepõem, não importa o tamanho do texto).
-function drawStatRow(
-  ctx: CanvasRenderingContext2D, x: number, baseY: number,
-  cells: [string, string][], gap: number, valSize: number, labSize: number,
+// traçado dentro de uma caixa (fit + início/fim), com brilho — pra fundo transparente
+function drawRouteBox(
+  ctx: CanvasRenderingContext2D, pts: { lat: number; lon: number }[],
+  bx: number, by: number, bw: number, bh: number, color: string, lw: number,
 ) {
-  let cx = x;
-  for (const [v, l] of cells) {
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px system-ui, sans-serif`;
-    ctx.fillText(v, cx, baseY);
-    const w1 = ctx.measureText(v).width;
-    ctx.fillStyle = "#D4D5E0"; ctx.font = `600 ${labSize}px system-ui, sans-serif`;
-    ctx.fillText(l, cx, baseY + labSize + 12);
-    const w2 = ctx.measureText(l).width;
-    cx += Math.max(w1, w2) + gap;
-  }
+  const good = pts.filter((p) => p.lat && p.lon);
+  if (good.length < 2) return;
+  let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+  for (const p of good) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
+  const kx = Math.cos(((minLa + maxLa) / 2 * Math.PI) / 180);
+  const spanLo = Math.max(1e-6, (maxLo - minLo) * kx), spanLa = Math.max(1e-6, maxLa - minLa);
+  const scale = Math.min(bw / spanLo, bh / spanLa);
+  const ox = bx + (bw - spanLo * scale) / 2, oy = by + (bh - spanLa * scale) / 2;
+  const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
+  const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 12;
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath();
+  good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
+  ctx.restore();
+  const r = Math.max(7, lw * 1.1), a = good[0], b = good[good.length - 1];
+  ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px(a), py(a), r, 0, 7); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(px(a), py(a), r * 0.55, 0, 7); ctx.fill();
+  ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px(b), py(b), r, 0, 7); ctx.fill();
+  ctx.fillStyle = "#E24666"; ctx.beginPath(); ctx.arc(px(b), py(b), r * 0.55, 0, 7); ctx.fill();
 }
 function brandDate(ctx: CanvasRenderingContext2D, W: number, d: CardData) {
   markAt(ctx, 64, 104, 44);
@@ -388,59 +392,98 @@ function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
 }
 
-// CLÁSSICO — mapa (ou foto) de fundo + degradê + fileira de stats embaixo.
-function styleClassico(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+// tempo tipo Strava: "53min 24s" (ou "1h05" em corrida longa)
+function fmtDur(s: number): string {
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}`;
+  return ss > 0 ? `${m}min ${ss}s` : `${m}min`;
+}
+// [rótulo, valor com unidade] — Distância / Ritmo / Tempo (+ FC quando tem)
+function shareCells(it: FeedItem): [string, string][] {
+  const c: [string, string][] = [
+    ["Distância", `${it.distance_km.toFixed(2).replace(".", ",")} km`],
+    ["Ritmo", `${it.pace ?? "—"} /km`],
+    ["Tempo", fmtDur(it.duration_s || it.duration_min * 60)],
+  ];
+  if (it.avg_hr != null) c.push(["FC média", `${it.avg_hr} bpm`]);
+  return c;
+}
+// fileira de colunas (rótulo em cima, valor embaixo), largura automática;
+// centerAt centraliza o conjunto num x. Sempre com sombra (fundo transparente).
+function drawStatCols(
+  ctx: CanvasRenderingContext2D, startX: number, baseY: number,
+  cells: [string, string][], gap: number, valSize: number, labSize: number,
+  centerAt?: number,
+) {
+  const widths = cells.map(([lab, val]) => {
+    ctx.font = `800 ${valSize}px system-ui, sans-serif`; const wv = ctx.measureText(val).width;
+    ctx.font = `600 ${labSize}px system-ui, sans-serif`; const wl = ctx.measureText(lab).width;
+    return Math.max(wv, wl);
+  });
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (cells.length - 1);
+  let cx = centerAt != null ? centerAt - total / 2 : startX;
+  withShadow(ctx, () => {
+    ctx.textAlign = "left";
+    cells.forEach(([lab, val], i) => {
+      ctx.fillStyle = "#D6D7E2"; ctx.font = `600 ${labSize}px system-ui, sans-serif`;
+      ctx.fillText(lab, cx, baseY);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px system-ui, sans-serif`;
+      ctx.fillText(val, cx, baseY + valSize + 8);
+      cx += widths[i] + gap;
+    });
+  });
+}
+
+// ===== estilos TRANSPARENTES (PNG com fundo vazado) pra colar em cima da foto =====
+
+// CENTRALIZADO — stats empilhados no centro + traçado pequeno + marca (template 1).
+function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  const cx = W / 2;
+  const cells = shareCells(d.it).slice(0, 3);
+  let y = 360;
+  withShadow(ctx, () => {
+    ctx.textAlign = "center";
+    for (const [lab, val] of cells) {
+      ctx.fillStyle = "#EAEBF2"; ctx.font = "600 36px system-ui, sans-serif"; ctx.fillText(lab, cx, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = "800 96px system-ui, sans-serif"; ctx.fillText(val, cx, y + 96);
+      y += 180;
+    }
+    ctx.textAlign = "left";
+  });
+  if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, cx - 150, y - 6, 300, 220, "#1FD9B8", 8);
+  withShadow(ctx, () => brandCentered(ctx, cx, y + 296, 42));
+}
+
+// ROTA — traçado grande como herói + marca + stats embaixo (template 2).
+function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  const cx = W / 2;
+  if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, 110, 250, W - 220, 620, "#1FD9B8", 13);
+  withShadow(ctx, () => brandCentered(ctx, cx, 980, 46));
+  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 30, cx);
+}
+
+// CANTINHO — marca + stats no canto inferior esquerdo (template 3).
+function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  withShadow(ctx, () => markAt(ctx, 64, H - 230, 44));
+  drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 28);
+}
+
+// COM MAPA — card completo (não transparente): mapa/foto de fundo + stats.
+function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   drawBg(ctx, W, H, d.photo, d.mapCard);
-  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 430);
+  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 420);
   brandDate(ctx, W, d);
-  drawStatRow(ctx, 64, H - 150, statCells(d.it), 56, 82, 24);
+  drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 26);
   footer(ctx, W, H);
 }
 
-// DESTAQUE — km gigante + ritmo/tempo, mapa/foto de fundo.
-function styleTrajeto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo, d.mapCard);
-  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 400);
-  brandDate(ctx, W, d);
-  kmBig(ctx, 60, H - 210, d.kmTxt, 150);
-  ctx.fillStyle = "#EDEEF5"; ctx.font = "700 40px system-ui, sans-serif";
-  ctx.fillText(`${d.it.pace ? d.it.pace + " /km" : ""}${d.it.pace ? "    " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? "    " + d.it.avg_hr + " bpm" : ""}`, 64, H - 120);
-  footer(ctx, W, H);
-}
-
-// MINIMAL — barra de vidro embaixo: km grande à esquerda, ritmo/tempo à direita.
-function styleMinimal(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo, d.mapCard);
-  topScrim(ctx, W);
-  brandDate(ctx, W, d);
-  const barH = 176, y = H - 72 - barH;
-  roundRect(ctx, 48, y, W - 96, barH, 28); ctx.fillStyle = "rgba(10,11,18,0.74)"; ctx.fill();
-  kmBig(ctx, 88, y + 112, d.kmTxt, 96);
-  const line = `${d.it.pace ? d.it.pace + " /km" : ""}${d.it.pace ? "    " : ""}${d.it.duration_min} min`;
-  ctx.fillStyle = "#EDEEF5"; ctx.font = "700 36px system-ui, sans-serif"; ctx.textAlign = "right";
-  ctx.fillText(line, W - 88, y + 106); ctx.textAlign = "left";
-  if (d.it.avg_hr != null) {
-    ctx.fillStyle = "#C9CAD6"; ctx.font = "600 30px system-ui, sans-serif"; ctx.textAlign = "right";
-    ctx.fillText(`${d.it.avg_hr} bpm`, W - 88, y + 150); ctx.textAlign = "left";
-  }
-}
-
-// SELO — cartão de vidro compacto (canto inferior) pra colar em qualquer foto/story.
-function styleSelo(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo, d.mapCard);
-  const bw = 640, bh = 316, bx = 48, by = H - 60 - bh;
-  roundRect(ctx, bx, by, bw, bh, 32); ctx.fillStyle = "rgba(10,11,18,0.85)"; ctx.fill();
-  markAt(ctx, bx + 36, by + 68, 38);
-  kmBig(ctx, bx + 36, by + 188, d.kmTxt, 100);
-  ctx.fillStyle = "#C9CAD6"; ctx.font = "600 30px system-ui, sans-serif";
-  ctx.fillText(`${d.it.pace ? d.it.pace + " /km · " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? " · " + d.it.avg_hr + " bpm" : ""}`, bx + 36, by + 254);
-}
-
-const CARD_STYLES: { key: string; label: string; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void }[] = [
-  { key: "classico", label: "Clássico", draw: styleClassico },
-  { key: "destaque", label: "Destaque", draw: styleTrajeto },
-  { key: "minimal", label: "Minimal", draw: styleMinimal },
-  { key: "selo", label: "Selo", draw: styleSelo },
+interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
+const CARD_STYLES: CardStyle[] = [
+  { key: "centralizado", label: "Central", transparent: true, draw: styleCentralizado },
+  { key: "rota", label: "Rota", transparent: true, draw: styleRota },
+  { key: "cantinho", label: "Cantinho", transparent: true, draw: styleCantinho },
+  { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
 ];
 
 export default function AtividadesPage() {
@@ -455,6 +498,7 @@ export default function AtividadesPage() {
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
   const [styleIdx, setStyleIdx] = useState(0);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [mapCard, setMapCard] = useState<HTMLCanvasElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
@@ -491,15 +535,15 @@ export default function AtividadesPage() {
     img.src = URL.createObjectURL(file);
   }
 
-  // monta o mapa REAL de fundo (tiles + rota) quando não há foto
+  // monta o mapa REAL de fundo (tiles + rota) só no estilo "Com mapa" e sem foto
   useEffect(() => {
-    if (!editor || photoImg) { setMapCard(null); return; }
+    if (!editor || CARD_STYLES[styleIdx].transparent || photoImg) { setMapCard(null); return; }
     const pts = track?.points ?? [];
     if (pts.length < 2) { setMapCard(null); return; }
     let alive = true;
     buildMapCard(pts, 1080, 1350).then((c) => { if (alive) setMapCard(c); });
     return () => { alive = false; };
-  }, [editor, photoImg, track]);
+  }, [editor, styleIdx, photoImg, track]);
 
   // redesenha o preview quando muda estilo/foto/atividade/mapa
   useEffect(() => {
@@ -523,13 +567,42 @@ export default function AtividadesPage() {
     CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
   }, [editor, styleIdx, photoImg, sel, track, mapCard]);
 
-  async function shareCurrent() {
+  // PNG (mantém a transparência) do card atual
+  async function makeBlob(): Promise<Blob | null> {
     const cv = previewRef.current;
-    if (!cv || !sel) return;
+    if (!cv) return null;
+    return new Promise((res) => cv.toBlob((b) => res(b), "image/png"));
+  }
+
+  // COPIAR a imagem pro clipboard — pra colar direto no Instagram/story
+  async function copyImage() {
+    if (!sel) return;
     setSharing(true);
     try {
-      const blob: Blob = await new Promise((res) => cv.toBlob((b) => res(b as Blob), "image/jpeg", 0.92));
-      const file = new File([blob], "ritmind-corrida.jpg", { type: "image/jpeg" });
+      const blob = await makeBlob();
+      if (!blob) throw new Error("no blob");
+      const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+      if (navigator.clipboard && CI) {
+        await navigator.clipboard.write([new CI({ "image/png": blob })]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      } else {
+        setResultUrl(URL.createObjectURL(blob));
+      }
+    } catch {
+      const blob = await makeBlob();
+      if (blob) setResultUrl(URL.createObjectURL(blob));
+    }
+    setSharing(false);
+  }
+
+  async function shareCurrent() {
+    if (!sel) return;
+    setSharing(true);
+    try {
+      const blob = await makeBlob();
+      if (!blob) throw new Error("no blob");
+      const file = new File([blob], "ritmind-corrida.png", { type: "image/png" });
       const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
       if (navShare.canShare && navShare.canShare({ files: [file] })) {
         try {
@@ -537,11 +610,9 @@ export default function AtividadesPage() {
           setSharing(false);
           return;
         } catch (err) {
-          // usuário cancelou o menu de compartilhar: não mostra fallback
           if (err instanceof DOMException && err.name === "AbortError") { setSharing(false); return; }
         }
       }
-      // sem share nativo (ou falhou): mostra a imagem pra salvar/segurar
       setResultUrl(URL.createObjectURL(blob));
     } catch { /* indisponível */ }
     setSharing(false);
@@ -615,7 +686,7 @@ export default function AtividadesPage() {
               </header>
 
               <div className="se-preview">
-                <canvas ref={previewRef} className="se-canvas" />
+                <canvas ref={previewRef} className={`se-canvas${CARD_STYLES[styleIdx].transparent ? " transp" : ""}`} />
               </div>
 
               <div className="se-styles">
@@ -624,24 +695,31 @@ export default function AtividadesPage() {
                 ))}
               </div>
 
-              <div className="se-photo">
-                <button className="btn-ghost" onClick={() => fileRef.current?.click()}>
-                  {photoImg ? "Trocar foto" : "📷 Adicionar sua foto"}
-                </button>
-                {photoImg && <button className="btn-ghost" onClick={() => setPhotoImg(null)}>Remover</button>}
-              </div>
+              {CARD_STYLES[styleIdx].transparent ? (
+                <p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
+              ) : (
+                <div className="se-photo">
+                  <button className="btn-ghost" onClick={() => fileRef.current?.click()}>
+                    {photoImg ? "Trocar foto" : "📷 Adicionar sua foto"}
+                  </button>
+                  {photoImg && <button className="btn-ghost" onClick={() => setPhotoImg(null)}>Remover</button>}
+                </div>
+              )}
 
-              <button className="btn se-share" onClick={shareCurrent} disabled={sharing}>
-                {sharing ? "Gerando…" : "Compartilhar"}
-              </button>
+              <div className="se-actions">
+                <button className="btn se-share" onClick={copyImage} disabled={sharing}>
+                  {copied ? "Copiado! ✓" : sharing ? "Gerando…" : "Copiar imagem"}
+                </button>
+                <button className="btn-ghost" onClick={shareCurrent} disabled={sharing}>Compartilhar</button>
+              </div>
 
               {resultUrl && (
                 <div className="se-result" onClick={() => setResultUrl(null)}>
                   <div className="se-result-in" onClick={(e) => e.stopPropagation()}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={resultUrl} alt="Card da corrida" />
-                    <p>Segure a imagem para salvar ou compartilhar 📲</p>
-                    <a className="btn" href={resultUrl} download="ritmind-corrida.jpg">Baixar imagem</a>
+                    <p>Segure a imagem para copiar ou salvar — depois cole no seu story 📲</p>
+                    <a className="btn" href={resultUrl} download="ritmind-corrida.png">Baixar imagem</a>
                     <button className="btn-ghost" onClick={() => setResultUrl(null)}>Voltar</button>
                   </div>
                 </div>
