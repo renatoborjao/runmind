@@ -17,6 +17,7 @@ from app.presentation.api.v1 import notifications
 from app.presentation.api.v1 import plan
 from app.presentation.api.v1 import profile as profile_route
 from app.presentation.api.v1 import progress
+from app.presentation.api.v1 import races
 from app.presentation.api.v1 import recorded_runs
 from app.presentation.api.v1 import shoes
 from app.presentation.api.v1 import strava
@@ -57,6 +58,8 @@ router.include_router(coach.router)
 router.include_router(body.router)
 
 router.include_router(progress.router)
+
+router.include_router(races.router)
 
 router.include_router(profile_route.router)
 

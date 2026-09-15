@@ -171,6 +171,7 @@ export interface RaceInfo {
 export interface WorkoutsResponse {
   week: WorkoutDay[];
   race: RaceInfo | null;
+  garmin_connected?: boolean;
 }
 
 export async function getWorkouts(): Promise<WorkoutsResponse | null> {
@@ -270,7 +271,13 @@ export interface Progress {
   weekly_volume: { label: string; km: number }[];
   fitness: {
     vo2max: number | null;
+    vo2max_trend?: "up" | "down" | "flat" | null;
     resting_hr: number | null;
+    resting_hr_trend?: "up" | "down" | "flat" | null;
+    hrv?: number | null;
+    hrv_trend?: "up" | "down" | "flat" | null;
+    hrv_status?: string | null;
+    training_status?: string | null;
     projection_5k: string | null;
     projection_10k: string | null;
     projection_half: string | null;
@@ -539,6 +546,36 @@ export async function pushWatch(): Promise<{ ok: boolean; message: string }> {
   const r = await apiFetch("/plan/push-watch", { method: "POST" });
   if (!r.ok) return { ok: false, message: "Não consegui enviar agora. Tenta de novo." };
   return r.json();
+}
+
+// ---- Provas ----
+
+export interface Race {
+  id: string;
+  name: string;
+  date: string; // ISO YYYY-MM-DD
+  target_time: string | null;
+  is_anchor?: boolean;
+  past?: boolean;
+}
+
+export async function getRaces(): Promise<Race[] | null> {
+  const r = await apiFetch("/races");
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.races ?? [];
+}
+
+export async function addRace(body: { name: string; date: string; target_time?: string | null }): Promise<{ ok: boolean; race?: Race; message?: string }> {
+  const r = await apiFetch("/races", { method: "POST", body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, message: data.detail || "Não consegui cadastrar." };
+  return { ok: true, race: data.race };
+}
+
+export async function deleteRace(id: string): Promise<boolean> {
+  const r = await apiFetch(`/races/${id}`, { method: "DELETE" });
+  return r.ok;
 }
 
 // ---- Notificações (central no app) ----

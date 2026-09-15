@@ -89,16 +89,72 @@ class EvolutionBuilder:
     @staticmethod
     def _fitness(profile: str) -> dict:
 
-        health = GarminHealthRepository().latest(profile)
+        snaps = GarminHealthRepository().load(profile)
+
+        health = snaps[-1] if snaps else None
 
         pred = RacePredictionRepository().load(profile)
         has_pred = pred and pred.has_data
 
+        # tendências recentes (janela de ~21 dias com dado): direção do que
+        # importa pra FORMA — VO2max subindo, FC de repouso caindo, HRV subindo
+        # = evoluindo. Direção crua ("up"/"down"/"flat"); o app pinta o tom.
+        recent = snaps[-21:]
+
+        hrv = None
+
+        if health:
+
+            hrv = health.hrv_weekly_avg or health.hrv_last_night
+
         return {
             "vo2max": health.vo2max if health else None,
+            "vo2max_trend": EvolutionBuilder._trend(recent, "vo2max"),
             "resting_hr": health.resting_hr if health else None,
+            "resting_hr_trend": EvolutionBuilder._trend(recent, "resting_hr"),
+            "hrv": hrv,
+            "hrv_trend": EvolutionBuilder._trend(recent, "hrv_weekly_avg")
+            or EvolutionBuilder._trend(recent, "hrv_last_night"),
+            "hrv_status": health.hrv_status if health else None,
+            "training_status": health.training_status if health else None,
             "projection_5k": pred.time_5k if has_pred else None,
             "projection_10k": pred.time_10k if has_pred else None,
             "projection_half": pred.time_half if has_pred else None,
             "projection_marathon": pred.time_marathon if has_pred else None,
         }
+
+    @staticmethod
+    def _trend(snaps: list, attr: str) -> str | None:
+        """Direção de uma métrica ao longo dos snapshots: compara a média do
+        início da janela com a do fim. 'up'/'down'/'flat', ou None se faltam
+        pontos. Direção CRUA (sem juízo de bom/ruim) — o app interpreta."""
+
+        vals = [
+            getattr(s, attr) for s in snaps if getattr(s, attr, None) is not None
+        ]
+
+        if len(vals) < 4:
+
+            return None
+
+        third = max(1, len(vals) // 3)
+
+        early = sum(vals[:third]) / third
+
+        late = sum(vals[-third:]) / third
+
+        if early == 0:
+
+            return None
+
+        delta = (late - early) / abs(early)
+
+        if delta > 0.02:
+
+            return "up"
+
+        if delta < -0.02:
+
+            return "down"
+
+        return "flat"

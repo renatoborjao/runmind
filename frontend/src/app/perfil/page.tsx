@@ -275,10 +275,28 @@ export default function PerfilPage() {
           <Row label="Objetivo" value={p.goal || "—"} />
           <Row label="Dias por semana" value={p.weekly_training_days ? `${p.weekly_training_days}x` : "—"} />
           <Row label="Dias preferidos" value={p.preferred_running_days.length ? p.preferred_running_days.join(", ") : "—"} />
-          {p.target_race && <Row label="Prova" value={p.target_race} />}
-          {p.race_date && <Row label="Data da prova" value={new Date(p.race_date + "T00:00:00").toLocaleDateString("pt-BR")} />}
-          {p.target_time && <Row label="Tempo-alvo" value={p.target_time} />}
           <p className="muted" style={{ margin: "10px 2px 0", fontSize: 12 }}>Isso é dinâmico — ajuste com o coach. 💬</p>
+        </section>
+
+        {/* provas */}
+        <section className="card tap" onClick={() => router.push("/provas")}>
+          <div className="card-head"><span className="eyebrow">Minhas provas</span></div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              {p.target_race ? (
+                <>
+                  <div style={{ fontWeight: 700, fontSize: 14.5 }}>{p.target_race}</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    {p.race_date ? new Date(p.race_date + "T00:00:00").toLocaleDateString("pt-BR") : ""}
+                    {p.target_time ? ` · alvo ${p.target_time}` : ""}
+                  </div>
+                </>
+              ) : (
+                <div className="muted" style={{ fontSize: 13 }}>Cadastre uma ou mais provas 🏁</div>
+              )}
+            </div>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--muted)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none" }}><path d="M9 18l6-6-6-6" /></svg>
+          </div>
         </section>
 
         <button className="btn-danger" onClick={onLogout}>Sair da conta</button>

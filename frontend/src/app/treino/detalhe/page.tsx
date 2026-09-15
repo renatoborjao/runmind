@@ -62,6 +62,7 @@ function DetalheInner() {
   const [target, setTarget] = useState<WorkoutDay | null>(null);
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+  const [garminConnected, setGarminConnected] = useState(false);
 
   async function onPushWatch() {
     setWatch({ sending: true, msg: null });
@@ -90,6 +91,7 @@ function DetalheInner() {
         return;
       }
       setWeek(w.week);
+      setGarminConnected(!!w.garmin_connected);
       const picked =
         (dayParam && w.week.find((d) => d.day_en === dayParam)) ||
         w.week.find((d) => d.is_today) ||
@@ -197,11 +199,15 @@ function DetalheInner() {
             )}
             {moveMsg && <div className="notice err">{moveMsg}</div>}
 
-            <button className="btn-ghost" onClick={onPushWatch} disabled={watch.sending}>
-              <svg className="accent" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="3" width="12" height="18" rx="3" /><path d="M12 7v4l2 1" /></svg>
-              {watch.sending ? "Enviando pro relógio…" : "Enviar pro relógio"}
-            </button>
-            {watch.msg && <div className="notice ok">{watch.msg}</div>}
+            {garminConnected && (
+              <>
+                <button className="btn-ghost" onClick={onPushWatch} disabled={watch.sending}>
+                  <svg className="accent" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="3" width="12" height="18" rx="3" /><path d="M12 7v4l2 1" /></svg>
+                  {watch.sending ? "Enviando pro relógio…" : "Enviar pro relógio"}
+                </button>
+                {watch.msg && <div className="notice ok">{watch.msg}</div>}
+              </>
+            )}
           </div>
         </>
       )}

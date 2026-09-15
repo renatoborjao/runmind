@@ -503,6 +503,24 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .install-banner .ib-btn:active { transform: scale(.98); }
 .install-banner .ib-x { position: absolute; top: 8px; right: 10px; border: none; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 4px; }
 
+/* evolução: status de treino */
+.form-status { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 10px 12px; margin-bottom: 12px; border-radius: 11px; background: var(--accent-wash); }
+.form-status .k { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-ink); font-weight: 600; }
+.form-status .v { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; color: var(--accent-ink); }
+
+/* provas */
+.race-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 13px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.race-row.anchor { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-wash); }
+.race-row.past { opacity: .6; }
+.race-cal { width: 44px; flex: none; text-align: center; border-radius: 10px; background: var(--surface-2); padding: 6px 0; }
+.race-cal .d { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 17px; line-height: 1; }
+.race-cal .m { font-family: var(--font-mono), monospace; font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-top: 2px; }
+.race-info { flex: 1; min-width: 0; }
+.race-info .n { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14.5px; }
+.race-info .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.race-badge { display: inline-block; font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-wash); padding: 3px 7px; border-radius: 999px; margin-top: 5px; }
+.race-del { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 19px; padding: 4px 6px; flex: none; }
+
 /* captar e-mail no app */
 .email-capture { position: relative; display: flex; gap: 11px; align-items: flex-start; padding: 13px 34px 13px 13px; }
 .email-capture .ec-ic { font-size: 20px; line-height: 1.2; flex: none; }

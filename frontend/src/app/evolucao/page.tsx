@@ -43,6 +43,14 @@ function VolumeChart({ data }: { data: { label: string; km: number }[] }) {
   );
 }
 
+function Trend({ dir, higherBetter }: { dir?: "up" | "down" | "flat" | null; higherBetter: boolean }) {
+  if (!dir) return null;
+  const char = dir === "up" ? "↑" : dir === "down" ? "↓" : "→";
+  const good = dir === "flat" ? null : (dir === "up") === higherBetter;
+  const color = good === null ? "var(--muted)" : good ? "var(--accent)" : "var(--rose)";
+  return <span style={{ color, fontSize: 14, fontWeight: 700, marginLeft: 2 }}>{char}</span>;
+}
+
 export default function EvolucaoPage() {
   const router = useRouter();
   const [p, setP] = useState<Progress | null>(null);
@@ -106,14 +114,39 @@ export default function EvolucaoPage() {
           <VolumeChart data={p.weekly_volume} />
         </section>
 
-        {/* forma: vo2 + fc */}
-        {(f.vo2max != null || f.resting_hr != null) && (
+        {/* forma: vo2 + fc + hrv + status */}
+        {(f.vo2max != null || f.resting_hr != null || f.hrv != null || f.training_status) && (
           <section className="card">
             <div className="card-head"><span className="eyebrow">Forma</span></div>
+            {f.training_status && (
+              <div className="form-status">
+                <span className="k">Status de treino</span>
+                <span className="v">{f.training_status}</span>
+              </div>
+            )}
             <div className="prog-grid">
-              {f.vo2max != null && <div className="stat"><div className="k">VO₂max</div><div className="big">{f.vo2max} <small>ml/kg</small></div></div>}
-              {f.resting_hr != null && <div className="stat"><div className="k">FC repouso</div><div className="big">{f.resting_hr} <small>bpm</small></div></div>}
+              {f.vo2max != null && (
+                <div className="stat">
+                  <div className="k">VO₂max</div>
+                  <div className="big">{f.vo2max} <small>ml/kg</small> <Trend dir={f.vo2max_trend} higherBetter /></div>
+                </div>
+              )}
+              {f.resting_hr != null && (
+                <div className="stat">
+                  <div className="k">FC repouso</div>
+                  <div className="big">{f.resting_hr} <small>bpm</small> <Trend dir={f.resting_hr_trend} higherBetter={false} /></div>
+                </div>
+              )}
+              {f.hrv != null && (
+                <div className="stat">
+                  <div className="k">HRV{f.hrv_status ? ` · ${f.hrv_status}` : ""}</div>
+                  <div className="big">{f.hrv} <small>ms</small> <Trend dir={f.hrv_trend} higherBetter /></div>
+                </div>
+              )}
             </div>
+            <p className="muted" style={{ margin: "12px 0 0", fontSize: 12 }}>
+              Setas: tendência das últimas semanas. VO₂max e HRV subindo, FC de repouso caindo = você evoluindo. 📈
+            </p>
           </section>
         )}
 
