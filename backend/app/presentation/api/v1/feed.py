@@ -51,6 +51,84 @@ def _run_date_iso(r: dict) -> str | None:
     return None
 
 
+_GENERIC_NAMES = {
+    "morning run", "afternoon run", "evening run", "night run", "lunch run",
+    "corrida matinal", "corrida vespertina", "corrida noturna", "corrida",
+}
+
+
+def _name_score(name: str) -> int:
+    """Qualidade do nome de uma atividade — pra escolher o melhor quando o MESMO
+    treino chega em 2 fontes (Garmin e Strava). O nome do NOSSO plano
+    ('Ritmind · ...') vence; o do Garmin costuma vir com prefixo de cidade e
+    CORTADO ('São Paulo - Ritmind · Intervalado de Cruzei')."""
+
+    n = (name or "").strip()
+
+    score = min(len(n), 40)
+
+    if n.startswith("Ritmind"):
+
+        score += 100  # nome limpo do nosso plano
+
+    low = n.lower()
+
+    if low.startswith(("são ", "sao ")) or " - " in n[:16]:
+
+        score -= 15  # prefixo de local do Garmin (e costuma vir cortado)
+
+    if low in _GENERIC_NAMES:
+
+        score -= 30
+
+    return score
+
+
+def _dedup_archived(items: list[dict]) -> list[dict]:
+    """Junta o MESMO treino que veio de 2 fontes (Garmin + Strava = mesma data +
+    distância ~igual, ids diferentes): fica com o melhor nome, garante o traçado
+    se alguma cópia tiver e completa stats faltantes. Evita corrida duplicada no
+    feed e o nome cortado. Ver [[project_garmin_strava_dedup]]."""
+
+    out: list[dict] = []
+
+    for it in items:
+
+        dup = next(
+            (
+                o
+                for o in out
+                if o["date_iso"] == it["date_iso"]
+                and abs(o["distance_km"] - it["distance_km"]) < 0.15
+            ),
+            None,
+        )
+
+        if dup is None:
+
+            out.append(it)
+
+            continue
+
+        if _name_score(it["name"]) > _name_score(dup["name"]):
+
+            dup["name"] = it["name"]
+
+        if not dup["has_track"] and it["has_track"]:
+
+            dup["has_track"] = it["has_track"]
+            dup["track_source"] = it["track_source"]
+            dup["track_id"] = it["track_id"]
+
+        for k in ("avg_hr", "max_hr", "elevation_gain", "hr_zones", "air_temp_c", "pace"):
+
+            if dup.get(k) is None and it.get(k) is not None:
+
+                dup[k] = it[k]
+
+    return out
+
+
 @router.get("")
 async def activity_feed(profile: str = Depends(current_profile)):
     """Feed de atividades (tipo Strava): TODAS as corridas — arquivadas (Strava/
@@ -95,6 +173,10 @@ async def activity_feed(profile: str = Depends(current_profile)):
                 "track_id": str(a.id) if has_arch_track else None,
             }
         )
+
+    # mesmo treino em 2 fontes (Garmin+Strava) não aparece 2x e fica com o nome
+    # limpo (não o cortado do Garmin)
+    items = _dedup_archived(items)
 
     for r in RecordedRunRepository().load(profile):
 

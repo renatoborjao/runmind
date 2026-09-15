@@ -216,6 +216,7 @@ export default function InicioPage() {
   const firstName = (home.athlete.name ?? "").split(" ")[0] || "corredor";
   const body = home.body;
   const session = home.today.session;
+  const todayDone = home.week.find((d) => d.is_today)?.done ?? false;
   const shoe = home.shoe;
 
   return (
@@ -291,14 +292,28 @@ export default function InicioPage() {
         )}
 
         {/* TREINO DE HOJE */}
-        <section className={`card today${session ? " tap" : ""}`} onClick={session ? () => router.push(`/treino/detalhe?day=${home.today.day_en}`) : undefined}>
+        <section
+          className={`card today${session ? " tap" : ""}`}
+          onClick={session ? () => router.push(todayDone ? "/atividades" : `/treino/detalhe?day=${home.today.day_en}`) : undefined}
+        >
           <div className="card-head">
             <span className="eyebrow">{home.today.label}{home.today.session_date_label ? ` · ${home.today.session_date_label}` : ""}</span>
-            {session && (session.pace_min && session.pace_max) && (
+            {session && todayDone ? (
+              <span className="pace-pill done">Concluído ✓</span>
+            ) : session && (session.pace_min && session.pace_max) ? (
               <span className="pace-pill">{session.pace_min}–{session.pace_max}/km</span>
-            )}
+            ) : null}
           </div>
-          {session ? (
+          {session && todayDone ? (
+            <>
+              <h2>Treino de hoje concluído ✓</h2>
+              <p className="sub" style={{ margin: 0 }}>Boa, {firstName}! {session.workout_type} fechado. 👏</p>
+              <button className="cta-btn" onClick={(e) => { e.stopPropagation(); router.push("/atividades"); }}>
+                Ver como foi
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </button>
+            </>
+          ) : session ? (
             <>
               <h2>{session.workout_type}{session.distance_km ? ` · ${String(session.distance_km).replace(".", ",")} km` : ""}</h2>
               <p className="sub">{session.objective}</p>

@@ -192,32 +192,6 @@ function Chart({ title, dist, values, color, area, unit, fmt }: {
   );
 }
 
-// Dinâmica de corrida (Garmin): cadência máx, contato com o solo, oscilação e
-// comprimento de passada — o pacote "avançado" que o atleta via só no Garmin.
-function RunDynamics({ m }: { m: NonNullable<TrackData["metrics"]> }) {
-  const cells: { v: string; k: string }[] = [];
-  if (m.max_cadence) cells.push({ v: `${m.max_cadence} spm`, k: "Cadência máx" });
-  if (m.ground_contact_ms) cells.push({ v: `${m.ground_contact_ms} ms`, k: "Contato solo" });
-  if (m.vertical_oscillation_cm) cells.push({ v: `${m.vertical_oscillation_cm} cm`, k: "Oscilação vert." });
-  if (m.stride_length_cm) {
-    const s = m.stride_length_cm > 10 ? m.stride_length_cm / 100 : m.stride_length_cm;
-    cells.push({ v: `${s.toFixed(2)} m`, k: "Passada" });
-  }
-  if (m.vertical_ratio) cells.push({ v: `${m.vertical_ratio}%`, k: "Razão vertical" });
-  if (m.max_power) cells.push({ v: `${m.max_power} W`, k: "Potência máx" });
-  if (!cells.length) return null;
-  return (
-    <section className="card">
-      <div className="card-head"><span className="eyebrow">Dinâmica de corrida</span></div>
-      <div className="dyn">
-        {cells.map((c, i) => (
-          <div className="dyn-cell" key={i}><div className="v">{c.v}</div><div className="k">{c.k}</div></div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 // Fallback: traçado como polyline em SVG (sem mapa base) quando o Leaflet falha.
 function TrackMapSVG({ points }: { points: { lat: number; lon: number }[] }) {
   const pts = points.filter((p) => p.lat && p.lon);
@@ -645,24 +619,34 @@ export default function AtividadesPage() {
       ? Math.min(...fullKm.map((s) => s.sec / (s.partial_km || 1)))
       : null;
 
-    // estatísticas extras (só as que existem) em blocos de 3, tipo Strava
     const m = track?.metrics;
-    const extras: { v: string; unit: string; k: string }[] = [];
-    if (it.avg_hr != null) extras.push({ v: String(it.avg_hr), unit: " bpm", k: "FC média" });
-    if (it.max_hr != null) extras.push({ v: String(it.max_hr), unit: " bpm", k: "FC máx" });
-    if (bestSec != null) extras.push({ v: fmtPaceSec(bestSec), unit: "/km", k: "Melhor km" });
-    if (m?.avg_cadence) extras.push({ v: String(m.avg_cadence), unit: " spm", k: "Cadência" });
-    if (m?.avg_power) extras.push({ v: String(m.avg_power), unit: " W", k: "Potência" });
-    if (m?.calories) extras.push({ v: String(m.calories), unit: " kcal", k: "Calorias" });
-    if (it.elevation_gain != null) extras.push({ v: String(it.elevation_gain), unit: " m", k: "Ganho" });
-    if (m?.elevation_loss) extras.push({ v: String(m.elevation_loss), unit: " m", k: "Perda" });
-    if (m?.training_effect) extras.push({ v: m.training_effect.toFixed(1), unit: "", k: "Efeito aeróbico" });
-    if (m?.anaerobic_effect) extras.push({ v: m.anaerobic_effect.toFixed(1), unit: "", k: "Efeito anaeróbico" });
-    if (it.air_temp_c != null) extras.push({ v: String(it.air_temp_c), unit: "°C", k: "Temp." });
-    else if (m?.avg_temperature != null) extras.push({ v: String(m.avg_temperature), unit: "°C", k: "Temp." });
-    extras.push({ v: it.source === "app" ? "App" : "Strava/Garmin", unit: "", k: "Fonte" });
-    const extraRows: typeof extras[] = [];
-    for (let i = 0; i < extras.length; i += 3) extraRows.push(extras.slice(i, i + 3));
+
+    // GRID principal: só 3 tiles glanceáveis (além de dist/tempo/ritmo). O resto
+    // vira lista em "Detalhes" — pra tela não virar um monte de bullets.
+    const primary: { v: string; unit: string; k: string }[] = [];
+    if (it.avg_hr != null) primary.push({ v: String(it.avg_hr), unit: " bpm", k: "FC média" });
+    if (m?.avg_cadence) primary.push({ v: String(m.avg_cadence), unit: " spm", k: "Cadência" });
+    if (it.elevation_gain != null) primary.push({ v: String(it.elevation_gain), unit: " m", k: "Ganho" });
+    if (primary.length < 3 && m?.calories) primary.push({ v: String(m.calories), unit: " kcal", k: "Calorias" });
+    if (primary.length < 3 && m?.avg_power) primary.push({ v: String(m.avg_power), unit: " W", k: "Potência" });
+
+    // DETALHES: lista compacta (rótulo — valor), só o que existe
+    const details: [string, string][] = [];
+    if (it.max_hr != null) details.push(["FC máxima", `${it.max_hr} bpm`]);
+    if (bestSec != null) details.push(["Melhor km", `${fmtPaceSec(bestSec)}/km`]);
+    if (m?.max_cadence) details.push(["Cadência máx", `${m.max_cadence} spm`]);
+    if (m?.avg_power && !primary.some((p) => p.k === "Potência")) details.push(["Potência média", `${m.avg_power} W`]);
+    if (m?.max_power) details.push(["Potência máx", `${m.max_power} W`]);
+    if (m?.calories && !primary.some((p) => p.k === "Calorias")) details.push(["Calorias", `${m.calories} kcal`]);
+    if (m?.training_effect) details.push(["Efeito aeróbico", m.training_effect.toFixed(1)]);
+    if (m?.anaerobic_effect) details.push(["Efeito anaeróbico", m.anaerobic_effect.toFixed(1)]);
+    if (m?.elevation_loss) details.push(["Perda de elevação", `${m.elevation_loss} m`]);
+    if (m?.ground_contact_ms) details.push(["Contato com o solo", `${m.ground_contact_ms} ms`]);
+    if (m?.vertical_oscillation_cm) details.push(["Oscilação vertical", `${m.vertical_oscillation_cm} cm`]);
+    if (m?.stride_length_cm) { const sl = m.stride_length_cm > 10 ? m.stride_length_cm / 100 : m.stride_length_cm; details.push(["Passada", `${sl.toFixed(2)} m`]); }
+    if (m?.vertical_ratio) details.push(["Razão vertical", `${m.vertical_ratio}%`]);
+    const temp = it.air_temp_c ?? m?.avg_temperature;
+    if (temp != null) details.push(["Temperatura", `${temp} °C`]);
     return (
       <main className="stage">
         <div className="phone">
@@ -738,16 +722,16 @@ export default function AtividadesPage() {
             <div className="qstat"><div className="v">{it.pace ?? "—"}<small>{it.pace ? "/km" : ""}</small></div><div className="k">Pace</div></div>
           </div>
 
-          {extraRows.map((row, ri) => (
-            <div className="qstats" key={ri}>
-              {row.map((s, ci) => (
+          {primary.length > 0 && (
+            <div className="qstats">
+              {primary.slice(0, 3).map((s, ci) => (
                 <div className="qstat" key={ci}>
-                  <div className="v" style={s.v.length > 6 ? { fontSize: 13.5 } : undefined}>{s.v}<small>{s.unit}</small></div>
+                  <div className="v">{s.v}<small>{s.unit}</small></div>
                   <div className="k">{s.k}</div>
                 </div>
               ))}
             </div>
-          ))}
+          )}
 
           {it.hr_zones && <HrZones zones={it.hr_zones} />}
 
@@ -765,7 +749,6 @@ export default function AtividadesPage() {
                 {track.series?.hr?.length ? (
                   <Chart title="Frequência cardíaca" dist={track.series.dist} values={track.series.hr} color="#E24666" unit=" bpm" />
                 ) : null}
-                {track.metrics && <RunDynamics m={track.metrics} />}
                 {track.splits.length > 0 && (() => {
                   const hasHr = track.splits.some((s) => s.hr != null);
                   return (
@@ -801,6 +784,19 @@ export default function AtividadesPage() {
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>Trajeto e parciais não foram salvos nesta atividade. Corridas gravadas pelo app mostram o mapa e os splits. 🗺️</p>
             </div>
           )}
+
+          {details.length > 0 && (
+            <section className="card">
+              <div className="card-head"><span className="eyebrow">Detalhes</span></div>
+              <div className="det">
+                {details.map(([k, v], i) => (
+                  <div className="det-row" key={i}><span className="det-k">{k}</span><span className="det-v">{v}</span></div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <p className="det-src">Fonte: {it.source === "app" ? "GPS do app" : "Strava/Garmin"}</p>
         </div>
       </main>
     );

@@ -257,11 +257,13 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .chart { width: 100%; height: 108px; display: block; }
 .chart-range { font-family: var(--font-mono), monospace; font-size: 10px; color: var(--muted); font-weight: 600; }
 
-/* dinâmica de corrida (Garmin) */
-.dyn { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.dyn-cell { text-align: center; }
-.dyn-cell .v { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 16px; letter-spacing: -.02em; }
-.dyn-cell .k { font-family: var(--font-mono), monospace; font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+/* lista de detalhes (rótulo — valor) */
+.det { display: flex; flex-direction: column; }
+.det-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.det-row:last-child { border-bottom: none; }
+.det-k { font-size: 13px; color: var(--ink-soft); }
+.det-v { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13.5px; color: var(--ink); }
+.det-src { margin: 2px 2px 4px; font-family: var(--font-mono), monospace; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); text-align: center; }
 .src-tag { font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
 .src-tag.app { color: var(--accent-ink); background: var(--accent-wash); }
 .src-tag.sync { color: var(--muted); background: var(--surface-2); }
