@@ -20,7 +20,24 @@ export default function PWARegister() {
 
     const register = () => {
       navigator.serviceWorker.register("/sw.js").then((reg) => {
-        reg.update().catch(() => {});
+        const check = () => reg.update().catch(() => {});
+        check();
+        // procura nova versão periodicamente e quando o app volta ao foco —
+        // o PWA fica aberto na memória e não re-navega, então sem isso ele nunca
+        // pegava um deploy novo. Se houver SW esperando, ativa na hora.
+        setInterval(check, 60 * 1000);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") check();
+        });
+        reg.addEventListener("updatefound", () => {
+          const w = reg.installing;
+          if (!w) return;
+          w.addEventListener("statechange", () => {
+            if (w.state === "installed" && navigator.serviceWorker.controller) {
+              w.postMessage("skip-waiting");
+            }
+          });
+        });
       }).catch(() => {});
     };
 

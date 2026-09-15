@@ -2,7 +2,7 @@
 //  - /api/* NUNCA é cacheado (dado do atleta vem sempre da rede).
 //  - assets do Next (/_next/static, hasheados) = cache-first (imutáveis).
 //  - navegação = network-first, cai pra casca cacheada quando offline.
-const CACHE = "ritmind-v5";
+const CACHE = "ritmind-v6";
 const SHELL = [
   "/inicio/",
   "/entrar/",
@@ -16,6 +16,11 @@ self.addEventListener("install", (e) => {
   e.waitUntil(
     caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())
   );
+});
+
+// a página pede pra pular a espera quando detecta versão nova (atualização na hora)
+self.addEventListener("message", (e) => {
+  if (e.data === "skip-waiting") self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
