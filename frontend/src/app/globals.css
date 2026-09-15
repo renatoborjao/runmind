@@ -264,7 +264,16 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
    eles "flutuam" por cima dos outros cards ao rolar a página. */
 /* mapa do detalhe edge-to-edge (estilo Strava): sangra pras bordas do frame */
 .map-section { margin: 4px -16px; }
+.map-tap { position: relative; }
 .map-box { height: 300px; width: 100%; background: var(--surface-2); position: relative; z-index: 0; isolation: isolate; }
+/* camada por cima: bloqueia interação inline e abre o mapa em tela cheia ao tocar */
+.map-overlay { position: absolute; inset: 0; z-index: 2; background: transparent; border: none; cursor: pointer; display: flex; align-items: flex-end; justify-content: flex-end; padding: 12px; }
+.map-hint { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 11px; letter-spacing: .03em; color: #fff; background: rgba(12,13,22,.72); padding: 6px 11px; border-radius: 999px; backdrop-filter: blur(4px); }
+/* mapa em tela cheia (navegável) */
+.fullmap { position: fixed; inset: 0; z-index: 3000; background: #0C0D16; }
+.fullmap-box { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fullmap-close { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 3001; width: 40px; height: 40px; border-radius: 12px; border: none; background: rgba(12,13,22,.82); color: #fff; display: grid; place-items: center; cursor: pointer; backdrop-filter: blur(4px); }
+.fullmap-close svg { width: 20px; height: 20px; }
 .leaflet-container { font-family: var(--font-body), sans-serif; z-index: 0; }
 
 /* zonas de FC (estilo Strava) */

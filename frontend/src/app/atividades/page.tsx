@@ -40,11 +40,24 @@ function loadLeaflet(): Promise<any> {
   });
 }
 
-// Mapa real com o trajeto (Leaflet + OSM). Cai pro traçado em SVG se o mapa não
-// carregar (offline/tiles bloqueados).
+// Desenha o traçado (linha + início/fim) num mapa Leaflet e devolve a linha.
+function _drawRoute(L: any, map: any, pts: number[][]) {
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "© OpenStreetMap",
+  }).addTo(map);
+  const line = L.polyline(pts, { color: "#0FB499", weight: 5 }).addTo(map);
+  L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
+  L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#E24666", fillOpacity: 1 }).addTo(map);
+  return line;
+}
+
+// Mapa FIXO do detalhe (estilo Strava): não arrasta nem dá zoom inline — só
+// mostra o percurso com a bolinha de playback. Tocar abre o mapa em tela cheia.
 function MapView({ points }: { points: { lat: number; lon: number }[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  const [full, setFull] = useState(false);
 
   useEffect(() => {
     const pts = points.filter((p) => p.lat && p.lon).map((p) => [p.lat, p.lon]);
@@ -55,52 +68,64 @@ function MapView({ points }: { points: { lat: number; lon: number }[] }) {
     loadLeaflet()
       .then((L: any) => {
         if (cancelled || !ref.current) return;
-        // Mapa TRAVADO no percurso: encostar o dedo não arrasta/gira o mapa —
-        // ele fica focado no traçado (o atleta pediu "só no percurso"). Os
-        // botões de zoom seguem valendo pra aproximar/afastar.
         map = L.map(ref.current, {
-          zoomControl: true,
-          attributionControl: true,
-          scrollWheelZoom: false,
-          dragging: false,
-          touchZoom: false,
-          doubleClickZoom: false,
-          boxZoom: false,
-          keyboard: false,
-          tap: false,
+          zoomControl: false, attributionControl: true, scrollWheelZoom: false,
+          dragging: false, touchZoom: false, doubleClickZoom: false,
+          boxZoom: false, keyboard: false, tap: false,
         });
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "© OpenStreetMap",
-        }).addTo(map);
-        const line = L.polyline(pts, { color: "#0FB499", weight: 5 }).addTo(map);
-        L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
-        L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#E24666", fillOpacity: 1 }).addTo(map);
-        const b = line.getBounds();
-        map.fitBounds(b, { padding: [22, 22] });
-        map.setMaxBounds(b.pad(0.25));  // não deixa o mapa vagar pra longe do percurso
+        const line = _drawRoute(L, map, pts);
+        map.fitBounds(line.getBounds(), { padding: [22, 22] });
         setTimeout(() => map && map.invalidateSize(), 120);
-
         // bolinha "correndo" o percurso (playback, estilo Strava)
         const dot = L.circleMarker(pts[0], { radius: 7, color: "#fff", weight: 3, fillColor: "#0FB499", fillOpacity: 1 }).addTo(map);
         const step = Math.max(1, Math.round(pts.length / 240));
         let i = 0;
-        anim = setInterval(() => {
-          i += step;
-          if (i >= pts.length) i = 0;  // recomeça o trajeto
-          dot.setLatLng(pts[i]);
-        }, 45);
+        anim = setInterval(() => { i += step; if (i >= pts.length) i = 0; dot.setLatLng(pts[i]); }, 45);
       })
       .catch(() => setFailed(true));
-    return () => {
-      cancelled = true;
-      if (anim) clearInterval(anim);
-      if (map) map.remove();
-    };
+    return () => { cancelled = true; if (anim) clearInterval(anim); if (map) map.remove(); };
   }, [points]);
 
   if (failed) return <TrackMapSVG points={points} />;
-  return <div ref={ref} className="map-box" />;
+  return (
+    <div className="map-tap">
+      <div ref={ref} className="map-box" />
+      <button className="map-overlay" aria-label="Ampliar mapa" onClick={() => setFull(true)}>
+        <span className="map-hint">Toque para ampliar</span>
+      </button>
+      {full && <FullMap points={points} onClose={() => setFull(false)} />}
+    </div>
+  );
+}
+
+// Mapa em TELA CHEIA (navegável): arrasta, dá zoom, botões — como o Strava
+// quando você toca no mapa.
+function FullMap({ points, onClose }: { points: { lat: number; lon: number }[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const pts = points.filter((p) => p.lat && p.lon).map((p) => [p.lat, p.lon]);
+    if (pts.length < 2 || !ref.current) return;
+    let map: any;
+    let cancelled = false;
+    loadLeaflet()
+      .then((L: any) => {
+        if (cancelled || !ref.current) return;
+        map = L.map(ref.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: true });
+        const line = _drawRoute(L, map, pts);
+        map.fitBounds(line.getBounds(), { padding: [30, 30] });
+        setTimeout(() => map && map.invalidateSize(), 120);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; if (map) map.remove(); };
+  }, [points]);
+  return (
+    <div className="fullmap">
+      <button className="fullmap-close" aria-label="Fechar" onClick={onClose}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+      </button>
+      <div ref={ref} className="fullmap-box" />
+    </div>
+  );
 }
 
 function Mark() {
