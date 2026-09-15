@@ -110,6 +110,49 @@ function cue() {
   } catch { /* ok */ }
 }
 
+// ---- voz guiada (fala no fone o que está acontecendo) ----
+function speak(text: string) {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel(); // não empilha (evita atraso acumulado)
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "pt-BR";
+    u.rate = 1.05;
+    synth.speak(u);
+  } catch { /* ok */ }
+}
+
+function spokenAmount(s: Segment): string {
+  if (s.dist != null) {
+    if (s.dist >= 1000) {
+      const km = s.dist / 1000;
+      const n = km.toLocaleString("pt-BR");
+      return `${n} ${km === 1 ? "quilômetro" : "quilômetros"}`;
+    }
+    return `${s.dist} metros`;
+  }
+  if (s.dur != null) {
+    return s.dur >= 60 ? `${Math.round(s.dur / 60)} minutos` : `${s.dur} segundos`;
+  }
+  return "";
+}
+
+function spokenPace(s: Segment): string {
+  const say = (p: string) => p.replace(":", " e ");
+  if (s.paceMin && s.paceMax) return `, ritmo ${say(s.paceMin)} a ${say(s.paceMax)}`;
+  if (s.paceMin) return `, ritmo ${say(s.paceMin)}`;
+  if (s.kind === "recovery" || s.kind === "easy") return ", leve";
+  return "";
+}
+
+function announce(s: Segment): string {
+  const amt = spokenAmount(s);
+  // "Tiro 1/4" soa melhor falado como "Tiro 1 de 4"
+  const label = s.label.replace("/", " de ");
+  return `${label}. ${amt}${spokenPace(s)}.`.replace(/\s+/g, " ").trim();
+}
+
 export default function CorrerPage() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -126,6 +169,11 @@ export default function CorrerPage() {
   const [segElapsed, setSegElapsed] = useState(0);
   const [livePace, setLivePace] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+
+  const voiceRef = useRef(true);
+  const lastNudge = useRef(0);
+  useEffect(() => { voiceRef.current = voiceOn; }, [voiceOn]);
 
   const segments = useRef<Segment[]>([]);
   const segIdxRef = useRef(0);
@@ -165,13 +213,15 @@ export default function CorrerPage() {
       setElapsed(e);
 
       // pace ao vivo (janela ~25s)
+      let lp: number | null = null;
       const buf = recent.current;
       if (buf.length >= 2) {
         const cutoff = e - 25;
         const old = buf.find((s) => s.t >= cutoff) ?? buf[0];
         const dd = distRef.current - old.d;
         const dt = e - old.t;
-        setLivePace(dd > 20 && dt > 3 ? (dt / 60) / (dd / 1000) : null);
+        lp = dd > 20 && dt > 3 ? (dt / 60) / (dd / 1000) : null;
+        setLivePace(lp);
       }
 
       if (!guided || segments.current.length === 0) return;
@@ -187,14 +237,28 @@ export default function CorrerPage() {
       const doneByDist = seg.dist != null && coveredD >= seg.dist;
       const doneByTime = seg.dur != null && coveredT >= seg.dur;
       if ((doneByDist || doneByTime) && idx < segments.current.length - 1) {
+        const nextSeg = segments.current[idx + 1];
         segIdxRef.current = idx + 1;
         segStartDist.current = distRef.current;
         segStartElapsed.current = e;
         setSegIdx(idx + 1);
         setSegDist(0); setSegElapsed(0);
         cue();
+        if (voiceRef.current) speak(announce(nextSeg));
+        lastNudge.current = e;
         setFlash(true);
         setTimeout(() => setFlash(false), 900);
+        return;
+      }
+
+      // nudge de pace por voz: só em bloco com alvo, no máximo a cada ~40s, e
+      // não nos primeiros 15s do bloco (deixa acelerar/desacelerar antes)
+      if (voiceRef.current && coveredT > 15 && e - lastNudge.current > 40) {
+        const lo = paceToSec(seg.paceMin), hi = paceToSec(seg.paceMax ?? seg.paceMin);
+        if (lp != null && lo != null && hi != null) {
+          if (lp > hi + 12) { speak("Acelera um pouco."); lastNudge.current = e; }
+          else if (lp < lo - 12) { speak("Segura o ritmo, tá rápido."); lastNudge.current = e; }
+        }
       }
     }, 500);
     return () => clearInterval(id);
@@ -268,9 +332,14 @@ export default function CorrerPage() {
     elapsedBase.current = 0;
     distRef.current = 0; setDist(0); setElapsed(0);
     last.current = null; points.current = []; recent.current = [];
+    lastNudge.current = 0;
     setPhase("recording"); phaseRef.current = "recording";
     startWatch();
     requestWake();
+    // fala o 1º bloco AQUI (dentro do gesto do toque) — destrava a voz no iOS
+    if (useGuide && session && segments.current.length && voiceRef.current) {
+      speak(`Bora! ${announce(segments.current[0])}`);
+    }
   }
 
   function onPause() {
@@ -295,6 +364,7 @@ export default function CorrerPage() {
       points: points.current,
     });
     setElapsed(durS);
+    if (guided && voiceRef.current) speak("Treino concluído! Mandou bem.");
     setPhase("done"); phaseRef.current = "done";
   }
 
@@ -355,6 +425,20 @@ export default function CorrerPage() {
                 {next && <div className="guide-next">Depois: {next.label} · {targetLabel(next)}</div>}
                 {!next && <div className="guide-next">Último bloco — finaliza quando terminar. 🏁</div>}
               </div>
+            )}
+
+            {guided && (recording || paused) && (
+              <button
+                className="voice-toggle"
+                onClick={() => {
+                  const on = !voiceOn;
+                  setVoiceOn(on);
+                  if (!on) { try { window.speechSynthesis?.cancel(); } catch { /* ok */ } }
+                  else if (seg) speak(announce(seg));
+                }}
+              >
+                {voiceOn ? "🔊 Voz ligada" : "🔇 Voz desligada"}
+              </button>
             )}
 
             <div className="run-metrics">
