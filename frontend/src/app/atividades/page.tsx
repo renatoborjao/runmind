@@ -677,6 +677,7 @@ export default function AtividadesPage() {
 
           {editor && (
             <div className="share-editor">
+              <div className="se-inner">
               <header className="appbar">
                 <button className="icon-btn" aria-label="Fechar" onClick={() => { setEditor(false); setResultUrl(null); }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -724,6 +725,7 @@ export default function AtividadesPage() {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           )}
 
