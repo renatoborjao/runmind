@@ -129,14 +129,10 @@ def _dedup_archived(items: list[dict]) -> list[dict]:
     return out
 
 
-@router.get("")
-async def activity_feed(profile: str = Depends(current_profile)):
-    """Feed de atividades (tipo Strava): TODAS as corridas — arquivadas (Strava/
-    Garmin) + gravadas no app — mais recentes primeiro. Cada corrida do app é só
-    mais uma base: dedup por CORRIDA (mesma data + distância ~igual); quando bate
-    com uma arquivada, mantém os stats da arquivada (FC/altimetria) e ANEXA o
-    traçado do app (run_id) — assim a mesma corrida não aparece 2x e ainda ganha
-    mapa/parciais. Só o app tem traçado hoje; as arquivadas vêm com stats."""
+def build_feed(profile: str) -> list[dict]:
+    """Monta o feed de atividades de UM atleta (arquivadas + app, dedup, mais
+    recentes primeiro). Reusado pela rota do próprio atleta e pelo social
+    (perfil/atividades de outro atleta)."""
 
     archived = [
         a
@@ -232,7 +228,19 @@ async def activity_feed(profile: str = Depends(current_profile)):
 
     items.sort(key=lambda x: x.get("datetime") or "", reverse=True)
 
-    return {"activities": items}
+    return items
+
+
+@router.get("")
+async def activity_feed(profile: str = Depends(current_profile)):
+    """Feed de atividades (tipo Strava): TODAS as corridas — arquivadas (Strava/
+    Garmin) + gravadas no app — mais recentes primeiro. Cada corrida do app é só
+    mais uma base: dedup por CORRIDA (mesma data + distância ~igual); quando bate
+    com uma arquivada, mantém os stats da arquivada (FC/altimetria) e ANEXA o
+    traçado do app (run_id) — assim a mesma corrida não aparece 2x e ainda ganha
+    mapa/parciais. Só o app tem traçado hoje; as arquivadas vêm com stats."""
+
+    return {"activities": build_feed(profile)}
 
 
 @router.get("/track/{activity_id}")

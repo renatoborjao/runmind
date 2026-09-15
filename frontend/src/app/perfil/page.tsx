@@ -2,7 +2,45 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getProfile, logout, saveProfile, type Profile } from "@/lib/api";
+import { getMySocial, getProfile, logout, saveProfile, setMySocial, type MySocial, type Profile } from "@/lib/api";
+
+function SocialSettings() {
+  const [s, setS] = useState<MySocial | null>(null);
+  const [bio, setBio] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { (async () => { const d = await getMySocial(); if (d) { setS(d); setBio(d.bio); } })(); }, []);
+
+  async function setPrivacy(privacy: "public" | "private") {
+    const d = await setMySocial({ privacy });
+    if (d) setS(d);
+  }
+  async function saveBio() {
+    const d = await setMySocial({ bio });
+    if (d) { setS(d); setSaved(true); setTimeout(() => setSaved(false), 2000); }
+  }
+  if (!s) return null;
+
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Social</span></div>
+      <p className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>Quem pode te seguir e ver suas atividades:</p>
+      <div className="seg" style={{ marginBottom: 12 }}>
+        <button className={s.privacy === "public" ? "on" : ""} onClick={() => setPrivacy("public")}>Público</button>
+        <button className={s.privacy === "private" ? "on" : ""} onClick={() => setPrivacy("private")}>Com solicitação</button>
+      </div>
+      <p className="muted" style={{ margin: "0 0 6px", fontSize: 11.5 }}>
+        {s.privacy === "public" ? "Qualquer atleta segue na hora e vê suas corridas." : "Seguir precisa da sua aprovação; só aprovados veem suas corridas."}
+      </p>
+      <label className="field" style={{ marginTop: 8 }}>
+        <span>Bio</span>
+        <input value={bio} maxLength={280} onChange={(e) => setBio(e.target.value)} placeholder="Uma linha sobre você (opcional)" />
+      </label>
+      <button className="btn-ghost" style={{ marginTop: 8 }} onClick={saveBio}>{saved ? "Salvo ✓" : "Salvar bio"}</button>
+      <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>{s.followers} seguidores · {s.following} seguindo</p>
+    </section>
+  );
+}
 
 const SEX_PT: Record<string, string> = { M: "Masculino", F: "Feminino" };
 
@@ -298,6 +336,8 @@ export default function PerfilPage() {
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--muted)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none" }}><path d="M9 18l6-6-6-6" /></svg>
           </div>
         </section>
+
+        <SocialSettings />
 
         <button className="btn-danger" onClick={onLogout}>Sair da conta</button>
 

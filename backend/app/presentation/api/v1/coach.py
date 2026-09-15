@@ -62,6 +62,12 @@ async def history(profile: str = Depends(current_profile)):
 
     for n in pushes:
 
+        # social (seguir/kudos/pedidos) vive só na central/comunidade, não na
+        # timeline do coach — aqui é conversa de treino
+        if str(n.get("kind") or "").startswith("social_"):
+
+            continue
+
         items.append(
             {
                 "role": "coach",

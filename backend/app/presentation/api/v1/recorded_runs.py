@@ -122,9 +122,9 @@ async def list_runs(profile: str = Depends(current_profile)):
     }
 
 
-@router.get("/{run_id}")
-async def get_run(run_id: str, profile: str = Depends(current_profile)):
-    """Detalhe de uma corrida gravada: dados + traçado (pontos) + parciais/km."""
+def recorded_run_detail(profile: str, run_id: str) -> dict | None:
+    """Detalhe (dados + traçado + parciais) de uma corrida gravada. Reusado pela
+    rota do próprio atleta e pelo social (traçado de outro atleta)."""
 
     run = next(
         (r for r in RecordedRunRepository().load(profile) if r.get("id") == run_id),
@@ -133,7 +133,7 @@ async def get_run(run_id: str, profile: str = Depends(current_profile)):
 
     if run is None:
 
-        raise HTTPException(status_code=404, detail="Corrida não encontrada.")
+        return None
 
     points = run.get("points") or []
 
@@ -147,6 +147,19 @@ async def get_run(run_id: str, profile: str = Depends(current_profile)):
         "points": points,
         "splits": _splits(points),
     }
+
+
+@router.get("/{run_id}")
+async def get_run(run_id: str, profile: str = Depends(current_profile)):
+    """Detalhe de uma corrida gravada: dados + traçado (pontos) + parciais/km."""
+
+    detail = recorded_run_detail(profile, run_id)
+
+    if detail is None:
+
+        raise HTTPException(status_code=404, detail="Corrida não encontrada.")
+
+    return detail
 
 
 @router.post("")

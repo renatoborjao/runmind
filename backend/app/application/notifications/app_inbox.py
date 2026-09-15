@@ -44,6 +44,10 @@ _TITLES = {
     "external_plan": "Treino recebido",
     "wear_alert": "Seus tênis",
     "watch_update": "Enviar pro relógio",
+    "social_follow": "Novo seguidor 👋",
+    "social_request": "Pedido pra te seguir",
+    "social_accept": "Pedido aceito ✓",
+    "social_kudos": "Kudos no seu treino 👏",
 }
 
 _DEFAULT_TITLE = "Mensagem do coach"
@@ -73,6 +77,10 @@ _LINKS = {
     "race_week": "/provas/",
     "race_taper": "/provas/",
     "goal_projection": "/provas/",
+    "social_follow": "/comunidade/",
+    "social_request": "/comunidade/",
+    "social_accept": "/comunidade/",
+    "social_kudos": "/atividades/",
 }
 
 

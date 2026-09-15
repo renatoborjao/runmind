@@ -454,9 +454,14 @@ export interface TrackData {
   series?: ActivitySeries | null;
 }
 
-/** Traçado de uma atividade do feed — app (recorded-runs) ou sincronizada (feed/track). */
-export async function getTrack(item: FeedItem): Promise<TrackData | null> {
+/** Traçado de uma atividade do feed — app (recorded-runs) ou sincronizada (feed/track).
+ * `owner` (opcional) busca o traçado de OUTRO atleta via rota social. */
+export async function getTrack(item: FeedItem, owner?: string): Promise<TrackData | null> {
   if (!item.has_track || !item.track_id) return null;
+  if (owner) {
+    const r = await apiFetch(`/social/athletes/${owner}/track/${item.track_source}/${item.track_id}`);
+    return r.ok ? r.json() : null;
+  }
   if (item.track_source === "app") {
     const d = await getRecordedRun(item.track_id);
     return d ? { points: d.points, splits: d.splits } : null;
@@ -464,6 +469,88 @@ export async function getTrack(item: FeedItem): Promise<TrackData | null> {
   const r = await apiFetch(`/feed/track/${item.track_id}`);
   if (!r.ok) return null;
   return r.json();
+}
+
+// ---- Social (seguir, perfis, feed, kudos) ----
+
+export type Relationship = "self" | "following" | "requested" | "none";
+
+export interface AthleteCard {
+  id: string;
+  name: string;
+  avatar: string | null;
+  privacy: "public" | "private";
+  relationship: Relationship;
+}
+
+export interface AthleteProfile extends AthleteCard {
+  bio: string;
+  counts: { following: number; followers: number };
+  follows_me: boolean;
+  can_view: boolean;
+  journey: { km_total: number; runs: number; biggest_km: number } | null;
+}
+
+export interface SocialActivity extends FeedItem {
+  owner: string;
+  owner_name?: string;
+  owner_avatar?: string | null;
+  kudos: number;
+  kudos_by_me: boolean;
+}
+
+export interface MySocial {
+  privacy: "public" | "private";
+  bio: string;
+  following: number;
+  followers: number;
+}
+
+export async function getAthletes(): Promise<AthleteCard[]> {
+  const r = await apiFetch("/social/athletes");
+  return r.ok ? (await r.json()).athletes : [];
+}
+export async function getAthlete(id: string): Promise<AthleteProfile | null> {
+  const r = await apiFetch(`/social/athletes/${id}`);
+  return r.ok ? r.json() : null;
+}
+export async function getAthleteActivities(id: string): Promise<SocialActivity[] | null> {
+  const r = await apiFetch(`/social/athletes/${id}/activities`);
+  if (r.status === 403) return null; // privado, sem acesso
+  return r.ok ? (await r.json()).activities : [];
+}
+export async function getSocialFeed(): Promise<SocialActivity[]> {
+  const r = await apiFetch("/social/feed");
+  return r.ok ? (await r.json()).activities : [];
+}
+export async function followAthlete(id: string): Promise<Relationship> {
+  const r = await apiFetch(`/social/follow/${id}`, { method: "POST" });
+  return r.ok ? (await r.json()).relationship : "none";
+}
+export async function unfollowAthlete(id: string): Promise<void> {
+  await apiFetch(`/social/unfollow/${id}`, { method: "POST" });
+}
+export async function getFollowRequests(): Promise<AthleteCard[]> {
+  const r = await apiFetch("/social/requests");
+  return r.ok ? (await r.json()).requests : [];
+}
+export async function acceptFollow(id: string): Promise<void> {
+  await apiFetch(`/social/requests/${id}/accept`, { method: "POST" });
+}
+export async function rejectFollow(id: string): Promise<void> {
+  await apiFetch(`/social/requests/${id}/reject`, { method: "POST" });
+}
+export async function toggleKudos(owner: string, key: string): Promise<boolean> {
+  const r = await apiFetch("/social/kudos", { method: "POST", body: JSON.stringify({ owner, key }) });
+  return r.ok ? (await r.json()).liked : false;
+}
+export async function getMySocial(): Promise<MySocial | null> {
+  const r = await apiFetch("/social/me");
+  return r.ok ? r.json() : null;
+}
+export async function setMySocial(patch: { privacy?: string; bio?: string }): Promise<MySocial | null> {
+  const r = await apiFetch("/social/me", { method: "PUT", body: JSON.stringify(patch) });
+  return r.ok ? r.json() : null;
 }
 
 // ---- Leitura do corpo ----
