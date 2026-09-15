@@ -298,13 +298,6 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
   good.forEach((p, i) => { const x = _lon2x(p.lon, z) - originX, y = _lat2y(p.lat, z) - originY; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
   ctx.stroke();
   ctx.restore();
-  const dot = (lon: number, lat: number, outer: string, inner: string) => {
-    const x = _lon2x(lon, z) - originX, y = _lat2y(lat, z) - originY;
-    ctx.fillStyle = outer; ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fill();
-    ctx.fillStyle = inner; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill();
-  };
-  dot(good[0].lon, good[0].lat, "#FFFFFF", "#1FD9B8");
-  dot(good[good.length - 1].lon, good[good.length - 1].lat, "#FFFFFF", "#E24666");
   return cv;
 }
 
@@ -332,14 +325,23 @@ function bottomScrim(ctx: CanvasRenderingContext2D, W: number, H: number, fromY:
   g.addColorStop(0, "rgba(6,7,12,0)"); g.addColorStop(0.55, "rgba(6,7,12,0.78)"); g.addColorStop(1, "rgba(6,7,12,0.96)");
   ctx.fillStyle = g; ctx.fillRect(0, fromY, W, H - fromY);
 }
+// família usada no canvas — igual à do app (Archivo, via next/font). Resolvida
+// do CSS em runtime pro card ter a MESMA cara de fonte do resto (estilo Strava).
+let CANVAS_FONT = "system-ui, sans-serif";
+function refreshCanvasFont() {
+  if (typeof window === "undefined") return;
+  const v = getComputedStyle(document.body).getPropertyValue("--font-display").trim();
+  if (v) CANVAS_FONT = `${v}, system-ui, sans-serif`;
+}
+
 function markAt(ctx: CanvasRenderingContext2D, x: number, baseY: number, size = 46) {
-  ctx.font = `800 ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
+  ctx.font = `800 ${size}px ${CANVAS_FONT}`;
   ctx.fillStyle = "#1FD9B8"; ctx.fillText("Rit", x, baseY);
   const rw = ctx.measureText("Rit").width;
   ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", x + rw, baseY);
 }
 function brandCentered(ctx: CanvasRenderingContext2D, cx: number, baseY: number, size: number) {
-  ctx.font = `800 ${size}px system-ui, sans-serif`;
+  ctx.font = `800 ${size}px ${CANVAS_FONT}`;
   const rw = ctx.measureText("Rit").width, mw = ctx.measureText("mind").width;
   const start = cx - (rw + mw) / 2;
   ctx.textAlign = "left";
@@ -376,19 +378,14 @@ function drawRouteBox(
   good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
   ctx.stroke();
   ctx.restore();
-  const r = Math.max(7, lw * 1.1), a = good[0], b = good[good.length - 1];
-  ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px(a), py(a), r, 0, 7); ctx.fill();
-  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(px(a), py(a), r * 0.55, 0, 7); ctx.fill();
-  ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px(b), py(b), r, 0, 7); ctx.fill();
-  ctx.fillStyle = "#E24666"; ctx.beginPath(); ctx.arc(px(b), py(b), r * 0.55, 0, 7); ctx.fill();
 }
 function brandDate(ctx: CanvasRenderingContext2D, W: number, d: CardData) {
   markAt(ctx, 64, 104, 44);
-  ctx.font = "600 28px system-ui, sans-serif"; ctx.fillStyle = "#E7E8F0"; ctx.textAlign = "right";
+  ctx.font = `600 28px ${CANVAS_FONT}`; ctx.fillStyle = "#E7E8F0"; ctx.textAlign = "right";
   ctx.fillText(d.date, W - 64, 100); ctx.textAlign = "left";
 }
 function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  ctx.fillStyle = "#9A9BAE"; ctx.font = "600 22px system-ui, sans-serif"; ctx.textAlign = "center";
+  ctx.fillStyle = "#9A9BAE"; ctx.font = `600 22px ${CANVAS_FONT}`; ctx.textAlign = "center";
   ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
 }
 
@@ -417,8 +414,8 @@ function drawStatCols(
   centerAt?: number,
 ) {
   const widths = cells.map(([lab, val]) => {
-    ctx.font = `800 ${valSize}px system-ui, sans-serif`; const wv = ctx.measureText(val).width;
-    ctx.font = `600 ${labSize}px system-ui, sans-serif`; const wl = ctx.measureText(lab).width;
+    ctx.font = `800 ${valSize}px ${CANVAS_FONT}`; const wv = ctx.measureText(val).width;
+    ctx.font = `600 ${labSize}px ${CANVAS_FONT}`; const wl = ctx.measureText(lab).width;
     return Math.max(wv, wl);
   });
   const total = widths.reduce((a, b) => a + b, 0) + gap * (cells.length - 1);
@@ -426,9 +423,9 @@ function drawStatCols(
   withShadow(ctx, () => {
     ctx.textAlign = "left";
     cells.forEach(([lab, val], i) => {
-      ctx.fillStyle = "#D6D7E2"; ctx.font = `600 ${labSize}px system-ui, sans-serif`;
+      ctx.fillStyle = "#D6D7E2"; ctx.font = `600 ${labSize}px ${CANVAS_FONT}`;
       ctx.fillText(lab, cx, baseY);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px system-ui, sans-serif`;
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
       ctx.fillText(val, cx, baseY + valSize + 8);
       cx += widths[i] + gap;
     });
@@ -445,8 +442,8 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     for (const [lab, val] of cells) {
-      ctx.fillStyle = "#EAEBF2"; ctx.font = "600 36px system-ui, sans-serif"; ctx.fillText(lab, cx, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = "800 96px system-ui, sans-serif"; ctx.fillText(val, cx, y + 96);
+      ctx.fillStyle = "#EAEBF2"; ctx.font = `600 36px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 96);
       y += 180;
     }
     ctx.textAlign = "left";
@@ -550,21 +547,27 @@ export default function AtividadesPage() {
     if (!editor || !sel) return;
     const cv = previewRef.current;
     if (!cv) return;
-    cv.width = 1080; cv.height = 1350;
-    const ctx = cv.getContext("2d");
-    if (!ctx) return;
-    ctx.textBaseline = "alphabetic";
-    ctx.clearRect(0, 0, 1080, 1350);
-    const d: CardData = {
-      it: sel,
-      pts: track?.points ?? [],
-      date: fmtDate(sel.datetime ?? sel.date_iso),
-      name: sel.name || "Corrida",
-      kmTxt: km(sel.distance_km),
-      photo: photoImg,
-      mapCard,
+    refreshCanvasFont();
+    const paint = () => {
+      cv.width = 1080; cv.height = 1350;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return;
+      ctx.textBaseline = "alphabetic";
+      ctx.clearRect(0, 0, 1080, 1350);
+      const d: CardData = {
+        it: sel,
+        pts: track?.points ?? [],
+        date: fmtDate(sel.datetime ?? sel.date_iso),
+        name: sel.name || "Corrida",
+        kmTxt: km(sel.distance_km),
+        photo: photoImg,
+        mapCard,
+      };
+      CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
     };
-    CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
+    paint();
+    // redesenha quando a fonte (Archivo) terminar de carregar, pra não sair no fallback
+    document.fonts?.ready.then(paint).catch(() => {});
   }, [editor, styleIdx, photoImg, sel, track, mapCard]);
 
   // PNG (mantém a transparência) do card atual

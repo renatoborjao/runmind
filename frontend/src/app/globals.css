@@ -237,8 +237,11 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .split .shr small { color: var(--muted); font-weight: 600; font-size: 10px; }
 .split.head { padding-bottom: 2px; }
 .split.head span { font-family: var(--font-mono), monospace; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.map-box { height: 230px; width: 100%; background: var(--surface-2); }
-.leaflet-container { font-family: var(--font-body), sans-serif; }
+/* isolation cria um contexto de empilhamento próprio: prende os z-index altos
+   internos do Leaflet (tiles/controles ~1000) DENTRO da caixa do mapa, senão
+   eles "flutuam" por cima dos outros cards ao rolar a página. */
+.map-box { height: 230px; width: 100%; background: var(--surface-2); position: relative; z-index: 0; isolation: isolate; }
+.leaflet-container { font-family: var(--font-body), sans-serif; z-index: 0; }
 
 /* zonas de FC (estilo Strava) */
 .hrz { display: flex; flex-direction: column; gap: 9px; }
@@ -594,7 +597,7 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .voice-toggle:active { transform: scale(.98); }
 
 /* editor de compartilhar corrida (estilos por cima da foto) */
-.share-editor { position: fixed; inset: 0; z-index: 60; background: var(--stage); display: flex; justify-content: center; }
+.share-editor { position: fixed; inset: 0; z-index: 2000; background: var(--stage); display: flex; justify-content: center; }
 .se-inner { width: 100%; max-width: 430px; height: 100%; display: flex; flex-direction: column; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
 .se-preview { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 8px 0; }
 .se-canvas { width: auto; height: 100%; max-height: 100%; max-width: 100%; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.4); background: #0C0D16; }
@@ -617,7 +620,7 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .se-photo { display: flex; gap: 8px; padding: 6px 0 10px; }
 .se-photo .btn-ghost { flex: 1; margin: 0; padding: 12px; }
 .se-share { margin: 0; }
-.se-result { position: fixed; inset: 0; z-index: 70; background: rgba(6,7,12,.92); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.se-result { position: fixed; inset: 0; z-index: 2001; background: rgba(6,7,12,.92); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .se-result-in { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; max-height: 100%; }
 .se-result-in img { max-width: 100%; max-height: 62vh; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
 .se-result-in p { margin: 0; color: var(--ink-soft); font-size: 13.5px; text-align: center; }
