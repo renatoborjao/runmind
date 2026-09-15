@@ -293,7 +293,7 @@ export default function InicioPage() {
 
         {/* TREINO DE HOJE */}
         <section
-          className={`card today${session ? " tap" : ""}`}
+          className={`card today${session ? " tap" : ""}${session && !todayDone ? " today-hero" : ""}`}
           onClick={session ? () => router.push(todayDone ? "/atividades" : `/treino/detalhe?day=${home.today.day_en}`) : undefined}
         >
           <div className="card-head">
