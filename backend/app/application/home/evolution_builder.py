@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 
+from app.application.history.run_merge import merged_runs
 from app.application.history.weekly_buckets import group_by_week, last_week_keys
 from app.core.clock import now_local
-from app.infrastructure.persistence.activity_archive_repository import (
-    ActivityArchiveRepository,
-)
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
@@ -14,29 +12,20 @@ from app.infrastructure.persistence.race_prediction_repository import (
     RacePredictionRepository,
 )
 
-_RUN_HINT = ("run", "corrida", "trail")
-
-
-def _is_run(sport: str) -> bool:
-
-    s = (sport or "").lower()
-
-    return any(h in s for h in _RUN_HINT)
-
 
 class EvolutionBuilder:
     """Enriquece a tela de Evolução: jornada (km/treinos/maior), volume por
     semana (gráfico), VO2max + projeções de prova e FC de repouso. Leituras
-    baratas (arquivo local + garmin health + previsão), sem IA."""
+    baratas (arquivo local + garmin health + previsão), sem IA.
+
+    As corridas contam o histórico arquivado (Strava/Garmin) E as gravadas no
+    GPS do app, deduplicadas por corrida ([[run_merge]]) — o número reflete o que
+    o atleta correu. É só DISPLAY; a análise/ACWR não muda (segue no Garmin)."""
 
     @staticmethod
     def build(profile: str, weeks: int = 10) -> dict:
 
-        runs = [
-            a
-            for a in ActivityArchiveRepository().load_activities(profile)
-            if _is_run(a.sport)
-        ]
+        runs = merged_runs(profile)
 
         return {
             "journey": EvolutionBuilder._journey(runs),
