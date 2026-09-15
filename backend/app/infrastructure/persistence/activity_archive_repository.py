@@ -122,7 +122,28 @@ class ActivityArchiveRepository:
 
             primary.hr_zone_minutes = secondary.hr_zone_minutes
 
+        # nome de EXIBIÇÃO: fica com o mais limpo (o do nosso plano, "Ritmind · …"),
+        # não o do Garmin que vem com prefixo de cidade e CORTADO. Só o rótulo muda;
+        # stats/zonas seguem da cópia primária.
+        primary.name = ActivityArchiveRepository._prefer_name(
+            primary.name, secondary.name
+        )
+
         return primary
+
+    @staticmethod
+    def _prefer_name(a: str, b: str) -> str:
+        """Entre dois nomes do mesmo treino, escolhe o do nosso plano
+        ('Ritmind · …') sobre o do Garmin (prefixo de cidade + cortado)."""
+
+        a_ours = (a or "").startswith("Ritmind")
+        b_ours = (b or "").startswith("Ritmind")
+
+        if b_ours and not a_ours:
+
+            return b
+
+        return a
 
     @staticmethod
     def _same_run(a: Activity, b: Activity) -> bool:

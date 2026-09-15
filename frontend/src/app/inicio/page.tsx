@@ -8,15 +8,43 @@ import InstallBanner from "../install-banner";
 import EmailCapture from "../email-capture";
 import {
   getBody,
+  getFeed,
   getHome,
   getMe,
   getProgress,
+  getTrack,
   type BodyReading,
+  type FeedItem,
   type HomeSummary,
   type Progress,
   type TodaySession,
   type WorkoutStep,
 } from "@/lib/api";
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+// mini-traçado da última corrida (estilo Strava) — normaliza os pontos numa caixa
+function RouteMini({ points }: { points: { lat: number; lon: number }[] }) {
+  const pts = points.filter((p) => p.lat && p.lon);
+  if (pts.length < 2) return null;
+  const W = 300, H = 128, pad = 12;
+  let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+  for (const p of pts) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
+  const kx = Math.cos(((minLa + maxLa) / 2 * Math.PI) / 180);
+  const spanLo = Math.max(1e-6, (maxLo - minLo) * kx), spanLa = Math.max(1e-6, maxLa - minLa);
+  const scale = Math.min((W - 2 * pad) / spanLo, (H - 2 * pad) / spanLa);
+  const ox = (W - spanLo * scale) / 2, oy = (H - spanLa * scale) / 2;
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${(ox + (p.lon - minLo) * kx * scale).toFixed(1)} ${(oy + (maxLa - p.lat) * scale).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="128" preserveAspectRatio="xMidYMid meet" aria-hidden>
+      <path d={d} fill="none" stroke="var(--accent)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 const RING_C = 2 * Math.PI * 47; // circunferência do anel de prontidão
 
@@ -187,6 +215,8 @@ export default function InicioPage() {
   const [bodyR, setBodyR] = useState<BodyReading | null>(null);
   const [prog, setProg] = useState<Progress | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastRun, setLastRun] = useState<FeedItem | null>(null);
+  const [lastRoute, setLastRoute] = useState<{ lat: number; lon: number }[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -200,6 +230,14 @@ export default function InicioPage() {
       setBodyR(bd);
       setProg(pr);
       setLoading(false);
+      // última corrida (card com traçado, estilo Strava) — best-effort, não bloqueia
+      const feed = await getFeed();
+      const last = feed?.[0] ?? null;
+      setLastRun(last);
+      if (last?.has_track) {
+        const t = await getTrack(last);
+        if (t?.points) setLastRoute(t.points);
+      }
     })();
   }, [router]);
 
@@ -238,8 +276,8 @@ export default function InicioPage() {
         </div>
 
         <div className="greet">
-          <h1>Olá, {firstName}.</h1>
-          <p>{home.today.weekday_pt} · {home.today.date_label}</p>
+          <h1>Bora, {firstName}.</h1>
+          <p>{todayDone ? "Treino de hoje: feito 💪" : session ? (session.kind === "tiro" || session.kind === "long" ? "Hoje é dia forte 🔥" : "Bora treinar hoje 🏃") : "Dia de recuperar 😌"} · {home.today.weekday_pt} {home.today.date_label}</p>
         </div>
 
         <InstallBanner />
@@ -353,6 +391,28 @@ export default function InicioPage() {
           Correr agora (GPS)
         </button>
         <a className="link center" style={{ display: "block", marginTop: -2 }} onClick={() => router.push("/atividades")}>Minhas atividades</a>
+
+        {/* ÚLTIMA CORRIDA (card com traçado, estilo Strava) */}
+        {lastRun && (
+          <section className="card tap lastrun" style={{ padding: 0, overflow: "hidden" }} onClick={() => router.push("/atividades")}>
+            {lastRoute.length >= 2 && (
+              <div className="lastrun-map"><RouteMini points={lastRoute} /></div>
+            )}
+            <div style={{ padding: 18 }}>
+              <div className="card-head" style={{ marginBottom: 8 }}>
+                <span className="eyebrow">Última corrida</span>
+                <span className="lastrun-when">{fmtDate(lastRun.datetime ?? lastRun.date_iso)}</span>
+              </div>
+              <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 800, letterSpacing: "-.02em" }}>{lastRun.name}</h2>
+              <div className="lastrun-stats">
+                <div><b>{lastRun.distance_km.toFixed(2).replace(".", ",")}</b><span>km</span></div>
+                <div><b>{lastRun.pace ?? "—"}</b><span>/km</span></div>
+                <div><b>{lastRun.duration_min}</b><span>min</span></div>
+                {lastRun.avg_hr != null && <div><b>{lastRun.avg_hr}</b><span>bpm</span></div>}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* SEMANA */}
         <section className="card">
