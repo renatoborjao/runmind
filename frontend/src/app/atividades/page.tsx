@@ -130,6 +130,7 @@ export default function AtividadesPage() {
   const [sel, setSel] = useState<FeedItem | null>(null);
   const [track, setTrack] = useState<TrackData | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -148,6 +149,111 @@ export default function AtividadesPage() {
       setTrack(await getTrack(it));
       setLoadingTrack(false);
     }
+  }
+
+  async function shareRun(it: FeedItem, tk: TrackData | null) {
+    setSharing(true);
+    try {
+      const S = 1080;
+      const cv = document.createElement("canvas");
+      cv.width = S; cv.height = S;
+      const ctx = cv.getContext("2d");
+      if (!ctx) { setSharing(false); return; }
+
+      // fundo
+      ctx.fillStyle = "#0C0D16";
+      ctx.fillRect(0, 0, S, S);
+
+      // marca + data
+      ctx.textBaseline = "alphabetic";
+      ctx.font = "800 46px system-ui, -apple-system, Segoe UI, sans-serif";
+      ctx.fillStyle = "#1FD9B8";
+      ctx.fillText("Rit", 64, 96);
+      const rw = ctx.measureText("Rit").width;
+      ctx.fillStyle = "#EDEEF5";
+      ctx.fillText("mind", 64 + rw, 96);
+      ctx.font = "600 26px system-ui, sans-serif";
+      ctx.fillStyle = "#8A8B9E";
+      const dateTxt = fmtDate(it.datetime ?? it.date_iso);
+      ctx.textAlign = "right";
+      ctx.fillText(dateTxt, S - 64, 92);
+      ctx.textAlign = "left";
+      ctx.font = "700 30px system-ui, sans-serif";
+      ctx.fillStyle = "#EDEEF5";
+      ctx.fillText((it.name || "Corrida").slice(0, 30), 64, 150);
+
+      // mapa do trajeto
+      const pts = (tk?.points || []).filter((p) => p.lat && p.lon);
+      const mapY = 200, mapH = 560, mapX = 64, mapW = S - 128;
+      if (pts.length >= 2) {
+        let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+        for (const p of pts) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
+        const midLa = (minLa + maxLa) / 2;
+        const spanLo = Math.max(1e-6, (maxLo - minLo) * Math.cos((midLa * Math.PI) / 180));
+        const spanLa = Math.max(1e-6, maxLa - minLa);
+        const pad = 40;
+        const scale = Math.min((mapW - pad * 2) / spanLo, (mapH - pad * 2) / spanLa);
+        const ox = mapX + (mapW - spanLo * scale) / 2;
+        const oy = mapY + (mapH - spanLa * scale) / 2;
+        const px = (p: { lat: number; lon: number }) => ox + ((p.lon - minLo) * Math.cos((midLa * Math.PI) / 180)) * scale;
+        const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
+        ctx.strokeStyle = "#1FD9B8";
+        ctx.lineWidth = 7; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.beginPath();
+        pts.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+        ctx.stroke();
+        // início/fim
+        ctx.fillStyle = "#EDEEF5"; ctx.beginPath(); ctx.arc(px(pts[0]), py(pts[0]), 11, 0, 7); ctx.fill();
+        ctx.fillStyle = "#E24666"; ctx.beginPath(); ctx.arc(px(pts[pts.length - 1]), py(pts[pts.length - 1]), 11, 0, 7); ctx.fill();
+      } else {
+        ctx.fillStyle = "#14151F";
+        ctx.fillRect(mapX, mapY, mapW, mapH);
+        ctx.fillStyle = "#3A3B49"; ctx.font = "600 28px system-ui, sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("🏃", S / 2, mapY + mapH / 2);
+        ctx.textAlign = "left";
+      }
+
+      // stats
+      const statY = 880;
+      ctx.fillStyle = "#1FD9B8";
+      ctx.font = "800 120px system-ui, sans-serif";
+      const kmTxt = km(it.distance_km);
+      ctx.fillText(kmTxt, 60, statY);
+      const kmW = ctx.measureText(kmTxt).width;
+      ctx.fillStyle = "#8A8B9E"; ctx.font = "600 34px system-ui, sans-serif";
+      ctx.fillText(" km", 60 + kmW + 6, statY);
+
+      const cells: [string, string][] = [
+        [it.pace ? `${it.pace}` : "—", "pace /km"],
+        [`${it.duration_min}`, "min"],
+      ];
+      if (it.avg_hr != null) cells.push([`${it.avg_hr}`, "bpm"]);
+      const cw = (S - 120) / cells.length;
+      cells.forEach(([v, l], i) => {
+        const cx = 60 + cw * i;
+        ctx.fillStyle = "#EDEEF5"; ctx.font = "800 52px system-ui, sans-serif";
+        ctx.fillText(v, cx, statY + 78);
+        ctx.fillStyle = "#8A8B9E"; ctx.font = "600 26px system-ui, sans-serif";
+        ctx.fillText(l, cx, statY + 116);
+      });
+
+      ctx.fillStyle = "#4A4B59"; ctx.font = "600 24px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("runmind.duckdns.org", S / 2, S - 40);
+      ctx.textAlign = "left";
+
+      const blob: Blob = await new Promise((res) => cv.toBlob((b) => res(b as Blob), "image/png", 0.92));
+      const file = new File([blob], "ritmind-corrida.png", { type: "image/png" });
+      const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
+      if (navShare.canShare && navShare.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text: `${kmTxt} km no Ritmind 🏃` });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "ritmind-corrida.png"; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
+    } catch { /* usuário cancelou ou share indisponível */ }
+    setSharing(false);
   }
 
   if (loading || !feed) {
@@ -174,7 +280,13 @@ export default function AtividadesPage() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             </button>
             <div className="title"><div className="k">{fmtDate(it.datetime ?? it.date_iso)}</div><div className="t">{it.name}</div></div>
-            <span style={{ width: 34 }} />
+            <button className="icon-btn" aria-label="Compartilhar" onClick={() => shareRun(it, track)} disabled={sharing}>
+              {sharing ? (
+                <span style={{ fontSize: 12 }}>…</span>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
+              )}
+            </button>
           </header>
 
           <div className="qstats">
