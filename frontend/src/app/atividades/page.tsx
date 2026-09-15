@@ -244,43 +244,80 @@ function TrackMapSVG({ points }: { points: { lat: number; lon: number }[] }) {
   );
 }
 
-// desenha o traçado dentro de uma caixa do canvas (fit + início/fim)
-function drawRouteInBox(
-  ctx: CanvasRenderingContext2D,
-  pts: { lat: number; lon: number }[],
-  bx: number, by: number, bw: number, bh: number,
-  color: string, lw: number,
-) {
-  const good = pts.filter((p) => p.lat && p.lon);
-  if (good.length < 2) return false;
+// ---- mapa REAL de fundo (estilo Strava): tiles escuros do CARTO (grátis, com
+// CORS -> canvas exportável) + a rota por cima, renderizados num canvas offscreen ----
+function _lon2x(lon: number, z: number) { return ((lon + 180) / 360) * 256 * Math.pow(2, z); }
+function _lat2y(lat: number, z: number) {
+  const r = (lat * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 256 * Math.pow(2, z);
+}
+function _tileURL(z: number, x: number, y: number) {
+  const subs = ["a", "b", "c", "d"];
+  return `https://${subs[(x + y) % subs.length]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`;
+}
+function _loadTile(url: string): Promise<HTMLImageElement | null> {
+  return new Promise((res) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = url;
+  });
+}
+async function buildMapCard(points: { lat: number; lon: number }[], W: number, H: number): Promise<HTMLCanvasElement | null> {
+  const good = points.filter((p) => p.lat && p.lon);
+  if (good.length < 2) return null;
   let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
   for (const p of good) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
-  const midLa = (minLa + maxLa) / 2;
-  const kx = Math.cos((midLa * Math.PI) / 180);
-  const spanLo = Math.max(1e-6, (maxLo - minLo) * kx);
-  const spanLa = Math.max(1e-6, maxLa - minLa);
-  const scale = Math.min(bw / spanLo, bh / spanLa);
-  const ox = bx + (bw - spanLo * scale) / 2, oy = by + (bh - spanLa * scale) / 2;
-  const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
-  const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
-  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  const padLa = (maxLa - minLa) * 0.16 || 0.003, padLo = (maxLo - minLo) * 0.16 || 0.003;
+  minLa -= padLa; maxLa += padLa; minLo -= padLo; maxLo += padLo;
+  let z = 17;
+  for (; z >= 3; z--) {
+    if (_lon2x(maxLo, z) - _lon2x(minLo, z) <= W && _lat2y(minLa, z) - _lat2y(maxLa, z) <= H) break;
+  }
+  const originX = (_lon2x(minLo, z) + _lon2x(maxLo, z)) / 2 - W / 2;
+  const originY = (_lat2y(minLa, z) + _lat2y(maxLa, z)) / 2 - H / 2;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d"); if (!ctx) return null;
+  ctx.fillStyle = "#11131C"; ctx.fillRect(0, 0, W, H);
+  const maxT = Math.pow(2, z) - 1;
+  const jobs: Promise<void>[] = [];
+  for (let tx = Math.floor(originX / 256); tx <= Math.floor((originX + W) / 256); tx++) {
+    for (let ty = Math.floor(originY / 256); ty <= Math.floor((originY + H) / 256); ty++) {
+      if (ty < 0 || ty > maxT) continue;
+      const gx = ((tx % (maxT + 1)) + (maxT + 1)) % (maxT + 1);
+      const dx = tx * 256 - originX, dy = ty * 256 - originY;
+      jobs.push(_loadTile(_tileURL(z, gx, ty)).then((img) => { if (img) ctx.drawImage(img, dx, dy, 256, 256); }));
+    }
+  }
+  await Promise.all(jobs);
+  ctx.save();
+  ctx.shadowColor = "rgba(31,217,184,0.5)"; ctx.shadowBlur = 16;
+  ctx.strokeStyle = "#1FD9B8"; ctx.lineWidth = 8; ctx.lineJoin = "round"; ctx.lineCap = "round";
   ctx.beginPath();
-  good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  good.forEach((p, i) => { const x = _lon2x(p.lon, z) - originX, y = _lat2y(p.lat, z) - originY; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
   ctx.stroke();
-  const r = Math.max(6, lw * 1.4);
-  ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px(good[0]), py(good[0]), r, 0, 7); ctx.fill();
-  ctx.fillStyle = "#E24666"; ctx.beginPath(); ctx.arc(px(good[good.length - 1]), py(good[good.length - 1]), r, 0, 7); ctx.fill();
-  return true;
+  ctx.restore();
+  const dot = (lon: number, lat: number, outer: string, inner: string) => {
+    const x = _lon2x(lon, z) - originX, y = _lat2y(lat, z) - originY;
+    ctx.fillStyle = outer; ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fill();
+    ctx.fillStyle = inner; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill();
+  };
+  dot(good[0].lon, good[0].lat, "#FFFFFF", "#1FD9B8");
+  dot(good[good.length - 1].lon, good[good.length - 1].lat, "#FFFFFF", "#E24666");
+  return cv;
 }
 
-// ---- estilos de card compartilhável (todos por cima da foto, ou fundo escuro) ----
-interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; }
+// ---- estilos de card compartilhável (foto OU mapa real de fundo) ----
+interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; }
 
-function drawBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null) {
+function drawBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null, mapCard: HTMLCanvasElement | null) {
   if (photo && photo.width) {
     const s = Math.max(W / photo.width, H / photo.height);
     const dw = photo.width * s, dh = photo.height * s;
     ctx.drawImage(photo, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  } else if (mapCard) {
+    ctx.drawImage(mapCard, 0, 0, W, H);
   } else {
     ctx.fillStyle = "#0C0D16"; ctx.fillRect(0, 0, W, H);
   }
@@ -351,23 +388,30 @@ function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
 }
 
-// CLÁSSICO — overlay estilo Strava: foto + degradê + fileira de stats embaixo.
-// Sem foto, o traçado vira o herói do fundo.
+// CLÁSSICO — mapa (ou foto) de fundo + degradê + fileira de stats embaixo.
 function styleClassico(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo);
-  if (d.photo) { topScrim(ctx, W); bottomScrim(ctx, W, H, H - 430); }
-  else if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 96, 300, W - 192, 560, "#1FD9B8", 9);
+  drawBg(ctx, W, H, d.photo, d.mapCard);
+  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 430);
   brandDate(ctx, W, d);
-  if (d.photo && d.pts.length >= 2) drawRouteInBox(ctx, d.pts, W - 296, 150, 232, 150, "#FFFFFF", 5);
-  drawStatRow(ctx, 64, H - 150, statCells(d.it), 60, 82, 24);
+  drawStatRow(ctx, 64, H - 150, statCells(d.it), 56, 82, 24);
+  footer(ctx, W, H);
+}
+
+// DESTAQUE — km gigante + ritmo/tempo, mapa/foto de fundo.
+function styleTrajeto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  drawBg(ctx, W, H, d.photo, d.mapCard);
+  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 400);
+  brandDate(ctx, W, d);
+  kmBig(ctx, 60, H - 210, d.kmTxt, 150);
+  ctx.fillStyle = "#EDEEF5"; ctx.font = "700 40px system-ui, sans-serif";
+  ctx.fillText(`${d.it.pace ? d.it.pace + " /km" : ""}${d.it.pace ? "    " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? "    " + d.it.avg_hr + " bpm" : ""}`, 64, H - 120);
   footer(ctx, W, H);
 }
 
 // MINIMAL — barra de vidro embaixo: km grande à esquerda, ritmo/tempo à direita.
 function styleMinimal(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo);
-  if (d.photo) topScrim(ctx, W);
-  else if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 96, 320, W - 192, 520, "#1FD9B8", 8);
+  drawBg(ctx, W, H, d.photo, d.mapCard);
+  topScrim(ctx, W);
   brandDate(ctx, W, d);
   const barH = 176, y = H - 72 - barH;
   roundRect(ctx, 48, y, W - 96, barH, 28); ctx.fillStyle = "rgba(10,11,18,0.74)"; ctx.fill();
@@ -381,33 +425,20 @@ function styleMinimal(ctx: CanvasRenderingContext2D, W: number, H: number, d: Ca
   }
 }
 
-// TRAJETO — o mapa é o herói (grande), stats embaixo.
-function styleTrajeto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo);
-  if (d.photo) { ctx.fillStyle = "rgba(6,7,12,0.45)"; ctx.fillRect(0, 0, W, H); }
-  brandDate(ctx, W, d);
-  if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, 100, 240, W - 200, 700, "#1FD9B8", 11);
-  else { ctx.fillStyle = "#3A3B49"; ctx.font = "600 120px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("🏃", W / 2, 640); ctx.textAlign = "left"; }
-  bottomScrim(ctx, W, H, H - 320);
-  drawStatRow(ctx, 64, H - 150, statCells(d.it), 60, 78, 24);
-  footer(ctx, W, H);
-}
-
 // SELO — cartão de vidro compacto (canto inferior) pra colar em qualquer foto/story.
 function styleSelo(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo);
+  drawBg(ctx, W, H, d.photo, d.mapCard);
   const bw = 640, bh = 316, bx = 48, by = H - 60 - bh;
   roundRect(ctx, bx, by, bw, bh, 32); ctx.fillStyle = "rgba(10,11,18,0.85)"; ctx.fill();
   markAt(ctx, bx + 36, by + 68, 38);
   kmBig(ctx, bx + 36, by + 188, d.kmTxt, 100);
   ctx.fillStyle = "#C9CAD6"; ctx.font = "600 30px system-ui, sans-serif";
   ctx.fillText(`${d.it.pace ? d.it.pace + " /km · " : ""}${d.it.duration_min} min${d.it.avg_hr != null ? " · " + d.it.avg_hr + " bpm" : ""}`, bx + 36, by + 254);
-  if (d.pts.length >= 2) drawRouteInBox(ctx, d.pts, W - 250, 110, 190, 150, "#1FD9B8", 5);
 }
 
 const CARD_STYLES: { key: string; label: string; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void }[] = [
   { key: "classico", label: "Clássico", draw: styleClassico },
-  { key: "trajeto", label: "Trajeto", draw: styleTrajeto },
+  { key: "destaque", label: "Destaque", draw: styleTrajeto },
   { key: "minimal", label: "Minimal", draw: styleMinimal },
   { key: "selo", label: "Selo", draw: styleSelo },
 ];
@@ -424,6 +455,7 @@ export default function AtividadesPage() {
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
   const [styleIdx, setStyleIdx] = useState(0);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [mapCard, setMapCard] = useState<HTMLCanvasElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
 
@@ -459,7 +491,17 @@ export default function AtividadesPage() {
     img.src = URL.createObjectURL(file);
   }
 
-  // redesenha o preview quando muda estilo/foto/atividade
+  // monta o mapa REAL de fundo (tiles + rota) quando não há foto
+  useEffect(() => {
+    if (!editor || photoImg) { setMapCard(null); return; }
+    const pts = track?.points ?? [];
+    if (pts.length < 2) { setMapCard(null); return; }
+    let alive = true;
+    buildMapCard(pts, 1080, 1350).then((c) => { if (alive) setMapCard(c); });
+    return () => { alive = false; };
+  }, [editor, photoImg, track]);
+
+  // redesenha o preview quando muda estilo/foto/atividade/mapa
   useEffect(() => {
     if (!editor || !sel) return;
     const cv = previewRef.current;
@@ -476,9 +518,10 @@ export default function AtividadesPage() {
       name: sel.name || "Corrida",
       kmTxt: km(sel.distance_km),
       photo: photoImg,
+      mapCard,
     };
     CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
-  }, [editor, styleIdx, photoImg, sel, track]);
+  }, [editor, styleIdx, photoImg, sel, track, mapCard]);
 
   async function shareCurrent() {
     const cv = previewRef.current;
