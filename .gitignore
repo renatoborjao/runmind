@@ -237,3 +237,12 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 ops/*.out
+
+# --- Segredos, virtualenv e backups locais (deploy manual) — NUNCA versionar ---
+.venv/
+**/.venv/
+.env.bak*
+**/.env.bak*
+*.pem
+*.bak
+*.bak-*
