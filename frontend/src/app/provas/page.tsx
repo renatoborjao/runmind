@@ -56,7 +56,10 @@ export default function ProvasPage() {
     }
   }
 
-  async function onDelete(id: string) {
+  async function onDelete(id: string, raceName: string) {
+    // confirma antes de apagar — evita sumir com a prova num toque sem querer
+    const ok = window.confirm(`Apagar a prova "${raceName}"? Isso não dá pra desfazer.`);
+    if (!ok) return;
     setRaces((rs) => (rs ? rs.filter((r) => r.id !== id) : rs));
     await deleteRace(id);
     load();
@@ -122,7 +125,7 @@ export default function ProvasPage() {
                     {r.is_anchor && <span className="race-badge">🎯 alvo do plano</span>}
                     {r.past && <span className="race-badge" style={{ color: "var(--muted)", background: "var(--surface-2)" }}>realizada</span>}
                   </div>
-                  <button className="race-del" aria-label="Remover" onClick={() => onDelete(r.id)}>×</button>
+                  <button className="race-del" aria-label="Remover" onClick={() => onDelete(r.id, r.name)}>×</button>
                 </div>
               );
             })}
