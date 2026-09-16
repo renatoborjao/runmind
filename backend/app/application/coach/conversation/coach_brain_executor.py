@@ -231,6 +231,18 @@ class CoachBrainExecutor:
 
         if action.type in _PROPOSAL_ACTIONS:
 
+            # correção de um AVULSO nosso (ex.: "não, 1km só" logo após montar):
+            # o cérebro pode ler como ajuste, mas ajustar um avulso é REMONTAR o
+            # avulso do dia — não virar proposta de plano (que listaria a semana
+            # toda). Ver [[project_treino_avulso]].
+            corrected = await CoachBrainExecutor._oneoff_correction(
+                profile, runner, action, incoming_text, context_facts,
+            )
+
+            if corrected is not None:
+
+                return corrected
+
             proposed = await CoachBrainExecutor._propose(
                 profile, runner, action, repo, context_facts,
             )
@@ -407,6 +419,47 @@ class CoachBrainExecutor:
 
         return await OneOffWorkoutFlow.build_for(
             profile, runner, incoming_text, athlete_context=context_facts,
+        )
+
+    @staticmethod
+    async def _oneoff_correction(
+        profile, runner, action: BrainAction, incoming_text, context_facts="",
+    ) -> str | None:
+        """Se a ação de ajuste/mover mira um dia cuja sessão é um AVULSO nosso
+        (origin='oneoff'), REMONTA o avulso do dia com a correção do atleta —
+        em vez de abrir proposta de plano (que listaria a semana). None quando
+        não se aplica (o fluxo de proposta segue normal). Bug do teste do
+        Renato: "não, 1km só" virava ajuste e despejava a semana."""
+
+        from datetime import timedelta
+
+        from app.application.coach.conversation.one_off_workout_flow import (
+            OneOffWorkoutFlow,
+        )
+        from app.core.weekdays import WEEKDAYS
+
+        # WEEKDAYS é dict {0:"Monday",...}; índice do dia (0=segunda) pelo nome
+        day_index = {name: idx for idx, name in WEEKDAYS.items()}
+
+        if not action.target_day or action.target_day not in day_index:
+
+            return None
+
+        _, plan = await CurrentPlanProvider.for_profile(profile)
+
+        existing = plan.find_session_by_day(action.target_day)
+
+        if existing is None or existing.origin != "oneoff":
+
+            return None
+
+        target_date = plan.week_start + timedelta(
+            days=day_index[action.target_day]
+        )
+
+        return await OneOffWorkoutFlow.build_for(
+            profile, runner, incoming_text,
+            athlete_context=context_facts, forced_date=target_date,
         )
 
     @staticmethod

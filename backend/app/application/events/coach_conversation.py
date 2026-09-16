@@ -227,6 +227,28 @@ class CoachConversationEvent:
 
                 reply_text = None
 
+        # "SIM"/"não" à PROPOSTA de treino avulso (antes de entrar no plano): o
+        # coach montou e ESPERA confirmação — 'sim' grava e oferece o relógio,
+        # 'não' descarta e nada fica. ANTES do cérebro, pra a confirmação nunca
+        # virar outra coisa. Ver [[project_treino_avulso]].
+        if reply_text is None:
+
+            try:
+
+                reply_text = await OneOffWorkoutFlow.resolve_proposal_reply(
+                    profile,
+                    runner,
+                    incoming_text,
+                )
+
+                used_deterministic = reply_text is not None
+
+            except Exception as e:
+
+                print(f"Falha na proposta do avulso de '{profile}': {e}")
+
+                reply_text = None
+
         # "SIM" pra oferta de mandar o treino AVULSO pro relógio — empurra só
         # a sessão avulsa (push escopado), antes do sync do plano da semana.
         if reply_text is None:

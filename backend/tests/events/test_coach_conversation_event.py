@@ -641,6 +641,7 @@ def test_brain_active_skips_deterministic_mutation_flows():
         voice.handle.return_value = None
         garmin.handle_reply = AsyncMock(return_value=None)
         oneoff.resolve_watch_reply = AsyncMock(return_value=None)
+        oneoff.resolve_proposal_reply = AsyncMock(return_value=None)
 
         intent.detect.return_value = None  # não é analítico
         engine.reply = AsyncMock(return_value="resposta do chat")
@@ -721,6 +722,7 @@ def test_pending_goal_reply_is_captured_before_brain():
         voice.handle.return_value = None
         garmin.handle_reply = AsyncMock(return_value=None)
         oneoff.resolve_watch_reply = AsyncMock(return_value=None)
+        oneoff.resolve_proposal_reply = AsyncMock(return_value=None)
         intent.detect.return_value = None
         freq.resolve_reply = AsyncMock(return_value=None)
 

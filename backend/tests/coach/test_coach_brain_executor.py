@@ -258,6 +258,93 @@ def test_external_athlete_proposal_routes_to_one_off():
     assert "sábado" in build_for.call_args.args[2]
 
 
+def test_oneoff_correction_rebuilds_instead_of_plan_proposal():
+    """Bug do teste do Renato: 'não, 1km só' logo após montar um avulso vinha
+    como 'adjust' e virava PROPOSTA de plano (que lista a semana inteira). Agora,
+    se o dia-alvo tem um avulso nosso (origin='oneoff'), REMONTA o avulso com
+    forced_date — nunca abre proposta de plano."""
+
+    decision = BrainDecision(
+        say="Ajusto teu avulso!",
+        action=BrainAction("adjust", "single_session", "Wednesday", "não, 1km só"),
+    )
+
+    existing = MagicMock()
+    existing.origin = "oneoff"
+
+    plan = _plan()
+    plan.find_session_by_day.return_value = existing
+
+    build_for = AsyncMock(return_value="Montei teu 1km 👇 ...")
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            patch(
+                f"{M}.CurrentPlanProvider.for_profile",
+                new=AsyncMock(return_value=(make_runner(), plan)),
+            ),
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.build_for",
+                new=build_for,
+            ),
+        ],
+    )
+
+    assert reply == "Montei teu 1km 👇 ..."
+    build_for.assert_awaited_once()
+    # remontou pelo dia já conhecido (forced_date), não virou proposta de plano
+    assert build_for.await_args.kwargs.get("forced_date") is not None
+    repo.save.assert_not_called()
+
+
+def test_proposal_on_plan_session_is_not_treated_as_oneoff():
+    """Guarda: ajuste num dia cuja sessão é do PLANO (origin != oneoff) segue o
+    fluxo normal de proposta — não é sequestrado pelo caminho do avulso."""
+
+    decision = BrainDecision(
+        say="Deixo mais leve, posso aplicar?",
+        action=BrainAction("adjust", "single_session", "Saturday", "mais leve"),
+    )
+
+    existing = MagicMock()
+    existing.origin = "plan"
+
+    plan = _plan()
+    plan.find_session_by_day.return_value = existing
+
+    negotiation = MagicMock()
+    negotiation.operations = [{"action": "replace", "day": "Saturday", "session": {}}]
+    negotiation.message = "Aliviei o de sábado."
+
+    build_for = AsyncMock(return_value="NÃO DEVERIA SER CHAMADO")
+
+    reply, repo = _run(
+        decision,
+        extra_patches=[
+            patch(
+                f"{M}.CurrentPlanProvider.for_profile",
+                new=AsyncMock(return_value=(make_runner(), plan)),
+            ),
+            patch(f"{M}.NegotiationEngine.propose", new=AsyncMock(return_value=negotiation)),
+            patch(f"{M}.PlanChangeApplier._apply_operations"),
+            patch(
+                f"{M}.WeeklyPlanMessageFormatter.session_lines",
+                return_value=["sábado — leve"],
+            ),
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.build_for",
+                new=build_for,
+            ),
+        ],
+    )
+
+    build_for.assert_not_awaited()  # não caiu no caminho do avulso
+    repo.save.assert_called_once()  # virou proposta de plano, como esperado
+
+
 def test_our_athlete_proposal_that_fails_does_not_one_off():
     """Atleta NOSSO cuja proposta não vinga NÃO vira avulso — cai na cascata
     (None), pra não montar treino avulso onde caberia ajustar o plano."""

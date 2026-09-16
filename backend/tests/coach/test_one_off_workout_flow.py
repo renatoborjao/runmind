@@ -58,10 +58,12 @@ def _run(coro):
 
 
 def _enter_common(stack, plan, engine_result=None, garmin_connected=True):
-    """Entra os mocks do fluxo no ExitStack. Retorna o repo de plano mockado
-    (pra assertar o save)."""
+    """Entra os mocks do fluxo no ExitStack. Retorna (plan_repo, proposal_store)
+    mockados — o plan_repo pra assertar a GRAVAÇÃO (só no 'sim') e o
+    proposal_store pra assertar que a PROPOSTA foi guardada (no build)."""
 
     plan_repo = MagicMock()
+    proposal_store = MagicMock()
 
     stack.enter_context(patch(f"{MODULE}.today_local", return_value=MONDAY))
     stack.enter_context(patch(
@@ -89,8 +91,11 @@ def _enter_common(stack, plan, engine_result=None, garmin_connected=True):
         f"{MODULE}.GarminClient.is_connected", return_value=garmin_connected,
     ))
     stack.enter_context(patch(f"{MODULE}.OneOffOfferStore"))
+    stack.enter_context(
+        patch(f"{MODULE}.OneOffProposalStore", new=proposal_store)
+    )
 
-    return plan_repo
+    return plan_repo, proposal_store
 
 
 def test_ignores_non_request():
@@ -120,9 +125,9 @@ def test_asks_for_day_when_no_date():
     assert "qual dia" in reply.lower()
 
 
-def test_external_coach_fills_empty_day_and_offers_watch():
-    """Treinador externo (ter/qui do treinador), domingo vazio: monta o
-    avulso, grava origin=oneoff e oferece o relógio."""
+def test_external_coach_fills_empty_day_proposes_before_saving():
+    """Treinador externo (ter/qui do treinador), domingo vazio: monta o avulso
+    e PROPÕE (pede 'sim') — NÃO grava ainda. Guarda a proposta pendente."""
 
     runner = make_runner(external_coach=True)
 
@@ -130,7 +135,7 @@ def test_external_coach_fills_empty_day_and_offers_watch():
 
     with ExitStack() as stack:
 
-        plan_repo = _enter_common(
+        plan_repo, proposal = _enter_common(
             stack, plan, engine_result=_oneoff_result()
         )
 
@@ -140,20 +145,14 @@ def test_external_coach_fills_empty_day_and_offers_watch():
             )
         )
 
-    # respondeu com a mensagem do motor + o treino
+    # respondeu com a mensagem do motor + o treino + o pedido de confirmação
     assert "Montei um longão leve" in reply
     assert "domingo" in reply.lower()
-    # ofereceu o relógio
-    assert "relógio" in reply.lower()
+    assert "sim" in reply.lower()  # pede confirmação
 
-    # gravou a sessão avulsa no plano
-    plan_repo.save.assert_called_once()
-    saved_plan = plan_repo.save.call_args.args[1]
-    sunday = saved_plan.find_session_by_day("Sunday")
-    assert sunday is not None
-    assert sunday.origin == "oneoff"
-    # não apagou o que o treinador deixou
-    assert saved_plan.find_session_by_day("Tuesday") is not None
+    # NÃO gravou ainda — só guardou a proposta pendente
+    plan_repo.save.assert_not_called()
+    proposal.set_pending.assert_called_once()
 
 
 def test_managed_athlete_with_session_that_day_points_to_it():
@@ -166,7 +165,7 @@ def test_managed_athlete_with_session_that_day_points_to_it():
 
     with ExitStack() as stack:
 
-        plan_repo = _enter_common(
+        plan_repo, _ = _enter_common(
             stack, plan, engine_result=_oneoff_result()
         )
 
@@ -180,9 +179,9 @@ def test_managed_athlete_with_session_that_day_points_to_it():
     plan_repo.save.assert_not_called()
 
 
-def test_managed_athlete_extra_on_empty_day_builds():
-    """Atleta nosso pedindo treino num dia de folga (sem sessão): monta o
-    extra sem mexer no resto."""
+def test_managed_athlete_extra_on_empty_day_proposes():
+    """Atleta nosso pedindo treino num dia de folga (sem sessão): PROPÕE o
+    extra (pede 'sim'), sem gravar ainda."""
 
     runner = make_runner(external_coach=False)
 
@@ -190,7 +189,7 @@ def test_managed_athlete_extra_on_empty_day_builds():
 
     with ExitStack() as stack:
 
-        plan_repo = _enter_common(
+        plan_repo, proposal = _enter_common(
             stack, plan, engine_result=_oneoff_result()
         )
 
@@ -201,7 +200,146 @@ def test_managed_athlete_extra_on_empty_day_builds():
         )
 
     assert "Montei" in reply
-    plan_repo.save.assert_called_once()
+    plan_repo.save.assert_not_called()
+    proposal.set_pending.assert_called_once()
+
+
+def test_passes_request_text_to_engine():
+    """Fix raiz do teste do Renato: o motor do avulso PRECISA receber o texto do
+    pedido pra honrar distância/estrutura ("1km com variações a cada 150m").
+    Antes o incoming_text nunca chegava no engine → virava treino genérico."""
+
+    runner = make_runner(external_coach=True)
+
+    plan = _plan([_session("Tuesday")])
+
+    build_mock = AsyncMock(return_value=_oneoff_result())
+
+    pedido = "monta um treino de 1km com variações a cada 150m pra domingo"
+
+    with ExitStack() as stack:
+
+        _enter_common(stack, plan)
+
+        stack.enter_context(
+            patch(f"{MODULE}.OneOffWorkoutEngine.build", new=build_mock)
+        )
+
+        _run(OneOffWorkoutFlow.handle("mauricio", runner, pedido))
+
+    build_mock.assert_awaited_once()
+    assert build_mock.await_args.kwargs["request"] == pedido
+
+
+def test_rebuilds_over_existing_oneoff_with_forced_date():
+    """Correção de um avulso nosso ("não, 1km só"): o dia já tem uma sessão
+    origin='oneoff' -> PROPÕE por cima (não devolve 'já tem'), e forced_date
+    dispensa data no texto. É o caso da correção que antes despejava a semana."""
+
+    runner = make_runner(external_coach=False)
+
+    existing = _session("Sunday", wtype="Regenerativo")
+    existing.origin = "oneoff"
+
+    plan = _plan([existing], source="runmind")
+
+    with ExitStack() as stack:
+
+        plan_repo, proposal = _enter_common(
+            stack, plan, engine_result=_oneoff_result()
+        )
+
+        reply = _run(
+            OneOffWorkoutFlow.build_for(
+                "renato2", runner, "não, quero 1km só",
+                forced_date=date(2026, 8, 2),
+            )
+        )
+
+    assert "já tem" not in reply.lower()
+    assert "Montei" in reply
+    plan_repo.save.assert_not_called()  # propõe, não grava
+    proposal.set_pending.assert_called_once()
+
+
+def test_proposal_reply_yes_commits_and_offers_watch():
+    """'SIM' à proposta: grava a sessão no plano E oferece o relógio."""
+
+    runner = make_runner(external_coach=False)
+
+    plan = _plan([_session("Tuesday")], source="runmind")
+
+    plan_repo = MagicMock()
+
+    session_dict = _oneoff_result().session
+
+    with (
+        patch(
+            f"{MODULE}.OneOffProposalStore.pending",
+            return_value={
+                "date": "2026-08-02", "session": session_dict, "message": "x",
+            },
+        ),
+        patch(f"{MODULE}.OneOffProposalStore.clear") as clear,
+        patch(
+            f"{MODULE}.CurrentPlanProvider.for_profile",
+            new=AsyncMock(return_value=(None, plan)),
+        ),
+        patch(f"{MODULE}.WeeklyPlanRepository", return_value=plan_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(f"{MODULE}.OneOffOfferStore") as offer,
+    ):
+
+        reply = _run(
+            OneOffWorkoutFlow.resolve_proposal_reply("renato2", runner, "sim")
+        )
+
+    plan_repo.save.assert_called_once()  # AGORA sim gravou
+    clear.assert_called_once_with("renato2")
+    offer.set_pending.assert_called_once()  # armou o relógio
+    saved_plan = plan_repo.save.call_args.args[1]
+    sunday = saved_plan.find_session_by_day("Sunday")
+    assert sunday is not None and sunday.origin == "oneoff"
+    assert "adicionei" in reply.lower()
+    assert "relógio" in reply.lower()
+
+
+def test_proposal_reply_no_discards_and_saves_nothing():
+    """'não' à proposta: descarta e NADA fica no plano."""
+
+    runner = make_runner(external_coach=False)
+
+    plan_repo = MagicMock()
+
+    with (
+        patch(
+            f"{MODULE}.OneOffProposalStore.pending",
+            return_value={"date": "2026-08-02", "session": {}, "message": "x"},
+        ),
+        patch(f"{MODULE}.OneOffProposalStore.clear") as clear,
+        patch(f"{MODULE}.WeeklyPlanRepository", return_value=plan_repo),
+    ):
+
+        reply = _run(
+            OneOffWorkoutFlow.resolve_proposal_reply("renato2", runner, "não")
+        )
+
+    clear.assert_called_once_with("renato2")
+    plan_repo.save.assert_not_called()
+    assert "não adicionei" in reply.lower()
+
+
+def test_proposal_reply_none_when_no_pending():
+
+    runner = make_runner(external_coach=False)
+
+    with patch(f"{MODULE}.OneOffProposalStore.pending", return_value=None):
+
+        reply = _run(
+            OneOffWorkoutFlow.resolve_proposal_reply("renato2", runner, "sim")
+        )
+
+    assert reply is None
 
 
 def test_watch_reply_yes_pushes():

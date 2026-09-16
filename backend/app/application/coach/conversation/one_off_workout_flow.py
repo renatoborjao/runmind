@@ -29,6 +29,9 @@ from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.integrations.garmin.one_off_offer_store import (
     OneOffOfferStore,
 )
+from app.infrastructure.integrations.garmin.one_off_proposal_store import (
+    OneOffProposalStore,
+)
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -77,15 +80,19 @@ class OneOffWorkoutFlow:
         runner: RunnerProfile,
         incoming_text: str,
         athlete_context: str = "",
+        forced_date: date | None = None,
     ) -> str | None:
         """Núcleo SEM o portão de palavra-chave: resolve o dia, monta a sessão
         avulsa ancorada no histórico + estado atual do atleta e oferece o
         relógio. Usado pelo cérebro do coach (que já reconheceu o pedido) e pelo
-        handle() determinístico (fallback). Ver [[project_roteador_acao_ia]]."""
+        handle() determinístico (fallback). `forced_date` pula a resolução por
+        texto — usado quando é uma CORREÇÃO de um avulso já montado ("não, 1km
+        só"), em que o dia já é conhecido e o texto não tem data.
+        Ver [[project_roteador_acao_ia]]."""
 
         today = today_local()
 
-        target_date = OneOffWorkoutDetector.resolve_target_date(
+        target_date = forced_date or OneOffWorkoutDetector.resolve_target_date(
             incoming_text, today
         )
 
@@ -122,12 +129,15 @@ class OneOffWorkoutFlow:
         existing = plan.find_session_by_day(target_day)
 
         # atleta NOSSO que já tem treino nesse dia: não duplica — aponta o que
-        # já tem (se quiser mudar, é negociação/aversão). Treinador externo
-        # segue sempre (preenche o buraco que o treinador deixou).
+        # já tem (se quiser mudar, é negociação/aversão). EXCEÇÃO: se o que já
+        # está lá é um AVULSO nosso (origin='oneoff'), a gente REMONTA por cima
+        # (é o caso da correção "não, 1km só" logo após montar). Treinador
+        # externo segue sempre (preenche o buraco que o treinador deixou).
         if (
             not runner.external_coach
             and existing is not None
             and existing.kind in _RUNNING_KINDS
+            and existing.origin != "oneoff"
         ):
 
             return (
@@ -154,6 +164,7 @@ class OneOffWorkoutFlow:
             portrait=portrait,
             week_context=week_context,
             athlete_context=athlete_context,
+            request=incoming_text,
         )
 
         # IA não produziu treino utilizável: deixa a conversa seguir (o chat
@@ -162,14 +173,64 @@ class OneOffWorkoutFlow:
 
             return None
 
-        new_session = OneOffWorkoutFlow._save_session(
-            profile, plan, target_day, workout
+        # CONFIRMAR ANTES DE ENTRAR: não grava agora — guarda a proposta e pede
+        # o 'SIM'. Um 'não' descarta e NADA fica no plano/app (o atleta pediu
+        # isso: o coach não deve criar treino sem confirmação). O relógio só é
+        # oferecido DEPOIS que ele aceita. Ver [[project_treino_avulso]].
+        OneOffProposalStore.set_pending(
+            profile, workout.session, target_date, workout.message
         )
 
-        return OneOffWorkoutFlow._compose_reply(
-            profile, plan, new_session, target_date, target_label,
-            workout.message,
+        return OneOffWorkoutFlow._compose_proposal(
+            plan, workout, target_label
         )
+
+    @staticmethod
+    async def resolve_proposal_reply(
+        profile: str,
+        runner: RunnerProfile,
+        incoming_text: str,
+    ) -> str | None:
+        """'SIM'/'não' à PROPOSTA de treino avulso (antes de entrar no plano).
+        'sim' grava a sessão no plano e oferece o relógio; 'não' descarta e nada
+        fica. Só age com proposta pendente; resposta ambígua devolve None (a
+        conversa segue — o cérebro pode remontar)."""
+
+        data = OneOffProposalStore.pending(profile)
+
+        if data is None:
+
+            return None
+
+        norm = OneOffWorkoutDetector._normalize(incoming_text)
+
+        if norm in _AFFIRMATIVE:
+
+            OneOffProposalStore.clear(profile)
+
+            target_date = date.fromisoformat(data["date"])
+
+            target_day = WEEKDAYS[target_date.weekday()]
+
+            plan, new_session = await OneOffWorkoutFlow._commit_session(
+                profile, target_day, data["session"]
+            )
+
+            return OneOffWorkoutFlow._compose_added(
+                profile, plan, new_session, target_date,
+                weekday_label(target_day),
+            )
+
+        if norm in _NEGATIVE:
+
+            OneOffProposalStore.clear(profile)
+
+            return (
+                "Beleza, não adicionei nada. 👍 Qualquer hora é só pedir."
+            )
+
+        # resposta ambígua com proposta pendente: deixa a conversa seguir
+        return None
 
     @staticmethod
     async def resolve_watch_reply(
@@ -239,17 +300,19 @@ class OneOffWorkoutFlow:
         )
 
     @staticmethod
-    def _save_session(
+    async def _commit_session(
         profile: str,
-        plan: TrainingPlan,
         target_day: str,
-        workout,
-    ) -> PlannedSession:
-        """Grava a sessão avulsa no plano da semana (substitui o dia se já
-        havia algo), reidratando os steps. Marca origin='oneoff' — não mexe
-        no resto do plano nem no que o treinador deixou nos outros dias."""
+        session_dict: dict,
+    ) -> tuple[TrainingPlan, PlannedSession]:
+        """Grava DE VERDADE a sessão avulsa no plano (no 'sim' do atleta):
+        recarrega o plano vivo, substitui o dia se já havia algo, reidrata os
+        steps e salva. Marca origin='oneoff' — não mexe no resto do plano nem
+        no que o treinador deixou nos outros dias. Devolve (plano, sessão)."""
 
-        session_dict = dict(workout.session)
+        _, plan = await CurrentPlanProvider.for_profile(profile)
+
+        session_dict = dict(session_dict)
 
         session_dict["steps"] = parse_steps(session_dict.get("steps") or [])
 
@@ -265,28 +328,62 @@ class OneOffWorkoutFlow:
 
         WeeklyPlanRepository().save(profile, plan)
 
-        return new_session
+        return plan, new_session
 
     @staticmethod
-    def _compose_reply(
+    def _hydrate(session_dict: dict) -> PlannedSession:
+        """Sessão (dict) -> PlannedSession pra formatação, reidratando os steps.
+        Não persiste nada — só pra montar o preview da proposta."""
+
+        data = dict(session_dict)
+
+        data["steps"] = parse_steps(data.get("steps") or [])
+
+        return PlannedSession(**data)
+
+    @staticmethod
+    def _compose_proposal(
+        plan: TrainingPlan,
+        workout,
+        target_label: str,
+    ) -> str:
+        """Preview da PROPOSTA (ainda não gravou): mostra o treino e pede o
+        'SIM'. Um 'não' descarta. Reusa o formatador (plano de 1 sessão)."""
+
+        single = replace(
+            plan, sessions=[OneOffWorkoutFlow._hydrate(workout.session)]
+        )
+
+        lines = "\n".join(
+            WeeklyPlanMessageFormatter.session_lines(single)
+        ).strip()
+
+        return (
+            f"{workout.message}\n\n📋 {target_label}\n\n{lines}\n\n"
+            "👉 Quer que eu adicione ao teu plano? Responde *SIM* que eu "
+            "coloco (aí depois te ofereço mandar pro relógio). Se não quiser, "
+            "é só falar."
+        )
+
+    @staticmethod
+    def _compose_added(
         profile: str,
         plan: TrainingPlan,
         new_session: PlannedSession,
         target_date: date,
-        target_label: str,
-        intro: str,
+        day_label: str,
     ) -> str:
+        """Confirmação pós-'SIM': o treino ENTROU no plano; oferece o relógio
+        (push escopado do avulso, inclusive pra treinador externo)."""
 
-        # formata só a sessão avulsa, reusando o formatador (plano de 1 sessão)
         single = replace(plan, sessions=[new_session])
 
         lines = "\n".join(
             WeeklyPlanMessageFormatter.session_lines(single)
         ).strip()
 
-        body = f"{intro}\n\n📋 {target_label}\n\n{lines}"
+        body = f"Prontinho, adicionei teu treino de {day_label}! ✅\n\n{lines}"
 
-        # oferece o relógio (inclusive treinador externo — o avulso é NOSSO)
         if GarminClient.is_connected(profile):
 
             OneOffOfferStore.set_pending(profile, target_date)

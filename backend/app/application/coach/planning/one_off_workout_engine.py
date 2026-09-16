@@ -26,7 +26,7 @@ PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 plano dele não cobre. Meta: {objective}.
 
 DIA ALVO: {target_label}.
-
+{request_block}
 O QUE JÁ EXISTE NA SEMANA DELE (não repita à toa, COMPLEMENTE):
 {week_context}
 
@@ -34,6 +34,12 @@ RETRATO REAL DO ATLETA (histórico e evolução — a base da sua decisão):
 {portrait}
 {athlete_context}
 Monte UM treino só pra o dia alvo, como treinador de verdade:
+- HONRE O PEDIDO EXPLÍCITO: se o atleta especificou distância, duração, tipo ou \
+ESTRUTURA (ex.: "1km", "variações a cada 150m", "6x400", "fartlek 1min forte/\
+1min leve"), monte EXATAMENTE isso — reflita em distance_km/duration_min E nos \
+"steps" (blocos e recuperações, na ordem certa). Ancore no retrato só a \
+INTENSIDADE (paces/FC) e a segurança. Só decida o treino VOCÊ quando o pedido \
+for ABERTO ("monta um treino", "que treino faço?").
 - ANCORE tudo no retrato real (volume, paces, evolução) — nada genérico.
 - COMPLEMENTE a semana: não empilhe dois dias fortes coladinhos; se ele já \
 teve/terá carga forte perto, faça um dia de absorver (rodagem/regenerativo); se \
@@ -96,6 +102,7 @@ class OneOffWorkoutEngine:
         portrait: str,
         week_context: str,
         athlete_context: str = "",
+        request: str = "",
     ) -> OneOffWorkout | None:
 
         settings = get_settings()
@@ -104,6 +111,7 @@ class OneOffWorkoutEngine:
             runner_name=runner.name,
             objective=objective or runner.goal or "saúde e evolução",
             target_label=target_label,
+            request_block=OneOffWorkoutEngine._request_block(request),
             week_context=week_context or "(nada registrado nesta semana)",
             portrait=portrait or "(sem retrato disponível)",
             athlete_context=OneOffWorkoutEngine._context_block(athlete_context),
@@ -121,6 +129,23 @@ class OneOffWorkoutEngine:
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
             parse=lambda raw: OneOffWorkoutEngine._parse(raw, target_day),
+        )
+
+    @staticmethod
+    def _request_block(request: str) -> str:
+        """O texto EXATO que o atleta pediu — pra a IA honrar distância/estrutura
+        explícitas ("1km com variações a cada 150m") em vez de cair num tipo
+        genérico do menu. Vazio (pedido não veio) => a IA decide pelo retrato."""
+
+        text = (request or "").strip()
+
+        if not text:
+
+            return ""
+
+        return (
+            '\nPEDIDO DO ATLETA (texto exato — HONRE o que for explícito): '
+            f'"{text}"\n'
         )
 
     @staticmethod
