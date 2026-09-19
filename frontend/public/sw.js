@@ -2,7 +2,7 @@
 //  - /api/* NUNCA é cacheado (dado do atleta vem sempre da rede).
 //  - assets do Next (/_next/static, hasheados) = cache-first (imutáveis).
 //  - navegação = network-first, cai pra casca cacheada quando offline.
-const CACHE = "ritmind-v8";
+const CACHE = "ritmind-v9";
 const SHELL = [
   "/inicio/",
   "/entrar/",

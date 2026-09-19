@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
   getActivityAnalysis,
@@ -504,14 +504,16 @@ const CARD_STYLES: CardStyle[] = [
   { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
 ];
 
-export default function AtividadesPage() {
+function AtividadesInner() {
   const router = useRouter();
+  const params = useSearchParams();
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState<FeedItem | null>(null);
   const [track, setTrack] = useState<TrackData | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
   const [analysis, setAnalysis] = useState<CoachAnalysis | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [editor, setEditor] = useState(false);
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
@@ -530,27 +532,26 @@ export default function AtividadesPage() {
       setLoading(false);
       // deep-link: /atividades?date=YYYY-MM-DD (ou ?key=arch-123) abre direto a
       // atividade — é assim que o "Ver como foi" da home entra na corrida do dia
-      // em vez de cair na lista. Sem match (ex.: sync ainda não chegou), fica na
-      // lista mesmo (degrada bem).
-      try {
-        const q = new URLSearchParams(window.location.search);
-        const key = q.get("key");
-        const date = q.get("date");
-        const hit = key
-          ? f.find((it) => it.key === key)
-          : date
-            ? f.find((it) => it.date_iso === date)
-            : null;
-        if (hit) open(hit);
-      } catch { /* sem query, segue na lista */ }
+      // em vez de cair na lista. useSearchParams (não window.location) pra pegar
+      // a query já na 1ª navegação client-side (antes exigia refresh). Sem match
+      // (ex.: sync ainda não chegou), fica na lista mesmo (degrada bem).
+      const key = params.get("key");
+      const date = params.get("date");
+      const hit = key
+        ? f.find((it) => it.key === key)
+        : date
+          ? f.find((it) => it.date_iso === date)
+          : null;
+      if (hit) open(hit);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [router, params]);
 
   async function open(it: FeedItem) {
     setSel(it);
     setTrack(null);
     setAnalysis(null);
+    setAnalysisOpen(false);
     // análise do coach (best-effort, não bloqueia o traçado)
     getActivityAnalysis(it).then(setAnalysis).catch(() => {});
     if (it.has_track) {
@@ -807,10 +808,11 @@ export default function AtividadesPage() {
 
           {analysis?.analysis && (
             <section className="card coach-analysis">
-              <div className="card-head">
-                <span className="eyebrow">Análise do coach{analysis.workout_type ? ` · ${analysis.workout_type}` : ""}</span>
-              </div>
-              <p className="ca-text">{analysis.analysis}</p>
+              <button className="ca-toggle" onClick={() => setAnalysisOpen((o) => !o)} aria-expanded={analysisOpen}>
+                <span className="ca-title">📊 Análise do coach{analysis.workout_type ? ` · ${analysis.workout_type}` : ""}</span>
+                <svg className={`ca-chev${analysisOpen ? " open" : ""}`} viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {analysisOpen && <p className="ca-text">{analysis.analysis}</p>}
             </section>
           )}
 
@@ -919,5 +921,23 @@ export default function AtividadesPage() {
       </div>
       <BottomNav />
     </main>
+  );
+}
+
+// useSearchParams (deep-link ?date=/?key=) exige boundary de Suspense no export
+// estático do Next — senão a query não chega na 1ª navegação (só no refresh).
+export default function AtividadesPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="stage">
+          <div className="phone center" style={{ justifyContent: "center", flex: 1 }}>
+            <p className="auth-sub" style={{ margin: 0 }}>Carregando…</p>
+          </div>
+        </main>
+      }
+    >
+      <AtividadesInner />
+    </Suspense>
   );
 }

@@ -1,16 +1,20 @@
 """Backfill das ANÁLISES do coach por atividade — pra a tela da atividade no app
 já mostrar a análise dos treinos JÁ realizados (não só dos futuros).
 
-Reprocessa os treinos de corrida de cada atleta (hoje por padrão, ou os últimos
-N dias) pela MESMA engine do pós-treino (TrainingPipeline) e GRAVA a análise no
-WorkoutAnalysisRepository — reusando a gravação do evento real
-(TrainingCompletedEvent._record_analysis), texto limpo, idempotente por
-atividade. NÃO envia nada ao atleta (não é o evento, é só a análise+gravação);
-pula a prova-alvo (quem conduz lá é o debrief).
+Pra cada treino de corrida (hoje por padrão, ou os últimos N dias) grava a
+análise no WorkoutAnalysisRepository. FONTE, em ordem de preferência:
 
-⚠ Só é fiel onde os dados estão VIVOS (produção, na Oracle). Numa cópia local
-defasada, reprocessa o que houver de sync local. Roda 1 chamada de Gemini por
-treino (a análise da IA) — janela curta (hoje) mantém o custo baixo.
+1. **Mensagem canônica do outbox** — o feedback que o coach REALMENTE enviou
+   naquele dia (com "🧩 Execução por bloco" e "⏱️ Parciais por km", porque foi
+   gerada com os splits do Garmin). Casa por data + distância executada, corta as
+   caudas de chat (pergunta de RPE 💬 e nota de tênis 👟) e grava só a análise.
+   Idêntica à aba Coach; não gasta Gemini.
+
+2. **Regeneração pelo pipeline** — só quando não há feedback canônico no outbox
+   (treino antigo que já saiu das últimas mensagens). O arquivo reduzido não tem
+   splits, então essa versão é mais pobre (sem blocos/parciais) — fallback.
+
+NÃO envia nada ao atleta; pula a prova-alvo (lá quem conduz é o debrief).
 
 Uso:
   python backfill_workout_analysis.py                 # todos, só hoje
@@ -21,6 +25,7 @@ Uso:
 
 import argparse
 import asyncio
+import re
 from datetime import timedelta
 
 from app.application.events.training_completed import TrainingCompletedEvent
@@ -31,16 +36,110 @@ from app.core.clock import today_local, use_athlete_timezone
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
+from app.infrastructure.persistence.coach_outbox_repository import (
+    CoachOutboxRepository,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+from app.infrastructure.persistence.workout_analysis_repository import (
+    WorkoutAnalysisRepository,
+)
 
 _RUN_HINT = ("run", "corrida", "trail")
+
+# marcadores das CAUDAS de chat que vêm DEPOIS da análise no feedback enviado —
+# a pergunta de RPE e a nota de tênis. Cortamos a partir da 1ª que aparecer pra
+# guardar só a análise (o 💬/👟 não cabe numa tela read-only).
+_CAUDA_MARKERS = ("\n\n💬", "\n\n👟")
 
 
 def _is_run(sport: str) -> bool:
 
     return any(h in (sport or "").lower() for h in _RUN_HINT)
+
+
+def _strip_caudas(text: str) -> str:
+    """Remove as caudas de chat (RPE 💬 / tênis 👟) do fim do feedback, deixando
+    só a análise. Não toca no corpo (📅 Planejado, 🧩 blocos, 📊 Análise etc.)."""
+
+    cut = len(text)
+
+    for marker in _CAUDA_MARKERS:
+
+        i = text.find(marker)
+
+        if i != -1:
+
+            cut = min(cut, i)
+
+    return text[:cut].strip()
+
+
+def _planned_type(text: str) -> str | None:
+    """Tipo do treino a partir do bloco '📅 Planejado' do feedback (o bullet que
+    não é data nem distância). Best-effort — None se não achar."""
+
+    m = re.search(r"📅 Planejado\n((?:•.*\n?)+)", text)
+
+    if not m:
+
+        return None
+
+    for line in m.group(1).splitlines():
+
+        s = line.lstrip("• ").strip()
+
+        if not s:
+
+            continue
+
+        # pula a data "sábado (19/09)" e a distância "15.0 km"
+        if "(" in s and "/" in s:
+
+            continue
+
+        if re.search(r"\d", s) and "km" in s:
+
+            continue
+
+        return s
+
+    return None
+
+
+def _feedback_core_from_outbox(profile: str, activity) -> str | None:
+    """Análise CANÔNICA deste treino a partir do outbox: o feedback enviado cuja
+    data (dd/mm) e distância executada casam com a atividade. Devolve só a análise
+    (sem caudas), ou None quando não há feedback correspondente guardado."""
+
+    km = (activity.distance or 0) / 1000
+
+    d = activity.start_date.date()
+
+    date_tag = f"({d.day:02d}/{d.month:02d})"
+
+    for entry in reversed(CoachOutboxRepository().recent(profile, 50)):
+
+        text = entry.get("text", "")
+
+        if "Executado" not in text or date_tag not in text:
+
+            continue
+
+        m = re.search(r"Dist[âa]ncia:\s*([\d.,]+)\s*km", text)
+
+        if not m:
+
+            continue
+
+        executed_km = float(m.group(1).replace(",", "."))
+
+        if abs(executed_km - km) <= 0.2:
+
+            return _strip_caudas(text)
+
+    return None
 
 
 def _recent_runs(profile: str, days: int) -> list:
@@ -72,33 +171,64 @@ async def _backfill_profile(profile: str, days: int, dry_run: bool) -> int:
 
         return 0
 
+    repo = WorkoutAnalysisRepository()
+
     done = 0
 
     for activity in runs:
 
+        date = activity.start_date.date().isoformat()
+
+        km = round((activity.distance or 0) / 1000, 2)
+
+        # 1) FONTE CANÔNICA: o feedback que o coach enviou (com blocos/parciais)
+        core = _feedback_core_from_outbox(profile, activity)
+
+        if core:
+
+            if dry_run:
+
+                print(f"  [dry·outbox] {profile} {date} {km}km ({activity.id}): "
+                      f"análise canônica ({len(core)} chars)")
+
+            else:
+
+                repo.record(
+                    profile,
+                    activity_id=activity.id,
+                    date=date,
+                    distance_km=km,
+                    analysis=core,
+                    workout_type=_planned_type(core),
+                )
+
+                print(f"  ✓ outbox {profile} {date} {km}km ({activity.id})")
+
+            done += 1
+
+            continue
+
+        # 2) FALLBACK: regenera (sem splits — mais pobre) só quando não há canônica
         try:
 
             result = await TrainingPipeline.execute(profile, activity)
 
         except Exception as e:
 
-            print(f"  ! {profile} {activity.start_date.date()} "
-                  f"({activity.id}): pipeline falhou: {e}")
+            print(f"  ! {profile} {date} ({activity.id}): pipeline falhou: {e}")
 
             continue
 
         if RaceDebrief.is_target_race(result["runner"], result["activity"]):
 
-            print(f"  · {profile} {activity.start_date.date()}: prova — pulada")
+            print(f"  · {profile} {date}: prova — pulada")
 
             continue
 
-        km = round((activity.distance or 0) / 1000, 2)
-
         if dry_run:
 
-            print(f"  [dry] {profile} {activity.start_date.date()} "
-                  f"{km}km ({activity.id}): análise pronta ({len(result['message'])} chars)")
+            print(f"  [dry·regen] {profile} {date} {km}km ({activity.id}): "
+                  f"análise regenerada ({len(result['message'])} chars)")
 
         else:
 
@@ -106,8 +236,7 @@ async def _backfill_profile(profile: str, days: int, dry_run: bool) -> int:
                 profile, result, result["message"]
             )
 
-            print(f"  ✓ {profile} {activity.start_date.date()} "
-                  f"{km}km ({activity.id}): análise gravada")
+            print(f"  ✓ regen  {profile} {date} {km}km ({activity.id})")
 
         done += 1
 

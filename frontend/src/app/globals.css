@@ -305,9 +305,13 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .det-v { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13.5px; color: var(--ink); }
 .det-src { margin: 2px 2px 4px; font-family: var(--font-mono), monospace; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); text-align: center; }
 
-/* Análise do coach dentro da atividade — destaque leve com a cor da marca */
+/* Análise do coach dentro da atividade — botão que abre a análise (accordion) */
 .coach-analysis { border: 1px solid var(--accent-line, var(--line)); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
-.ca-text { margin: 6px 2px 2px; font-size: 14px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+.ca-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; background: none; border: none; padding: 2px; cursor: pointer; color: var(--accent-ink); }
+.ca-title { font-family: var(--font-mono), monospace; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-ink); text-align: left; }
+.ca-chev { color: var(--accent-ink); transition: transform .18s ease; flex-shrink: 0; }
+.ca-chev.open { transform: rotate(180deg); }
+.ca-text { margin: 12px 2px 2px; font-size: 14px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
 .src-tag { font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
 .src-tag.app { color: var(--accent-ink); background: var(--accent-wash); }
 .src-tag.sync { color: var(--muted); background: var(--surface-2); }
