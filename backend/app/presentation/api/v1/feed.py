@@ -9,6 +9,9 @@ from app.infrastructure.persistence.activity_track_repository import (
 from app.infrastructure.persistence.recorded_run_repository import (
     RecordedRunRepository,
 )
+from app.infrastructure.persistence.workout_analysis_repository import (
+    WorkoutAnalysisRepository,
+)
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/feed", tags=["Feed"])
@@ -241,6 +244,30 @@ async def activity_feed(profile: str = Depends(current_profile)):
     mapa/parciais. Só o app tem traçado hoje; as arquivadas vêm com stats."""
 
     return {"activities": build_feed(profile)}
+
+
+@router.get("/analysis")
+async def activity_analysis(
+    date: str,
+    km: float | None = None,
+    profile: str = Depends(current_profile),
+):
+    """Análise que o coach fez do treino daquele dia — pra tela da atividade no
+    app. Casa por DATA (+ distância, quando informada) porque a mesma corrida
+    chega com ids diferentes do Garmin/Strava e o feed faz dedup por data+
+    distância. Devolve `{analysis: null}` quando ainda não há análise."""
+
+    entry = WorkoutAnalysisRepository().find(profile, date, km)
+
+    if entry is None:
+
+        return {"analysis": None}
+
+    return {
+        "analysis": entry.get("analysis"),
+        "workout_type": entry.get("workout_type"),
+        "created_at": entry.get("created_at"),
+    }
 
 
 @router.get("/track/{activity_id}")

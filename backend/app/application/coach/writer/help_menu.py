@@ -44,6 +44,9 @@ class HelpMenu:
                 '• "Quero o app" ou "/app" — te mando um link de acesso na hora '
                 "(sem senha) pra abrir o Ritmind no celular: seus treinos, "
                 "calendário, corridas com mapa, evolução e o coach na tela.",
+                "• Terminou o treino de hoje? Toque em \"ver como foi\" que o "
+                "app abre a corrida do dia — com mapa, parciais e a minha "
+                "análise daquele treino ali dentro.",
                 "",
                 "👟 Seus tênis",
                 '• "Meus tênis são o Boston e o Vaporfly" (e a km de cada um, '
@@ -99,6 +102,9 @@ class HelpMenu:
         '💡 Você sabia? Temos app! Mande "quero o app" que eu te envio um link '
         "de acesso (sem senha) pra abrir o Ritmind no celular — treinos, "
         "calendário, corridas com mapa e sua evolução na tela.",
+        '💡 Você sabia? No app, depois que você fecha o treino do dia, é só '
+        'tocar em "ver como foi" pra abrir a corrida — com mapa, parciais e a '
+        "minha análise daquele treino ali dentro.",
     ]
 
     @staticmethod
