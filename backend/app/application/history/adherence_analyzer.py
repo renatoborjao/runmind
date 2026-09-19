@@ -141,11 +141,18 @@ class AdherenceAnalyzer:
         None quando não há sessão de corrida VENCIDA pra cobrar (semana só de
         descanso, plano vazio, ou semana ainda em curso)."""
 
+        # piso: o plano só cobra sessões que existiam quando o dia chegou. Um
+        # plano gerado no meio da semana (atleta que entrou na quinta) não pode
+        # cobrar a segunda que já tinha passado — ela nunca foi prescrita a ele.
+        # Sem generated_at (legado) não há piso: comportamento antigo intacto.
+        floor = plan.generated_on()
+
         running = [
             session
             for session in plan.sessions
             if session.kind in _RUNNING_KINDS
             and plan.session_date(session) <= today
+            and (floor is None or plan.session_date(session) >= floor)
         ]
 
         if not running:
@@ -231,11 +238,14 @@ class AdherenceAnalyzer:
 
         for plan in plans:
 
+            floor = plan.generated_on()
+
             for session in plan.sessions:
 
                 if (
                     session.kind not in _RUNNING_KINDS
                     or plan.session_date(session) > today
+                    or (floor is not None and plan.session_date(session) < floor)
                 ):
 
                     continue

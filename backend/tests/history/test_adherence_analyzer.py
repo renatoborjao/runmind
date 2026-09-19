@@ -43,7 +43,7 @@ def _session(day, distance=6.0, workout_type="Rodagem", kind="run"):
     )
 
 
-def _plan(week_start, sessions):
+def _plan(week_start, sessions, generated_at=None):
 
     return TrainingPlan(
         athlete_name="Renato",
@@ -53,6 +53,7 @@ def _plan(week_start, sessions):
         running_days=[s.day for s in sessions],
         week_start=week_start,
         sessions=sessions,
+        generated_at=generated_at,
     )
 
 
@@ -436,3 +437,49 @@ def test_semana_inteira_no_futuro_nao_entra_na_serie():
     )
 
     assert report.weeks == []
+
+
+def test_atleta_novo_nao_fura_dia_anterior_a_entrada():
+    """Atleta que entra no meio da semana recebe um plano gerado ali — os dias
+    já vencidos daquela semana NÃO foram prescritos a ele e não podem ser
+    cobrados (o caso do Lahoz: 'IGNORA O PLANO' por furar uma segunda que
+    nunca existiu pra ele). Só a sexta, prescrita depois da entrada e cumprida,
+    conta — aderência 100%, não 50%."""
+
+    # plano da semana corrente, gerado na quinta (atleta entrou nesse dia)
+    plano = _plan(
+        LAST_WEEK,
+        [_session("Monday", 6.0), _session("Friday", 6.0)],
+        generated_at=(LAST_WEEK + timedelta(days=3)).isoformat(),
+    )
+
+    report = _analyze(
+        [plano],
+        [_run(LAST_WEEK, "Friday", 6.0, 1)],
+        until_week=LAST_WEEK,
+    )
+
+    assert report.weeks[0].planned == 1
+
+    assert report.weeks[0].done == 1
+
+    assert report.weeks[0].missed_days == []
+
+    assert report.rate == 1.0
+
+
+def test_sem_generated_at_mantem_comportamento_legado():
+    """Plano legado (sem marco de geração) não ganha piso nenhum — a segunda
+    vencida e não cumprida segue contando como furo, como antes."""
+
+    plano = _plan(LAST_WEEK, [_session("Monday", 6.0), _session("Friday", 6.0)])
+
+    report = _analyze(
+        [plano],
+        [_run(LAST_WEEK, "Friday", 6.0, 1)],
+        until_week=LAST_WEEK,
+    )
+
+    assert report.weeks[0].planned == 2
+
+    assert report.weeks[0].done == 1
