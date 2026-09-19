@@ -176,10 +176,13 @@ export default function CorrerPage() {
   const [voiceOn, setVoiceOn] = useState(true);
   const [recoverable, setRecoverable] = useState<RunPayload | null>(null);
   const [savingRec, setSavingRec] = useState(false);
+  const [gpsDbg, setGpsDbg] = useState(""); // leitura de GPS na tela (diagnóstico)
+  const [saveFailed, setSaveFailed] = useState(false); // envio falhou (ficou pendente)
 
   const voiceRef = useRef(true);
   const lastNudge = useRef(0);
   const lastPersist = useRef(0);
+  const fixes = useRef(0); // nº de posições GPS recebidas (diagnóstico)
   useEffect(() => { voiceRef.current = voiceOn; }, [voiceOn]);
 
   const segments = useRef<Segment[]>([]);
@@ -302,7 +305,14 @@ export default function CorrerPage() {
     if (phaseRef.current !== "recording") return;
     const acc = pos.coords.accuracy;
     const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-    if (acc != null && acc > 30) return;
+    fixes.current += 1;
+    // GPS de navegador no celular reporta 20–60m fácil (assistido por wifi/cell,
+    // 1º fix, área urbana). O teto antigo de 30m rejeitava TODO ponto e a
+    // distância nunca subia — corrida "morta". Aceita até 65m (ainda barra lixo).
+    if (acc != null && acc > 65) {
+      setGpsDbg(`fix ${fixes.current} · precisão ${Math.round(acc)}m (fraca, ignorado) · ${Math.round(distRef.current)}m`);
+      return;
+    }
     if (last.current) {
       const d = haversine(last.current, p);
       if (d >= 2 && d < 60) {
@@ -314,6 +324,7 @@ export default function CorrerPage() {
     }
     last.current = p;
     points.current.push({ ...p, t: Math.floor((Date.now() - startTs.current) / 1000) });
+    setGpsDbg(`fix ${fixes.current} · precisão ${acc != null ? Math.round(acc) : "?"}m · ${Math.round(distRef.current)}m`);
   }
 
   function onErr(e: GeolocationPositionError) {
@@ -378,6 +389,7 @@ export default function CorrerPage() {
     distRef.current = 0; setDist(0); setElapsed(0);
     last.current = null; points.current = []; recent.current = [];
     lastNudge.current = 0; lastPersist.current = 0;
+    fixes.current = 0; setGpsDbg("");
     setRecoverable(null); clearProgress();
     setPhase("recording"); phaseRef.current = "recording";
     startWatch();
@@ -402,14 +414,33 @@ export default function CorrerPage() {
     stopWatch(); releaseWake();
     const durS = Math.floor(elapsedBase.current / 1000);
     setPhase("saving"); phaseRef.current = "saving";
-    await saveRun({
+
+    const payload: RunPayload = {
       started_at: new Date(startTs.current).toISOString(),
       duration_s: durS,
       distance_m: Math.round(distRef.current),
       avg_pace: paceStr(distRef.current, durS),
       points: points.current,
-    });
-    clearProgress();
+    };
+
+    // BLINDADO: o envio NUNCA pode travar a tela em "Salvando…". Se falhar
+    // (rede/erro), não perde a corrida — mantém no localStorage pra recuperar
+    // depois — e chega a "done" do mesmo jeito, avisando que ficou pendente.
+    let ok = false;
+    try {
+      ok = await saveRun(payload);
+    } catch {
+      ok = false;
+    }
+
+    if (ok) {
+      clearProgress();
+      setSaveFailed(false);
+    } else {
+      try { localStorage.setItem(RUN_KEY, JSON.stringify(payload)); } catch { /* ok */ }
+      setSaveFailed(true);
+    }
+
     setElapsed(durS);
     if (guided && voiceRef.current) speak("Treino concluído! Mandou bem.");
     setPhase("done"); phaseRef.current = "done";
@@ -566,8 +597,13 @@ export default function CorrerPage() {
 
             {phase === "done" && (
               <div className="card center" style={{ marginTop: 8 }}>
-                <div className="badge" style={{ margin: "0 auto 10px" }}><span className="dot" />Corrida salva</div>
+                <div className="badge" style={{ margin: "0 auto 10px" }}><span className="dot" />{saveFailed ? "Corrida guardada" : "Corrida salva"}</div>
                 <p style={{ margin: 0, fontSize: 15 }}>Boa! {km} km em {fmtTime(elapsed)} · {paceStr(dist, elapsed)}/km 🏃</p>
+                {saveFailed && (
+                  <p className="notice" style={{ marginTop: 10, fontSize: 12.5 }}>
+                    Não consegui enviar agora (conexão). Guardei a corrida aqui no aparelho — quando você abrir a tela de correr de novo com internet, é só tocar em Salvar. 💾
+                  </p>
+                )}
                 <button className="btn" style={{ marginTop: 16 }} onClick={() => router.push("/atividades")}>Ver minhas atividades</button>
                 <button className="btn-ghost" style={{ marginTop: 10 }} onClick={() => router.push("/inicio")}>Voltar pro início</button>
               </div>
@@ -575,6 +611,12 @@ export default function CorrerPage() {
 
             {gpsOk === true && phase !== "done" && (
               <p className="muted center" style={{ fontSize: 11, marginTop: 8 }}>GPS ativo 🟢</p>
+            )}
+
+            {(recording || paused) && (
+              <p className="muted center" style={{ fontSize: 11, marginTop: 4, opacity: 0.7 }}>
+                📍 {gpsDbg || "aguardando 1º sinal de GPS…"}
+              </p>
             )}
           </>
         )}
