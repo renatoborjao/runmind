@@ -20,6 +20,7 @@ import {
   type HomeSummary,
   type Progress,
   type TodaySession,
+  type WeekDay,
   type WorkoutStep,
 } from "@/lib/api";
 
@@ -252,8 +253,17 @@ export default function InicioPage() {
   // navegar — gatilho confiável que a tela lê no mount; a URL fica pra refresh/
   // deep-link direto.
   const openTodayActivity = () => {
-    try { if (todayIso) sessionStorage.setItem("rm_open_activity_date", todayIso); } catch { /* ok */ }
-    router.push(doneHref);
+    // Navegação REAL (full load) em vez de client-side. No PWA/export estático o
+    // router.push nem sempre entrega a query (?date=) pra a tela de destino — a
+    // atividade caía na lista e só abria no refresh. O full load se comporta
+    // IGUAL ao refresh que já funciona: a tela lê a URL e abre a corrida. Robusto.
+    window.location.assign(doneHref);
+  };
+  // Clique num dia da semana: FEITO abre a atividade rica (mapa/parciais/análise
+  // do coach); a FAZER abre o treino planejado.
+  const openWeekDay = (d: WeekDay) => {
+    if (d.done) window.location.assign(`/atividades?date=${d.date_iso}`);
+    else router.push(`/treino/detalhe?day=${d.day_en}`);
   };
   const shoe = home.shoe;
 
@@ -426,7 +436,7 @@ export default function InicioPage() {
               <div
                 key={i}
                 className={`day${d.is_today ? " today" : ""}${d.workout_type ? " tap" : " rest"}`}
-                onClick={d.workout_type ? () => router.push(`/treino/detalhe?day=${d.day_en}`) : undefined}
+                onClick={d.workout_type ? () => openWeekDay(d) : undefined}
               >
                 <div className="dn">{d.day_pt.toUpperCase()}</div>
                 <div className="dd">{d.date_num}</div>
@@ -445,7 +455,7 @@ export default function InicioPage() {
           </div>
 
           {home.week.filter((d) => d.workout_type).map((d) => (
-            <div key={d.day_en} className="wrow" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
+            <div key={d.day_en} className="wrow" onClick={() => openWeekDay(d)}>
               <div className="date">
                 <div className="dn">{d.day_pt}</div>
                 <div className="dd">{d.date_num}</div>

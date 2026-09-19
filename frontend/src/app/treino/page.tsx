@@ -91,7 +91,10 @@ export default function TreinoPage() {
   }, [cal]);
 
   function openDay(iso: string, done: boolean, dayEn?: string) {
-    if (done) router.push(`/treino/realizado?date=${iso}`);
+    // Treino FEITO abre a atividade RICA (mapa, parciais, análise do coach) —
+    // igual ao "Ver como foi" do treino de hoje, não o resumo fraco antigo.
+    // Full load (window.location) porque no PWA a query não chega no client-nav.
+    if (done) window.location.assign(`/atividades?date=${iso}`);
     else if (dayEn) router.push(`/treino/detalhe?day=${dayEn}`);
   }
 
