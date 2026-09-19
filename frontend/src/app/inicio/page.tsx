@@ -8,6 +8,7 @@ import NotifBell from "../notif-bell";
 import InstallBanner from "../install-banner";
 import EmailCapture from "../email-capture";
 import {
+  APP_BUILD,
   getBody,
   getFeed,
   getHome,
@@ -513,7 +514,7 @@ export default function InicioPage() {
           </button>
         )}
 
-        <p className="muted center" style={{ marginTop: 2 }}>Ritmind · {home.athlete.goal}</p>
+        <p className="muted center" style={{ marginTop: 2 }}>Ritmind · {home.athlete.goal} · <b>{APP_BUILD}</b></p>
 
       </div>
       <BottomNav />

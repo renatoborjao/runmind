@@ -19,7 +19,10 @@ export default function PWARegister() {
     });
 
     const register = () => {
-      navigator.serviceWorker.register("/sw.js").then((reg) => {
+      // updateViaCache:"none" = o navegador SEMPRE revalida o sw.js pela rede
+      // (não serve o SW do cache HTTP) — deixa a atualização do app confiável,
+      // que é o gargalo recorrente no PWA (código novo não chegava no aparelho).
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((reg) => {
         const check = () => reg.update().catch(() => {});
         check();
         // procura nova versão periodicamente e quando o app volta ao foco —
