@@ -242,6 +242,10 @@ export default function InicioPage() {
   const body = home.body;
   const session = home.today.session;
   const todayDone = home.week.find((d) => d.is_today)?.done ?? false;
+  const todayIso = home.week.find((d) => d.is_today)?.date_iso ?? null;
+  // "Ver como foi" abre DIRETO a atividade do dia (deep-link por data), não a
+  // lista. Se o sync ainda não trouxe a corrida, a tela degrada pra lista.
+  const doneHref = todayIso ? `/atividades?date=${todayIso}` : "/atividades";
   const shoe = home.shoe;
 
   return (
@@ -319,7 +323,7 @@ export default function InicioPage() {
         {/* TREINO DE HOJE */}
         <section
           className={`card today${session ? " tap" : ""}${session && !todayDone ? " today-hero" : ""}`}
-          onClick={session ? () => router.push(todayDone ? "/atividades" : `/treino/detalhe?day=${home.today.day_en}`) : undefined}
+          onClick={session ? () => router.push(todayDone ? doneHref : `/treino/detalhe?day=${home.today.day_en}`) : undefined}
         >
           <div className="card-head">
             <span className="eyebrow">{home.today.label}{home.today.session_date_label ? ` · ${home.today.session_date_label}` : ""}</span>
@@ -333,7 +337,7 @@ export default function InicioPage() {
             <>
               <h2>Treino de hoje concluído ✓</h2>
               <p className="sub" style={{ margin: 0 }}>Boa, {firstName}! {session.workout_type} fechado. 👏</p>
-              <button className="cta-btn" onClick={(e) => { e.stopPropagation(); router.push("/atividades"); }}>
+              <button className="cta-btn" onClick={(e) => { e.stopPropagation(); router.push(doneHref); }}>
                 Ver como foi
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               </button>

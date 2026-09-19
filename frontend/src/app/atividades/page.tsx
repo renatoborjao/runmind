@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
+  getActivityAnalysis,
   getFeed,
   getTrack,
+  type CoachAnalysis,
   type FeedItem,
   type TrackData,
 } from "@/lib/api";
@@ -509,6 +511,7 @@ export default function AtividadesPage() {
   const [sel, setSel] = useState<FeedItem | null>(null);
   const [track, setTrack] = useState<TrackData | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
+  const [analysis, setAnalysis] = useState<CoachAnalysis | null>(null);
   const [sharing, setSharing] = useState(false);
   const [editor, setEditor] = useState(false);
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
@@ -525,12 +528,31 @@ export default function AtividadesPage() {
       if (f === null) { router.replace("/entrar"); return; }
       setFeed(f);
       setLoading(false);
+      // deep-link: /atividades?date=YYYY-MM-DD (ou ?key=arch-123) abre direto a
+      // atividade — é assim que o "Ver como foi" da home entra na corrida do dia
+      // em vez de cair na lista. Sem match (ex.: sync ainda não chegou), fica na
+      // lista mesmo (degrada bem).
+      try {
+        const q = new URLSearchParams(window.location.search);
+        const key = q.get("key");
+        const date = q.get("date");
+        const hit = key
+          ? f.find((it) => it.key === key)
+          : date
+            ? f.find((it) => it.date_iso === date)
+            : null;
+        if (hit) open(hit);
+      } catch { /* sem query, segue na lista */ }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   async function open(it: FeedItem) {
     setSel(it);
     setTrack(null);
+    setAnalysis(null);
+    // análise do coach (best-effort, não bloqueia o traçado)
+    getActivityAnalysis(it).then(setAnalysis).catch(() => {});
     if (it.has_track) {
       setLoadingTrack(true);
       setTrack(await getTrack(it));
@@ -781,6 +803,15 @@ export default function AtividadesPage() {
                 </div>
               ))}
             </div>
+          )}
+
+          {analysis?.analysis && (
+            <section className="card coach-analysis">
+              <div className="card-head">
+                <span className="eyebrow">Análise do coach{analysis.workout_type ? ` · ${analysis.workout_type}` : ""}</span>
+              </div>
+              <p className="ca-text">{analysis.analysis}</p>
+            </section>
           )}
 
           {it.hr_zones && <HrZones zones={it.hr_zones} />}

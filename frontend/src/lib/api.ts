@@ -544,6 +544,24 @@ export async function getTrack(item: FeedItem, owner?: string): Promise<TrackDat
   return r.json();
 }
 
+// ---- Análise do coach de um treino ----
+
+export interface CoachAnalysis {
+  analysis: string | null;
+  workout_type?: string | null;
+  created_at?: string | null;
+}
+
+/** Análise que o coach fez do treino daquele dia. Casa por data (+ distância),
+ * igual ao dedup do feed. `analysis` vem null quando ainda não há análise. */
+export async function getActivityAnalysis(item: FeedItem): Promise<CoachAnalysis | null> {
+  const r = await apiFetch(
+    `/feed/analysis?date=${encodeURIComponent(item.date_iso)}&km=${item.distance_km}`,
+  );
+  if (!r.ok) return null;
+  return r.json();
+}
+
 // ---- Social (seguir, perfis, feed, kudos) ----
 
 export type Relationship = "self" | "following" | "requested" | "none";

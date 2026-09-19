@@ -85,6 +85,12 @@ class TrainingCompletedEvent:
 
             message = result["message"]
 
+            # Guarda a ANÁLISE deste treino (texto limpo, ANTES de anexar RPE/
+            # tênis) vinculada à atividade — a tela da atividade no app lê daqui
+            # ("ver a análise que o coach fez"). Best-effort; nunca derruba o
+            # feedback. Ver [[WorkoutAnalysisRepository]].
+            TrainingCompletedEvent._record_analysis(profile, result, message)
+
             # sRPE: pergunta o esforço percebido junto do feedback e marca o
             # treino como pendente de RPE (o número vira carga subjetiva).
             # Best-effort — nunca derruba o feedback. (Numa PROVA não faz
@@ -195,6 +201,48 @@ class TrainingCompletedEvent:
             )
 
         return result
+
+    @staticmethod
+    def _record_analysis(profile: str, result: dict, analysis: str) -> None:
+        """Persiste a análise do treino ligada à atividade (id + data +
+        distância + tipo). Best-effort — nunca derruba o feedback."""
+
+        try:
+
+            from app.infrastructure.integrations.telegram.telegram_text import (
+                to_plain_text,
+            )
+            from app.infrastructure.persistence.workout_analysis_repository import (
+                WorkoutAnalysisRepository,
+            )
+
+            enriched = result.get("activity")
+
+            activity = getattr(enriched, "activity", None)
+
+            if activity is None:
+
+                return
+
+            planned = result.get("planned_session")
+
+            workout_type = (
+                getattr(planned, "workout_type", None)
+                or getattr(enriched, "training_type", None)
+            )
+
+            WorkoutAnalysisRepository().record(
+                profile,
+                activity_id=activity.id,
+                date=activity.start_date.date().isoformat(),
+                distance_km=(activity.distance or 0) / 1000,
+                analysis=to_plain_text(analysis),
+                workout_type=workout_type,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao guardar análise do treino de '{profile}': {e}")
 
     @staticmethod
     def _attribute_shoe(profile: str, runner, result):
