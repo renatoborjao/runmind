@@ -246,6 +246,14 @@ export default function InicioPage() {
   // "Ver como foi" abre DIRETO a atividade do dia (deep-link por data), não a
   // lista. Se o sync ainda não trouxe a corrida, a tela degrada pra lista.
   const doneHref = todayIso ? `/atividades?date=${todayIso}` : "/atividades";
+  // No export estático do Next a query da URL nem sempre chega na navegação
+  // client-side (só no reload). Então gravamos o alvo no sessionStorage ANTES de
+  // navegar — gatilho confiável que a tela lê no mount; a URL fica pra refresh/
+  // deep-link direto.
+  const openTodayActivity = () => {
+    try { if (todayIso) sessionStorage.setItem("rm_open_activity_date", todayIso); } catch { /* ok */ }
+    router.push(doneHref);
+  };
   const shoe = home.shoe;
 
   return (
@@ -323,7 +331,7 @@ export default function InicioPage() {
         {/* TREINO DE HOJE */}
         <section
           className={`card today${session ? " tap" : ""}${session && !todayDone ? " today-hero" : ""}`}
-          onClick={session ? () => router.push(todayDone ? doneHref : `/treino/detalhe?day=${home.today.day_en}`) : undefined}
+          onClick={session ? () => (todayDone ? openTodayActivity() : router.push(`/treino/detalhe?day=${home.today.day_en}`)) : undefined}
         >
           <div className="card-head">
             <span className="eyebrow">{home.today.label}{home.today.session_date_label ? ` · ${home.today.session_date_label}` : ""}</span>
@@ -337,7 +345,7 @@ export default function InicioPage() {
             <>
               <h2>Treino de hoje concluído ✓</h2>
               <p className="sub" style={{ margin: 0 }}>Boa, {firstName}! {session.workout_type} fechado. 👏</p>
-              <button className="cta-btn" onClick={(e) => { e.stopPropagation(); router.push(doneHref); }}>
+              <button className="cta-btn" onClick={(e) => { e.stopPropagation(); openTodayActivity(); }}>
                 Ver como foi
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               </button>

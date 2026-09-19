@@ -526,17 +526,31 @@ function AtividadesInner() {
 
   useEffect(() => {
     (async () => {
+      // Alvo do deep-link, consumido UMA vez ANTES do feed. No export estático do
+      // Next a query da URL não chega de forma confiável na navegação client-side
+      // (só no reload) — por isso a home grava a data no sessionStorage ANTES de
+      // navegar (gatilho síncrono e confiável). A URL (?date=/?key=) fica como
+      // fallback pra refresh/deep-link direto.
+      let date: string | null = null;
+      let key: string | null = null;
+      try {
+        date = sessionStorage.getItem("rm_open_activity_date");
+        if (date) sessionStorage.removeItem("rm_open_activity_date");
+      } catch { /* ok */ }
+      if (!date) {
+        try {
+          const q = new URLSearchParams(window.location.search);
+          date = q.get("date");
+          key = q.get("key");
+        } catch { /* ok */ }
+        if (!date && !key) { date = params.get("date"); key = params.get("key"); }
+      }
+
       const f = await getFeed();
       if (f === null) { router.replace("/entrar"); return; }
       setFeed(f);
       setLoading(false);
-      // deep-link: /atividades?date=YYYY-MM-DD (ou ?key=arch-123) abre direto a
-      // atividade — é assim que o "Ver como foi" da home entra na corrida do dia
-      // em vez de cair na lista. useSearchParams (não window.location) pra pegar
-      // a query já na 1ª navegação client-side (antes exigia refresh). Sem match
-      // (ex.: sync ainda não chegou), fica na lista mesmo (degrada bem).
-      const key = params.get("key");
-      const date = params.get("date");
+
       const hit = key
         ? f.find((it) => it.key === key)
         : date
