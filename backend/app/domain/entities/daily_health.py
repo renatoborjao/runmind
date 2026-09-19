@@ -26,6 +26,13 @@ class DailyHealth:
 
     date: str  # dia que as métricas descrevem (YYYY-MM-DD, local do atleta)
 
+    # meta (NÃO é métrica do corpo): o dia já FECHOU e foi ingerido completo?
+    # O poll grava o dia CORRENTE parcial (prontidão da manhã — sono/HRV/bateria
+    # ao acordar, que já fecham cedo) com is_final=False, e reescreve UMA vez, o
+    # dia inteiro, quando ele fecha (is_final=True). Serve só pra controlar a
+    # re-busca; has_data ignora este campo. Ver GarminHealthPoller.poll_one.
+    is_final: bool = False
+
     # -- sinais computados pela Garmin (relógios melhores; None nos básicos) --
     readiness_score: int | None = None
     readiness_level: str | None = None

@@ -307,6 +307,31 @@ class GarminHealthPoller:
                 print(f"Garmin health poll falhou para '{profile}': {e}")
 
     @staticmethod
+    def _merge(existing: DailyHealth | None, fresh: DailyHealth) -> DailyHealth:
+        """Mescla o snapshot novo sobre o que já havia: só sobrescreve campo COM
+        valor (não-None), pra um endpoint que não mediu (None) nunca apagar o que
+        outra passada já trouxe. Sem base anterior, é o próprio snapshot novo.
+        `date`/`is_final` são controlados por quem chama, não copiados."""
+
+        if existing is None:
+
+            return fresh
+
+        for name in fresh.__dataclass_fields__:
+
+            if name in ("date", "is_final"):
+
+                continue
+
+            value = getattr(fresh, name)
+
+            if value is not None:
+
+                setattr(existing, name, value)
+
+        return existing
+
+    @staticmethod
     def poll_one(
         profile: str,
         repo: GarminHealthRepository | None = None,
@@ -316,18 +341,48 @@ class GarminHealthPoller:
 
         runner = RunnerProfileRepository().load(profile)
 
-        # ontem no fuso do atleta: o dia de ontem já está fechado (sono da
-        # noite, stress do dia inteiro), ao contrário de "hoje" que ainda enche
-        yesterday = (
-            now_in(getattr(runner, "timezone", None)).date() - timedelta(days=1)
-        ).isoformat()
+        today = now_in(getattr(runner, "timezone", None)).date()
 
-        # série diária (sono/HRV/stress/RHR): só puxa se ainda não tiver ontem
-        if not repo.has_date(profile, yesterday):
+        yesterday = (today - timedelta(days=1)).isoformat()
 
-            health = GarminHealthSource.fetch(profile, yesterday)
+        today_iso = today.isoformat()
 
-            repo.upsert(profile, health)
+        # (1) FINALIZAR o dia FECHADO (ontem): puxa o dia inteiro UMA vez, quando
+        # fecha, e marca is_final. Se já está finalizado, nem toca (imutável,
+        # gentil com a API). Cobre também o registro que nasceu parcial como
+        # "hoje" (is_final=False) — ao virar ontem, é reescrito completo.
+        y_existing = repo.get(profile, yesterday)
+
+        if y_existing is None or not y_existing.is_final:
+
+            closed = GarminHealthSource.fetch(profile, yesterday)
+
+            if closed.has_data:
+
+                merged = GarminHealthPoller._merge(y_existing, closed)
+
+                merged.is_final = True
+
+                repo.upsert(profile, merged)
+
+        # (2) PRONTIDÃO DO DIA (hoje): sono/HRV/bateria-ao-acordar já fecham de
+        # manhã — então a leitura do corpo sai SAME-DAY, sem esperar o dia virar.
+        # Puxa hoje enquanto ainda não capturou dado; ao capturar a manhã, para
+        # (o resto do dia é finalizado amanhã em (1)). Roda a cada tick do poll
+        # (de hora em hora), então atualiza sozinho conforme o relógio sincroniza.
+        t_existing = repo.get(profile, today_iso)
+
+        if t_existing is None or not t_existing.has_data:
+
+            fresh = GarminHealthSource.fetch(profile, today_iso)
+
+            if fresh.has_data:
+
+                merged = GarminHealthPoller._merge(t_existing, fresh)
+
+                merged.is_final = False
+
+                repo.upsert(profile, merged)
 
         # ESTADO: o VO₂máx chega esporádico/atrasado — varre os dias recentes e
         # preenche as lacunas (barato: pula dias que já têm o valor). Sem isto o

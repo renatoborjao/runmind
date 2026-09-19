@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import ExitStack
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -15,63 +16,145 @@ def _runner(tz="America/Sao_Paulo"):
     return SimpleNamespace(timezone=tz)
 
 
-def _patches(has_date, fetched=None):
-    """Contexto com now_in fixo (ontem = 2026-07-20), profile carregado e a
-    fonte/repo mockados."""
+def _repo_with(records=None):
+    """MagicMock repo cujo get(profile, day) devolve records.get(day) — deixa
+    cada teste montar o estado do disco por data."""
+
+    records = records or {}
 
     repo = MagicMock()
 
-    repo.has_date.return_value = has_date
+    repo.get.side_effect = lambda profile, day: records.get(day)
 
-    fetch = MagicMock(return_value=fetched or DailyHealth(date="2026-07-20"))
+    return repo
+
+
+def _poll_patches(fetch, profile_repo):
+    """now_in fixo (hoje = 2026-07-21, ontem = 2026-07-20), profile carregado,
+    fonte mockada e as varreduras (VO₂máx/contexto/prova) neutralizadas."""
+
+    return (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
+        patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
+        patch.object(GarminHealthPoller, "sync_body_context", return_value=0),
+        patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
+    )
+
+
+def test_finaliza_ontem_e_semeia_hoje_no_mesmo_tick():
+    """Disco vazio: o poll finaliza ONTEM (dia fechado, is_final) E semeia HOJE
+    (prontidão da manhã, is_final=False) no mesmo tick — leitura same-day."""
+
+    repo = _repo_with({})
 
     profile_repo = MagicMock()
 
     profile_repo.load.return_value = _runner()
 
-    return repo, fetch, profile_repo
+    fetch = MagicMock(
+        side_effect=lambda p, d: DailyHealth(date=d, sleep_hours=7.0, sleep_score=70)
+    )
 
+    with ExitStack() as stack:
 
-def test_pulls_and_stores_yesterday_when_missing():
+        for _p in _poll_patches(fetch, profile_repo):
 
-    repo, fetch, profile_repo = _patches(has_date=False)
-
-    with (
-        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
-        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
-        patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
-        patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
-        patch.object(GarminHealthPoller, "sync_body_context", return_value=0),
-        patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
-    ):
+            stack.enter_context(_p)
 
         GarminHealthPoller.poll_one("renato2", repo)
 
-    # puxou ONTEM (2026-07-20) e gravou
-    fetch.assert_called_once_with("renato2", "2026-07-20")
+    fetched = sorted(c.args[1] for c in fetch.call_args_list)
 
-    repo.upsert.assert_called_once()
+    assert fetched == ["2026-07-20", "2026-07-21"]
+
+    saved = {c.args[1].date: c.args[1] for c in repo.upsert.call_args_list}
+
+    assert saved["2026-07-20"].is_final is True    # ontem: dia fechado
+
+    assert saved["2026-07-21"].is_final is False   # hoje: parcial, atualizável
 
 
-def test_skips_garmin_when_date_already_stored():
+def test_nao_rebusca_ontem_final_nem_hoje_ja_capturado():
+    """Gentileza com a API: ontem já finalizado e hoje já com a manhã capturada
+    → nenhuma chamada nova ao Garmin (na série)."""
 
-    repo, fetch, profile_repo = _patches(has_date=True)
+    records = {
+        "2026-07-20": DailyHealth(date="2026-07-20", sleep_score=70, is_final=True),
+        "2026-07-21": DailyHealth(date="2026-07-21", sleep_hours=7.0),
+    }
 
-    with (
-        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
-        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
-        patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
-        patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
-        patch.object(GarminHealthPoller, "sync_body_context", return_value=0),
-        patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
-    ):
+    repo = _repo_with(records)
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    fetch = MagicMock()
+
+    with ExitStack() as stack:
+
+        for _p in _poll_patches(fetch, profile_repo):
+
+            stack.enter_context(_p)
 
         GarminHealthPoller.poll_one("renato2", repo)
 
-    # já tinha o dia: nem bateu no Garmin (série); a varredura de VO₂máx roda à parte
     fetch.assert_not_called()
 
     repo.upsert.assert_not_called()
+
+
+def test_finalizar_ontem_nao_apaga_a_manha_ja_capturada():
+    """Ontem nasceu parcial como 'hoje' (tinha o sono da manhã). Ao fechar, o
+    fetch de finalização traz a carga do dia mas o sono veio None nessa passada
+    (endpoint instável) — o merge NÃO pode apagar o sono que já havia."""
+
+    partial = DailyHealth(
+        date="2026-07-20", sleep_hours=7.0, sleep_score=72, is_final=False
+    )
+
+    records = {
+        "2026-07-20": partial,
+        # hoje já capturado → isola o teste no fechamento de ontem
+        "2026-07-21": DailyHealth(date="2026-07-21", sleep_hours=6.0),
+    }
+
+    repo = _repo_with(records)
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    # fechamento de ontem: passos + FC repouso cheios, mas SEM sono nesta passada
+    fetch = MagicMock(
+        side_effect=lambda p, d: DailyHealth(date=d, steps=12000, resting_hr=48)
+    )
+
+    with ExitStack() as stack:
+
+        for _p in _poll_patches(fetch, profile_repo):
+
+            stack.enter_context(_p)
+
+        GarminHealthPoller.poll_one("renato2", repo)
+
+    saved = {c.args[1].date: c.args[1] for c in repo.upsert.call_args_list}
+
+    assert "2026-07-21" not in saved            # hoje não foi re-buscado
+
+    ontem = saved["2026-07-20"]
+
+    assert ontem.is_final is True
+
+    assert ontem.steps == 12000                 # veio do fechamento
+
+    assert ontem.resting_hr == 48
+
+    assert ontem.sleep_hours == 7.0             # a manhã NÃO foi apagada
+
+    assert ontem.sleep_score == 72
 
 
 def test_sync_vo2max_fills_missing_days():
