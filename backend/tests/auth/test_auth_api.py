@@ -46,7 +46,8 @@ def test_me_with_valid_cookie_returns_profile(monkeypatch):
         "app.presentation.api.v1.auth.RunnerProfileRepository",
         lambda: SimpleNamespace(
             load=lambda p: SimpleNamespace(
-                name="Renato", email="a@b.com", goal="10k"
+                name="Renato", email="a@b.com", goal="10k",
+                onboarding_complete=True,
             )
         ),
     )
