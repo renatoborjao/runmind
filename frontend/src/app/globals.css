@@ -426,6 +426,35 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .sw-h { font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--ink-soft); }
 .sw-d { font-size: 10px; color: var(--muted); text-transform: uppercase; }
 
+/* fortalecimento — entrada na home */
+.strength-entry { display: flex; align-items: center; gap: 12px; }
+.strength-entry .se-ico { font-size: 24px; line-height: 1; }
+.strength-entry .se-t { font-weight: 700; font-size: 15px; }
+.strength-entry .se-s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* fortalecimento — tela */
+.intro-card { font-size: 13.5px; line-height: 1.5; }
+.ex-cat { margin-top: 6px; }
+.ex-cat-t { font-family: var(--font-mono), monospace; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 14px 4px 8px; }
+.ex-card { padding: 0; overflow: hidden; }
+.ex-head { width: 100%; background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px; text-align: left; color: inherit; }
+.ex-demo { width: 66px; height: 66px; flex: none; border-radius: 12px; overflow: hidden; background: #fff; display: flex; align-items: center; justify-content: center; }
+.ex-demo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ex-demo-ph { background: var(--surface-2); }
+.ex-info { flex: 1; min-width: 0; }
+.ex-name { font-weight: 700; font-size: 14.5px; }
+.ex-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.ex-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ex-badge { font-size: 10.5px; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.ex-badge.reps { color: var(--accent-ink); }
+.ex-chev { flex: none; color: var(--muted); transition: transform .18s ease; }
+.ex-chev.open { transform: rotate(180deg); }
+.ex-body { padding: 0 14px 14px; }
+.ex-why { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+.ex-cues-t { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.ex-cues { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.ex-cues li { font-size: 13.5px; line-height: 1.45; }
+
 /* perfil */
 .avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }
 .avatar-sm { width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 14px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); cursor: pointer; border: none; }

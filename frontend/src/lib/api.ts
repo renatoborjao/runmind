@@ -7,7 +7,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b17 · sono em grafico";
+export const APP_BUILD = "b18 · fortalecimento";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -713,6 +713,32 @@ export interface BodyReading {
 
 export async function getBody(): Promise<BodyReading | null> {
   const r = await apiFetch("/body");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Fortalecimento (biblioteca de exercícios pra quem corre) ----
+
+export interface StrengthExercise {
+  id: string;
+  name: string;
+  category: string;
+  target: string;
+  equipment: string;
+  why: string;
+  cues: string[];
+  reps: string;
+  images: string[];
+}
+
+export interface StrengthLibrary {
+  categories: string[];
+  exercises: StrengthExercise[];
+  credit: string;
+}
+
+export async function getStrengthLibrary(): Promise<StrengthLibrary | null> {
+  const r = await apiFetch("/strength/library");
   if (!r.ok) return null;
   return r.json();
 }

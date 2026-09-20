@@ -23,6 +23,7 @@ from app.presentation.api.v1 import social
 from app.presentation.api.v1 import recorded_runs
 from app.presentation.api.v1 import shoes
 from app.presentation.api.v1 import strava
+from app.presentation.api.v1 import strength
 from app.presentation.api.v1 import telegram
 from app.presentation.api.v1 import workouts
 from app.presentation.api.v1 import webhooks
@@ -70,6 +71,8 @@ router.include_router(profile_route.router)
 router.include_router(recorded_runs.router)
 
 router.include_router(shoes.router)
+
+router.include_router(strength.router)
 
 router.include_router(feed.router)
 
