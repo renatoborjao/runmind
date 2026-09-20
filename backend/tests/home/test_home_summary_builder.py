@@ -11,6 +11,20 @@ _TUE = datetime(2026, 9, 15, 8, 0, 0)
 _SUN = datetime(2026, 9, 13, 8, 0, 0)  # domingo, antes do week_start do plano
 
 
+def _health_repo(series):
+    """Fake do GarminHealthRepository sobre uma lista de DailyHealth (ordenada
+    por data), implementando o que a home usa: latest e latest_where."""
+
+    series = series or []
+
+    return SimpleNamespace(
+        latest=lambda p: series[-1] if series else None,
+        latest_where=lambda p, pred: next(
+            (h for h in reversed(series) if pred(h)), None
+        ),
+    )
+
+
 def _session(day, wtype):
     return SimpleNamespace(
         day=day,
@@ -24,7 +38,11 @@ def _session(day, wtype):
     )
 
 
-def _build_with(plan=None, body=None, fitness_health=None, pred=None, book=None):
+def _build_with(plan=None, health_series=None, fitness_health=None, pred=None, book=None):
+
+    # compat: quem passa um único fitness_health vira uma série de um dia
+    if health_series is None:
+        health_series = [fitness_health] if fitness_health is not None else []
 
     profiles = SimpleNamespace(
         load=lambda p: SimpleNamespace(name="Renato Teste", goal="10k")
@@ -34,7 +52,7 @@ def _build_with(plan=None, body=None, fitness_health=None, pred=None, book=None)
         patch(f"{MOD}.now_local", return_value=_TUE),
         patch(f"{MOD}.RunnerProfileRepository", lambda: profiles),
         patch(f"{MOD}.WeeklyPlanRepository", lambda: SimpleNamespace(load=lambda p: plan)),
-        patch(f"{MOD}.GarminHealthRepository", lambda: SimpleNamespace(latest=lambda p: fitness_health)),
+        patch(f"{MOD}.GarminHealthRepository", lambda: _health_repo(health_series)),
         patch(f"{MOD}.RacePredictionRepository", lambda: SimpleNamespace(load=lambda p: pred)),
         patch(f"{MOD}.ShoeRepository", lambda: SimpleNamespace(load=lambda p: book)),
     ):
@@ -119,7 +137,7 @@ def test_failing_block_does_not_break_home():
         patch(f"{MOD}.now_local", return_value=_TUE),
         patch(f"{MOD}.RunnerProfileRepository", lambda: SimpleNamespace(load=lambda p: SimpleNamespace(name="R", goal="x"))),
         patch(f"{MOD}.WeeklyPlanRepository", lambda: SimpleNamespace(load=lambda p: None)),
-        patch(f"{MOD}.GarminHealthRepository", lambda: SimpleNamespace(latest=_boom)),
+        patch(f"{MOD}.GarminHealthRepository", lambda: SimpleNamespace(latest=_boom, latest_where=lambda p, pred: _boom(p))),
         patch(f"{MOD}.RacePredictionRepository", lambda: SimpleNamespace(load=lambda p: None)),
         patch(f"{MOD}.ShoeRepository", lambda: SimpleNamespace(load=_boom)),
     ):
@@ -128,3 +146,45 @@ def test_failing_block_does_not_break_home():
     assert out["body"] is None
     assert out["shoe"] is None
     assert out["athlete"]["name"] == "R"
+
+
+def test_body_uses_last_day_with_recovery_not_hollow_today():
+    """Regressão (o bug do 'dormi e acordei sem'): o dia CORRENTE nasce oco — o
+    relógio sincroniza stress/SpO2/bateria corrente antes do sono da noite. Esse
+    dia não pode virar a leitura do corpo (herói em branco); a home mostra o
+    último dia COM leitura da manhã (sono/HRV/prontidão/bateria ao acordar)."""
+
+    from app.domain.entities.daily_health import DailyHealth
+
+    ontem = DailyHealth(
+        date="2026-09-14", sleep_hours=7.2, hrv_last_night=42,
+        resting_hr=54, body_battery_at_wake=78, readiness_score=81, vo2max=52.0,
+    )
+    hoje_oco = DailyHealth(  # só o "agora": stress/SpO2/bateria corrente
+        date="2026-09-15", stress_avg=30, spo2_avg=96,
+        body_battery_most_recent=5,
+    )
+
+    out = _build_with(health_series=[ontem, hoje_oco])
+
+    assert out["body"] is not None
+    assert out["body"]["date"] == "2026-09-14"       # não o dia oco
+    assert out["body"]["readiness_score"] == 81
+    assert out["body"]["ring"]["value"] == 81
+    # o VO₂máx também não some num dia sem medição
+    assert out["fitness"]["vo2max"] == 52.0
+
+
+def test_body_shows_today_once_morning_reading_lands():
+    """Assim que HOJE captura a leitura da manhã, o herói passa a mostrar HOJE
+    (a leitura same-day continua funcionando)."""
+
+    from app.domain.entities.daily_health import DailyHealth
+
+    ontem = DailyHealth(date="2026-09-14", sleep_hours=7.0, readiness_score=70)
+    hoje = DailyHealth(date="2026-09-15", sleep_hours=8.1, readiness_score=90)
+
+    out = _build_with(health_series=[ontem, hoje])
+
+    assert out["body"]["date"] == "2026-09-15"
+    assert out["body"]["readiness_score"] == 90

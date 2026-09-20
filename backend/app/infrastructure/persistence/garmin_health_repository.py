@@ -47,11 +47,32 @@ class GarminHealthRepository:
 
         return any(h.date == day for h in self.load(profile))
 
+    def get(self, profile: str, day: str) -> DailyHealth | None:
+        """O snapshot de um dia específico, ou None. Usado pelo poll pra saber
+        se o dia corrente já capturou a manhã e se o dia fechado já foi
+        finalizado (evita re-buscar à toa)."""
+
+        return next(
+            (h for h in self.load(profile) if h.date == day),
+            None,
+        )
+
     def latest(self, profile: str) -> DailyHealth | None:
 
         snapshots = self.load(profile)
 
         return snapshots[-1] if snapshots else None
+
+    def latest_where(self, profile: str, predicate) -> DailyHealth | None:
+        """O snapshot mais recente que satisfaz `predicate` (ex.: já tem a
+        leitura da manhã, ou já tem VO₂máx). None se nenhum satisfaz. Serve pra
+        o painel não travar num dia corrente ainda OCO (só stress/SpO2) — mostra
+        o último dia com o dado que interessa. Ver HomeSummaryBuilder."""
+
+        return next(
+            (h for h in reversed(self.load(profile)) if predicate(h)),
+            None,
+        )
 
     def upsert(self, profile: str, health: DailyHealth) -> None:
         """Grava o snapshot do dia; se já existia um pra a mesma data,

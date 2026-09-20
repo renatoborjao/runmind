@@ -280,9 +280,16 @@ class HomeSummaryBuilder:
     @staticmethod
     def _body(profile: str) -> dict | None:
 
-        h = GarminHealthRepository().latest(profile)
+        # o herói do corpo mostra a LEITURA DA MANHÃ (prontidão/sono/HRV/bateria
+        # ao acordar). Pega o último dia COM essa leitura, não o último snapshot
+        # cru: o dia corrente nasce oco (o relógio sincroniza stress/SpO2 antes
+        # do sono da noite) e viraria um painel em branco — aí mostramos o último
+        # dia de verdade até a manhã de hoje cair. Ver DailyHealth.has_recovery.
+        h = GarminHealthRepository().latest_where(
+            profile, lambda d: d.has_recovery
+        )
 
-        if h is None or not h.has_data:
+        if h is None:
 
             return None
 
@@ -317,7 +324,11 @@ class HomeSummaryBuilder:
     @staticmethod
     def _fitness(profile: str) -> dict | None:
 
-        health = GarminHealthRepository().latest(profile)
+        # VO₂máx chega esporádico e o dia corrente pode não tê-lo ainda — pega o
+        # último dia QUE TEM, pra o número não sumir do herói num dia sem medição.
+        health = GarminHealthRepository().latest_where(
+            profile, lambda d: d.vo2max is not None
+        )
 
         vo2max = health.vo2max if health else None
 

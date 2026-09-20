@@ -26,6 +26,13 @@ class DailyHealth:
 
     date: str  # dia que as métricas descrevem (YYYY-MM-DD, local do atleta)
 
+    # meta (NÃO é métrica do corpo): o dia já FECHOU e foi ingerido completo?
+    # O poll grava o dia CORRENTE parcial (prontidão da manhã — sono/HRV/bateria
+    # ao acordar, que já fecham cedo) com is_final=False, e reescreve UMA vez, o
+    # dia inteiro, quando ele fecha (is_final=True). Serve só pra controlar a
+    # re-busca; has_data ignora este campo. Ver GarminHealthPoller.poll_one.
+    is_final: bool = False
+
     # -- sinais computados pela Garmin (relógios melhores; None nos básicos) --
     readiness_score: int | None = None
     readiness_level: str | None = None
@@ -93,6 +100,30 @@ class DailyHealth:
                 self.resting_hr,
                 self.vo2max,
                 self.readiness_score,
+            )
+        )
+
+    @property
+    def has_recovery(self) -> bool:
+        """True quando o dia já trouxe a LEITURA DA MANHÃ — sono, HRV, prontidão,
+        bateria ao acordar ou FC de repouso: o que o herói do corpo mostra.
+
+        Mais estrito que has_data DE PROPÓSITO: o relógio sincroniza o "agora"
+        (stress/SpO2/bateria corrente) antes do sono da noite, então um dia
+        recém-nascido pode ter has_data=True mas NENHUM marcador de recuperação.
+        Esse dia oco não deve virar a leitura do corpo (o painel seguiria em
+        branco); o poll continua puxando o dia até a manhã cair, e o painel
+        mostra o último dia com leitura DE VERDADE. Ver GarminHealthPoller e
+        HomeSummaryBuilder._body ([[project_analise_corpo_garmin]])."""
+
+        return any(
+            v is not None
+            for v in (
+                self.sleep_hours,
+                self.hrv_last_night,
+                self.readiness_score,
+                self.body_battery_at_wake,
+                self.resting_hr,
             )
         )
 
