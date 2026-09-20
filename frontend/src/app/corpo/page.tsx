@@ -64,6 +64,78 @@ function Dir({ direction, upIsGood }: { direction?: string; upIsGood: boolean })
   return <span className={`dir ${good ? "good" : "warn"}`}>{rising ? "↑" : "↓"}</span>;
 }
 
+// horas decimais → "6h 51" (compacto pra estágios do sono)
+function fmtHM(h: number | null | undefined): string {
+  if (h == null) return "—";
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return hh > 0 ? `${hh}h ${String(mm).padStart(2, "0")}` : `${mm}min`;
+}
+
+// faixas do score de sono do Garmin
+function sleepScore(score: number): { tone: string; label: string } {
+  if (score >= 90) return { tone: "good", label: "Excelente" };
+  if (score >= 80) return { tone: "good", label: "Bom" };
+  if (score >= 60) return { tone: "warn", label: "Razoável" };
+  return { tone: "bad", label: "Ruim" };
+}
+
+// estágios do sono: chave no payload, rótulo e cor da barra empilhada
+const SLEEP_STAGES: { key: "deep" | "light" | "rem" | "awake"; label: string; color: string }[] = [
+  { key: "deep", label: "Profundo", color: "var(--accent)" },
+  { key: "light", label: "Leve", color: "rgba(15,180,153,0.45)" },
+  { key: "rem", label: "REM", color: "#6C7BF0" },
+  { key: "awake", label: "Acordado", color: "var(--muted)" },
+];
+
+function SleepCard({ s }: { s: import("@/lib/api").SleepDetail }) {
+  const stages = SLEEP_STAGES.map((st) => ({ ...st, v: s[st.key] })).filter((st) => st.v != null) as {
+    key: string; label: string; color: string; v: number;
+  }[];
+  const total = stages.reduce((acc, st) => acc + st.v, 0);
+  const sc = s.score != null ? sleepScore(s.score) : null;
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Sono · última noite</span></div>
+      <div className="sleep-top">
+        <div className="sleep-total">{fmtSleep(s.hours)}<small>h</small></div>
+        {sc && (
+          <div className={`sleep-score ${sc.tone}`}>
+            <b>{s.score}</b><span>/100 · {sc.label}</span>
+          </div>
+        )}
+      </div>
+
+      {stages.length >= 2 && total > 0 && (
+        <>
+          <div className="sleep-bar">
+            {stages.map((st) => (
+              <span key={st.key} style={{ width: `${(st.v / total) * 100}%`, background: st.color }} />
+            ))}
+          </div>
+          <div className="sleep-legend">
+            {stages.map((st) => (
+              <div className="sleep-leg" key={st.key}>
+                <span className="dot" style={{ background: st.color }} />
+                <span className="lb">{st.label}</span>
+                <span className="hv">{fmtHM(st.v)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {(s.respiration != null || s.spo2 != null) && (
+        <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
+          {s.respiration != null && <>Respiração {Math.round(s.respiration)} rpm</>}
+          {s.respiration != null && s.spo2 != null && " · "}
+          {s.spo2 != null && <>SpO₂ {s.spo2}%</>}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function CorpoPage() {
   const router = useRouter();
   const [b, setB] = useState<BodyReading | null>(null);
@@ -134,6 +206,8 @@ export default function CorpoPage() {
                 )}
               </div>
             </section>
+
+            {b.sleep && b.sleep.hours != null && <SleepCard s={b.sleep} />}
 
             {b.trend && TREND_ROWS.some((row) => b.trend![row.key]) && (
               <section className="card">

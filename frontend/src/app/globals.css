@@ -400,6 +400,24 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .dir.good { color: var(--accent-ink); }
 .dir.warn { color: #E1911A; }
 
+/* sono — detalhe da última noite */
+.sleep-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.sleep-total { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 30px; line-height: 1; display: flex; align-items: baseline; gap: 4px; }
+.sleep-total small { font-size: 13px; color: var(--muted); font-family: var(--font-body); font-weight: 500; }
+.sleep-score { display: flex; align-items: baseline; gap: 5px; padding: 6px 11px; border-radius: 999px; background: var(--surface-2); font-family: var(--font-mono), monospace; }
+.sleep-score b { font-size: 16px; }
+.sleep-score span { font-size: 11px; color: var(--muted); font-family: var(--font-body); }
+.sleep-score.good { color: var(--accent-ink); }
+.sleep-score.warn { color: #E1911A; }
+.sleep-score.bad { color: var(--rose); }
+.sleep-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); }
+.sleep-bar span { display: block; height: 100%; }
+.sleep-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-top: 12px; }
+.sleep-leg { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.sleep-leg .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.sleep-leg .lb { color: var(--ink-soft); }
+.sleep-leg .hv { margin-left: auto; font-family: var(--font-mono), monospace; font-weight: 600; }
+
 /* perfil */
 .avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }
 .avatar-sm { width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 14px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); cursor: pointer; border: none; }

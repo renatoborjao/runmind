@@ -42,6 +42,33 @@ def _trend(profile: str) -> dict | None:
         "hrv": series("hrv_last_night"),
     }
 
+def _sleep(profile: str) -> dict | None:
+    """Detalhe da ÚLTIMA noite medida: total, score e estágios (profundo/leve/
+    REM/acordado) — o que o relógio gravou, sem cálculo nosso. None quando não
+    há nenhuma noite com sono na série. Estágios podem vir None em relógio
+    básico (o app esconde o que não veio)."""
+
+    h = GarminHealthRepository().latest_where(
+        profile, lambda d: d.sleep_hours is not None
+    )
+
+    if h is None:
+
+        return None
+
+    return {
+        "date": h.date,
+        "hours": h.sleep_hours,
+        "score": h.sleep_score,
+        "deep": h.deep_sleep_hours,
+        "light": h.light_sleep_hours,
+        "rem": h.rem_sleep_hours,
+        "awake": h.awake_hours,
+        "respiration": h.respiration_sleep_avg,
+        "spo2": h.spo2_sleep_avg,
+    }
+
+
 _STATE = {
     "STRAINED": ("Sobrecarga", "bad"),
     "RECOVERY_FLAG": ("Recuperação em alerta", "warn"),
@@ -90,9 +117,18 @@ async def get_body(profile: str = Depends(current_profile)):
 
         trend = None
 
+    try:
+
+        sleep = _sleep(profile)
+
+    except Exception:
+
+        sleep = None
+
     return {
         "has_data": True,
         "trend": trend,
+        "sleep": sleep,
         "body_state": reading.body_state,
         "state_label": label,
         "tone": tone,
