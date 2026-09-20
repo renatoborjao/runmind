@@ -199,36 +199,80 @@ export default function InicioPage() {
   const [bodyR, setBodyR] = useState<BodyReading | null>(null);
   const [prog, setProg] = useState<Progress | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [lastRun, setLastRun] = useState<FeedItem | null>(null);
   const [lastRoute, setLastRoute] = useState<{ lat: number; lon: number }[]>([]);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const who = await getMe();
-      if (!who) {
-        router.replace("/entrar");
-        return;
-      }
-      // cadastro ainda não terminou (nasceu no app e parou no meio): wizard
-      if (!who.onboarding_complete) {
-        router.replace("/onboarding");
-        return;
-      }
-      const [h, bd, pr] = await Promise.all([getHome(), getBody(), getProgress()]);
-      setHome(h);
-      setBodyR(bd);
-      setProg(pr);
-      setLoading(false);
-      // última corrida (card com traçado, estilo Strava) — best-effort, não bloqueia
-      const feed = await getFeed();
-      const last = feed?.[0] ?? null;
-      setLastRun(last);
-      if (last?.has_track) {
-        const t = await getTrack(last);
-        if (t?.points) setLastRoute(t.points);
+      try {
+        const who = await getMe();
+        if (!alive) return;
+        if (!who) {
+          router.replace("/entrar");
+          return;
+        }
+        // cadastro ainda não terminou (nasceu no app e parou no meio): wizard
+        if (!who.onboarding_complete) {
+          router.replace("/onboarding");
+          return;
+        }
+        const [h, bd, pr] = await Promise.all([getHome(), getBody(), getProgress()]);
+        if (!alive) return;
+        // sessão VÁLIDA (getMe passou) mas a home não veio: erro transitório do
+        // servidor (ex.: deploy reiniciando) — mostra "tentar de novo", NUNCA
+        // deixa preso no "Carregando…" pra sempre. [[feedback_conversa_viva]]
+        if (!h) {
+          setFailed(true);
+          setLoading(false);
+          return;
+        }
+        setHome(h);
+        setBodyR(bd);
+        setProg(pr);
+        setLoading(false);
+        // última corrida (card com traçado, estilo Strava) — best-effort, não bloqueia
+        const feed = await getFeed();
+        if (!alive) return;
+        const last = feed?.[0] ?? null;
+        setLastRun(last);
+        if (last?.has_track) {
+          const t = await getTrack(last);
+          if (alive && t?.points) setLastRoute(t.points);
+        }
+      } catch {
+        // rede caiu / resposta veio quebrada no meio: idem — oferece retry
+        if (alive) {
+          setFailed(true);
+          setLoading(false);
+        }
       }
     })();
-  }, [router]);
+    return () => {
+      alive = false;
+    };
+  }, [router, attempt]);
+
+  function retry() {
+    setFailed(false);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  }
+
+  if (failed) {
+    return (
+      <main className="stage">
+        <div className="phone center" style={{ justifyContent: "center", flex: 1, gap: 14 }}>
+          <p className="auth-sub" style={{ margin: 0, textAlign: "center" }}>
+            Não consegui carregar agora. Verifica a conexão e tenta de novo.
+          </p>
+          <button className="btn-primary" onClick={retry}>Tentar de novo</button>
+        </div>
+      </main>
+    );
+  }
 
   if (loading || !home) {
     return (

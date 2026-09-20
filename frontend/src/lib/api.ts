@@ -7,7 +7,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b13 · atividade rica";
+export const APP_BUILD = "b14 · corpo + carregamento resiliente";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
