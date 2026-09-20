@@ -209,6 +209,7 @@ class TrainingCompletedEvent:
 
         try:
 
+            from app.application.coach.analysis_cleaner import AnalysisCleaner
             from app.infrastructure.integrations.telegram.telegram_text import (
                 to_plain_text,
             )
@@ -236,7 +237,7 @@ class TrainingCompletedEvent:
                 activity_id=activity.id,
                 date=activity.start_date.date().isoformat(),
                 distance_km=(activity.distance or 0) / 1000,
-                analysis=to_plain_text(analysis),
+                analysis=to_plain_text(AnalysisCleaner.clean(analysis)),
                 workout_type=workout_type,
             )
 

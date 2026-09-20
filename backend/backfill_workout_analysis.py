@@ -28,6 +28,7 @@ import asyncio
 import re
 from datetime import timedelta
 
+from app.application.coach.analysis_cleaner import AnalysisCleaner
 from app.application.events.training_completed import TrainingCompletedEvent
 from app.application.coach.intelligence.race_debrief import RaceDebrief
 from app.application.orchestrators.training_pipeline import TrainingPipeline
@@ -48,32 +49,10 @@ from app.infrastructure.persistence.workout_analysis_repository import (
 
 _RUN_HINT = ("run", "corrida", "trail")
 
-# marcadores das CAUDAS de chat que vêm DEPOIS da análise no feedback enviado —
-# a pergunta de RPE e a nota de tênis. Cortamos a partir da 1ª que aparecer pra
-# guardar só a análise (o 💬/👟 não cabe numa tela read-only).
-_CAUDA_MARKERS = ("\n\n💬", "\n\n👟")
-
 
 def _is_run(sport: str) -> bool:
 
     return any(h in (sport or "").lower() for h in _RUN_HINT)
-
-
-def _strip_caudas(text: str) -> str:
-    """Remove as caudas de chat (RPE 💬 / tênis 👟) do fim do feedback, deixando
-    só a análise. Não toca no corpo (📅 Planejado, 🧩 blocos, 📊 Análise etc.)."""
-
-    cut = len(text)
-
-    for marker in _CAUDA_MARKERS:
-
-        i = text.find(marker)
-
-        if i != -1:
-
-            cut = min(cut, i)
-
-    return text[:cut].strip()
 
 
 def _planned_type(text: str) -> str | None:
@@ -137,7 +116,7 @@ def _feedback_core_from_outbox(profile: str, activity) -> str | None:
 
         if abs(executed_km - km) <= 0.2:
 
-            return _strip_caudas(text)
+            return AnalysisCleaner.clean(text)
 
     return None
 
