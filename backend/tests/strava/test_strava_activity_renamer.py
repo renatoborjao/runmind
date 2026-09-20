@@ -202,6 +202,22 @@ def test_plan_name_empty_without_type():
     assert StravaActivityRenamer._plan_name(_session("", km=6.0)) == ""
 
 
+def test_plan_name_drops_distance_when_athlete_fell_short():
+    """Correu 10,7 num Longão de 15 → nome SEM distância (não mente '15km')."""
+
+    assert StravaActivityRenamer._plan_name(
+        _session("Longão Aeróbico", km=15.0), executed_km=10.66
+    ) == "Ritmind · Longão Aeróbico"
+
+
+def test_plan_name_keeps_distance_when_completed():
+    """Cumpriu (>= 90% do planejado) → nome COM a distância planejada."""
+
+    assert StravaActivityRenamer._plan_name(
+        _session("Longão Aeróbico", km=15.0), executed_km=14.6
+    ) == "Ritmind · Longão Aeróbico 15.0km"
+
+
 # ---- detecção de nome genérico --------------------------------------------
 
 

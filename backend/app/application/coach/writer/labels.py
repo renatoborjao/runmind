@@ -53,10 +53,20 @@ def plan_workout_label(
     return workout_type_label(code)
 
 
-def plan_session_title(session) -> str:
+# fração da distância planejada a partir da qual consideramos que o atleta
+# "cumpriu" o treino (pra decidir se o nome no Strava leva a distância).
+DISTANCE_COMPLETED_RATIO = 0.9
+
+
+def plan_session_title(session, executed_km: float | None = None) -> str:
     """Título do treino como vai pro RELÓGIO (Garmin) e pro STRAVA — uma fonte
     só, sem drift. Ex.: 'Ritmind · Longão Aeróbico 13.0km' / 'Ritmind ·
-    Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava."""
+    Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava.
+
+    `executed_km` (só o Strava passa, PÓS-corrida): quando o atleta ficou aquém
+    da distância planejada, o nome sai SEM a distância (senão diria '15km' numa
+    corrida de 10 — conflitando com o que o Strava já mostra). Sem `executed_km`
+    (relógio, PRÉ-corrida) o alvo planejado é o certo e a distância entra."""
 
     label = plan_workout_label(
         getattr(session, "workout_type", "") or "",
@@ -65,7 +75,12 @@ def plan_session_title(session) -> str:
 
     km = getattr(session, "planned_distance_km", None)
 
-    if km:
+    completed = (
+        executed_km is None
+        or (km and executed_km >= km * DISTANCE_COMPLETED_RATIO)
+    )
+
+    if km and completed:
 
         return f"Ritmind · {label} {km:.1f}km"
 
