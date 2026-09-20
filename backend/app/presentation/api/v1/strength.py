@@ -1,6 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.application.strength.strength_library import library
+from app.application.strength.strength_routine_builder import (
+    StrengthRoutineBuilder,
+)
+from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/strength", tags=["Strength"])
 
@@ -12,3 +16,11 @@ async def strength_library():
     montar rotinas a partir dela."""
 
     return library()
+
+
+@router.get("/routine")
+async def strength_routine(profile: str = Depends(current_profile)):
+    """A rotina de força que o COACH montou pra ESTE atleta — 2x/semana nos
+    dias que não atrapalham a corrida, dose pelo nível, ciente do plano."""
+
+    return StrengthRoutineBuilder.build(profile)

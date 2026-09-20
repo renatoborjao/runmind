@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getStrengthLibrary, type StrengthExercise, type StrengthLibrary } from "@/lib/api";
+import { getStrengthLibrary, getStrengthRoutine, type StrengthExercise, type StrengthLibrary, type StrengthRoutine } from "@/lib/api";
 
 // Demonstração: alterna os 2 quadros (início/fim) do movimento = um "GIF"
 // simples. Se a imagem não carregar (CDN fora/off-line), mostra um selo neutro.
@@ -32,7 +32,7 @@ function ExerciseDemo({ images, alt }: { images: string[]; alt: string }) {
   );
 }
 
-function ExerciseCard({ ex }: { ex: StrengthExercise }) {
+function ExerciseCard({ ex, prescription }: { ex: StrengthExercise; prescription?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <section className="card ex-card">
@@ -43,7 +43,7 @@ function ExerciseCard({ ex }: { ex: StrengthExercise }) {
           <div className="ex-meta"><span>{ex.target}</span></div>
           <div className="ex-badges">
             <span className="ex-badge">{ex.equipment}</span>
-            <span className="ex-badge reps">{ex.reps}</span>
+            <span className="ex-badge reps">{prescription ?? ex.reps}</span>
           </div>
         </div>
         <svg className={`ex-chev${open ? " open" : ""}`} viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
@@ -64,6 +64,7 @@ function ExerciseCard({ ex }: { ex: StrengthExercise }) {
 export default function FortalecimentoPage() {
   const router = useRouter();
   const [lib, setLib] = useState<StrengthLibrary | null>(null);
+  const [routine, setRoutine] = useState<StrengthRoutine | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -72,10 +73,12 @@ export default function FortalecimentoPage() {
     let alive = true;
     (async () => {
       try {
-        const data = await getStrengthLibrary();
+        // rotina do coach é best-effort (não derruba a tela se faltar sessão)
+        const [data, rout] = await Promise.all([getStrengthLibrary(), getStrengthRoutine()]);
         if (!alive) return;
         if (!data) { setFailed(true); setLoading(false); return; }
         setLib(data);
+        setRoutine(rout);
         setLoading(false);
       } catch {
         if (alive) { setFailed(true); setLoading(false); }
@@ -116,8 +119,25 @@ export default function FortalecimentoPage() {
           <span style={{ width: 34 }} />
         </header>
 
+        {routine && routine.exercises.length > 0 && (
+          <div className="routine-block">
+            <div className="routine-head">
+              <span className="eyebrow">Sua rotina · o coach montou</span>
+              <div className="routine-days">
+                {routine.days_pt.map((d) => <span key={d} className="rday">{d}</span>)}
+                <span className="rfreq">{routine.frequency}x/semana</span>
+              </div>
+            </div>
+            <p className="routine-note">{routine.note}</p>
+            {routine.exercises.map((ex) => (
+              <ExerciseCard key={ex.id} ex={ex} prescription={ex.prescription} />
+            ))}
+          </div>
+        )}
+
         <div className="card intro-card">
-          <p style={{ margin: 0 }}>Força pra quem corre: <b>glúteo, core e panturrilha</b> — os elos que previnem lesão e melhoram sua economia de corrida. Dá pra fazer em casa, com peso do corpo ou faixa. Toque num exercício pra ver como fazer. 💪</p>
+          <div className="lib-t">Biblioteca completa</div>
+          <p style={{ margin: 0 }}>Todos os exercícios de força pra quem corre — <b>glúteo, core, pernas e panturrilha</b>. Peso do corpo ou faixa, dá pra fazer em casa. Toque pra ver como fazer. 💪</p>
         </div>
 
         {lib.categories.map((cat) => {
