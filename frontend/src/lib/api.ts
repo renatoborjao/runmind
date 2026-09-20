@@ -7,7 +7,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b16 · recupera de deploy";
+export const APP_BUILD = "b17 · sono em grafico";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -660,6 +660,16 @@ export interface BodyTrend {
   hrv: (number | null)[] | null;
 }
 
+export interface SleepNight {
+  date: string;
+  hours: number | null;
+  score: number | null;
+  deep: number | null;
+  light: number | null;
+  rem: number | null;
+  awake: number | null;
+}
+
 export interface SleepDetail {
   date: string;
   hours: number | null;
@@ -670,6 +680,7 @@ export interface SleepDetail {
   awake: number | null;
   respiration: number | null;
   spo2: number | null;
+  nights?: SleepNight[];
 }
 
 export interface BodyReading {

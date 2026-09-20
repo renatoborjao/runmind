@@ -417,6 +417,14 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .sleep-leg .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .sleep-leg .lb { color: var(--ink-soft); }
 .sleep-leg .hv { margin-left: auto; font-family: var(--font-mono), monospace; font-weight: 600; }
+.sleep-week { margin-top: 16px; }
+.sw-title { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.sw-bars { display: flex; align-items: flex-end; justify-content: space-between; gap: 5px; }
+.sw-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.sw-bar { width: 62%; max-width: 20px; border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; }
+.sw-bar span { display: block; width: 100%; }
+.sw-h { font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--ink-soft); }
+.sw-d { font-size: 10px; color: var(--muted); text-transform: uppercase; }
 
 /* perfil */
 .avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }

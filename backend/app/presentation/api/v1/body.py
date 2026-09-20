@@ -43,18 +43,34 @@ def _trend(profile: str) -> dict | None:
     }
 
 def _sleep(profile: str) -> dict | None:
-    """Detalhe da ÚLTIMA noite medida: total, score e estágios (profundo/leve/
-    REM/acordado) — o que o relógio gravou, sem cálculo nosso. None quando não
-    há nenhuma noite com sono na série. Estágios podem vir None em relógio
+    """Detalhe da ÚLTIMA noite medida + as últimas 7 noites (pro gráfico semanal
+    de barras por estágio, à la Garmin). Só dado cru do relógio, sem cálculo.
+    None quando não há nenhuma noite com sono. Estágios podem vir None em relógio
     básico (o app esconde o que não veio)."""
 
-    h = GarminHealthRepository().latest_where(
-        profile, lambda d: d.sleep_hours is not None
-    )
+    series = GarminHealthRepository().load(profile)
 
-    if h is None:
+    with_sleep = [h for h in series if h.sleep_hours is not None]
+
+    if not with_sleep:
 
         return None
+
+    h = with_sleep[-1]
+
+    # últimas 7 noites com sono, pro gráfico semanal (mais antiga → mais recente)
+    nights = [
+        {
+            "date": n.date,
+            "hours": n.sleep_hours,
+            "score": n.sleep_score,
+            "deep": n.deep_sleep_hours,
+            "light": n.light_sleep_hours,
+            "rem": n.rem_sleep_hours,
+            "awake": n.awake_hours,
+        }
+        for n in with_sleep[-7:]
+    ]
 
     return {
         "date": h.date,
@@ -66,6 +82,7 @@ def _sleep(profile: str) -> dict | None:
         "awake": h.awake_hours,
         "respiration": h.respiration_sleep_avg,
         "spo2": h.spo2_sleep_avg,
+        "nights": nights,
     }
 
 

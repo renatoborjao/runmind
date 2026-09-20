@@ -125,6 +125,39 @@ function SleepCard({ s }: { s: import("@/lib/api").SleepDetail }) {
         </>
       )}
 
+      {(() => {
+        const nights = (s.nights ?? []).filter((n) => n.hours != null);
+        if (nights.length < 2) return null;
+        const maxH = Math.max(...nights.map((n) => n.hours || 0), 1);
+        return (
+          <div className="sleep-week">
+            <div className="sw-title">Últimas noites</div>
+            <div className="sw-bars">
+              {nights.map((n) => {
+                // empilha do topo (acordado) pra base (profundo), como o Garmin
+                const segs = SLEEP_STAGES.map((st) => ({ c: st.color, v: n[st.key] ?? 0 }));
+                const hasStages = segs.some((g) => g.v > 0);
+                const colH = Math.round(((n.hours || 0) / maxH) * 76);
+                const wd = new Date(n.date + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "").slice(0, 3);
+                return (
+                  <div className="sw-col" key={n.date}>
+                    <div className="sw-bar" style={{ height: `${Math.max(6, colH)}px` }}>
+                      {hasStages
+                        ? [...segs].reverse().map((g, i) => (
+                            <span key={i} style={{ flex: g.v, background: g.c }} />
+                          ))
+                        : <span style={{ flex: 1, background: "rgba(15,180,153,0.45)" }} />}
+                    </div>
+                    <span className="sw-h">{fmtSleep(n.hours)}</span>
+                    <span className="sw-d">{wd}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {(s.respiration != null || s.spo2 != null) && (
         <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
           {s.respiration != null && <>Respiração {Math.round(s.respiration)} rpm</>}
