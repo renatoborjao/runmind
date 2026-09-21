@@ -2,10 +2,12 @@
 1x por dia por atleta. Camada 1: só junta o dado no disco, SEM IA e SEM
 custo — a análise vem depois.
 
-Gentileza com a API não-oficial (risco de rate-limit): puxa só o dia ANTERIOR
-(já fechado) e, se já tiver esse dia guardado, nem conecta no Garmin. Roda de
-hora em hora, mas o dedup por data faz virar UM pull/atleta/dia de verdade —
-e resiliente a máquina que dorme (pega assim que ela estiver ligada)."""
+Gentileza com a API não-oficial (risco de rate-limit): finaliza o dia FECHADO
+(ontem) UMA vez e insiste no de HOJE só enquanto a leitura da manhã (SONO) não
+caiu — o dedup por data/sono faz virar poucos pulls/atleta/dia de verdade. A
+leitura da manhã roda num tick FREQUENTE (a cada 15 min) pra o sono da noite
+aparecer logo que o relógio sincroniza; os scans caros (VO₂/body-context/prova)
+ficam no tick horário. Ver GarminHealthPoller.poll_one e weekly_plan_scheduler."""
 
 import time
 from datetime import timedelta
@@ -33,6 +35,13 @@ from app.infrastructure.persistence.runner_profile_repository import (
 _SEED_MAX_DAYS = 60
 _SEED_STOP_AFTER_EMPTY = 3
 _SEED_PACE_SECONDS = 1.2
+
+# leitura da manhã (hoje): até que HORA local ainda vale insistir no pull de
+# hoje esperando o SONO da noite cair. O Garmin costuma processar o sono 1-2h
+# depois de o atleta acordar; depois deste corte, quem ainda não registrou sono
+# provavelmente dormiu sem o relógio — para de bater na API (o dia é finalizado
+# amanhã, no passo (1)). Cobre quem acorda até ~meio-dia sem martelar a API.
+_MORNING_SLEEP_CUTOFF_HOUR = 14
 
 
 class GarminHealthPoller:
@@ -284,7 +293,7 @@ class GarminHealthPoller:
         return True
 
     @staticmethod
-    async def poll_all() -> None:
+    async def poll_all(recovery_only: bool = False) -> None:
 
         repo = GarminHealthRepository()
 
@@ -300,7 +309,9 @@ class GarminHealthPoller:
 
             try:
 
-                GarminHealthPoller.poll_one(profile, repo)
+                GarminHealthPoller.poll_one(
+                    profile, repo, recovery_only=recovery_only
+                )
 
             except Exception as e:
 
@@ -335,13 +346,21 @@ class GarminHealthPoller:
     def poll_one(
         profile: str,
         repo: GarminHealthRepository | None = None,
+        *,
+        recovery_only: bool = False,
     ) -> None:
+        """Puxa o retrato de saúde do atleta. `recovery_only=True` faz só a
+        LEITURA DA MANHÃ (finaliza ontem + prontidão de hoje) — barato, roda
+        num tick frequente; os scans caros (VO₂/body-context/previsão) ficam
+        de fora e são cobertos pelo tick horário (`recovery_only=False`)."""
 
         repo = repo or GarminHealthRepository()
 
         runner = RunnerProfileRepository().load(profile)
 
-        today = now_in(getattr(runner, "timezone", None)).date()
+        now_local = now_in(getattr(runner, "timezone", None))
+
+        today = now_local.date()
 
         yesterday = (today - timedelta(days=1)).isoformat()
 
@@ -365,17 +384,26 @@ class GarminHealthPoller:
 
                 repo.upsert(profile, merged)
 
-        # (2) PRONTIDÃO DO DIA (hoje): sono/HRV/bateria-ao-acordar já fecham de
-        # manhã — então a leitura do corpo sai SAME-DAY, sem esperar o dia virar.
-        # Puxa hoje enquanto ainda não capturou a LEITURA DA MANHÃ (has_recovery,
-        # não has_data): o relógio sincroniza stress/SpO2/bateria corrente ANTES
-        # do sono da noite, e parar nesse dado oco deixava o dia sem sono/HRV/
-        # prontidão pro resto do dia (herói do corpo em branco). Ao capturar a
-        # manhã, para (o resto do dia é finalizado amanhã em (1)). Roda a cada
-        # tick do poll, então atualiza sozinho conforme o relógio sincroniza.
+        # (2) LEITURA DA MANHÃ (hoje): o Garmin DATA o sono da noite pela manhã
+        # em que ela TERMINA (a noite de domingo→segunda é "sono de segunda"),
+        # e ele fica pronto na API POUCO DEPOIS de o atleta acordar — então a
+        # leitura do corpo sai SAME-DAY, sem esperar o dia virar.
+        #
+        # O sinal-âncora é o SONO. O relógio sincroniza stress/SpO2/bateria-
+        # corrente (e às vezes HRV) ANTES de o sono ser processado; parar no
+        # primeiro sinal (has_recovery) dava "manhã capturada" cedo demais e
+        # deixava o SONO cair pro dia seguinte — o atleta via a noite ANTERIOR
+        # (o "domingo na segunda"). Por isso insistimos enquanto o sono ainda
+        # não veio E ainda é de manhã: captura o sono no 1º tick após o relógio
+        # sincronizar e então para (gentil com a API). Passado o corte, aceita
+        # o que tem (o dia é finalizado completo amanhã, no passo (1)).
         t_existing = repo.get(profile, today_iso)
 
-        if t_existing is None or not t_existing.has_recovery:
+        morning_open = now_local.hour < _MORNING_SLEEP_CUTOFF_HOUR
+
+        if t_existing is None or (
+            t_existing.sleep_hours is None and morning_open
+        ):
 
             fresh = GarminHealthSource.fetch(profile, today_iso)
 
@@ -386,6 +414,14 @@ class GarminHealthPoller:
                 merged.is_final = False
 
                 repo.upsert(profile, merged)
+
+        # A leitura da manhã (passos 1 e 2) é barata — o gate por data/sono corta
+        # a maioria dos pulls — e roda num tick FREQUENTE pra aparecer logo que o
+        # relógio sincroniza. Os scans abaixo são CAROS (varrem vários dias na
+        # API) e não urgentes: rodam no tick horário. Ver weekly_plan_scheduler.
+        if recovery_only:
+
+            return
 
         # ESTADO: o VO₂máx chega esporádico/atrasado — varre os dias recentes e
         # preenche as lacunas (barato: pula dias que já têm o valor). Sem isto o

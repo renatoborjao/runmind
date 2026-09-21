@@ -124,6 +124,130 @@ def test_hoje_oco_so_com_stress_e_re_buscado_ate_a_manha_cair():
     assert hoje.is_final is False
 
 
+def test_hoje_com_hrv_e_bateria_mas_sem_sono_ainda_e_rebuscado():
+    """Regressão da raiz do 'domingo na segunda': o relógio sincroniza HRV +
+    bateria-ao-acordar ANTES de o Garmin processar o sono da noite. Esse dia já
+    satisfazia has_recovery (HRV/bateria), então o poll PARAVA e o sono só
+    entrava amanhã — o atleta via a noite ANTERIOR. Agora o âncora é o SONO:
+    enquanto sleep_hours é None e ainda é manhã, insiste em HOJE e captura o
+    sono no 1º tick após ele cair."""
+
+    records = {
+        "2026-07-20": DailyHealth(date="2026-07-20", sleep_score=70, is_final=True),
+        # hoje já tem a leitura instantânea (HRV/bateria) mas o SONO ainda não
+        "2026-07-21": DailyHealth(
+            date="2026-07-21", hrv_last_night=42, body_battery_at_wake=55
+        ),
+    }
+
+    repo = _repo_with(records)
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    # agora o sono da noite caiu na API
+    fetch = MagicMock(
+        side_effect=lambda p, d: DailyHealth(date=d, sleep_hours=7.5, sleep_score=68)
+    )
+
+    with ExitStack() as stack:
+
+        for _p in _poll_patches(fetch, profile_repo):
+
+            stack.enter_context(_p)
+
+        GarminHealthPoller.poll_one("renato2", repo)
+
+    fetched = [c.args[1] for c in fetch.call_args_list]
+
+    assert "2026-07-21" in fetched            # não parou no HRV/bateria
+
+    saved = {c.args[1].date: c.args[1] for c in repo.upsert.call_args_list}
+
+    hoje = saved["2026-07-21"]
+
+    assert hoje.sleep_hours == 7.5            # o sono de HOJE entrou same-day
+    assert hoje.hrv_last_night == 42          # e o que já havia não sumiu
+
+
+def test_hoje_sem_sono_nao_e_rebuscado_passado_o_corte_da_manha():
+    """Gentileza com a API: passada a janela da manhã (corte 14h local), quem
+    ainda não tem sono provavelmente dormiu sem o relógio — para de insistir em
+    HOJE (o dia é finalizado amanhã no passo (1)), em vez de bater na API a cada
+    tick o resto do dia."""
+
+    records = {
+        "2026-07-20": DailyHealth(date="2026-07-20", sleep_score=70, is_final=True),
+        # hoje nasceu oco (só stress) e o sono nunca veio
+        "2026-07-21": DailyHealth(date="2026-07-21", stress_avg=30),
+    }
+
+    repo = _repo_with(records)
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    fetch = MagicMock(
+        side_effect=lambda p, d: DailyHealth(date=d, sleep_hours=7.5)
+    )
+
+    with (
+        # 15h local: já passou do corte da manhã
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 15, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
+        patch.object(GarminHealthPoller, "sync_vo2max", return_value=0),
+        patch.object(GarminHealthPoller, "sync_body_context", return_value=0),
+        patch.object(GarminHealthPoller, "sync_race_predictions", return_value=False),
+    ):
+
+        GarminHealthPoller.poll_one("renato2", repo)
+
+    # não re-buscou HOJE (fora da janela); só ontem seria tocado, mas já é final
+    fetched = [c.args[1] for c in fetch.call_args_list]
+
+    assert "2026-07-21" not in fetched
+
+
+def test_recovery_only_pula_os_scans_caros():
+    """O tick frequente (recovery_only=True) faz só a leitura da manhã e NÃO
+    dispara as varreduras caras (VO₂/body-context/prova) — essas ficam no tick
+    horário."""
+
+    repo = _repo_with({})
+
+    profile_repo = MagicMock()
+
+    profile_repo.load.return_value = _runner()
+
+    fetch = MagicMock(
+        side_effect=lambda p, d: DailyHealth(date=d, sleep_hours=7.0)
+    )
+
+    with (
+        patch(f"{MODULE}.now_in", return_value=datetime(2026, 7, 21, 8, 0)),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.GarminHealthSource.fetch", fetch),
+        patch.object(GarminHealthPoller, "sync_vo2max") as vo2,
+        patch.object(GarminHealthPoller, "sync_body_context") as body_ctx,
+        patch.object(GarminHealthPoller, "sync_race_predictions") as race,
+    ):
+
+        GarminHealthPoller.poll_one("renato2", repo, recovery_only=True)
+
+        # ...mas nenhum scan caro foi chamado (asserção DENTRO do patch)
+        vo2.assert_not_called()
+        body_ctx.assert_not_called()
+        race.assert_not_called()
+
+    # a leitura da manhã rodou (finalizou ontem + semeou hoje)
+    saved = sorted(c.args[1].date for c in repo.upsert.call_args_list)
+
+    assert saved == ["2026-07-20", "2026-07-21"]
+
+
 def test_nao_rebusca_ontem_final_nem_hoje_ja_capturado():
     """Gentileza com a API: ontem já finalizado e hoje já com a manhã capturada
     → nenhuma chamada nova ao Garmin (na série)."""
@@ -421,7 +545,7 @@ def test_poll_all_gates_on_connected_and_analysis_enabled():
 
     seen = []
 
-    def fake_poll_one(profile, repo):
+    def fake_poll_one(profile, repo, recovery_only=False):
 
         seen.append(profile)
 
@@ -602,7 +726,7 @@ def test_sync_race_predictions_skips_without_garmin():
 
 def test_poll_all_isolates_failure_per_athlete():
 
-    def fake_poll_one(profile, repo):
+    def fake_poll_one(profile, repo, recovery_only=False):
 
         if profile == "quebra":
 
@@ -614,7 +738,7 @@ def test_poll_all_isolates_failure_per_athlete():
 
     done = []
 
-    def tracking(profile, repo):
+    def tracking(profile, repo, recovery_only=False):
 
         fake_poll_one(profile, repo)
 
