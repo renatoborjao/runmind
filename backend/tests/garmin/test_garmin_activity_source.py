@@ -571,3 +571,58 @@ def test_structure_builder_prefers_exact_garmin_interval():
     assert structure.interval is exact
     assert structure.interval.rep_count == 6
     assert structure.is_interval is True
+
+
+def test_recent_maps_distance_and_canonical_sport():
+    """recent(): histórico base do Garmin a partir da LISTA — distância REAL em
+    metros (summary_from_item zera pro contador de corpo) e sport canônico
+    (Run/Walk/Other) pro filtro corrida×não-corrida do chamador."""
+
+    from unittest.mock import MagicMock, patch
+
+    items = [
+        {
+            "activityId": 101, "activityName": "Corrida matinal",
+            "activityType": {"typeKey": "running"},
+            "startTimeLocal": "2026-09-20 07:00:00",
+            "distance": 8000.0, "movingDuration": 2400, "averageHR": 150,
+        },
+        {
+            "activityId": 102, "activityName": "Bike",
+            "activityType": {"typeKey": "cycling"},
+            "startTimeLocal": "2026-09-19 07:00:00",
+            "distance": 20000.0, "movingDuration": 3600,
+        },
+    ]
+
+    garmin = MagicMock()
+    garmin.get_activities.return_value = items
+
+    with patch(
+        "app.infrastructure.integrations.garmin.garmin_activity_source."
+        "GarminClient.connect",
+        return_value=garmin,
+    ):
+
+        runs = GarminActivitySource.recent("renato2", limit=30)
+
+    by_id = {a.id: a for a in runs}
+
+    assert by_id[101].distance == 8000.0        # metros, real (não zerado)
+    assert by_id[101].sport == "Run"            # canônico
+    assert by_id[102].sport == "Other"          # bike cai fora do FOOT_SPORTS
+
+
+def test_recent_is_best_effort_when_watch_offline():
+    """Relógio fora do ar (connect devolve None): lista vazia, nunca derruba o
+    carregamento do histórico."""
+
+    from unittest.mock import patch
+
+    with patch(
+        "app.infrastructure.integrations.garmin.garmin_activity_source."
+        "GarminClient.connect",
+        return_value=None,
+    ):
+
+        assert GarminActivitySource.recent("renato2") == []
