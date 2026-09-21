@@ -11,22 +11,28 @@ MODULE = "app.application.use_cases.load_training_history"
 
 def test_history_keeps_only_foot_sports():
 
+    # datas distintas pra o dedup (mesma data+distância+tempo = mesma corrida)
+    # não colapsar treinos diferentes do teste
+    from datetime import datetime
+
     activities = [
-        make_activity(id=1, sport="Run"),
-        make_activity(id=2, sport="Ride"),
-        make_activity(id=3, sport="Walk"),
-        make_activity(id=4, sport="Swim"),
-        make_activity(id=5, sport="WeightTraining"),
-        make_activity(id=6, sport="VirtualRun"),
+        make_activity(id=1, sport="Run", start_date=datetime(2026, 7, 1, 7)),
+        make_activity(id=2, sport="Ride", start_date=datetime(2026, 7, 2, 7)),
+        make_activity(id=3, sport="Walk", start_date=datetime(2026, 7, 3, 7)),
+        make_activity(id=4, sport="Swim", start_date=datetime(2026, 7, 4, 7)),
+        make_activity(id=5, sport="WeightTraining", start_date=datetime(2026, 7, 5, 7)),
+        make_activity(id=6, sport="VirtualRun", start_date=datetime(2026, 7, 6, 7)),
     ]
 
     with (
         patch(f"{MODULE}.StravaClient") as mock_client_cls,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
-        patch(f"{MODULE}.ActivityArchiveRepository"),
+        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive,
     ):
 
         mock_token_store.return_value.load.return_value = {"access_token": "x"}
+
+        mock_archive.return_value.load_activities.return_value = []
 
         mock_client = mock_client_cls.return_value
 
@@ -38,17 +44,23 @@ def test_history_keeps_only_foot_sports():
             LoadTrainingHistory.execute(profile="renato"),
         )
 
-    assert [activity.id for activity in history.activities] == [1, 3, 6]
+    assert sorted(a.id for a in history.activities) == [1, 3, 6]
 
 
-def test_profile_without_strava_tokens_gets_empty_history():
+def test_profile_without_strava_nor_garmin_gets_empty_history():
 
     with (
         patch(f"{MODULE}.StravaClient") as mock_client_cls,
         patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.GarminClient") as mock_garmin,
+        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive,
     ):
 
         mock_token_store.return_value.load.return_value = None
+
+        mock_garmin.is_connected.return_value = False
+
+        mock_archive.return_value.load_activities.return_value = []
 
         history = asyncio.run(
             LoadTrainingHistory.execute(profile="beatriz"),
@@ -57,6 +69,42 @@ def test_profile_without_strava_tokens_gets_empty_history():
     assert history.activities == []
 
     mock_client_cls.assert_not_called()
+
+
+def test_garmin_only_history_comes_from_watch_when_no_strava():
+    """Independência do Strava: sem token Strava mas com Garmin conectado, o
+    histórico base vem DIRETO do relógio (antes voltava VAZIO e o coach ficava
+    cego pra quem não tinha Strava)."""
+
+    garmin_runs = [
+        make_activity(id=1, sport="Run"),
+        make_activity(id=2, sport="Ride"),   # não-corrida: filtrada
+    ]
+
+    with (
+        patch(f"{MODULE}.StravaClient") as mock_client_cls,
+        patch(f"{MODULE}.TokenStore") as mock_token_store,
+        patch(f"{MODULE}.GarminClient") as mock_garmin,
+        patch(f"{MODULE}.GarminActivitySource") as mock_source,
+        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive,
+    ):
+
+        mock_token_store.return_value.load.return_value = None   # sem Strava
+
+        mock_garmin.is_connected.return_value = True
+
+        mock_source.recent.return_value = garmin_runs
+
+        mock_archive.return_value.load_activities.return_value = []
+
+        history = asyncio.run(
+            LoadTrainingHistory.execute(profile="carla"),
+        )
+
+    mock_client_cls.assert_not_called()          # Strava nunca tocado
+    mock_source.recent.assert_called_once()      # puxou do relógio
+
+    assert [a.id for a in history.activities] == [1]
 
 
 def test_direct_activity_bypasses_strava():
@@ -167,6 +215,8 @@ def test_fetched_activities_are_archived():
 
         mock_token_store.return_value.load.return_value = {"t": 1}
 
+        mock_archive_cls.return_value.load_activities.return_value = []
+
         mock_client = mock_client_cls.return_value
         mock_client.get_last_activities = AsyncMock(
             return_value=activities,
@@ -188,6 +238,8 @@ def test_archive_failure_does_not_break_history_load():
     ):
 
         mock_token_store.return_value.load.return_value = {"t": 1}
+
+        mock_archive_cls.return_value.load_activities.return_value = []
 
         mock_client = mock_client_cls.return_value
         mock_client.get_last_activities = AsyncMock(

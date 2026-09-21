@@ -297,6 +297,47 @@ class GarminActivitySource:
         )
 
     @staticmethod
+    def recent(profile: str, limit: int = 30) -> list[Activity]:
+        """Histórico recente de corridas do Garmin como `Activity`, a partir da
+        LISTA (get_activities) — SEM o deep-fetch pesado. Serve pra montar o
+        histórico BASE de quem não tem Strava (independência do Strava): o coach
+        enxerga o atleta direto do relógio.
+
+        Diferença pra summary_from_item (feito pro contador de corpo): traz a
+        DISTÂNCIA real (metros, como o Strava) e canoniza o `sport` pro
+        vocabulário FOOT_SPORTS, pra o filtro corrida×não-corrida do chamador
+        (is_foot_sport) funcionar igual ao Strava. Best-effort: relógio fora do
+        ar devolve lista vazia, nunca derruba o histórico."""
+
+        garmin = GarminClient.connect(profile)
+
+        if garmin is None:
+
+            return []
+
+        out: list[Activity] = []
+
+        for item in garmin.get_activities(0, limit) or []:
+
+            activity = GarminActivitySource.summary_from_item(item)
+
+            type_key = str(
+                (item.get("activityType") or {}).get("typeKey") or ""
+            )
+
+            # sport canônico (Run/Walk/Other) — summary_from_item guarda o cru
+            activity.sport = GarminActivitySource._sport(type_key)
+
+            # distância real em metros (summary_from_item zera pro corpo)
+            activity.distance = float(
+                _first(item, "distance", default=0.0) or 0.0
+            )
+
+            out.append(activity)
+
+        return out
+
+    @staticmethod
     def _to_activity(activity_id: int, s: dict, raw: dict) -> Activity:
 
         # get_activity devolve DTOs aninhados: os números vivem no summaryDTO,

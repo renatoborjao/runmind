@@ -3,6 +3,12 @@ from app.domain.entities.training_history import (
     TrainingHistory,
 )
 from app.domain.value_objects.sports import is_foot_sport
+from app.infrastructure.integrations.garmin.garmin_activity_source import (
+    GarminActivitySource,
+)
+from app.infrastructure.integrations.garmin.garmin_client import (
+    GarminClient,
+)
 from app.infrastructure.integrations.strava.client import (
     StravaClient,
 )
@@ -52,36 +58,65 @@ class LoadTrainingHistory:
                 ),
             )
 
-        # atleta sem Strava conectado: histórico vazio, sem erro —
-        # o MetricsResolver/assessment cuidam do plano inicial
-        if TokenStore(profile).load() is None:
+        # ---- CARGA BASE: histórico AGNÓSTICO DE FONTE ----
+        # base permanente (arquivo unificado Strava+Garmin, acumulado a cada
+        # passada) + o recém-buscado da fonte conectada. Assim o coach enxerga
+        # o atleta mesmo SEM Strava (independência do Strava). Ver
+        # [[project_independencia_strava]] e [[project_garmin_strava_dedup]].
+        archived = ActivityArchiveRepository().load_activities(profile)
 
-            return TrainingHistory(activities=[])
+        live: list[Activity] = []
 
-        client = StravaClient(
-            profile
-        )
+        # Strava conectado: ele já recebe o Garmin sincronizado, então uma
+        # fonte ao vivo basta (mantém o comportamento anterior, sem custo novo).
+        if TokenStore(profile).load() is not None:
 
-        activities = await client.get_last_activities(
-            limit
-        )
+            try:
+
+                live = await StravaClient(profile).get_last_activities(limit)
+
+            except Exception as e:
+
+                print(f"Strava: falha ao carregar histórico de '{profile}': {e}")
+
+        # Garmin-only: sem Strava, puxa o histórico DIRETO do relógio — antes
+        # isto voltava VAZIO e o coach ficava cego pra quem não tinha Strava.
+        elif GarminClient.is_connected(profile):
+
+            try:
+
+                live = GarminActivitySource.recent(profile, limit)
+
+            except Exception as e:
+
+                print(f"Garmin: falha ao carregar histórico de '{profile}': {e}")
 
         # só treinos a pé entram no histórico — bike/natação/musculação
         # poluiriam volume, consistência e comparações
-        activities = [
+        live = [
             activity
-            for activity in activities
+            for activity in live
             if is_foot_sport(activity.sport)
         ]
 
         LoadTrainingHistory._archive(
             profile,
-            activities,
+            live,
+        )
+
+        # une o recém-buscado com o arquivo permanente, colapsa a MESMA corrida
+        # vinda de fontes diferentes (dedup), newest-first, corta no limite
+        merged = LoadTrainingHistory._dedup(
+            sorted(
+                (a for a in live + archived if is_foot_sport(a.sport)),
+                key=lambda a: a.start_date,
+                reverse=True,
+            )
         )
 
         return TrainingHistory(
 
-            activities=activities
+            activities=merged[:limit]
 
         )
 
