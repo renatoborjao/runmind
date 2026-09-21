@@ -78,6 +78,7 @@ async def callback(
     background_tasks: BackgroundTasks,
     code: str,
     state: str = "",
+    scope: str = "",
 ):
 
     settings = get_settings()
@@ -120,6 +121,12 @@ async def callback(
             "access_token": data["access_token"],
             "refresh_token": data["refresh_token"],
             "expires_at": data["expires_at"],
+            # o Strava manda no redirect o que o atleta REALMENTE concedeu
+            # (ele pode desmarcar activity:write na tela). Guardar aqui deixa
+            # o rename saber ANTES de tentar quem tem escrita — sem depender do
+            # 401. Refresh preserva este valor (não vem no refresh). Ver
+            # StravaClient.can_write e /debug/strava-rename.
+            "scope": scope,
         }
     )
 
