@@ -86,6 +86,22 @@ async def _garmin_health_tick() -> None:
         print(f"Garmin health poll falhou: {e}")
 
 
+async def _garmin_recovery_tick() -> None:
+    """Só a LEITURA DA MANHÃ (sono/HRV/bateria-ao-acordar): barata (o gate por
+    data/sono corta a maioria dos pulls) e frequente, pra o sono da noite
+    aparecer no app logo depois que o relógio sincroniza — sem esperar o tick
+    horário. Os scans caros ficam no _garmin_health_tick."""
+
+    try:
+
+        await GarminHealthPoller.poll_all(recovery_only=True)
+
+    except Exception as e:
+
+        # Garmin fora do ar / token expirado — só loga, tenta em 15 min
+        print(f"Garmin recovery poll falhou: {e}")
+
+
 async def _strava_catchup_tick() -> None:
 
     try:
@@ -299,6 +315,18 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=7,
         misfire_grace_time=_INTERVAL_GRACE,
         id="garmin_health_poll",
+    )
+
+    # LEITURA DA MANHÃ a cada 15 min: o sono da noite aparece no app pouco
+    # depois de o relógio sincronizar (não fica preso ao tick horário). Barato
+    # — o gate por data/sono corta o pull de quem já fechou a manhã; só puxa
+    # quem ainda espera o sono de hoje, e para assim que ele cai.
+    _scheduler.add_job(
+        _garmin_recovery_tick,
+        trigger="interval",
+        minutes=15,
+        misfire_grace_time=_INTERVAL_GRACE,
+        id="garmin_recovery_poll",
     )
 
     # Rede de segurança do webhook Strava (atleta só-Strava): roda LOGO no
