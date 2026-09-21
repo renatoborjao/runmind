@@ -36,6 +36,24 @@ class StravaClient:
             profile
         )
 
+    @staticmethod
+    def can_write(profile: str) -> bool | None:
+        """Tem activity:write (renomear treino)? True/False, ou None se o escopo
+        é DESCONHECIDO — o atleta conectou antes de passarmos a gravar o scope,
+        e só uma reconexão revela. Lê o scope persistido pelo callback."""
+
+        tokens = TokenStore(profile).load() or {}
+
+        scope = tokens.get("scope")
+
+        # None (nunca gravado) ou "" (callback sem o param) = desconhecido: o
+        # atleta conectou antes de gravarmos o scope; só reconectar revela.
+        if not scope:
+
+            return None
+
+        return "activity:write" in scope
+
     async def _get_access_token(self) -> str:
 
         tokens = self.token_store.load()
@@ -92,6 +110,10 @@ class StravaClient:
                 "refresh_token": data["refresh_token"],
 
                 "expires_at": data["expires_at"],
+
+                # o refresh NÃO retorna o escopo — preserva o que o callback
+                # gravou, senão a 1ª renovação apagaria o scope conhecido
+                "scope": tokens.get("scope"),
 
             }
 

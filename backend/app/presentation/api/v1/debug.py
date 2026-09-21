@@ -49,6 +49,41 @@ router = APIRouter(
 )
 
 
+@router.get("/strava-rename")
+async def strava_rename_status():
+    """Quem está apto a ter o treino renomeado no Strava, e por quê não.
+    `gate` = flag/allowlist liga pra ele; `write_scope` = concedeu
+    activity:write (None = desconhecido, conectou antes de gravarmos o scope →
+    precisa reconectar pra revelar). 'não vai o nome' = gate False OU
+    write_scope != True."""
+
+    from app.core.config import get_settings
+    from app.infrastructure.integrations.strava.client import StravaClient
+    from app.infrastructure.persistence.runner_profile_repository import (
+        RunnerProfileRepository,
+    )
+
+    settings = get_settings()
+
+    out = []
+
+    for profile in RunnerProfileRepository().list_all():
+
+        write = StravaClient.can_write(profile)
+
+        out.append(
+            {
+                "profile": profile,
+                "gate": settings.strava_rename_active_for(profile),
+                "write_scope": write,
+                "renomeia": settings.strava_rename_active_for(profile)
+                and write is True,
+            }
+        )
+
+    return {"atletas": out}
+
+
 @router.get("/activities")
 async def enriched_activities():
 
