@@ -234,17 +234,17 @@ function drawStatCols(
 function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const cx = W / 2;
   const cells = shareCells(d.it).slice(0, 3);
-  let y = 356;
+  let y = 360;
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     for (const [lab, val] of cells) {
-      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 44px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 108px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 104);
-      y += 192;
+      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 42px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 98);
+      y += 182;
     }
     ctx.textAlign = "left";
   });
-  if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, cx - 150, y - 6, 300, 220, "#1FD9B8", 9);
+  if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, cx - 150, y - 6, 300, 220, "#1FD9B8", 8);
   withShadow(ctx, () => brandCentered(ctx, cx, y + 296, 42));
 }
 
@@ -258,22 +258,10 @@ function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
 
 // CANTINHO — marca + stats no canto inferior esquerdo (template 3).
 function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  const x = 64;
-  const cells = shareCells(d.it).slice(0, 3);
-  const labSize = 40, valSize = 92, block = 40 + 12 + 92 + 30;  // label+gap+valor+respiro
-  const totalH = cells.length * block;
-  withShadow(ctx, () => markAt(ctx, x, H - 110 - totalH, 48));
-  let y = H - 110 - totalH + 56 + labSize;  // baseline do 1º rótulo (abaixo da marca)
-  withShadow(ctx, () => {
-    ctx.textAlign = "left";
-    for (const [lab, val] of cells) {
-      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 ${labSize}px ${CANVAS_FONT}`;
-      ctx.fillText(lab, x, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
-      ctx.fillText(val, x, y + 12 + valSize);
-      y += block;
-    }
-  });
+  withShadow(ctx, () => markAt(ctx, 64, H - 230, 44));
+  // layout original (horizontal); só o TÍTULO (rótulo) aumentado — era o que
+  // ficava pequeno. Valor mantido no tamanho de antes.
+  drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 36);
 }
 
 // COM MAPA — card completo (não transparente): mapa/foto de fundo + stats.
