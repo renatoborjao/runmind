@@ -408,11 +408,19 @@ EXERCISES += [
 
 
 def library() -> dict:
-    """Biblioteca completa pro app: exercícios agrupados por categoria + crédito.
-    Conteúdo estático curado (sem PII), igual pra todo atleta."""
+    """Biblioteca do app: exercícios agrupados por categoria + crédito. Conteúdo
+    estático curado (sem PII), igual pra todo atleta.
+
+    REGRA (Renato): num app que ENSINA execução, só entra exercício COM
+    demonstração. Então servimos apenas os que têm imagem — os que estão sem
+    demo (fisio moderno ausente do acervo aberto) ficam definidos no código,
+    prontos, mas OCULTOS até ganharem mídia real (vídeo). Nada de card capenga.
+    Ver [[project_fortalecimento]], [[feedback_nao_tapar_sol_com_peneira]]."""
+
+    exercises = [e for e in EXERCISES if e.get("images")]
 
     return {
         "categories": CATEGORIES,
-        "exercises": EXERCISES,
+        "exercises": exercises,
         "credit": CREDIT,
     }
