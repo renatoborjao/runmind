@@ -492,6 +492,7 @@ export interface FeedItem {
   has_track: boolean;
   track_source: "app" | "arch" | null;
   track_id: string | null;
+  route_preview?: [number, number][] | null;
 }
 
 export async function getFeed(): Promise<FeedItem[] | null> {

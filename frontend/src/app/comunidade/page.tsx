@@ -8,6 +8,7 @@ import {
   rejectFollow, toggleKudos, unfollowAthlete,
   type AthleteCard, type Relationship, type SocialActivity,
 } from "@/lib/api";
+import { RouteThumb } from "../activity-detail";
 
 function Avatar({ name, src, size = 40 }: { name: string; src?: string | null; size?: number }) {
   const initials = (name || "?").trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
@@ -59,6 +60,13 @@ export default function ComunidadePage() {
       ? { ...x, kudos_by_me: liked, kudos: x.kudos + (liked ? 1 : -1) } : x) ?? prev);
   }
 
+  // abre o detalhe da atividade do amigo (mapa/splits, sem análise). Passa o
+  // item pelo sessionStorage (canal confiável no export estático do Next).
+  function openActivity(a: SocialActivity) {
+    try { sessionStorage.setItem("rm_friend_activity", JSON.stringify(a)); } catch { /* ok */ }
+    router.push(`/atleta/atividade?owner=${a.owner}&key=${encodeURIComponent(a.key)}`);
+  }
+
   async function onFollow(c: AthleteCard) {
     if (c.relationship === "following" || c.relationship === "requested") {
       await unfollowAthlete(c.id);
@@ -100,14 +108,19 @@ export default function ComunidadePage() {
                   <Avatar name={a.owner_name || a.owner} src={a.owner_avatar} />
                   <div><div className="sa-name">{a.owner_name || a.owner}</div><div className="sa-when">{fmtWhen(a.datetime ?? a.date_iso)}</div></div>
                 </div>
-                <div className="sa-title">{a.name}</div>
-                <div className="sa-stats">
-                  <div><b>{a.distance_km.toFixed(2).replace(".", ",")}</b><span>km</span></div>
-                  <div><b>{a.pace ?? "—"}</b><span>/km</span></div>
-                  <div><b>{a.duration_min}</b><span>min</span></div>
-                  {a.avg_hr != null && <div><b>{a.avg_hr}</b><span>bpm</span></div>}
+                <div className="sa-body tap" onClick={() => openActivity(a)}>
+                  <div className="sa-title">{a.name}</div>
+                  <div className="sa-row">
+                    <div className="sa-stats">
+                      <div><b>{a.distance_km.toFixed(2).replace(".", ",")}</b><span>km</span></div>
+                      <div><b>{a.pace ?? "—"}</b><span>/km</span></div>
+                      <div><b>{a.duration_min}</b><span>min</span></div>
+                      {a.avg_hr != null && <div><b>{a.avg_hr}</b><span>bpm</span></div>}
+                    </div>
+                    {a.route_preview && <RouteThumb route={a.route_preview} className="sa-thumb" />}
+                  </div>
                 </div>
-                <div className="sa-foot"><KudosBtn a={a} onToggle={() => onKudos(a)} /></div>
+                <div className="sa-foot"><KudosBtn a={a} onToggle={() => onKudos(a)} /><span className="sa-open" onClick={() => openActivity(a)}>Ver treino ›</span></div>
               </section>
             ))
           ) : (

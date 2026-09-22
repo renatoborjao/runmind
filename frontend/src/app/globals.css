@@ -755,9 +755,16 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .sa-stats > div { display: flex; flex-direction: column; }
 .sa-stats b { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 18px; letter-spacing: -.02em; }
 .sa-stats span { font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.sa-foot { display: flex; justify-content: flex-start; border-top: 1px solid var(--line); padding-top: 10px; }
+.sa-body { display: flex; flex-direction: column; gap: 10px; cursor: pointer; }
+.sa-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sa-thumb { flex: 0 0 auto; width: 96px; height: 58px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); padding: 4px; }
+.rr-thumb { flex: 0 0 auto; width: 80px; height: 48px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); padding: 3px; }
+.sa-foot { display: flex; align-items: center; justify-content: flex-start; border-top: 1px solid var(--line); padding-top: 10px; }
+.sa-open { margin-left: auto; font-family: var(--font-mono), monospace; font-size: 11.5px; font-weight: 700; color: var(--accent-ink); cursor: pointer; }
 .kudos { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13px; padding: 7px 14px; border-radius: 999px; cursor: pointer; }
 .kudos.on { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-wash); }
+.icon-btn.kudos { border: none; background: none; padding: 6px; }
+.icon-btn.kudos.on { color: var(--accent-ink); }
 
 .ath-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .ath-row:last-child { border-bottom: none; }
