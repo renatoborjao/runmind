@@ -462,6 +462,16 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .ex-cues-t { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 .ex-cues { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .ex-cues li { font-size: 13.5px; line-height: 1.45; }
+.ex-breath { margin: 12px 0 0; font-size: 12.5px; color: var(--muted); }
+.ex-tip { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: var(--surface-2); }
+.ex-tip b { font-size: 11px; font-weight: 700; }
+.ex-tip span { font-size: 13px; line-height: 1.4; color: var(--ink-soft); }
+.ex-tip.mistake { background: color-mix(in srgb, #E24666 10%, var(--surface)); }
+.ex-tip.mistake b { color: #c23a56; }
+.ex-tip.feel b { color: var(--accent-ink); }
+.ex-levels { display: flex; gap: 8px; margin-top: 10px; }
+.ex-levels .lvl { flex: 1; font-size: 12.5px; line-height: 1.4; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.ex-levels .lvl-t { display: block; font-family: var(--font-mono), monospace; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
 
 /* perfil */
 .avatar-lg { width: 64px; height: 64px; border-radius: 20px; flex: none; display: grid; place-items: center; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 24px; color: #04231d; background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6C4BF0)); }
