@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
+from app.infrastructure.persistence.activity_comment_repository import (
+    ActivityCommentRepository,
+)
 from app.infrastructure.persistence.activity_meta_repository import (
     ActivityMetaRepository,
     valid_key,
@@ -263,8 +266,10 @@ def build_feed(profile: str) -> list[dict]:
         )
 
     # adornos do atleta: título custom (sobrepõe o nome) + foto (booleano; os
-    # bytes só saem sob demanda no detalhe). Uma leitura por atleta.
+    # bytes só saem sob demanda no detalhe) + contador de comentários. Uma
+    # leitura de cada por atleta.
     meta = ActivityMetaRepository().load(profile)
+    comment_counts = ActivityCommentRepository().counts(profile)
 
     for it in items:
 
@@ -276,6 +281,7 @@ def build_feed(profile: str) -> list[dict]:
             it["custom_title"] = True
 
         it["has_photo"] = bool(entry.get("has_photo"))
+        it["comment_count"] = comment_counts.get(it["key"], 0)
 
     items.sort(key=lambda x: x.get("datetime") or "", reverse=True)
 
@@ -436,3 +442,107 @@ async def get_activity_photo(
         raise HTTPException(status_code=403, detail="Perfil privado.")
 
     return {"photo": ActivityMetaRepository().photo_data_url(target, key)}
+
+
+# ---------------------------------------------------------------- comentários
+
+def _first_name(profile: str) -> str:
+
+    from app.infrastructure.persistence.runner_profile_repository import (
+        RunnerProfileRepository,
+    )
+
+    try:
+
+        return (RunnerProfileRepository().load(profile).name or profile).split(" ")[0]
+
+    except Exception:
+
+        return profile
+
+
+class CommentIn(BaseModel):
+    key: str
+    text: str
+    owner: str | None = None
+
+
+@router.get("/comments")
+async def list_comments(key: str, owner: str | None = None, me: str = Depends(current_profile)):
+    """Comentários de uma atividade (guardados sob o DONO). Trava de privacidade
+    do social. Sem `owner` = a minha atividade."""
+
+    if not valid_key(key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    target = owner or me
+
+    if not _can_view(me, target):
+
+        raise HTTPException(status_code=403, detail="Perfil privado.")
+
+    return {"comments": ActivityCommentRepository().list(target, key), "me": me}
+
+
+@router.post("/comments")
+async def add_comment(body: CommentIn, me: str = Depends(current_profile)):
+    """Comenta numa atividade (minha ou de quem eu posso ver). Avisa o dono
+    quando não sou eu (central + push)."""
+
+    if not valid_key(body.key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    text = (body.text or "").strip()
+
+    if not text:
+
+        raise HTTPException(status_code=400, detail="comentário vazio")
+
+    target = body.owner or me
+
+    if not _can_view(me, target):
+
+        raise HTTPException(status_code=403, detail="Perfil privado.")
+
+    comment = ActivityCommentRepository().add(target, body.key, me, _first_name(me), text)
+
+    if target != me:
+
+        try:
+
+            from app.application.notifications.app_inbox import AppInbox
+            from app.infrastructure.persistence.runner_profile_repository import (
+                RunnerProfileRepository,
+            )
+
+            runner = RunnerProfileRepository().load(target)
+            await AppInbox.deliver(
+                runner,
+                f"{_first_name(me)} comentou no seu treino: “{text[:80]}”",
+                kind="social_comment",
+            )
+
+        except Exception as e:
+
+            print(f"[feed] notif de comentário falhou p/ '{target}': {e}")
+
+    return {"comment": comment}
+
+
+@router.delete("/comments")
+async def delete_comment(key: str, id: str, owner: str | None = None, me: str = Depends(current_profile)):
+    """Apaga um comentário — o AUTOR dele ou o DONO da atividade."""
+
+    if not valid_key(key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    ok = ActivityCommentRepository().delete(owner or me, key, id, me)
+
+    if not ok:
+
+        raise HTTPException(status_code=403, detail="Não dá pra apagar esse comentário.")
+
+    return {"ok": True}

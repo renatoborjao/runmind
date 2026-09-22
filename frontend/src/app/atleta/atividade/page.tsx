@@ -11,7 +11,7 @@ import {
   getActivityPhoto, getAthleteActivities, getTrack, toggleKudos,
   type SocialActivity, type TrackData,
 } from "@/lib/api";
-import { ActivityDetailBody, fmtDate } from "../../activity-detail";
+import { ActivityDetailBody, CommentsSection, fmtDate } from "../../activity-detail";
 
 function AtividadeAmigoInner() {
   const router = useRouter();
@@ -111,6 +111,8 @@ function AtividadeAmigoInner() {
         )}
 
         <ActivityDetailBody item={item} track={track} loadingTrack={loadingTrack} photoUrl={photoUrl} />
+
+        <CommentsSection activityKey={item.key} owner={item.owner} />
       </div>
     </main>
   );

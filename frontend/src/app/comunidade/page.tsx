@@ -120,7 +120,7 @@ export default function ComunidadePage() {
                     {a.route_preview && <RouteThumb route={a.route_preview} className="sa-thumb" />}
                   </div>
                 </div>
-                <div className="sa-foot"><KudosBtn a={a} onToggle={() => onKudos(a)} /><span className="sa-open" onClick={() => openActivity(a)}>Ver treino ›</span></div>
+                <div className="sa-foot"><KudosBtn a={a} onToggle={() => onKudos(a)} />{!!a.comment_count && <span className="sa-count" onClick={() => openActivity(a)}>💬 {a.comment_count}</span>}<span className="sa-open" onClick={() => openActivity(a)}>Ver treino ›</span></div>
               </section>
             ))
           ) : (

@@ -495,6 +495,33 @@ export interface FeedItem {
   route_preview?: [number, number][] | null;
   custom_title?: boolean;
   has_photo?: boolean;
+  comment_count?: number;
+}
+
+export interface ActivityComment {
+  id: string;
+  author: string;
+  author_name: string;
+  text: string;
+  at: string;
+}
+
+/** Comentários de uma atividade + o meu id (pra saber o que posso apagar). */
+export async function getComments(key: string, owner?: string): Promise<{ comments: ActivityComment[]; me: string } | null> {
+  const q = owner ? `?owner=${owner}&key=${encodeURIComponent(key)}` : `?key=${encodeURIComponent(key)}`;
+  const r = await apiFetch(`/feed/comments${q}`);
+  return r.ok ? r.json() : null;
+}
+
+export async function addComment(key: string, text: string, owner?: string): Promise<ActivityComment | null> {
+  const r = await apiFetch("/feed/comments", { method: "POST", body: JSON.stringify({ key, text, owner }) });
+  return r.ok ? (await r.json()).comment : null;
+}
+
+export async function deleteComment(key: string, id: string, owner?: string): Promise<boolean> {
+  const q = owner ? `?owner=${owner}&key=${encodeURIComponent(key)}&id=${id}` : `?key=${encodeURIComponent(key)}&id=${id}`;
+  const r = await apiFetch(`/feed/comments${q}`, { method: "DELETE" });
+  return r.ok;
 }
 
 /** Batiza uma atividade minha (título vazio remove o custom). */
