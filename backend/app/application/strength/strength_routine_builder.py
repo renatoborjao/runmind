@@ -186,6 +186,14 @@ class StrengthRoutineBuilder:
                     "images": base["images"],
                     "cues": base["cues"],
                     "why": base["why"],
+                    # enriquecimento (erro comum/onde sentir/níveis/respiração)
+                    # também na carta da rotina — mesmo card do app
+                    "common_mistake": base.get("common_mistake"),
+                    "feel_where": base.get("feel_where"),
+                    "regression": base.get("regression"),
+                    "progression": base.get("progression"),
+                    "breathing": base.get("breathing"),
+                    "execution": base.get("execution"),
                     "sets": sets,
                     "reps": reps,
                     "prescription": f"{sets} x {reps}",

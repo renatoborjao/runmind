@@ -774,6 +774,14 @@ export async function getBody(): Promise<BodyReading | null> {
 
 // ---- Fortalecimento (biblioteca de exercícios pra quem corre) ----
 
+export interface ExerciseExecution {
+  sets: number;
+  reps: number | null;
+  hold_seconds: number | null;
+  per_side: boolean;
+  rest_seconds: number;
+}
+
 export interface StrengthExercise {
   id: string;
   name: string;
@@ -784,6 +792,12 @@ export interface StrengthExercise {
   cues: string[];
   reps: string;
   images: string[];
+  common_mistake?: string | null;
+  feel_where?: string | null;
+  regression?: string | null;
+  progression?: string | null;
+  breathing?: string | null;
+  execution?: ExerciseExecution | null;
 }
 
 export interface StrengthLibrary {

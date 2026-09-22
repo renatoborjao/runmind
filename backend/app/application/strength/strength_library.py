@@ -200,6 +200,213 @@ EXERCISES = [
 ]
 
 
+# Enriquecimento dos 10 acima (erro comum / onde sentir / mais fácil-difícil /
+# respiração + prescrição ESTRUTURADA). `execution` alimenta a execução guiada
+# (contar série/rep/tempo, slice 3). Conteúdo curado no tom do coach.
+_ENRICH = {
+    "single_leg_glute_bridge": {
+        "common_mistake": "Deixar o quadril despencar do lado sem apoio.",
+        "feel_where": "Sinta o glúteo e a parte de trás da coxa empurrando o chão.",
+        "regression": "Faça a ponte tradicional com os dois pés apoiados.",
+        "progression": "Apoie o pé sobre um banco ou adicione peso no quadril.",
+        "breathing": "Solte o ar ao subir e puxe ao descer.",
+        "execution": {"sets": 3, "reps": 10, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+    "glute_bridge": {
+        "common_mistake": "Arquear a lombar no topo em vez de usar o glúteo.",
+        "feel_where": "Sinta a contração forte no glúteo no topo do movimento.",
+        "regression": "Reduza a amplitude mantendo as costas bem apoiadas.",
+        "progression": "Faça a subida rápida e segure 3 segundos no topo.",
+        "breathing": "Expire na subida e inspire no retorno.",
+        "execution": {"sets": 3, "reps": 12, "hold_seconds": None, "per_side": False, "rest_seconds": 45},
+    },
+    "hip_abduction_band": {
+        "common_mistake": "Girar o pé para fora em vez de manter a ponta pra frente.",
+        "feel_where": "Sinta queimar a lateral do quadril (glúteo médio).",
+        "regression": "Faça o movimento deitado sem o elástico.",
+        "progression": "Aumente a resistência da faixa elástica.",
+        "breathing": "Solte o ar ao afastar a perna e puxe ao voltar.",
+        "execution": {"sets": 3, "reps": 12, "hold_seconds": None, "per_side": True, "rest_seconds": 30},
+    },
+    "plank": {
+        "common_mistake": "Deixar o quadril ceder pro chão ou subir demais.",
+        "feel_where": "Sinta o abdômen firme e todo o tronco trabalhado.",
+        "regression": "Apoie os joelhos no chão.",
+        "progression": "Tire um pé do chão alternando os lados.",
+        "breathing": "Respire de forma curta e firme sem soltar o abdômen.",
+        "execution": {"sets": 3, "reps": None, "hold_seconds": 45, "per_side": False, "rest_seconds": 45},
+    },
+    "side_plank": {
+        "common_mistake": "Deixar o quadril cair em direção ao chão.",
+        "feel_where": "Sinta a lateral do abdômen e o quadril segurando o corpo.",
+        "regression": "Apoie os joelhos dobrados no chão.",
+        "progression": "Eleve a perna de cima durante a sustentação.",
+        "breathing": "Mantenha a respiração contínua e controlada.",
+        "execution": {"sets": 3, "reps": None, "hold_seconds": 30, "per_side": True, "rest_seconds": 45},
+    },
+    "superman": {
+        "common_mistake": "Hiperestender o pescoço olhando para a frente.",
+        "feel_where": "Sinta a musculatura das costas e dos glúteos acionada.",
+        "regression": "Eleve apenas os braços ou apenas as pernas de cada vez.",
+        "progression": "Segure 3 segundos no topo a cada repetição.",
+        "breathing": "Solte o ar ao subir e puxe ao descer.",
+        "execution": {"sets": 3, "reps": 12, "hold_seconds": None, "per_side": False, "rest_seconds": 45},
+    },
+    "walking_lunge": {
+        "common_mistake": "Deixar o joelho da frente passar muito da ponta do pé.",
+        "feel_where": "Sinta a coxa da frente e o glúteo empurrarem você.",
+        "regression": "Faça o afundo estático sem caminhar.",
+        "progression": "Segure halteres ou kettlebells ao caminhar.",
+        "breathing": "Inspire ao dar o passo e descer; expire ao subir.",
+        "execution": {"sets": 3, "reps": 10, "hold_seconds": None, "per_side": True, "rest_seconds": 60},
+    },
+    "split_squat": {
+        "common_mistake": "Projetar o tronco pra frente sem dobrar o joelho de trás.",
+        "feel_where": "Sinta o trabalho forte na coxa e glúteo da perna da frente.",
+        "regression": "Apoie a mão em uma parede para dar equilíbrio.",
+        "progression": "Eleve o pé de trás em um banco (agachamento búlgaro).",
+        "breathing": "Desça puxando o ar e suba soltando.",
+        "execution": {"sets": 3, "reps": 10, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+    "step_up": {
+        "common_mistake": "Tomar impulso com a perna de baixo em vez de subir pela de cima.",
+        "feel_where": "Sinta o glúteo da perna do degrau fazer todo o esforço.",
+        "regression": "Use um degrau mais baixo.",
+        "progression": "Suba com o joelho em elevação rápida e use uma caixa alta.",
+        "breathing": "Expire forte ao subir no degrau e inspire ao descer.",
+        "execution": {"sets": 3, "reps": 10, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+    "calf_raise": {
+        "common_mistake": "Fazer rápido sem esticar bem a panturrilha embaixo.",
+        "feel_where": "Sinta queimar a batata da perna até o topo.",
+        "regression": "Faça sentado com peso sobre as coxas.",
+        "progression": "Faça em um degrau para aumentar a amplitude.",
+        "breathing": "Solte o ar no topo e puxe na descida.",
+        "execution": {"sets": 3, "reps": 15, "hold_seconds": None, "per_side": False, "rest_seconds": 30},
+    },
+}
+
+for _e in EXERCISES:
+    _e.update(_ENRICH.get(_e["id"], {}))
+
+
+# Exercícios NOVOS (mesma curadoria). Bird-dog/clamshell/caminhada lateral e
+# panturrilha unilateral não têm foto fiel no acervo aberto → placeholder (a
+# tela trata bem); dead bug tem. O conteúdo textual (o forte) vem completo.
+EXERCISES += [
+    {
+        "id": "single_leg_calf_raise",
+        "name": "Elevação de panturrilha unilateral",
+        "category": "Panturrilha",
+        "target": "Sóleo e gastrocnêmio",
+        "equipment": "Degrau/banco",
+        "why": "Fortalece a panturrilha de forma isolada pra suportar o impacto "
+               "a cada passada — a impulsão que uma corrida eficiente pede.",
+        "cues": [
+            "Apoie a metade do pé no degrau e deixe o calcanhar descer bem.",
+            "Suba na ponta do pé até o máximo, com controle.",
+            "Desça devagar sentindo o alongamento antes da próxima repetição.",
+        ],
+        "reps": "3 x 12 cada perna",
+        "images": [],
+        "common_mistake": "Usar impulso ou dobrar o joelho durante a subida.",
+        "feel_where": "Sinta o foco total na panturrilha da perna ativa.",
+        "regression": "Faça no chão plano, sem a amplitude negativa do degrau.",
+        "progression": "Segure um peso na mão do mesmo lado do pé apoiado.",
+        "breathing": "Expire ao subir na ponta do pé e inspire ao descer.",
+        "execution": {"sets": 3, "reps": 12, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+    {
+        "id": "monster_walk",
+        "name": "Caminhada lateral com faixa",
+        "category": "Glúteos e quadril",
+        "target": "Glúteo médio e estabilizadores do quadril",
+        "equipment": "Faixa elástica",
+        "why": "Impede o joelho de colapsar pra dentro na passada e mantém a "
+               "bacia alinhada — freia desgastes que viram dor de joelho e canela.",
+        "cues": [
+            "Faixa nos tornozelos e joelhos levemente flexionados.",
+            "Dê passos laterais mantendo a tensão do elástico o tempo todo.",
+            "Pés apontados pra frente, sem os calcanhares se aproximarem.",
+        ],
+        "reps": "3 x 12 cada lado",
+        "images": [],
+        "common_mistake": "Arrastar o pé de trás ou perder a tensão da faixa.",
+        "feel_where": "Sinta queimar as laterais dos quadris enquanto caminha.",
+        "regression": "Posicione a faixa acima dos joelhos.",
+        "progression": "Desça mais o quadril, em posição de meio agachamento.",
+        "breathing": "Mantenha uma respiração ritmada conforme dá os passos.",
+        "execution": {"sets": 3, "reps": 12, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+    {
+        "id": "clamshell",
+        "name": "Concha (clamshell)",
+        "category": "Glúteos e quadril",
+        "target": "Rotadores externos do quadril e glúteo médio",
+        "equipment": "Faixa elástica",
+        "why": "Estabiliza a pelve pra sua energia ir pra frente, e não pros "
+               "lados — sustenta a postura ereta na fase de apoio da passada.",
+        "cues": [
+            "Deitado de lado, joelhos dobrados e calcanhares na linha do quadril.",
+            "Pés juntos, abra o joelho de cima o máximo que puder.",
+            "Volte devagar, sem rodar o tronco pra trás.",
+        ],
+        "reps": "3 x 15 cada lado",
+        "images": [],
+        "common_mistake": "Rodar o tronco ou a bacia pra trás pra ajudar a abrir.",
+        "feel_where": "Sinta o trabalho bem na lateral do glúteo.",
+        "regression": "Faça sem a faixa elástica.",
+        "progression": "Eleve os pés do chão mantendo a execução.",
+        "breathing": "Solte o ar na abertura do joelho e puxe no retorno.",
+        "execution": {"sets": 3, "reps": 15, "hold_seconds": None, "per_side": True, "rest_seconds": 30},
+    },
+    {
+        "id": "dead_bug",
+        "name": "Dead bug",
+        "category": "Core e estabilidade",
+        "target": "Transverso do abdômen e core profundo",
+        "equipment": "Peso do corpo",
+        "why": "Ensina o core a estabilizar a coluna enquanto braços e pernas se "
+               "movem — o que segura o ritmo e economiza energia no trote.",
+        "cues": [
+            "De costas, aperte a lombar firme contra o chão.",
+            "Estenda braço e perna opostos devagar até quase tocar o chão.",
+            "Volte à posição inicial com o abdômen travado.",
+        ],
+        "reps": "3 x 10 cada lado",
+        "images": _imgs("Dead_Bug"),
+        "common_mistake": "Descolar a lombar do chão ao mover as pernas.",
+        "feel_where": "Sinta a parede abdominal profunda contraída do início ao fim.",
+        "regression": "Mova apenas os braços ou apenas as pernas.",
+        "progression": "Segure um mini-band entre as mãos ou os pés.",
+        "breathing": "Solte o ar ao estender braço e perna; puxe ao voltar.",
+        "execution": {"sets": 3, "reps": 10, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+    {
+        "id": "bird_dog",
+        "name": "Bird-dog",
+        "category": "Core e estabilidade",
+        "target": "Eretores da espinha, glúteo e core",
+        "equipment": "Peso do corpo",
+        "why": "Treina o cruzamento de força entre ombro e quadril opostos — o "
+               "padrão direto da mecânica de uma passada forte e estável.",
+        "cues": [
+            "Em quatro apoios, mãos sob os ombros e joelhos sob o quadril.",
+            "Estenda o braço direito à frente e a perna esquerda pra trás.",
+            "Tronco reto, sem balançar o quadril; depois troque o lado.",
+        ],
+        "reps": "3 x 10 cada lado",
+        "images": [],
+        "common_mistake": "Girar o quadril ou arquear as costas ao esticar a perna.",
+        "feel_where": "Sinta a estabilidade no abdômen, na lombar e no glúteo.",
+        "regression": "Mova só a perna por vez, mantendo os braços fixos.",
+        "progression": "Traga joelho e cotovelo opostos até se tocarem antes de estender.",
+        "breathing": "Inspire na posição inicial e expire ao estender os membros.",
+        "execution": {"sets": 3, "reps": 10, "hold_seconds": None, "per_side": True, "rest_seconds": 45},
+    },
+]
+
+
 def library() -> dict:
     """Biblioteca completa pro app: exercícios agrupados por categoria + crédito.
     Conteúdo estático curado (sem PII), igual pra todo atleta."""

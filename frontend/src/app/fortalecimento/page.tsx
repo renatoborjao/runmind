@@ -55,6 +55,15 @@ function ExerciseCard({ ex, prescription }: { ex: StrengthExercise; prescription
           <ol className="ex-cues">
             {ex.cues.map((c, i) => <li key={i}>{c}</li>)}
           </ol>
+          {ex.breathing && <p className="ex-breath">🌬️ {ex.breathing}</p>}
+          {ex.feel_where && <div className="ex-tip feel"><b>🎯 Onde sentir</b><span>{ex.feel_where}</span></div>}
+          {ex.common_mistake && <div className="ex-tip mistake"><b>⚠️ Erro comum</b><span>{ex.common_mistake}</span></div>}
+          {(ex.regression || ex.progression) && (
+            <div className="ex-levels">
+              {ex.regression && <div className="lvl"><span className="lvl-t">Mais fácil</span>{ex.regression}</div>}
+              {ex.progression && <div className="lvl"><span className="lvl-t">Mais difícil</span>{ex.progression}</div>}
+            </div>
+          )}
         </div>
       )}
     </section>
