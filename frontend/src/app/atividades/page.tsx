@@ -219,7 +219,7 @@ function drawStatCols(
   withShadow(ctx, () => {
     ctx.textAlign = "left";
     cells.forEach(([lab, val], i) => {
-      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 ${labSize}px ${CANVAS_FONT}`;
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${labSize}px ${CANVAS_FONT}`;
       ctx.fillText(lab, cx, baseY);
       ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
       ctx.fillText(val, cx, baseY + valSize + 10);
@@ -238,9 +238,9 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     for (const [lab, val] of cells) {
-      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 42px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 98);
-      y += 182;
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 46px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 100);
+      y += 186;
     }
     ctx.textAlign = "left";
   });
@@ -253,7 +253,7 @@ function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   const cx = W / 2;
   if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, 110, 250, W - 220, 620, "#1FD9B8", 13);
   withShadow(ctx, () => brandCentered(ctx, cx, 980, 46));
-  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 36, cx);
+  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 40, cx);
 }
 
 // CANTINHO — marca + stats no canto inferior esquerdo (template 3).
@@ -261,7 +261,7 @@ function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
   withShadow(ctx, () => markAt(ctx, 64, H - 230, 44));
   // layout original (horizontal); só o TÍTULO (rótulo) aumentado — era o que
   // ficava pequeno. Valor mantido no tamanho de antes.
-  drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 36);
+  drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 40);
 }
 
 // COM MAPA — card completo (não transparente): mapa/foto de fundo + stats.
@@ -269,7 +269,7 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   drawBg(ctx, W, H, d.photo, d.mapCard);
   topScrim(ctx, W); bottomScrim(ctx, W, H, H - 420);
   brandDate(ctx, W, d);
-  drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 32);
+  drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 36);
   footer(ctx, W, H);
 }
 
