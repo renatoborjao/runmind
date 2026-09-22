@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Manrope, IBM_Plex_Mono } from "next/font/google";
+import { Archivo, Manrope, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import PWARegister from "./pwa-register";
 
@@ -7,6 +7,14 @@ const display = Archivo({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["600", "700", "800"],
+});
+
+// grotesca neutra e limpa (estilo Strava) — usada só no card de compartilhar,
+// desenhado no canvas. Ver refreshCanvasFont em atividades/page.tsx.
+const share = Inter({
+  variable: "--font-share",
+  subsets: ["latin"],
+  weight: ["600", "700", "800", "900"],
 });
 
 const body = Manrope({
@@ -51,7 +59,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${display.variable} ${body.variable} ${mono.variable}`}>
+      <body className={`${display.variable} ${body.variable} ${mono.variable} ${share.variable}`}>
         {children}
         <PWARegister />
       </body>
