@@ -133,6 +133,7 @@ export default function AtletaPage() {
                     <div className="sa-when">
                       {fmtWhen(a.datetime ?? a.date_iso)}
                       {a.has_track && <span className="src-tag track">mapa</span>}
+                      {a.has_photo && <span className="src-tag photo">📷</span>}
                     </div>
                     <div className="sa-title">{a.name}</div>
                     <div className="sa-row">

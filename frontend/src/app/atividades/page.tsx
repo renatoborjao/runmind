@@ -4,9 +4,13 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
+  deleteActivityPhoto,
   getActivityAnalysis,
+  getActivityPhoto,
   getFeed,
   getTrack,
+  setActivityTitle,
+  uploadActivityPhoto,
   type CoachAnalysis,
   type FeedItem,
   type TrackData,
@@ -282,7 +286,13 @@ function AtividadesInner() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mapCard, setMapCard] = useState<HTMLCanvasElement | null>(null);
+  // adornos da atividade (título custom + foto), só na MINHA tela
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [metaOpen, setMetaOpen] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingMeta, setSavingMeta] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const metaFileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -327,6 +337,10 @@ function AtividadesInner() {
     setTrack(null);
     setAnalysis(null);
     setAnalysisOpen(false);
+    setMetaOpen(false);
+    setTitleDraft(it.custom_title ? it.name : "");
+    setPhotoUrl(null);
+    if (it.has_photo) getActivityPhoto(it.key).then(setPhotoUrl).catch(() => {});
     // análise do coach (best-effort, não bloqueia o traçado)
     getActivityAnalysis(it).then(setAnalysis).catch(() => {});
     if (it.has_track) {
@@ -334,6 +348,65 @@ function AtividadesInner() {
       setTrack(await getTrack(it));
       setLoadingTrack(false);
     }
+  }
+
+  // reflete a mudança do item no `sel` E na lista do feed (nome/foto)
+  function patchItem(key: string, patch: Partial<FeedItem>) {
+    setSel((s) => (s && s.key === key ? { ...s, ...patch } : s));
+    setFeed((f) => f?.map((x) => (x.key === key ? { ...x, ...patch } : x)) ?? f);
+  }
+
+  async function onSaveTitle() {
+    if (!sel) return;
+    setSavingMeta(true);
+    const t = titleDraft.trim();
+    const ok = await setActivityTitle(sel.key, t);
+    setSavingMeta(false);
+    if (ok) {
+      // título vazio volta ao nome original da fonte; sem ele em mãos, usa o rótulo genérico
+      patchItem(sel.key, { name: t || (sel.source === "app" ? "Corrida no app" : sel.name), custom_title: !!t });
+    }
+  }
+
+  // comprime a foto escolhida (≤1280px, JPEG ~0.8) ANTES de subir — disco leve
+  function compressToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1280;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        const ctx = cv.getContext("2d");
+        if (!ctx) return reject(new Error("canvas"));
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL("image/jpeg", 0.8));
+      };
+      img.onerror = () => reject(new Error("img"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function onPickActivityPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !sel) return;
+    setSavingMeta(true);
+    try {
+      const dataUrl = await compressToDataUrl(file);
+      const ok = await uploadActivityPhoto(sel.key, dataUrl);
+      if (ok) { setPhotoUrl(dataUrl); patchItem(sel.key, { has_photo: true }); }
+    } catch { /* ignora */ }
+    setSavingMeta(false);
+  }
+
+  async function onRemovePhoto() {
+    if (!sel) return;
+    setSavingMeta(true);
+    const ok = await deleteActivityPhoto(sel.key);
+    setSavingMeta(false);
+    if (ok) { setPhotoUrl(null); patchItem(sel.key, { has_photo: false }); }
   }
 
   function openEditor() {
@@ -459,12 +532,40 @@ function AtividadesInner() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             </button>
             <div className="title"><div className="k">{fmtDate(it.datetime ?? it.date_iso)}</div><div className="t">{it.name}</div></div>
+            <button className="icon-btn" aria-label="Editar" onClick={() => { setMetaOpen((v) => !v); setTitleDraft(it.custom_title ? it.name : ""); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+            </button>
             <button className="icon-btn" aria-label="Compartilhar" onClick={openEditor}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
             </button>
           </header>
 
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
+          <input ref={metaFileRef} type="file" accept="image/*" hidden onChange={onPickActivityPhoto} />
+
+          {metaOpen && (
+            <section className="card meta-editor">
+              <div className="card-head"><span className="eyebrow">Editar treino</span></div>
+              <label className="me-label">Nome</label>
+              <div className="me-row">
+                <input
+                  className="me-input"
+                  value={titleDraft}
+                  maxLength={80}
+                  placeholder="Batize esse treino…"
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                />
+                <button className="btn-mini" disabled={savingMeta} onClick={onSaveTitle}>Salvar</button>
+              </div>
+              <div className="me-photo">
+                <button className="btn-ghost" disabled={savingMeta} onClick={() => metaFileRef.current?.click()}>
+                  {it.has_photo ? "Trocar foto" : "📷 Adicionar foto"}
+                </button>
+                {it.has_photo && <button className="btn-ghost" disabled={savingMeta} onClick={onRemovePhoto}>Remover foto</button>}
+              </div>
+              <p className="me-hint">A foto aparece pra você e pros amigos que te seguem. {savingMeta ? "Salvando…" : ""}</p>
+            </section>
+          )}
 
           {editor && (
             <div className="share-editor">
@@ -524,6 +625,7 @@ function AtividadesInner() {
             item={it}
             track={track}
             loadingTrack={loadingTrack}
+            photoUrl={photoUrl}
             analysisSlot={analysis?.analysis ? (
               <section className="card coach-analysis">
                 <button className="ca-toggle" onClick={() => setAnalysisOpen((o) => !o)} aria-expanded={analysisOpen}>
@@ -566,6 +668,7 @@ function AtividadesInner() {
                     {fmtDate(it.datetime ?? it.date_iso)}{fmtTime(it.datetime) ? ` · ${fmtTime(it.datetime)}` : ""}
                     <span className={`src-tag ${it.source}`}>{it.source === "app" ? "app" : "sync"}</span>
                     {it.has_track && <span className="src-tag track">mapa</span>}
+                    {it.has_photo && <span className="src-tag photo">📷</span>}
                   </div>
                   <div className="rr-km">{km(it.distance_km)} km</div>
                   <div className="rr-meta">{it.duration_min} min · {it.pace ?? "—"}/km{it.avg_hr ? ` · ${it.avg_hr} bpm` : ""}</div>

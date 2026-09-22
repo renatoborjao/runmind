@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
+)
+from app.infrastructure.persistence.activity_meta_repository import (
+    ActivityMetaRepository,
+    valid_key,
 )
 from app.infrastructure.persistence.activity_track_repository import (
     ActivityTrackRepository,
@@ -257,6 +262,21 @@ def build_feed(profile: str) -> list[dict]:
             }
         )
 
+    # adornos do atleta: título custom (sobrepõe o nome) + foto (booleano; os
+    # bytes só saem sob demanda no detalhe). Uma leitura por atleta.
+    meta = ActivityMetaRepository().load(profile)
+
+    for it in items:
+
+        entry = meta.get(it["key"]) or {}
+
+        if entry.get("title"):
+
+            it["name"] = entry["title"]
+            it["custom_title"] = True
+
+        it["has_photo"] = bool(entry.get("has_photo"))
+
     items.sort(key=lambda x: x.get("datetime") or "", reverse=True)
 
     return items
@@ -315,3 +335,104 @@ async def activity_track(activity_id: str, profile: str = Depends(current_profil
         "metrics": track.get("metrics"),
         "series": track.get("series"),
     }
+
+
+# ---------------------------------------------------- adornos (título + foto)
+
+def _can_view(me: str, owner: str) -> bool:
+    """me sempre vê o próprio; pra outro, respeita o modo do perfil + seguir."""
+
+    if me == owner:
+
+        return True
+
+    from app.infrastructure.persistence.social_graph_repository import (
+        SocialGraphRepository,
+    )
+    from app.infrastructure.persistence.social_profile_repository import (
+        SocialProfileRepository,
+    )
+
+    return SocialGraphRepository().can_view(
+        me, owner, SocialProfileRepository().is_public(owner)
+    )
+
+
+class MetaTitleIn(BaseModel):
+    key: str
+    title: str | None = None
+
+
+class PhotoIn(BaseModel):
+    key: str
+    data: str  # data URL da imagem (comprimida no cliente antes de subir)
+
+
+@router.post("/meta")
+async def set_activity_title(body: MetaTitleIn, profile: str = Depends(current_profile)):
+    """Batiza uma atividade minha (título custom que sobrepõe o nome do feed).
+    Título vazio remove o custom (volta ao nome original)."""
+
+    if not valid_key(body.key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    ActivityMetaRepository().set_title(profile, body.key, body.title)
+
+    return {"ok": True}
+
+
+@router.post("/photo")
+async def upload_activity_photo(body: PhotoIn, profile: str = Depends(current_profile)):
+    """Anexa 1 foto à minha atividade. O cliente já manda comprimida; o servidor
+    RE-comprime (≤1280px, JPEG q80) pra garantir disco leve (rodamos free)."""
+
+    if not valid_key(body.key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    try:
+
+        ActivityMetaRepository().set_photo(profile, body.key, body.data)
+
+    except ValueError as e:
+
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"ok": True}
+
+
+@router.delete("/photo/{key}")
+async def delete_activity_photo(key: str, profile: str = Depends(current_profile)):
+
+    if not valid_key(key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    ActivityMetaRepository().delete_photo(profile, key)
+
+    return {"ok": True}
+
+
+@router.get("/photo")
+async def get_activity_photo(
+    key: str,
+    owner: str | None = None,
+    me: str = Depends(current_profile),
+):
+    """Foto de uma atividade como data URL (pro detalhe). Endpoint AUTENTICADO
+    (o <img> do detalhe recebe a data URL, não a URL direta) e com a trava de
+    privacidade do social — foto de perfil privado só pra seguidor aprovado.
+    Sem `owner` = a minha própria atividade."""
+
+    if not valid_key(key):
+
+        raise HTTPException(status_code=400, detail="chave inválida")
+
+    target = owner or me
+
+    if not _can_view(me, target):
+
+        raise HTTPException(status_code=403, detail="Perfil privado.")
+
+    return {"photo": ActivityMetaRepository().photo_data_url(target, key)}

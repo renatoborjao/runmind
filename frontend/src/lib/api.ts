@@ -493,6 +493,32 @@ export interface FeedItem {
   track_source: "app" | "arch" | null;
   track_id: string | null;
   route_preview?: [number, number][] | null;
+  custom_title?: boolean;
+  has_photo?: boolean;
+}
+
+/** Batiza uma atividade minha (título vazio remove o custom). */
+export async function setActivityTitle(key: string, title: string): Promise<boolean> {
+  const r = await apiFetch("/feed/meta", { method: "POST", body: JSON.stringify({ key, title }) });
+  return r.ok;
+}
+
+/** Sobe 1 foto (data URL já comprimida no cliente) pra uma atividade minha. */
+export async function uploadActivityPhoto(key: string, data: string): Promise<boolean> {
+  const r = await apiFetch("/feed/photo", { method: "POST", body: JSON.stringify({ key, data }) });
+  return r.ok;
+}
+
+export async function deleteActivityPhoto(key: string): Promise<boolean> {
+  const r = await apiFetch(`/feed/photo/${encodeURIComponent(key)}`, { method: "DELETE" });
+  return r.ok;
+}
+
+/** Foto de uma atividade como data URL. Sem `owner` = a minha. */
+export async function getActivityPhoto(key: string, owner?: string): Promise<string | null> {
+  const q = owner ? `?owner=${owner}&key=${encodeURIComponent(key)}` : `?key=${encodeURIComponent(key)}`;
+  const r = await apiFetch(`/feed/photo${q}`);
+  return r.ok ? (await r.json()).photo : null;
 }
 
 export async function getFeed(): Promise<FeedItem[] | null> {

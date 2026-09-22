@@ -283,11 +283,12 @@ export function RouteThumb({ route, className }: { route?: [number, number][] | 
 
 /** Corpo do detalhe da atividade — igual pra minha corrida e pra do amigo.
  * `analysisSlot` é injetado só na MINHA tela (a análise do coach é privada). */
-export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot }: {
+export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot, photoUrl }: {
   item: FeedItem;
   track: TrackData | null;
   loadingTrack: boolean;
   analysisSlot?: React.ReactNode;
+  photoUrl?: string | null;
 }) {
   const maxPace = track && track.splits.length
     ? Math.max(...track.splits.map((s) => s.sec / (s.partial_km || 1)), 1)
@@ -330,6 +331,12 @@ export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot }: 
 
   return (
     <>
+      {/* FOTO do atleta (herói), quando houver — estilo Strava */}
+      {photoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="act-photo" src={photoUrl} alt="Foto da corrida" />
+      )}
+
       {/* MAPA no topo (herói), estilo Strava */}
       {item.has_track && track && track.points.length >= 2 && (
         <section className="map-section map-hero"><MapView points={track.points} /></section>
