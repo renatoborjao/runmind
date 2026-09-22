@@ -161,10 +161,10 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .hero-verdict p { margin: 0; font-size: 13px; color: var(--ink-soft); }
 
 .vitals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
-.vital { background: var(--surface-2); border-radius: 13px; padding: 9px 8px; text-align: center; }
-.vital .k { font-family: var(--font-mono), monospace; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.vital .v { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 15px; margin-top: 3px; }
-.vital .u { font-size: 9px; color: var(--muted); }
+.vital { background: var(--surface-2); border: 1px solid var(--line); border-radius: 13px; padding: 9px 8px; text-align: center; }
+.vital .k { font-family: var(--font-mono), monospace; font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); }
+.vital .v { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 17px; margin-top: 3px; color: var(--ink); }
+.vital .u { font-size: 9.5px; color: var(--muted); margin-top: 1px; }
 
 .pace-pill { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 12px; background: var(--accent-wash); color: var(--accent-ink); padding: 6px 12px; border-radius: 999px; }
 .today h2 { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -.03em; margin: 2px 0; }
