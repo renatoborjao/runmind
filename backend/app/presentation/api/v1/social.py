@@ -358,6 +358,6 @@ async def toggle_kudos(body: KudosBody, me: str = Depends(current_profile)):
 
     if liked and body.owner != me:
 
-        await _notify(body.owner, f"{_first_name(me)} curtiu seu treino. 👏", "social_kudos")
+        await _notify(body.owner, f"{_first_name(me)} te mandou um Rit no seu treino. 🏃", "social_kudos")
 
     return {"liked": liked}

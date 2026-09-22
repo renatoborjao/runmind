@@ -48,9 +48,10 @@ class HelpMenu:
                 "app abre a corrida do dia — com mapa, parciais e a minha "
                 "análise daquele treino ali dentro.",
                 "• Na aba Social você segue outros atletas e vê as corridas "
-                "deles como no Strava — mapa, pace, parciais — dá kudos e "
-                "comenta. E na sua corrida você pode botar um nome e uma foto. "
-                "(Sua análise do coach é só sua — ninguém mais vê.)",
+                "deles como no Strava — mapa, pace, parciais — manda um Rit "
+                "(nosso incentivo 🏃) e comenta. E na sua corrida você pode "
+                "botar um nome e uma foto. (Sua análise do coach é só sua — "
+                "ninguém mais vê.)",
                 "",
                 "👟 Seus tênis",
                 '• "Meus tênis são o Boston e o Vaporfly" (e a km de cada um, '

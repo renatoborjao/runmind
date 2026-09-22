@@ -47,7 +47,8 @@ _TITLES = {
     "social_follow": "Novo seguidor 👋",
     "social_request": "Pedido pra te seguir",
     "social_accept": "Pedido aceito ✓",
-    "social_kudos": "Kudos no seu treino 👏",
+    "social_kudos": "Você recebeu um Rit 🏃",
+    "social_comment": "Comentário no seu treino 💬",
 }
 
 _DEFAULT_TITLE = "Mensagem do coach"
@@ -81,6 +82,7 @@ _LINKS = {
     "social_request": "/comunidade/",
     "social_accept": "/comunidade/",
     "social_kudos": "/atividades/",
+    "social_comment": "/atividades/",
 }
 
 
