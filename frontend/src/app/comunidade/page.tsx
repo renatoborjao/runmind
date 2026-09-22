@@ -30,11 +30,19 @@ function relLabel(r: Relationship): string {
   return r === "following" ? "Seguindo" : r === "requested" ? "Solicitado" : "Seguir";
 }
 
+// "Rit" é o nosso incentivo (raiz de Ritmind) no lugar de "kudos" — ícone de
+// corredor. Interno segue "kudos" (classe/rota/repo); só o rótulo muda.
+function RunIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9 1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z" /></svg>
+  );
+}
+
 function KudosBtn({ a, onToggle }: { a: SocialActivity; onToggle: () => void }) {
   return (
-    <button className={`kudos${a.kudos_by_me ? " on" : ""}`} onClick={onToggle}>
-      <svg viewBox="0 0 24 24" width="17" height="17" fill={a.kudos_by_me ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 0 0-6 0v4H5l1.5 10.5A2 2 0 0 0 8.5 21h7a2 2 0 0 0 2-1.5L19 9z" /></svg>
-      {a.kudos > 0 ? a.kudos : ""}
+    <button className={`kudos${a.kudos_by_me ? " on" : ""}`} onClick={onToggle} aria-label="Mandar um Rit">
+      <RunIcon />
+      {a.kudos > 0 ? a.kudos : "Rit"}
     </button>
   );
 }
