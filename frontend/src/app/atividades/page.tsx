@@ -158,8 +158,14 @@ function drawRouteBox(
   const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
   const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 12;
-  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  // glow na cor do traçado (vida) + contorno escuro sutil pra legibilidade
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = lw + 4; ctx.shadowBlur = 0;
+  ctx.beginPath();
+  good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
+  ctx.shadowColor = color; ctx.shadowBlur = 22;
+  ctx.strokeStyle = color; ctx.lineWidth = lw;
   ctx.beginPath();
   good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
   ctx.stroke();
@@ -174,6 +180,10 @@ function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.fillStyle = "#9A9BAE"; ctx.font = `600 22px ${CANVAS_FONT}`; ctx.textAlign = "center";
   ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
 }
+
+// teal da marca (mais brilhante que o #1FD9B8 base) pros rótulos do card de
+// compartilhar — dá cor/vida sem perder legibilidade sobre qualquer foto.
+const _ACCENT_BRIGHT = "#34E3C8";
 
 // tempo tipo Strava: "53min 24s" (ou "1h05" em corrida longa)
 function fmtDur(s: number): string {
@@ -209,8 +219,8 @@ function drawStatCols(
   withShadow(ctx, () => {
     ctx.textAlign = "left";
     cells.forEach(([lab, val], i) => {
-      ctx.fillStyle = "#D6D7E2"; ctx.font = `600 ${labSize}px ${CANVAS_FONT}`;
-      ctx.fillText(lab, cx, baseY);
+      ctx.fillStyle = _ACCENT_BRIGHT; ctx.font = `700 ${labSize}px ${CANVAS_FONT}`;
+      ctx.fillText(lab.toUpperCase(), cx, baseY);
       ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
       ctx.fillText(val, cx, baseY + valSize + 8);
       cx += widths[i] + gap;
@@ -228,13 +238,13 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     for (const [lab, val] of cells) {
-      ctx.fillStyle = "#EAEBF2"; ctx.font = `600 36px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 96);
-      y += 180;
+      ctx.fillStyle = _ACCENT_BRIGHT; ctx.font = `700 34px ${CANVAS_FONT}`; ctx.fillText(lab.toUpperCase(), cx, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 100px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 98);
+      y += 184;
     }
     ctx.textAlign = "left";
   });
-  if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, cx - 150, y - 6, 300, 220, "#1FD9B8", 8);
+  if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, cx - 150, y - 6, 300, 220, "#1FD9B8", 9);
   withShadow(ctx, () => brandCentered(ctx, cx, y + 296, 42));
 }
 
