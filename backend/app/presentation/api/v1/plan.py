@@ -123,8 +123,9 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
     efetiva no plano vivo (persiste) E registra na conversa pra o coach ficar a
     par (nada se perde). Só move pra dia LIVRE da semana do plano."""
 
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
+    from app.core.clock import now_local
     from app.application.coach.conversation.plan_change_applier import (
         PlanChangeApplier,
     )
@@ -161,6 +162,15 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
     if plan.find_session_by_day(to_day) is not None:
 
         raise HTTPException(status_code=409, detail="o dia de destino já tem treino")
+
+    # não dá pra mover um treino pra um dia que JÁ PASSOU (data BRT via clock,
+    # nunca o relógio do cliente). week_start é a segunda do plano; o offset do
+    # dia na semana dá a data do destino.
+    to_date = plan.week_start + timedelta(days=list(_DAY_PT).index(to_day))
+
+    if to_date < now_local().date():
+
+        raise HTTPException(status_code=400, detail="esse dia já passou — escolhe um dia que ainda vem")
 
     session = asdict(source)
     session["day"] = to_day

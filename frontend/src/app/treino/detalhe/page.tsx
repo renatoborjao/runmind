@@ -172,12 +172,12 @@ function DetalheInner() {
             {picking && (
               <div className="card" style={{ padding: 14 }}>
                 <p className="eyebrow" style={{ margin: "0 0 10px" }}>Escolha o novo dia (nada muda até confirmar)</p>
-                {week.filter((d) => !d.session && d.day_en !== day?.day_en).length === 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>Não há dia livre nesta semana. Pra abrir espaço, fala com o coach. 💬</p>
+                {week.filter((d) => !d.session && !d.is_past && d.day_en !== day?.day_en).length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>Não há dia livre pra frente nesta semana. Pra abrir espaço, fala com o coach. 💬</p>
                 ) : (
                   <>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {week.filter((d) => !d.session && d.day_en !== day?.day_en).map((d) => (
+                      {week.filter((d) => !d.session && !d.is_past && d.day_en !== day?.day_en).map((d) => (
                         <button key={d.day_en}
                           className="btn-ghost"
                           style={{ flex: "0 0 auto", padding: "10px 14px", ...(target?.day_en === d.day_en ? { borderColor: "var(--accent)", color: "var(--accent-ink)" } : {}) }}
