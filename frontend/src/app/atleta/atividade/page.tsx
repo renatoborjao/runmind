@@ -8,7 +8,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  getAthleteActivities, getTrack, toggleKudos,
+  getActivityPhoto, getAthleteActivities, getTrack, toggleKudos,
   type SocialActivity, type TrackData,
 } from "@/lib/api";
 import { ActivityDetailBody, fmtDate } from "../../activity-detail";
@@ -19,6 +19,7 @@ function AtividadeAmigoInner() {
   const [item, setItem] = useState<SocialActivity | null>(null);
   const [track, setTrack] = useState<TrackData | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,6 +48,8 @@ function AtividadeAmigoInner() {
 
       setItem(it);
       setLoading(false);
+
+      if (it && own && it.has_photo) getActivityPhoto(it.key, own).then(setPhotoUrl).catch(() => {});
 
       if (it && own && it.has_track) {
         setLoadingTrack(true);
@@ -107,7 +110,7 @@ function AtividadeAmigoInner() {
           </p>
         )}
 
-        <ActivityDetailBody item={item} track={track} loadingTrack={loadingTrack} />
+        <ActivityDetailBody item={item} track={track} loadingTrack={loadingTrack} photoUrl={photoUrl} />
       </div>
     </main>
   );

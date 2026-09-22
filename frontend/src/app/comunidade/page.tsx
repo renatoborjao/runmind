@@ -109,7 +109,7 @@ export default function ComunidadePage() {
                   <div><div className="sa-name">{a.owner_name || a.owner}</div><div className="sa-when">{fmtWhen(a.datetime ?? a.date_iso)}</div></div>
                 </div>
                 <div className="sa-body tap" onClick={() => openActivity(a)}>
-                  <div className="sa-title">{a.name}</div>
+                  <div className="sa-title">{a.name}{a.has_track && <span className="src-tag track">mapa</span>}{a.has_photo && <span className="src-tag photo">📷</span>}</div>
                   <div className="sa-row">
                     <div className="sa-stats">
                       <div><b>{a.distance_km.toFixed(2).replace(".", ",")}</b><span>km</span></div>
