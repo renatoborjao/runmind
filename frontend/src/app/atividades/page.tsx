@@ -15,7 +15,7 @@ import {
   type FeedItem,
   type TrackData,
 } from "@/lib/api";
-import { ActivityDetailBody, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
+import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
 
 // Leaflet carregado sob demanda dentro do card compartilhável (mapa REAL de
 // fundo). O detalhe da atividade (mapa herói + stats + splits) vive no
@@ -636,6 +636,8 @@ function AtividadesInner() {
               </section>
             ) : null}
           />
+
+          <CommentsSection activityKey={it.key} />
         </div>
       </main>
     );
@@ -669,6 +671,7 @@ function AtividadesInner() {
                     <span className={`src-tag ${it.source}`}>{it.source === "app" ? "app" : "sync"}</span>
                     {it.has_track && <span className="src-tag track">mapa</span>}
                     {it.has_photo && <span className="src-tag photo">📷</span>}
+                    {!!it.comment_count && <span className="src-tag photo">💬 {it.comment_count}</span>}
                   </div>
                   <div className="rr-km">{km(it.distance_km)} km</div>
                   <div className="rr-meta">{it.duration_min} min · {it.pace ?? "—"}/km{it.avg_hr ? ` · ${it.avg_hr} bpm` : ""}</div>

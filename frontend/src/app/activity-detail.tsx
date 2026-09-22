@@ -7,7 +7,10 @@
 // igual Strava, sem nunca ver a leitura do coach.
 
 import { useEffect, useRef, useState } from "react";
-import type { FeedItem, TrackData } from "@/lib/api";
+import {
+  addComment, deleteComment, getComments,
+  type ActivityComment, type FeedItem, type TrackData,
+} from "@/lib/api";
 
 // Carrega o Leaflet (mapa real, tiles do OpenStreetMap — grátis, sem chave) sob
 // demanda via CDN. Resolve quando window.L está pronto.
@@ -278,6 +281,86 @@ export function RouteThumb({ route, className }: { route?: [number, number][] | 
       <circle cx={X(first[1])} cy={Y(first[0])} r="3.2" fill="var(--accent)" />
       <circle cx={X(last[1])} cy={Y(last[0])} r="3.2" fill="var(--rose)" />
     </svg>
+  );
+}
+
+function fmtCommentWhen(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) + " · " +
+    d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Comentários de uma atividade (estilo Strava) — compartilhado pela minha tela
+ * e pela do amigo. `owner` indefinido = a minha atividade (posso moderar tudo).
+ * Carrega sozinho; posta e apaga (o que é meu, ou tudo se a atividade é minha). */
+export function CommentsSection({ activityKey, owner }: { activityKey: string; owner?: string }) {
+  const [comments, setComments] = useState<ActivityComment[]>([]);
+  const [me, setMe] = useState<string>("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const isMine = !owner; // atividade minha → posso apagar qualquer comentário
+
+  useEffect(() => {
+    let alive = true;
+    getComments(activityKey, owner).then((r) => {
+      if (!alive || !r) return;
+      setComments(r.comments);
+      setMe(r.me);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+    return () => { alive = false; };
+  }, [activityKey, owner]);
+
+  async function onSend() {
+    const t = text.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    const c = await addComment(activityKey, t, owner);
+    setBusy(false);
+    if (c) { setComments((prev) => [...prev, c]); setText(""); }
+  }
+
+  async function onDelete(id: string) {
+    const ok = await deleteComment(activityKey, id, owner);
+    if (ok) setComments((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  return (
+    <section className="card comments">
+      <div className="card-head"><span className="eyebrow">Comentários{comments.length ? ` · ${comments.length}` : ""}</span></div>
+
+      {loaded && comments.length === 0 && (
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>Seja o primeiro a comentar. 💬</p>
+      )}
+
+      {comments.map((c) => (
+        <div className="cmt" key={c.id}>
+          <div className="cmt-main">
+            <div className="cmt-head"><b>{c.author_name}</b><span>{fmtCommentWhen(c.at)}</span></div>
+            <div className="cmt-text">{c.text}</div>
+          </div>
+          {(isMine || c.author === me) && (
+            <button className="cmt-del" aria-label="Apagar" onClick={() => onDelete(c.id)}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
+            </button>
+          )}
+        </div>
+      ))}
+
+      <div className="cmt-compose">
+        <input
+          className="me-input"
+          value={text}
+          maxLength={500}
+          placeholder="Escreve um comentário…"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onSend(); }}
+        />
+        <button className="btn-mini" disabled={busy || !text.trim()} onClick={onSend}>Enviar</button>
+      </div>
+    </section>
   );
 }
 

@@ -150,6 +150,7 @@ export default function AtletaPage() {
                         <svg viewBox="0 0 24 24" width="17" height="17" fill={a.kudos_by_me ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 0 0-6 0v4H5l1.5 10.5A2 2 0 0 0 8.5 21h7a2 2 0 0 0 2-1.5L19 9z" /></svg>
                         {a.kudos > 0 ? a.kudos : ""}
                       </button>
+                      {!!a.comment_count && <span className="sa-count">💬 {a.comment_count}</span>}
                       <span className="sa-open">Ver treino ›</span>
                     </div>
                   </section>
