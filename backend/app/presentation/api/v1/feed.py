@@ -41,6 +41,28 @@ def _pace(distance_m: float, moving_time_s: int) -> str | None:
     return f"{m}:{s:02d}"
 
 
+def _route_preview(points: list[dict] | None, n: int = 24) -> list[list[float]] | None:
+    """Traçado LEVE (downsampled ~n pontos, [lat, lon] arredondado) pra a
+    miniatura de mapa nos cards do feed — sem precisar puxar o traçado completo
+    por atividade. Mantém início e fim. None quando não há pontos suficientes."""
+
+    pts = [p for p in (points or []) if p.get("lat") and p.get("lon")]
+
+    if len(pts) < 2:
+
+        return None
+
+    step = max(1, len(pts) // n)
+
+    sampled = pts[::step]
+
+    if sampled[-1] is not pts[-1]:
+
+        sampled.append(pts[-1])
+
+    return [[round(p["lat"], 5), round(p["lon"], 5)] for p in sampled]
+
+
 def _run_date_iso(r: dict) -> str | None:
 
     for key in ("started_at", "saved_at"):
@@ -170,6 +192,7 @@ def build_feed(profile: str) -> list[dict]:
                 "has_track": has_arch_track,
                 "track_source": "arch" if has_arch_track else None,
                 "track_id": str(a.id) if has_arch_track else None,
+                "route_preview": _route_preview(tracks[str(a.id)].get("points")) if has_arch_track else None,
             }
         )
 
@@ -205,6 +228,10 @@ def build_feed(profile: str) -> list[dict]:
             match["track_source"] = "app"
             match["track_id"] = r["id"]
 
+            if not match.get("route_preview"):
+
+                match["route_preview"] = _route_preview(r.get("points"))
+
             continue
 
         items.append(
@@ -226,6 +253,7 @@ def build_feed(profile: str) -> list[dict]:
                 "has_track": True,
                 "track_source": "app",
                 "track_id": r["id"],
+                "route_preview": _route_preview(r.get("points")),
             }
         )
 

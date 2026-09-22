@@ -6,6 +6,7 @@ import {
   followAthlete, getAthlete, getAthleteActivities, toggleKudos, unfollowAthlete,
   type AthleteProfile, type SocialActivity,
 } from "@/lib/api";
+import { RouteThumb } from "../activity-detail";
 
 function Avatar({ name, src, size = 40 }: { name: string; src?: string | null; size?: number }) {
   const initials = (name || "?").trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
@@ -69,6 +70,13 @@ export default function AtletaPage() {
     setActs((prev) => prev?.map((x) => x.key === a.key ? { ...x, kudos_by_me: liked, kudos: x.kudos + (liked ? 1 : -1) } : x) ?? prev);
   }
 
+  // abre o detalhe da atividade do amigo (mapa/splits, sem análise). Passa o
+  // item pelo sessionStorage (canal confiável no export estático do Next).
+  function openActivity(a: SocialActivity) {
+    try { sessionStorage.setItem("rm_friend_activity", JSON.stringify(a)); } catch { /* ok */ }
+    router.push(`/atleta/atividade?owner=${a.owner}&key=${encodeURIComponent(a.key)}`);
+  }
+
   const followLabel = !prof ? "" : prof.relationship === "following" ? "Seguindo" : prof.relationship === "requested" ? "Solicitado" : prof.privacy === "private" ? "Solicitar" : "Seguir";
 
   return (
@@ -121,20 +129,27 @@ export default function AtletaPage() {
               <>
                 <div className="card-head" style={{ margin: "4px 2px 0" }}><span className="eyebrow">Atividades</span></div>
                 {acts.map((a) => (
-                  <section className="card social-act" key={a.key}>
-                    <div className="sa-when">{fmtWhen(a.datetime ?? a.date_iso)}</div>
+                  <section className="card social-act tap" key={a.key} onClick={() => openActivity(a)}>
+                    <div className="sa-when">
+                      {fmtWhen(a.datetime ?? a.date_iso)}
+                      {a.has_track && <span className="src-tag track">mapa</span>}
+                    </div>
                     <div className="sa-title">{a.name}</div>
-                    <div className="sa-stats">
-                      <div><b>{a.distance_km.toFixed(2).replace(".", ",")}</b><span>km</span></div>
-                      <div><b>{a.pace ?? "—"}</b><span>/km</span></div>
-                      <div><b>{a.duration_min}</b><span>min</span></div>
-                      {a.avg_hr != null && <div><b>{a.avg_hr}</b><span>bpm</span></div>}
+                    <div className="sa-row">
+                      <div className="sa-stats">
+                        <div><b>{a.distance_km.toFixed(2).replace(".", ",")}</b><span>km</span></div>
+                        <div><b>{a.pace ?? "—"}</b><span>/km</span></div>
+                        <div><b>{a.duration_min}</b><span>min</span></div>
+                        {a.avg_hr != null && <div><b>{a.avg_hr}</b><span>bpm</span></div>}
+                      </div>
+                      {a.route_preview && <RouteThumb route={a.route_preview} className="sa-thumb" />}
                     </div>
                     <div className="sa-foot">
-                      <button className={`kudos${a.kudos_by_me ? " on" : ""}`} onClick={() => onKudos(a)}>
+                      <button className={`kudos${a.kudos_by_me ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); onKudos(a); }}>
                         <svg viewBox="0 0 24 24" width="17" height="17" fill={a.kudos_by_me ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 0 0-6 0v4H5l1.5 10.5A2 2 0 0 0 8.5 21h7a2 2 0 0 0 2-1.5L19 9z" /></svg>
                         {a.kudos > 0 ? a.kudos : ""}
                       </button>
+                      <span className="sa-open">Ver treino ›</span>
                     </div>
                   </section>
                 ))}
