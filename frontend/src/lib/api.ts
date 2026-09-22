@@ -236,6 +236,7 @@ export interface WorkoutDay {
   date_iso: string;
   date_num: number;
   is_today: boolean;
+  is_past: boolean;
   session: TodaySession | null;
 }
 

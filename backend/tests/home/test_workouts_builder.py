@@ -45,6 +45,21 @@ def test_week_has_dates_and_sessions():
     assert [d for d in out["week"] if d["day_en"] == "Monday"][0]["session"] is None
 
 
+def test_is_past_marks_days_before_today():
+    """Terça é hoje (15/09): segunda já passou, quarta+ ainda vem. O seletor de
+    'trocar de dia' usa isso pra NÃO oferecer dia que já passou (bug do Renato)."""
+
+    plan = SimpleNamespace(sessions=[_session("Tuesday", "Fartlek")])
+    runner = SimpleNamespace(target_race=None, race_date=None, target_time=None)
+
+    week = {d["day_en"]: d for d in _build(plan, runner)["week"]}
+
+    assert week["Monday"]["is_past"] is True
+    assert week["Tuesday"]["is_past"] is False  # hoje NÃO é passado
+    assert week["Wednesday"]["is_past"] is False
+    assert week["Sunday"]["is_past"] is False
+
+
 def test_race_countdown():
     plan = SimpleNamespace(sessions=[])
     runner = SimpleNamespace(target_race="Prova 15k", race_date="2026-09-25", target_time="1:15:00")

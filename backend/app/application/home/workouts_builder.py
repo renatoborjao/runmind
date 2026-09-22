@@ -54,6 +54,7 @@ class WorkoutsBuilder:
                     "date_iso": day_date.isoformat(),
                     "date_num": day_date.day,
                     "is_today": day_date == today_date,
+                    "is_past": day_date < today_date,
                     "session": WorkoutsBuilder._session(s),
                 }
             )
