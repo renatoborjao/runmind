@@ -111,13 +111,17 @@ function bottomScrim(ctx: CanvasRenderingContext2D, W: number, H: number, fromY:
   g.addColorStop(0, "rgba(6,7,12,0)"); g.addColorStop(0.55, "rgba(6,7,12,0.78)"); g.addColorStop(1, "rgba(6,7,12,0.96)");
   ctx.fillStyle = g; ctx.fillRect(0, fromY, W, H - fromY);
 }
-// família usada no canvas — igual à do app (Archivo, via next/font). Resolvida
-// do CSS em runtime pro card ter a MESMA cara de fonte do resto (estilo Strava).
+// família usada no canvas do card de compartilhar: Inter (grotesca neutra e
+// limpa, estilo Strava), via next/font (--font-share). Resolvida do CSS em
+// runtime; fallback pra Archivo/system se não carregar.
 let CANVAS_FONT = "system-ui, sans-serif";
 function refreshCanvasFont() {
   if (typeof window === "undefined") return;
-  const v = getComputedStyle(document.body).getPropertyValue("--font-display").trim();
-  if (v) CANVAS_FONT = `${v}, system-ui, sans-serif`;
+  const cs = getComputedStyle(document.body);
+  const share = cs.getPropertyValue("--font-share").trim();
+  const disp = cs.getPropertyValue("--font-display").trim();
+  const fam = share || disp;
+  if (fam) CANVAS_FONT = `${fam}, system-ui, sans-serif`;
 }
 
 function markAt(ctx: CanvasRenderingContext2D, x: number, baseY: number, size = 46) {
@@ -164,7 +168,7 @@ function drawRouteBox(
   ctx.beginPath();
   good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
   ctx.stroke();
-  ctx.shadowColor = color; ctx.shadowBlur = 22;
+  ctx.shadowColor = color; ctx.shadowBlur = 10;
   ctx.strokeStyle = color; ctx.lineWidth = lw;
   ctx.beginPath();
   good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
@@ -180,10 +184,6 @@ function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.fillStyle = "#9A9BAE"; ctx.font = `600 22px ${CANVAS_FONT}`; ctx.textAlign = "center";
   ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
 }
-
-// teal da marca (mais brilhante que o #1FD9B8 base) pros rótulos do card de
-// compartilhar — dá cor/vida sem perder legibilidade sobre qualquer foto.
-const _ACCENT_BRIGHT = "#34E3C8";
 
 // tempo tipo Strava: "53min 24s" (ou "1h05" em corrida longa)
 function fmtDur(s: number): string {
@@ -219,10 +219,10 @@ function drawStatCols(
   withShadow(ctx, () => {
     ctx.textAlign = "left";
     cells.forEach(([lab, val], i) => {
-      ctx.fillStyle = _ACCENT_BRIGHT; ctx.font = `700 ${labSize}px ${CANVAS_FONT}`;
-      ctx.fillText(lab.toUpperCase(), cx, baseY);
+      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 ${labSize}px ${CANVAS_FONT}`;
+      ctx.fillText(lab, cx, baseY);
       ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
-      ctx.fillText(val, cx, baseY + valSize + 8);
+      ctx.fillText(val, cx, baseY + valSize + 10);
       cx += widths[i] + gap;
     });
   });
@@ -234,13 +234,13 @@ function drawStatCols(
 function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const cx = W / 2;
   const cells = shareCells(d.it).slice(0, 3);
-  let y = 360;
+  let y = 356;
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     for (const [lab, val] of cells) {
-      ctx.fillStyle = _ACCENT_BRIGHT; ctx.font = `700 34px ${CANVAS_FONT}`; ctx.fillText(lab.toUpperCase(), cx, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 100px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 98);
-      y += 184;
+      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 44px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 108px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 104);
+      y += 192;
     }
     ctx.textAlign = "left";
   });
@@ -253,13 +253,27 @@ function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   const cx = W / 2;
   if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, 110, 250, W - 220, 620, "#1FD9B8", 13);
   withShadow(ctx, () => brandCentered(ctx, cx, 980, 46));
-  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 30, cx);
+  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 36, cx);
 }
 
 // CANTINHO — marca + stats no canto inferior esquerdo (template 3).
 function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  withShadow(ctx, () => markAt(ctx, 64, H - 230, 44));
-  drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 28);
+  const x = 64;
+  const cells = shareCells(d.it).slice(0, 3);
+  const labSize = 40, valSize = 92, block = 40 + 12 + 92 + 30;  // label+gap+valor+respiro
+  const totalH = cells.length * block;
+  withShadow(ctx, () => markAt(ctx, x, H - 110 - totalH, 48));
+  let y = H - 110 - totalH + 56 + labSize;  // baseline do 1º rótulo (abaixo da marca)
+  withShadow(ctx, () => {
+    ctx.textAlign = "left";
+    for (const [lab, val] of cells) {
+      ctx.fillStyle = "#E9EAF1"; ctx.font = `600 ${labSize}px ${CANVAS_FONT}`;
+      ctx.fillText(lab, x, y);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
+      ctx.fillText(val, x, y + 12 + valSize);
+      y += block;
+    }
+  });
 }
 
 // COM MAPA — card completo (não transparente): mapa/foto de fundo + stats.
@@ -267,7 +281,7 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   drawBg(ctx, W, H, d.photo, d.mapCard);
   topScrim(ctx, W); bottomScrim(ctx, W, H, H - 420);
   brandDate(ctx, W, d);
-  drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 26);
+  drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 32);
   footer(ctx, W, H);
 }
 
@@ -466,8 +480,17 @@ function AtividadesInner() {
       CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
     };
     paint();
-    // redesenha quando a fonte (Archivo) terminar de carregar, pra não sair no fallback
-    document.fonts?.ready.then(paint).catch(() => {});
+    // garante a fonte do card (Inter) carregada antes de desenhar — o canvas cai
+    // no fallback se pintar antes. Carrega os pesos usados e repinta.
+    const fam = CANVAS_FONT.split(",")[0].trim();
+    if (document.fonts && fam) {
+      Promise.all([
+        document.fonts.load(`800 100px ${fam}`),
+        document.fonts.load(`900 100px ${fam}`),
+        document.fonts.load(`700 40px ${fam}`),
+      ]).then(paint).catch(() => {});
+      document.fonts.ready.then(paint).catch(() => {});
+    }
   }, [editor, styleIdx, photoImg, sel, track, mapCard]);
 
   // PNG (mantém a transparência) do card atual
