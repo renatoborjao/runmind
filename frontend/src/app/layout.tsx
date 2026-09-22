@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Manrope, IBM_Plex_Mono, Inter } from "next/font/google";
+import { Archivo, Manrope, IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import PWARegister from "./pwa-register";
 
@@ -15,6 +15,13 @@ const share = Inter({
   variable: "--font-share",
   subsets: ["latin"],
   weight: ["600", "700", "800", "900"],
+});
+
+// wordmark "Ritmind" no card de compartilhar — display descolado/moderno.
+const brand = Space_Grotesk({
+  variable: "--font-brand",
+  subsets: ["latin"],
+  weight: ["600", "700"],
 });
 
 const body = Manrope({
@@ -59,7 +66,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${display.variable} ${body.variable} ${mono.variable} ${share.variable}`}>
+      <body className={`${display.variable} ${body.variable} ${mono.variable} ${share.variable} ${brand.variable}`}>
         {children}
         <PWARegister />
       </body>

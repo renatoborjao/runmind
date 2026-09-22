@@ -115,60 +115,26 @@ function bottomScrim(ctx: CanvasRenderingContext2D, W: number, H: number, fromY:
 // limpa, estilo Strava), via next/font (--font-share). Resolvida do CSS em
 // runtime; fallback pra Archivo/system se não carregar.
 let CANVAS_FONT = "system-ui, sans-serif";   // Inter (stats)
-let DISPLAY_FONT = "system-ui, sans-serif";  // Archivo (wordmark do logo)
+let BRAND_FONT = "system-ui, sans-serif";    // Space Grotesk (wordmark Ritmind)
 function refreshCanvasFont() {
   if (typeof window === "undefined") return;
   const cs = getComputedStyle(document.body);
   const share = cs.getPropertyValue("--font-share").trim();
   const disp = cs.getPropertyValue("--font-display").trim();
+  const brand = cs.getPropertyValue("--font-brand").trim();
   if (share || disp) CANVAS_FONT = `${share || disp}, system-ui, sans-serif`;
-  if (disp) DISPLAY_FONT = `${disp}, system-ui, sans-serif`;
+  if (brand || disp) BRAND_FONT = `${brand || disp}, system-ui, sans-serif`;
 }
 
-// desenha a linha de pulso (a mesma do ícone do app) dentro de uma caixa.
-const _PULSE: [number, number][] = [[2, 12], [6, 12], [8.5, 5], [12.5, 20], [15, 12], [22, 12]];
-function drawPulse(ctx: CanvasRenderingContext2D, bx: number, by: number, box: number) {
-  const cx = bx + box / 2, cy = by + box / 2;
-  const s = box * 0.028;  // ~0.56 da caixa (path tem ~20 de largura)
-  ctx.save();
-  ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = box * 0.085;
-  ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.shadowBlur = 0;
-  ctx.beginPath();
-  _PULSE.forEach(([x, y], i) => {
-    const px = cx + (x - 12) * s, py = cy + (y - 12.5) * s;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-  });
-  ctx.stroke();
-  ctx.restore();
-}
-
-// LOGO do Ritmind (ícone gradiente teal→violeta + pulso branco + wordmark
-// "Rit"(branco) "mind"(teal) na fonte da marca) — a assinatura "de verdade"
-// no card, igual ao app. `center=true` centraliza o conjunto em x.
-function drawLogo(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  const icon = size * 1.18;
-  const gap = size * 0.42;
-  ctx.font = `800 ${size}px ${DISPLAY_FONT}`;
+// wordmark "Ritmind" — "Rit" na cor da marca (teal) + "mind" branco, na fonte
+// descolada (Space Grotesk). `center=true` centraliza em x.
+function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+  ctx.font = `700 ${size}px ${BRAND_FONT}`;
   const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
-  const total = icon + gap + wRit + wMind;
-  const startX = center ? x - total / 2 : x;
-  const iy = baseY - icon * 0.82;  // alinha o ícone à baseline do texto
-  // ícone: quadrado arredondado com gradiente da marca + sombra teal
-  ctx.save();
-  ctx.shadowColor = "rgba(31,217,184,0.45)"; ctx.shadowBlur = icon * 0.35; ctx.shadowOffsetY = icon * 0.08;
-  const g = ctx.createLinearGradient(startX, iy, startX + icon, iy + icon);
-  g.addColorStop(0, "#1FD9B8"); g.addColorStop(1, "#3E7FD6");  // teal → violeta-azul
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  (ctx as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(startX, iy, icon, icon, icon * 0.29);
-  ctx.fill();
-  ctx.restore();
-  drawPulse(ctx, startX, iy, icon);
-  // wordmark
-  const tx = startX + icon + gap;
+  const startX = center ? x - (wRit + wMind) / 2 : x;
   ctx.textAlign = "left";
-  ctx.fillStyle = "#FFFFFF"; ctx.fillText("Rit", tx, baseY);
-  ctx.fillStyle = "#34E3C8"; ctx.fillText("mind", tx + wRit, baseY);
+  ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", startX, baseY);
+  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", startX + wRit, baseY);
 }
 // sombra suave: deixa texto/rota legíveis sobre QUALQUER foto (o card é
 // transparente e vai ser colado por cima da foto do atleta no Instagram).
@@ -208,7 +174,7 @@ function drawRouteBox(
   ctx.restore();
 }
 function brandDate(ctx: CanvasRenderingContext2D, W: number, d: CardData) {
-  drawLogo(ctx, 64, 104, 40, false);
+  withShadow(ctx, () => drawBrand(ctx, 64, 100, 42, false));
   ctx.font = `600 28px ${CANVAS_FONT}`; ctx.fillStyle = "#E7E8F0"; ctx.textAlign = "right";
   ctx.fillText(d.date, W - 64, 100); ctx.textAlign = "left";
 }
@@ -277,20 +243,20 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
     ctx.textAlign = "left";
   });
   if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, cx - 150, y - 6, 300, 220, "#1FD9B8", 8);
-  withShadow(ctx, () => drawLogo(ctx, cx, y + 296, 44, true));
+  withShadow(ctx, () => drawBrand(ctx, cx, y + 296, 46, true));
 }
 
 // ROTA — traçado grande como herói + marca + stats embaixo (template 2).
 function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const cx = W / 2;
   if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, 110, 250, W - 220, 620, "#1FD9B8", 13);
-  withShadow(ctx, () => drawLogo(ctx, cx, 980, 48, true));
+  withShadow(ctx, () => drawBrand(ctx, cx, 980, 50, true));
   drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 40, cx);
 }
 
 // CANTINHO — marca + stats no canto inferior esquerdo (template 3).
 function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  withShadow(ctx, () => drawLogo(ctx, 64, H - 230, 44, false));
+  withShadow(ctx, () => drawBrand(ctx, 64, H - 230, 46, false));
   // layout original (horizontal); só o TÍTULO (rótulo) aumentado — era o que
   // ficava pequeno. Valor mantido no tamanho de antes.
   drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 40);
@@ -503,12 +469,12 @@ function AtividadesInner() {
     // garante a fonte do card (Inter) carregada antes de desenhar — o canvas cai
     // no fallback se pintar antes. Carrega os pesos usados e repinta.
     const fam = CANVAS_FONT.split(",")[0].trim();
-    const disp = DISPLAY_FONT.split(",")[0].trim();
+    const brand = BRAND_FONT.split(",")[0].trim();
     if (document.fonts && fam) {
       Promise.all([
         document.fonts.load(`800 100px ${fam}`),
         document.fonts.load(`700 40px ${fam}`),
-        document.fonts.load(`800 48px ${disp}`),  // wordmark do logo (Archivo)
+        document.fonts.load(`700 48px ${brand}`),  // wordmark Ritmind (Space Grotesk)
       ]).then(paint).catch(() => {});
       document.fonts.ready.then(paint).catch(() => {});
     }
