@@ -304,6 +304,7 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
   const splits = d.splits.filter((s) => s.sec > 0);
   const titleY = 200;
   const labelX = 90, barX = 172, valueX = Math.round(W * 0.62);
+  const blockCenterX = (labelX + valueX) / 2; // marca centraliza no BLOCO, não no card
 
   withShadow(ctx, () => {
     ctx.fillStyle = "#FFFFFF"; ctx.font = `800 44px ${CANVAS_FONT}`; ctx.textAlign = "left";
@@ -315,17 +316,23 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       ctx.fillStyle = "#E7E8F0"; ctx.font = `600 30px ${CANVAS_FONT}`;
       outlinedText(ctx, "Sem parciais nesta corrida", labelX, 250, 5);
     });
-    withShadow(ctx, () => drawBrand(ctx, W / 2, 330, 40, true));
+    withShadow(ctx, () => drawBrand(ctx, blockCenterX, 330, 40, true));
     return;
   }
 
-  // compacto de verdade — não estica até o rodapé nem ocupa a largura toda;
-  // encolhe mais ainda quando a corrida é longa (14+ splits).
-  const top = 244;
-  const rowH = Math.max(20, Math.min(46, 460 / splits.length));
-  const barH = Math.max(9, Math.min(18, rowH * 0.4));
+  // fonte de LABEL/PACE em tamanho FIXO e legível — não escala com a
+  // quantidade de splits (isso é o que ficou minúsculo/ilegível na v2).
+  // rowH acompanha esse tamanho; só encolhe de verdade em corrida MUITO
+  // longa (meia/maratona), e aí a fonte encolhe junto (proporcional).
+  const rowHFull = 46;
+  const rowH = Math.max(30, Math.min(rowHFull, 900 / splits.length));
+  const scale = rowH / rowHFull;
+  const labelFont = Math.round(34 * scale);
+  const paceFont = Math.round(30 * scale);
+  const barH = Math.max(14, Math.round(24 * scale));
   const barMaxW = valueX - 130 - barX;
 
+  const top = 244;
   const listBottom = top + splits.length * rowH;
   const brandY = Math.min(listBottom + 56, H - 90);
 
@@ -353,16 +360,16 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       roundRect(ctx, barX, barY, w, barH, barH / 2); ctx.fill();
     });
 
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${Math.round(rowH * 0.42)}px ${CANVAS_FONT}`; ctx.textAlign = "left";
-    outlinedText(ctx, label, labelX, y + rowH * 0.15, 4);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${labelFont}px ${CANVAS_FONT}`; ctx.textAlign = "left";
+    outlinedText(ctx, label, labelX, y + labelFont * 0.34, 4);
 
-    ctx.font = `600 ${Math.round(rowH * 0.36)}px ${CANVAS_FONT}`; ctx.textAlign = "right";
-    outlinedText(ctx, s.pace ?? "—", valueX, y + rowH * 0.13, 4);
+    ctx.font = `700 ${paceFont}px ${CANVAS_FONT}`; ctx.textAlign = "right";
+    outlinedText(ctx, s.pace ?? "—", valueX, y + paceFont * 0.32, 4);
     ctx.textAlign = "left";
   });
 
-  // marca colada logo abaixo da última linha
-  withShadow(ctx, () => drawBrand(ctx, W / 2, brandY, 40, true));
+  // marca colada logo abaixo da última linha, centralizada no BLOCO
+  withShadow(ctx, () => drawBrand(ctx, blockCenterX, brandY, 40, true));
 }
 
 interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
