@@ -49,11 +49,17 @@ const TREND_ROWS: { key: keyof BodyTrend; label: string; upIsGood: boolean; fmt:
 ];
 
 // conduta curta que apenas ROTULA a conclusão do backend (tom do estado),
-// sem inventar julgamento — mesma leitura que a home mostra no herói.
+// sem inventar julgamento — usada só quando a narrativa da IA não veio.
 function conduta(tone?: string): string {
   if (tone === "bad") return "Conduta: priorize leveza ou descanso até o corpo responder.";
   if (tone === "warn") return "Conduta: treine no controle, sem forçar a intensidade.";
   return "Conduta: corpo liberado — pode seguir o plano.";
+}
+
+// a narrativa já vem com um título "🩺 Leitura do corpo" (útil no chat) que
+// aqui duplicaria o header do card "Estado do corpo 🩺" — tira essa 1ª linha.
+function narrativeBody(text: string): string {
+  return text.replace(/^🩺[^\n]*\n+/, "");
 }
 
 // arrow + cor conforme a direção; upIsGood diz se subir é bom pra essa métrica
@@ -215,8 +221,14 @@ export default function CorpoPage() {
             <div className={`state-card ${b.tone}`}>
               <div className="st">Estado do corpo 🩺</div>
               <h2>{b.state_label}</h2>
-              {b.limiter_label && <p>Ponto de atenção principal: <b>{b.limiter_label}</b>.</p>}
-              <p style={{ margin: "6px 0 0", fontWeight: 600 }}>{conduta(b.tone)}</p>
+              {b.narrative ? (
+                <p style={{ margin: "6px 0 0", whiteSpace: "pre-line" }}>{narrativeBody(b.narrative)}</p>
+              ) : (
+                <>
+                  {b.limiter_label && <p>Ponto de atenção principal: <b>{b.limiter_label}</b>.</p>}
+                  <p style={{ margin: "6px 0 0", fontWeight: 600 }}>{conduta(b.tone)}</p>
+                </>
+              )}
             </div>
 
             <section className="card">

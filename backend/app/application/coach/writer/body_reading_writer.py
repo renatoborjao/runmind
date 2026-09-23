@@ -90,6 +90,27 @@ class BodyReadingWriter:
         trajectory: BodyTrajectory | None = None,
     ) -> str:
 
+        narrative, _ = await BodyReadingWriter.narrate(
+            reading, runner_name, trajectory
+        )
+
+        # painel factual dos números de recuperação — o veredito narra, o
+        # painel MOSTRA o dado concreto por trás (camada de saúde à mostra).
+        panel = HealthSnapshotFormatter.panel(reading.recovery)
+
+        return f"{narrative}\n\n{panel}" if panel else narrative
+
+    @staticmethod
+    async def narrate(
+        reading: BodyReading,
+        runner_name: str,
+        trajectory: BodyTrajectory | None = None,
+    ) -> tuple[str, bool]:
+        """Só a narrativa (sem painel de números) — usada pelo chat (via
+        `write`) e pelas telas do app. Retorna (texto, veio_da_ia) pra quem
+        chama decidir se vale cachear (fallback nunca é cacheado — tenta a IA
+        de novo na próxima leitura, [[feedback_ia_json_blindada]])."""
+
         prompt = _SYSTEM_PROMPT.format(
             facts=BodyReadingWriter._facts(reading, runner_name, trajectory)
         )
@@ -109,21 +130,17 @@ class BodyReadingWriter:
                 require_text=True,
             )
 
-            narrative = text.strip()
+            return text.strip(), True
 
         except Exception as e:  # noqa: BLE001 — nunca vira silêncio
 
             print(f"Leitura do corpo (IA) falhou p/ '{runner_name}': {e}")
 
-            narrative = BodyReadingWriter._fallback(
+            fallback = BodyReadingWriter._fallback(
                 reading, runner_name, trajectory
             )
 
-        # painel factual dos números de recuperação — o veredito narra, o
-        # painel MOSTRA o dado concreto por trás (camada de saúde à mostra).
-        panel = HealthSnapshotFormatter.panel(reading.recovery)
-
-        return f"{narrative}\n\n{panel}" if panel else narrative
+            return fallback, False
 
     # ------------------------------------------------------------------
 

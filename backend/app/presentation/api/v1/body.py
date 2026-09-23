@@ -6,6 +6,9 @@ from app.application.coach.intelligence.body_reading_service import (
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
+from app.infrastructure.persistence.runner_profile_repository import (
+    RunnerProfileRepository,
+)
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/body", tags=["Body"])
@@ -107,12 +110,14 @@ _LIMITER = {
 
 @router.get("")
 async def get_body(profile: str = Depends(current_profile)):
-    """Leitura do corpo (determinística, sem IA, sem gravar): estado, limitador,
-    ACWR e tendências de recuperação (HRV/FC/sono/etc.)."""
+    """Leitura do corpo: estado/limitador/ACWR/tendências são determinísticos
+    (sem IA, sem gravar); a narrativa é gerada pela IA a partir do veredito já
+    calculado, com cache de 1x/dia (persistida) e fallback determinístico se a
+    IA falhar."""
 
     try:
 
-        reading, _ = BodyReadingService.read(profile, persist=False)
+        reading, trajectory = BodyReadingService.read(profile, persist=False)
 
     except Exception as e:
 
@@ -125,6 +130,20 @@ async def get_body(profile: str = Depends(current_profile)):
         return {"has_data": False}
 
     label, tone = _STATE.get(reading.body_state, (reading.body_state.title(), "warn"))
+
+    try:
+
+        runner_name = RunnerProfileRepository().load(profile).name or profile
+
+        narrative = await BodyReadingService.narrative_for(
+            profile, runner_name, reading, trajectory
+        )
+
+    except Exception as e:
+
+        print(f"Narrativa da leitura do corpo falhou p/ '{profile}': {e}")
+
+        narrative = None
 
     try:
 
@@ -149,6 +168,7 @@ async def get_body(profile: str = Depends(current_profile)):
         "body_state": reading.body_state,
         "state_label": label,
         "tone": tone,
+        "narrative": narrative,
         "limiter": reading.limiter,
         "limiter_label": _LIMITER.get(reading.limiter or "", None),
         "acwr": reading.load.acwr,

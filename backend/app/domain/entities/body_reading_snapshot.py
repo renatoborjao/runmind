@@ -29,6 +29,7 @@ class BodyReadingSnapshot:
     sleep_avg_hours: float | None
     short_nights: int
     nights_counted: int
+    narrative: str | None = None  # narrativa da IA do dia (cache; None = ainda não gerada)
 
     @property
     def day(self) -> date:

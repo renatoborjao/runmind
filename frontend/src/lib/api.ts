@@ -745,6 +745,7 @@ export interface BodyReading {
   tone?: "good" | "warn" | "bad";
   limiter?: string | null;
   limiter_label?: string | null;
+  narrative?: string | null;
   trend?: BodyTrend | null;
   sleep?: SleepDetail | null;
   acwr?: number | null;
