@@ -299,13 +299,14 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       ctx.fillStyle = "#C9CAD9"; ctx.font = `600 34px ${CANVAS_FONT}`;
       ctx.fillText("Sem parciais nesta corrida", 90, 280);
     });
-    withShadow(ctx, () => drawBrand(ctx, W / 2, 420, 44, true));
+    withShadow(ctx, () => drawBrand(ctx, W / 2, 360, 44, true));
     return;
   }
 
   // compacto (bem próximo, igual Strava) em vez de esticar até o rodapé —
   // some linhas juntas quando a corrida é curta, encolhe quando é longa.
-  const top = 300;
+  // top logo colado no título (não solto lá embaixo).
+  const top = 250;
   const rowH = Math.max(30, Math.min(72, 820 / splits.length));
   const barH = Math.max(14, Math.min(28, rowH * 0.42));
   const labelX = 90, barX = 190, valueX = W - 90;
@@ -340,10 +341,10 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
     });
   });
 
-  // marca logo abaixo da última linha (sobe quando a lista é curta), nunca
-  // além do rodapé em corridas bem longas
+  // marca colada logo abaixo da última linha (sobe bastante quando a lista é
+  // curta), nunca além do rodapé em corridas bem longas
   const listBottom = top + splits.length * rowH;
-  const brandY = Math.min(listBottom + 110, H - 90);
+  const brandY = Math.min(listBottom + 60, H - 90);
   withShadow(ctx, () => drawBrand(ctx, W / 2, brandY, 44, true));
 }
 
