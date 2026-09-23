@@ -287,8 +287,6 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
 
 // PARCIAIS — barra por km (mais rápido = barra maior), estilo Strava (template 5).
 function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  withShadow(ctx, () => drawBrand(ctx, W / 2, H - 90, 44, true));
-
   const splits = d.splits.filter((s) => s.sec > 0);
 
   withShadow(ctx, () => {
@@ -301,12 +299,15 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       ctx.fillStyle = "#C9CAD9"; ctx.font = `600 34px ${CANVAS_FONT}`;
       ctx.fillText("Sem parciais nesta corrida", 90, 280);
     });
+    withShadow(ctx, () => drawBrand(ctx, W / 2, 420, 44, true));
     return;
   }
 
-  const top = 300, bottom = H - 230;
-  const rowH = Math.max(40, Math.min(92, (bottom - top) / splits.length));
-  const barH = Math.max(16, Math.min(30, rowH * 0.42));
+  // compacto (bem próximo, igual Strava) em vez de esticar até o rodapé —
+  // some linhas juntas quando a corrida é curta, encolhe quando é longa.
+  const top = 300;
+  const rowH = Math.max(30, Math.min(72, 820 / splits.length));
+  const barH = Math.max(14, Math.min(28, rowH * 0.42));
   const labelX = 90, barX = 190, valueX = W - 90;
   const barMaxW = valueX - 150 - barX;
 
@@ -338,6 +339,12 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       ctx.textAlign = "left";
     });
   });
+
+  // marca logo abaixo da última linha (sobe quando a lista é curta), nunca
+  // além do rodapé em corridas bem longas
+  const listBottom = top + splits.length * rowH;
+  const brandY = Math.min(listBottom + 110, H - 90);
+  withShadow(ctx, () => drawBrand(ctx, W / 2, brandY, 44, true));
 }
 
 interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
