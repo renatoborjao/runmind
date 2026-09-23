@@ -266,6 +266,9 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .map-section { margin: 4px -16px; }
 .map-hero { margin-top: 0; }
 .map-hero .map-box { height: 340px; }
+/* botão de compartilhar logo abaixo do mapa — antes vivia escondido num ícone
+   no header; Renato pediu mais visível */
+.share-cta { width: 100%; margin: 10px 0 2px; }
 .map-tap { position: relative; }
 .map-box { height: 300px; width: 100%; background: var(--surface-2); position: relative; z-index: 0; isolation: isolate; }
 /* camada por cima: bloqueia interação inline e abre o mapa em tela cheia ao tocar */

@@ -365,12 +365,14 @@ export function CommentsSection({ activityKey, owner }: { activityKey: string; o
 }
 
 /** Corpo do detalhe da atividade — igual pra minha corrida e pra do amigo.
- * `analysisSlot` é injetado só na MINHA tela (a análise do coach é privada). */
-export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot, photoUrl }: {
+ * `analysisSlot` e `shareSlot` são injetados só na MINHA tela (análise do
+ * coach é privada; compartilhar só faz sentido na minha própria corrida). */
+export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot, shareSlot, photoUrl }: {
   item: FeedItem;
   track: TrackData | null;
   loadingTrack: boolean;
   analysisSlot?: React.ReactNode;
+  shareSlot?: React.ReactNode;
   photoUrl?: string | null;
 }) {
   const maxPace = track && track.splits.length
@@ -424,6 +426,8 @@ export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot, ph
       {item.has_track && track && track.points.length >= 2 && (
         <section className="map-section map-hero"><MapView points={track.points} /></section>
       )}
+
+      {shareSlot}
 
       <div className="qstats">
         <div className="qstat"><div className="v">{km(item.distance_km)}<small> km</small></div><div className="k">Distância</div></div>

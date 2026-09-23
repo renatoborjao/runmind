@@ -666,9 +666,6 @@ function AtividadesInner() {
             <button className="icon-btn" aria-label="Editar" onClick={() => { setMetaOpen((v) => !v); setTitleDraft(it.custom_title ? it.name : ""); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
             </button>
-            <button className="icon-btn" aria-label="Compartilhar" onClick={openEditor}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
-            </button>
           </header>
 
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
@@ -757,6 +754,12 @@ function AtividadesInner() {
             track={track}
             loadingTrack={loadingTrack}
             photoUrl={photoUrl}
+            shareSlot={
+              <button className="btn-ghost share-cta" onClick={openEditor}>
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
+                Compartilhar
+              </button>
+            }
             analysisSlot={analysis?.analysis ? (
               <section className="card coach-analysis">
                 <button className="ca-toggle" onClick={() => setAnalysisOpen((o) => !o)} aria-expanded={analysisOpen}>
