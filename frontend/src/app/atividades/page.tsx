@@ -285,51 +285,49 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   footer(ctx, W, H);
 }
 
+// texto com CONTORNO escuro (não só sombra difusa) — a mesma ideia do traçado
+// da rota (drawRouteBox: stroke escuro por baixo, cor por cima), aplicada a
+// texto: segura contraste em QUALQUER foto sem precisar de painel de fundo.
+function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, lineW: number) {
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = lineW;
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+}
+
 // PARCIAIS — barra por km (mais rápido = barra maior), estilo Strava (template 5).
-// Ao contrário dos outros estilos transparentes, este ganha um painel escuro
-// translúcido atrás do bloco: são MUITAS linhas finas (barra+2 textos cada) e
-// o contraste por sombra sozinho não segura contra foto real (testado: sumiu
-// em cima de folhagem/calçada — Renato reportou "não ficou legal" colado).
+// Nada de painel de fundo (destoava, "não parece flutuar" — feedback do
+// Renato): contraste vem de contorno no texto + barra com trilho escuro
+// (halo), igual ao traçado da rota. Também mais estreito/baixo que a v1 —
+// não precisa ocupar o card inteiro pra ser legível.
 function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const splits = d.splits.filter((s) => s.sec > 0);
-  const titleY = 210;
-  const labelX = 90, barX = 190, valueX = W - 90;
+  const titleY = 200;
+  const labelX = 90, barX = 172, valueX = Math.round(W * 0.62);
+
+  withShadow(ctx, () => {
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 44px ${CANVAS_FONT}`; ctx.textAlign = "left";
+    outlinedText(ctx, "Parciais por KM", labelX, titleY, 7);
+  });
 
   if (!splits.length) {
-    const panelTop = 140, panelBottom = 400;
-    roundRect(ctx, 50, panelTop, W - 100, panelBottom - panelTop, 32);
-    ctx.fillStyle = "rgba(6,7,12,0.6)"; ctx.fill();
     withShadow(ctx, () => {
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 52px ${CANVAS_FONT}`; ctx.textAlign = "left";
-      ctx.fillText("Parciais por KM", labelX, titleY);
-      ctx.fillStyle = "#C9CAD9"; ctx.font = `600 34px ${CANVAS_FONT}`;
-      ctx.fillText("Sem parciais nesta corrida", labelX, 280);
+      ctx.fillStyle = "#E7E8F0"; ctx.font = `600 30px ${CANVAS_FONT}`;
+      outlinedText(ctx, "Sem parciais nesta corrida", labelX, 250, 5);
     });
-    withShadow(ctx, () => drawBrand(ctx, W / 2, 360, 44, true));
+    withShadow(ctx, () => drawBrand(ctx, W / 2, 330, 40, true));
     return;
   }
 
-  // compacto (bem próximo, igual Strava) em vez de esticar até o rodapé —
-  // some linhas juntas quando a corrida é curta, encolhe quando é longa
-  // (corrida de 14+ splits não pode virar uma coluna gigante na foto).
-  const top = 250;
-  const rowH = Math.max(26, Math.min(68, 680 / splits.length));
-  const barH = Math.max(12, Math.min(26, rowH * 0.42));
-  const barMaxW = valueX - 150 - barX;
+  // compacto de verdade — não estica até o rodapé nem ocupa a largura toda;
+  // encolhe mais ainda quando a corrida é longa (14+ splits).
+  const top = 244;
+  const rowH = Math.max(20, Math.min(46, 460 / splits.length));
+  const barH = Math.max(9, Math.min(18, rowH * 0.4));
+  const barMaxW = valueX - 130 - barX;
 
   const listBottom = top + splits.length * rowH;
-  const brandY = Math.min(listBottom + 60, H - 90);
-
-  // painel de fundo (só atrás do bloco, não o card inteiro) — garante leitura
-  // em cima de QUALQUER foto, ao custo de deixar de ser 100% "flutuante".
-  const panelTop = titleY - 78, panelBottom = brandY + 46;
-  roundRect(ctx, 50, panelTop, W - 100, panelBottom - panelTop, 32);
-  ctx.fillStyle = "rgba(6,7,12,0.6)"; ctx.fill();
-
-  withShadow(ctx, () => {
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 52px ${CANVAS_FONT}`; ctx.textAlign = "left";
-    ctx.fillText("Parciais por KM", labelX, titleY);
-  });
+  const brandY = Math.min(listBottom + 56, H - 90);
 
   const paceOf = (s: RunSplit) => s.sec / (s.partial_km || 1);
   const speeds = splits.map((s) => 1 / paceOf(s));
@@ -343,23 +341,28 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
     const w = Math.max(barH, minBarW + (barMaxW - minBarW) * ((1 / paceOf(s) - minSp) / span));
     const label = s.km != null ? String(s.km) : (s.partial_km != null ? String(s.partial_km).replace(".", ",") : "");
 
-    ctx.fillStyle = "rgba(255,255,255,0.16)";
-    roundRect(ctx, barX, barY, barMaxW, barH, barH / 2); ctx.fill();
-    const grad = ctx.createLinearGradient(barX, 0, barX + w, 0);
-    grad.addColorStop(0, "#1FD9B8"); grad.addColorStop(1, "#34E3C8");
-    ctx.fillStyle = grad;
-    roundRect(ctx, barX, barY, w, barH, barH / 2); ctx.fill();
+    withShadow(ctx, () => {
+      // trilho: halo escuro por baixo (contraste em foto clara) + faixa sutil
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      roundRect(ctx, barX - 2, barY - 2, barMaxW + 4, barH + 4, barH / 2 + 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      roundRect(ctx, barX, barY, barMaxW, barH, barH / 2); ctx.fill();
+      const grad = ctx.createLinearGradient(barX, 0, barX + w, 0);
+      grad.addColorStop(0, "#1FD9B8"); grad.addColorStop(1, "#34E3C8");
+      ctx.fillStyle = grad;
+      roundRect(ctx, barX, barY, w, barH, barH / 2); ctx.fill();
+    });
 
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${Math.round(rowH * 0.4)}px ${CANVAS_FONT}`; ctx.textAlign = "left";
-    ctx.fillText(label, labelX, y + rowH * 0.14);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${Math.round(rowH * 0.42)}px ${CANVAS_FONT}`; ctx.textAlign = "left";
+    outlinedText(ctx, label, labelX, y + rowH * 0.15, 4);
 
-    ctx.font = `600 ${Math.round(rowH * 0.34)}px ${CANVAS_FONT}`; ctx.textAlign = "right";
-    ctx.fillText(s.pace ?? "—", valueX, y + rowH * 0.12);
+    ctx.font = `600 ${Math.round(rowH * 0.36)}px ${CANVAS_FONT}`; ctx.textAlign = "right";
+    outlinedText(ctx, s.pace ?? "—", valueX, y + rowH * 0.13, 4);
     ctx.textAlign = "left";
   });
 
-  // marca colada logo abaixo da última linha, dentro do painel
-  withShadow(ctx, () => drawBrand(ctx, W / 2, brandY, 44, true));
+  // marca colada logo abaixo da última linha
+  withShadow(ctx, () => drawBrand(ctx, W / 2, brandY, 40, true));
 }
 
 interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
