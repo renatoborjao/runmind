@@ -141,12 +141,18 @@ function refreshCanvasFont() {
 }
 
 // wordmark "Ritmind" — "Rit" na cor da marca (teal) + "mind" branco, na fonte
-// descolada (Space Grotesk). `center=true` centraliza em x.
+// descolada (Space Grotesk). `center=true` centraliza em x. Leve aumento +
+// contorno escuro (pedido do Renato: "dar mais vida") — mesma técnica de
+// contraste do resto do card (outlinedText), aplicada às duas cores do wordmark.
 function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  ctx.font = `700 ${size}px ${BRAND_FONT}`;
+  const s = Math.round(size * 1.15);
+  ctx.font = `700 ${s}px ${BRAND_FONT}`;
+  ctx.lineJoin = "round";
   const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
   const startX = center ? x - (wRit + wMind) / 2 : x;
   ctx.textAlign = "left";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = Math.max(3, s * 0.1);
+  ctx.strokeText("Rit", startX, baseY); ctx.strokeText("mind", startX + wRit, baseY);
   ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", startX, baseY);
   ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", startX + wRit, baseY);
 }
@@ -157,6 +163,16 @@ function withShadow(ctx: CanvasRenderingContext2D, fn: () => void) {
   ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
   fn();
   ctx.restore();
+}
+// texto com CONTORNO escuro (não só sombra difusa) — a mesma ideia do traçado
+// da rota (drawRouteBox: stroke escuro por baixo, cor por cima), aplicada a
+// texto: segura contraste em QUALQUER foto. Padrão em TODOS os estilos de
+// compartilhar (pedido do Renato: padronizar o tratamento de texto).
+function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, lineW: number) {
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = lineW;
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
 }
 // traçado dentro de uma caixa (fit + início/fim), com brilho — pra fundo transparente
 function drawRouteBox(
@@ -190,11 +206,13 @@ function drawRouteBox(
 function brandDate(ctx: CanvasRenderingContext2D, W: number, d: CardData) {
   withShadow(ctx, () => drawBrand(ctx, 64, 100, 42, false));
   ctx.font = `600 28px ${CANVAS_FONT}`; ctx.fillStyle = "#E7E8F0"; ctx.textAlign = "right";
-  ctx.fillText(d.date, W - 64, 100); ctx.textAlign = "left";
+  withShadow(ctx, () => outlinedText(ctx, d.date, W - 64, 100, 4));
+  ctx.textAlign = "left";
 }
 function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.fillStyle = "#9A9BAE"; ctx.font = `600 22px ${CANVAS_FONT}`; ctx.textAlign = "center";
-  ctx.fillText("ritmind", W / 2, H - 34); ctx.textAlign = "left";
+  withShadow(ctx, () => outlinedText(ctx, "ritmind", W / 2, H - 34, 3));
+  ctx.textAlign = "left";
 }
 
 // tempo tipo Strava: "53min 24s" (ou "1h05" em corrida longa)
@@ -232,9 +250,9 @@ function drawStatCols(
     ctx.textAlign = "left";
     cells.forEach(([lab, val], i) => {
       ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${labSize}px ${CANVAS_FONT}`;
-      ctx.fillText(lab, cx, baseY);
+      outlinedText(ctx, lab, cx, baseY, Math.max(3, labSize * 0.11));
       ctx.fillStyle = "#FFFFFF"; ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
-      ctx.fillText(val, cx, baseY + valSize + 10);
+      outlinedText(ctx, val, cx, baseY + valSize + 10, Math.max(3, valSize * 0.11));
       cx += widths[i] + gap;
     });
   });
@@ -250,8 +268,8 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     for (const [lab, val] of cells) {
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 46px ${CANVAS_FONT}`; ctx.fillText(lab, cx, y);
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; ctx.fillText(val, cx, y + 100);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 46px ${CANVAS_FONT}`; outlinedText(ctx, lab, cx, y, 5);
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 96px ${CANVAS_FONT}`; outlinedText(ctx, val, cx, y + 100, 9);
       y += 186;
     }
     ctx.textAlign = "left";
@@ -283,16 +301,6 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   brandDate(ctx, W, d);
   drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 36);
   footer(ctx, W, H);
-}
-
-// texto com CONTORNO escuro (não só sombra difusa) — a mesma ideia do traçado
-// da rota (drawRouteBox: stroke escuro por baixo, cor por cima), aplicada a
-// texto: segura contraste em QUALQUER foto sem precisar de painel de fundo.
-function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, lineW: number) {
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = lineW;
-  ctx.strokeText(text, x, y);
-  ctx.fillText(text, x, y);
 }
 
 // PARCIAIS — barra por km (mais rápido = barra maior), estilo Strava (template 5).
