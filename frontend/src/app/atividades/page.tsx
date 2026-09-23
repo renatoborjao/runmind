@@ -13,6 +13,7 @@ import {
   uploadActivityPhoto,
   type CoachAnalysis,
   type FeedItem,
+  type RunSplit,
   type TrackData,
 } from "@/lib/api";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
@@ -88,7 +89,20 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
 }
 
 // ---- estilos de card compartilhável (foto OU mapa real de fundo) ----
-interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; }
+interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; }
+
+// cantinho arredondado — sem depender de ctx.roundRect (suporte irregular em
+// PWA/iOS mais antigo); usado só pela trilha/barra do estilo Parciais.
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, h / 2, Math.max(w, 0) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
 
 function drawBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null, mapCard: HTMLCanvasElement | null) {
   if (photo && photo.width) {
@@ -271,11 +285,67 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
   footer(ctx, W, H);
 }
 
+// PARCIAIS — barra por km (mais rápido = barra maior), estilo Strava (template 5).
+function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  withShadow(ctx, () => drawBrand(ctx, W / 2, H - 90, 44, true));
+
+  const splits = d.splits.filter((s) => s.sec > 0);
+
+  withShadow(ctx, () => {
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 52px ${CANVAS_FONT}`; ctx.textAlign = "left";
+    ctx.fillText("Parciais por KM", 90, 210);
+  });
+
+  if (!splits.length) {
+    withShadow(ctx, () => {
+      ctx.fillStyle = "#C9CAD9"; ctx.font = `600 34px ${CANVAS_FONT}`;
+      ctx.fillText("Sem parciais nesta corrida", 90, 280);
+    });
+    return;
+  }
+
+  const top = 300, bottom = H - 230;
+  const rowH = Math.max(40, Math.min(92, (bottom - top) / splits.length));
+  const barH = Math.max(16, Math.min(30, rowH * 0.42));
+  const labelX = 90, barX = 190, valueX = W - 90;
+  const barMaxW = valueX - 150 - barX;
+
+  const paceOf = (s: RunSplit) => s.sec / (s.partial_km || 1);
+  const speeds = splits.map((s) => 1 / paceOf(s));
+  const minSp = Math.min(...speeds), maxSp = Math.max(...speeds);
+  const span = maxSp - minSp || 1;
+  const minBarW = barMaxW * 0.14;
+
+  splits.forEach((s, i) => {
+    const y = top + i * rowH + rowH / 2;
+    const barY = y - barH / 2;
+    const w = Math.max(barH, minBarW + (barMaxW - minBarW) * ((1 / paceOf(s) - minSp) / span));
+    const label = s.km != null ? String(s.km) : (s.partial_km != null ? String(s.partial_km).replace(".", ",") : "");
+
+    withShadow(ctx, () => {
+      ctx.fillStyle = "rgba(255,255,255,0.14)";
+      roundRect(ctx, barX, barY, barMaxW, barH, barH / 2); ctx.fill();
+      const grad = ctx.createLinearGradient(barX, 0, barX + w, 0);
+      grad.addColorStop(0, "#1FD9B8"); grad.addColorStop(1, "#34E3C8");
+      ctx.fillStyle = grad;
+      roundRect(ctx, barX, barY, w, barH, barH / 2); ctx.fill();
+
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${Math.round(rowH * 0.4)}px ${CANVAS_FONT}`; ctx.textAlign = "left";
+      ctx.fillText(label, labelX, y + rowH * 0.14);
+
+      ctx.font = `600 ${Math.round(rowH * 0.34)}px ${CANVAS_FONT}`; ctx.textAlign = "right";
+      ctx.fillText(s.pace ?? "—", valueX, y + rowH * 0.12);
+      ctx.textAlign = "left";
+    });
+  });
+}
+
 interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
 const CARD_STYLES: CardStyle[] = [
   { key: "centralizado", label: "Central", transparent: true, draw: styleCentralizado },
   { key: "rota", label: "Rota", transparent: true, draw: styleRota },
   { key: "cantinho", label: "Cantinho", transparent: true, draw: styleCantinho },
+  { key: "parciais", label: "Parciais", transparent: true, draw: styleParciais },
   { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
 ];
 
@@ -462,6 +532,7 @@ function AtividadesInner() {
         kmTxt: km(sel.distance_km),
         photo: photoImg,
         mapCard,
+        splits: track?.splits ?? [],
       };
       CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
     };
