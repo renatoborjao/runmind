@@ -286,31 +286,50 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
 }
 
 // PARCIAIS — barra por km (mais rápido = barra maior), estilo Strava (template 5).
+// Ao contrário dos outros estilos transparentes, este ganha um painel escuro
+// translúcido atrás do bloco: são MUITAS linhas finas (barra+2 textos cada) e
+// o contraste por sombra sozinho não segura contra foto real (testado: sumiu
+// em cima de folhagem/calçada — Renato reportou "não ficou legal" colado).
 function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const splits = d.splits.filter((s) => s.sec > 0);
-
-  withShadow(ctx, () => {
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 52px ${CANVAS_FONT}`; ctx.textAlign = "left";
-    ctx.fillText("Parciais por KM", 90, 210);
-  });
+  const titleY = 210;
+  const labelX = 90, barX = 190, valueX = W - 90;
 
   if (!splits.length) {
+    const panelTop = 140, panelBottom = 400;
+    roundRect(ctx, 50, panelTop, W - 100, panelBottom - panelTop, 32);
+    ctx.fillStyle = "rgba(6,7,12,0.6)"; ctx.fill();
     withShadow(ctx, () => {
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `800 52px ${CANVAS_FONT}`; ctx.textAlign = "left";
+      ctx.fillText("Parciais por KM", labelX, titleY);
       ctx.fillStyle = "#C9CAD9"; ctx.font = `600 34px ${CANVAS_FONT}`;
-      ctx.fillText("Sem parciais nesta corrida", 90, 280);
+      ctx.fillText("Sem parciais nesta corrida", labelX, 280);
     });
     withShadow(ctx, () => drawBrand(ctx, W / 2, 360, 44, true));
     return;
   }
 
   // compacto (bem próximo, igual Strava) em vez de esticar até o rodapé —
-  // some linhas juntas quando a corrida é curta, encolhe quando é longa.
-  // top logo colado no título (não solto lá embaixo).
+  // some linhas juntas quando a corrida é curta, encolhe quando é longa
+  // (corrida de 14+ splits não pode virar uma coluna gigante na foto).
   const top = 250;
-  const rowH = Math.max(30, Math.min(72, 820 / splits.length));
-  const barH = Math.max(14, Math.min(28, rowH * 0.42));
-  const labelX = 90, barX = 190, valueX = W - 90;
+  const rowH = Math.max(26, Math.min(68, 680 / splits.length));
+  const barH = Math.max(12, Math.min(26, rowH * 0.42));
   const barMaxW = valueX - 150 - barX;
+
+  const listBottom = top + splits.length * rowH;
+  const brandY = Math.min(listBottom + 60, H - 90);
+
+  // painel de fundo (só atrás do bloco, não o card inteiro) — garante leitura
+  // em cima de QUALQUER foto, ao custo de deixar de ser 100% "flutuante".
+  const panelTop = titleY - 78, panelBottom = brandY + 46;
+  roundRect(ctx, 50, panelTop, W - 100, panelBottom - panelTop, 32);
+  ctx.fillStyle = "rgba(6,7,12,0.6)"; ctx.fill();
+
+  withShadow(ctx, () => {
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 52px ${CANVAS_FONT}`; ctx.textAlign = "left";
+    ctx.fillText("Parciais por KM", labelX, titleY);
+  });
 
   const paceOf = (s: RunSplit) => s.sec / (s.partial_km || 1);
   const speeds = splits.map((s) => 1 / paceOf(s));
@@ -324,27 +343,22 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
     const w = Math.max(barH, minBarW + (barMaxW - minBarW) * ((1 / paceOf(s) - minSp) / span));
     const label = s.km != null ? String(s.km) : (s.partial_km != null ? String(s.partial_km).replace(".", ",") : "");
 
-    withShadow(ctx, () => {
-      ctx.fillStyle = "rgba(255,255,255,0.14)";
-      roundRect(ctx, barX, barY, barMaxW, barH, barH / 2); ctx.fill();
-      const grad = ctx.createLinearGradient(barX, 0, barX + w, 0);
-      grad.addColorStop(0, "#1FD9B8"); grad.addColorStop(1, "#34E3C8");
-      ctx.fillStyle = grad;
-      roundRect(ctx, barX, barY, w, barH, barH / 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    roundRect(ctx, barX, barY, barMaxW, barH, barH / 2); ctx.fill();
+    const grad = ctx.createLinearGradient(barX, 0, barX + w, 0);
+    grad.addColorStop(0, "#1FD9B8"); grad.addColorStop(1, "#34E3C8");
+    ctx.fillStyle = grad;
+    roundRect(ctx, barX, barY, w, barH, barH / 2); ctx.fill();
 
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${Math.round(rowH * 0.4)}px ${CANVAS_FONT}`; ctx.textAlign = "left";
-      ctx.fillText(label, labelX, y + rowH * 0.14);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${Math.round(rowH * 0.4)}px ${CANVAS_FONT}`; ctx.textAlign = "left";
+    ctx.fillText(label, labelX, y + rowH * 0.14);
 
-      ctx.font = `600 ${Math.round(rowH * 0.34)}px ${CANVAS_FONT}`; ctx.textAlign = "right";
-      ctx.fillText(s.pace ?? "—", valueX, y + rowH * 0.12);
-      ctx.textAlign = "left";
-    });
+    ctx.font = `600 ${Math.round(rowH * 0.34)}px ${CANVAS_FONT}`; ctx.textAlign = "right";
+    ctx.fillText(s.pace ?? "—", valueX, y + rowH * 0.12);
+    ctx.textAlign = "left";
   });
 
-  // marca colada logo abaixo da última linha (sobe bastante quando a lista é
-  // curta), nunca além do rodapé em corridas bem longas
-  const listBottom = top + splits.length * rowH;
-  const brandY = Math.min(listBottom + 60, H - 90);
+  // marca colada logo abaixo da última linha, dentro do painel
   withShadow(ctx, () => drawBrand(ctx, W / 2, brandY, 44, true));
 }
 
