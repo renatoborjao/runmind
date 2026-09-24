@@ -740,7 +740,10 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .se-actions { display: flex; gap: 8px; align-items: center; }
 .se-actions .se-share { flex: 1; }
 .se-actions .btn-ghost { flex: none; width: auto; padding: 13px 18px; margin: 0; }
-.se-styles { display: flex; gap: 8px; overflow-x: auto; padding: 12px 2px 4px; }
+/* overflow-x sem a barra de rolagem nativa (feia, colava embaixo dos chips
+   assim que passou a ter 4+ estilos e a fileira virou scrollável) */
+.se-styles { display: flex; gap: 8px; overflow-x: auto; padding: 12px 2px 14px; scrollbar-width: none; -ms-overflow-style: none; }
+.se-styles::-webkit-scrollbar { display: none; }
 .se-chip { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: 999px; cursor: pointer; }
 .se-chip.on { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-ink); }
 .se-photo { display: flex; gap: 8px; padding: 6px 0 10px; }
