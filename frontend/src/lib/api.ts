@@ -1,8 +1,14 @@
 // Cliente da API do Ritmind. Todas as chamadas mandam o cookie de sessão
 // (credentials: "include") — é assim que o backend sabe quem é o atleta.
 
+// PRODUÇÃO é SEMPRE relativa (/api/v1 na mesma origem — o Caddy faz o proxy).
+// Nunca lê env no build de produção: um build que herdou o .env.local de dev
+// saiu apontando pra localhost:8000 e derrubou o app de todo mundo (2026-09-23).
+// Só o `next dev` usa a URL do .env.local / localhost.
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  process.env.NODE_ENV === "production"
+    ? ""
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
 
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
