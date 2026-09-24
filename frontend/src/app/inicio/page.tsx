@@ -448,7 +448,10 @@ export default function InicioPage() {
 
         {/* ÚLTIMA CORRIDA (card com traçado, estilo Strava) */}
         {lastRun && (
-          <section className="card tap lastrun" style={{ padding: 0, overflow: "hidden" }} onClick={() => router.push("/atividades")}>
+          <section className="card tap lastrun" style={{ padding: 0, overflow: "hidden" }}
+            // abre DIRETO esta corrida (pela chave, exata mesmo com 2 no dia) — full
+            // load pelo mesmo motivo do openTodayActivity (query no export estático)
+            onClick={() => window.location.assign(`/atividades?key=${encodeURIComponent(lastRun.key)}`)}>
             {lastRoute.length >= 2 && (
               <MiniMap points={lastRoute} height={158} />
             )}
