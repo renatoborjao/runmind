@@ -106,7 +106,7 @@ async def athletes(me: str = Depends(current_profile)):
 
     out = [
         _card(p, me, graph, sp)
-        for p in RunnerProfileRepository().list_all()
+        for p in RunnerProfileRepository().list_active()  # esqueleto não aparece
         if p != me
     ]
 

@@ -35,7 +35,7 @@ class AnnouncementBroadcaster:
 
         Devolve {'sent', 'skipped', 'failed', 'preview'} pra inspeção."""
 
-        profiles = only or RunnerProfileRepository().list_all()
+        profiles = only or RunnerProfileRepository().list_active()
 
         result: dict = {
             "sent": [],

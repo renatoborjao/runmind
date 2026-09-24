@@ -61,7 +61,7 @@ def _run(active: bool):
         patch(f"{MOD}.CoachOutbox.send",
               new=AsyncMock(side_effect=lambda *a, **k: sent.append((a, k)))),
     ):
-        repo.return_value.list_all.return_value = ["helio"]
+        repo.return_value.list_active.return_value = ["helio"]
         asyncio.run(CoachReconcileNotifier.notify_all())
 
     return sent

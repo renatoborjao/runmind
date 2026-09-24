@@ -48,7 +48,7 @@ def test_health_poll_does_not_block_the_server():
         patch(f"{HEALTH}.GarminHealthRepository"),
         patch.object(GarminHealthPoller, "poll_one", side_effect=_slow),
     ):
-        repo.return_value.list_all.return_value = ["renato2"]
+        repo.return_value.list_active.return_value = ["renato2"]
         client.is_connected.return_value = True
         client.analysis_enabled.return_value = True
 

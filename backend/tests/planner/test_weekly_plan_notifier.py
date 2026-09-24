@@ -40,7 +40,7 @@ def _run_external(plan):
         mock_guard.already_sent.return_value = False
 
         mock_repo = MagicMock()
-        mock_repo.list_all.return_value = ["fulano"]
+        mock_repo.list_active.return_value = ["fulano"]
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.return_value = make_runner(
@@ -104,7 +104,7 @@ def test_notify_all_sends_to_every_profile():
         mock_guard.already_sent.return_value = False
 
         mock_repo = MagicMock()
-        mock_repo.list_all.return_value = ["renato", "camila"]
+        mock_repo.list_active.return_value = ["renato", "camila"]
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.side_effect = [
@@ -155,7 +155,7 @@ def test_notify_all_continues_after_one_profile_fails():
         mock_guard.already_sent.return_value = False
 
         mock_repo = MagicMock()
-        mock_repo.list_all.return_value = ["quebrado", "renato"]
+        mock_repo.list_active.return_value = ["quebrado", "renato"]
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.side_effect = [
@@ -207,7 +207,7 @@ def _run_sunday(*, resync_result, should_offer=False):
         mock_guard.already_sent.return_value = False
 
         mock_repo = MagicMock()
-        mock_repo.list_all.return_value = ["renato"]
+        mock_repo.list_active.return_value = ["renato"]
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.return_value = make_runner(name="Renato")
@@ -277,7 +277,7 @@ def _run_reminder(plan, external=True):
         guard.already_sent.return_value = False
 
         repo = MagicMock()
-        repo.list_all.return_value = ["fulano"]
+        repo.list_active.return_value = ["fulano"]
         repo_cls.return_value = repo
 
         load_runner.execute.return_value = make_runner(

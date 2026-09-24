@@ -35,7 +35,7 @@ def _run_notify_all(profiles, runners, messages):
         mock_narrative.write = AsyncMock(return_value=None)
 
         mock_repo = MagicMock()
-        mock_repo.list_all.return_value = profiles
+        mock_repo.list_active.return_value = profiles
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.side_effect = runners

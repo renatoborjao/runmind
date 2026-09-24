@@ -162,6 +162,22 @@ class RunnerProfileRepository:
             for profile, _ in self._valid_profiles()
         ]
 
+    def list_active(
+        self,
+    ) -> list[str]:
+        """Atletas com onboarding CONCLUÍDO — a lista que TODO job de fundo
+        (plano de domingo, briefing, pollers, proativos, informativos) percorre.
+        O cadastro pelo app cria um perfil-esqueleto (`onboarding_complete=False`,
+        idade 0, sem objetivo) antes do wizard; ele não pode receber plano nem
+        mensagem. Perfis antigos não têm o campo e contam como concluídos.
+        `list_all` fica só pra unicidade de slug/cadastro e debug."""
+
+        return [
+            profile
+            for profile, runner in self._valid_profiles()
+            if getattr(runner, "onboarding_complete", True)
+        ]
+
     def _valid_profiles(
         self,
     ):

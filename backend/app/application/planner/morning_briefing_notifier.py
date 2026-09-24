@@ -64,7 +64,7 @@ class MorningBriefingNotifier:
         """Roda a cada ~15 min; cada _notify_one decide, no fuso do atleta, se
         já é hora e se o dado da noite chegou. Dedup: um 'bom dia' por dia."""
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             try:
 

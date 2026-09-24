@@ -69,7 +69,7 @@ def _run(
         patch(f"{MOD}.use_athlete_timezone"),
     ):
 
-        repo_cls.return_value.list_all.return_value = ["mauricio"]
+        repo_cls.return_value.list_active.return_value = ["mauricio"]
         load_runner.execute.return_value = runner
         offer.reminder_due.return_value = due
         oneoff.reminder_due.return_value = oneoff_due

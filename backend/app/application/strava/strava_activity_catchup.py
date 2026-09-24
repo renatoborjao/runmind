@@ -36,7 +36,7 @@ class StravaActivityCatchup:
     @staticmethod
     async def run_all() -> None:
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             try:
 

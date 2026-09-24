@@ -34,7 +34,7 @@ def _run(hour, verdict, already_sent=False):
     ):
 
         mock_repo = MagicMock()
-        mock_repo.list_all.return_value = ["renato"]
+        mock_repo.list_active.return_value = ["renato"]
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.return_value = runner

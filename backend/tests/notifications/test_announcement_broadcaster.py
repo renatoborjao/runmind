@@ -22,7 +22,7 @@ def _run(announcement_id="2026-07-novidades", message="Novidades!", **kwargs):
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
     ):
 
-        mock_repo_cls.return_value.list_all.return_value = profiles
+        mock_repo_cls.return_value.list_active.return_value = profiles
 
         mock_load.execute.side_effect = lambda p: SimpleNamespace(
             name=p.capitalize()
@@ -73,7 +73,7 @@ def test_one_failure_does_not_block_the_rest():
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
     ):
 
-        mock_repo_cls.return_value.list_all.return_value = ["a", "b", "c"]
+        mock_repo_cls.return_value.list_active.return_value = ["a", "b", "c"]
 
         mock_load.execute.side_effect = lambda p: SimpleNamespace(name=p)
 

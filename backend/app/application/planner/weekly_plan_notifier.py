@@ -56,7 +56,7 @@ class WeeklyPlanNotifier:
         """Roda de HORA EM HORA; cada _notify_one decide se é o horário local
         do atleta (domingo 20h) e faz dedup."""
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             try:
 
@@ -170,7 +170,7 @@ class WeeklyPlanNotifier:
         sem a prescrição pra comparar. Falha de um atleta não derruba os
         outros."""
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             try:
 

@@ -32,7 +32,7 @@ class WellbeingFollowUpNotifier:
     @staticmethod
     async def notify_all() -> None:
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             try:
 

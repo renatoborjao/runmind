@@ -551,7 +551,7 @@ def test_poll_all_gates_on_connected_and_analysis_enabled():
 
     profile_repo = MagicMock()
 
-    profile_repo.list_all.return_value = ["conectado", "sem_garmin", "sem_valvula"]
+    profile_repo.list_active.return_value = ["conectado", "sem_garmin", "sem_valvula"]
 
     def connected(p):
 
@@ -734,7 +734,7 @@ def test_poll_all_isolates_failure_per_athlete():
 
     profile_repo = MagicMock()
 
-    profile_repo.list_all.return_value = ["quebra", "ok"]
+    profile_repo.list_active.return_value = ["quebra", "ok"]
 
     done = []
 

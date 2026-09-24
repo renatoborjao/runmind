@@ -151,7 +151,7 @@ class GarminActivityPoller:
     @staticmethod
     async def poll_all() -> None:
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             # análise via Garmin exige conexão E a válvula ligada
             if not (

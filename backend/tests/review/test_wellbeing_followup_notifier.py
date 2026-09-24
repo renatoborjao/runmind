@@ -29,7 +29,7 @@ def _run(hour, concern, already_sent=False):
         patch(f"{MOD}.use_athlete_timezone"),
     ):
 
-        repo_cls.return_value.list_all.return_value = ["renato"]
+        repo_cls.return_value.list_active.return_value = ["renato"]
         load_runner.execute.return_value = runner
         checkin_cls.return_value.recent_concern.return_value = concern
         guard.already_sent.return_value = already_sent

@@ -53,7 +53,7 @@ class MonthlyRecapNotifier:
         """Roda de HORA EM HORA; cada _notify_one decide se é o horário
         local do atleta (dia 1, 9h) e faz dedup."""
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             try:
 

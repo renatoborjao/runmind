@@ -298,7 +298,7 @@ class GarminHealthPoller:
 
         repo = GarminHealthRepository()
 
-        for profile in RunnerProfileRepository().list_all():
+        for profile in RunnerProfileRepository().list_active():
 
             # mesmo gate da análise de treino: conectado E válvula ligada
             if not (
