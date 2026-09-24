@@ -1,0 +1,2 @@
+# scripts de deploy rodam no bash: nunca CRLF ( quebra o bash)
+*.sh text eol=lf
