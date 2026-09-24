@@ -133,3 +133,17 @@ def test_nothing_uploaded_counts_as_failure(env):
     _push(mp, calls, results=[{"ok": False}])
 
     assert _move().json()["watch"] == "failed"
+
+
+def test_move_to_today_at_night_is_honest_about_the_watch(env):
+    """Moveu pra HOJE depois das 21h: o treino não desce pro relógio — o app e
+    o coach dizem isso (nunca 'já atualizei teu relógio')."""
+    mp, calls = env
+    _connect(mp, True)
+    _push(mp, calls, results=[{"ok": True}, {"ok": False, "action": "late_today"}])
+
+    r = _move()
+
+    assert r.json()["watch"] == "late"
+    assert "fechou o dia" in r.json()["message"]
+    assert "Já atualizei" not in _Conv.turns[-1][1]

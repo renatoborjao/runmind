@@ -65,6 +65,7 @@ function DetalheInner() {
   const [confirming, setConfirming] = useState(false);
   const [moved, setMoved] = useState<{ message: string; watchFailed: boolean } | null>(null);
   const [garminConnected, setGarminConnected] = useState(false);
+  const [watchDayClosed, setWatchDayClosed] = useState(false);
 
   async function onPushWatch() {
     setWatch({ sending: true, msg: null });
@@ -79,7 +80,7 @@ function DetalheInner() {
     setMoving(false);
     if (res.ok) {
       // confirmação do que aconteceu (inclusive o relógio) antes de voltar
-      setMoved({ message: res.message, watchFailed: res.watch === "failed" });
+      setMoved({ message: res.message, watchFailed: res.watch === "failed" || res.watch === "late" });
     } else {
       setConfirming(false);
       setMoveMsg(res.message);
@@ -96,6 +97,7 @@ function DetalheInner() {
       }
       setWeek(w.week);
       setGarminConnected(!!w.garmin_connected);
+      setWatchDayClosed(!!w.watch_day_closed);
       const picked =
         (dayParam && w.week.find((d) => d.day_en === dayParam)) ||
         w.week.find((d) => d.is_today) ||
@@ -236,7 +238,9 @@ function DetalheInner() {
                 {garminConnected && (
                   <p className="confirm-watch">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="3" width="12" height="18" rx="3" /><path d="M12 7v4l2 1" /></svg>
-                    Já mando a semana atualizada pro teu relógio.
+                    {target.is_today && watchDayClosed
+                      ? "Atenção: a essa hora o Garmin já fechou o dia de hoje, então esse treino não desce pro relógio hoje. Dá pra correr livre que o coach compara com o plano igual."
+                      : "Já mando a semana atualizada pro teu relógio."}
                   </p>
                 )}
                 <button className="btn-primary" disabled={moving} onClick={() => onMove(target.day_en)}>

@@ -31,7 +31,7 @@ def _plan(days, records=None) -> TrainingPlan:
     )
 
 
-def _run(snapshot, full_refresh=True, current=None, done=frozenset()):
+def _run(snapshot, full_refresh=True, current=None, done=frozenset(), closed=False):
 
     current = current or _plan(["Tuesday", "Thursday", "Saturday"])
 
@@ -47,6 +47,7 @@ def _run(snapshot, full_refresh=True, current=None, done=frozenset()):
         patch(f"{MODULE}.LoadTrainingHistory") as history,
         patch(f"{MODULE}.WeeklyPlanMatcher") as matcher,
         patch(f"{MODULE}.today_local", return_value=MONDAY),
+        patch(f"{MODULE}.watch_day_closed", return_value=closed),
     ):
 
         provider.for_profile = AsyncMock(
@@ -58,9 +59,9 @@ def _run(snapshot, full_refresh=True, current=None, done=frozenset()):
         history.execute = AsyncMock(return_value=MagicMock(activities=[]))
         matcher.fulfilled_days.return_value = set(done)
 
-        asyncio.run(push_current_plan("renato2", full_refresh=full_refresh))
+        results = asyncio.run(push_current_plan("renato2", full_refresh=full_refresh))[2]
 
-        return current, reconciler, store, g
+        return current, reconciler, store, g, results
 
 
 def test_full_refresh_default_repushes_the_whole_week_fresh():
@@ -82,7 +83,7 @@ def test_full_refresh_default_repushes_the_whole_week_fresh():
 
     snapshot = _plan(["Tuesday", "Thursday", "Sunday"])
 
-    current, reconciler, store, g = _run(snapshot, current=current)
+    current, reconciler, store, g, _ = _run(snapshot, current=current)
 
     # apagou os 3 templates futuros que estavam no relógio
     deleted = {c.args[0] for c in g.delete_workout.call_args_list}
@@ -119,6 +120,7 @@ def test_full_refresh_leaves_past_sessions_untouched():
         patch(f"{MODULE}.LoadTrainingHistory") as history,
         patch(f"{MODULE}.WeeklyPlanMatcher") as matcher,
         patch(f"{MODULE}.today_local", return_value=date(2026, 7, 16)),
+        patch(f"{MODULE}.watch_day_closed", return_value=False),
     ):
         g = MagicMock()
         provider.for_profile = AsyncMock(return_value=(make_runner(), current))
@@ -153,7 +155,7 @@ def test_full_refresh_removes_fulfilled_and_does_not_repush_it():
     )
 
     # terça JÁ foi cumprida (today=segunda, mas terça marcada como done)
-    current, reconciler, store, g = _run(
+    current, reconciler, store, g, _ = _run(
         snapshot=None, current=current, done={"Tuesday"},
     )
 
@@ -172,7 +174,7 @@ def test_incremental_reconciles_against_the_pushed_snapshot():
 
     snapshot = _plan(["Tuesday", "Thursday", "Sunday"])
 
-    current, reconciler, store, g = _run(snapshot, full_refresh=False)
+    current, reconciler, store, g, _ = _run(snapshot, full_refresh=False)
 
     g.delete_workout.assert_not_called()                 # não purga
     call = reconciler.reconcile.call_args
@@ -185,8 +187,62 @@ def test_incremental_first_push_without_snapshot_reconciles_against_itself():
     """full_refresh=False, primeira vez (sem snapshot): previous = o próprio
     plano -> empurra tudo, idempotente."""
 
-    current, reconciler, _, _ = _run(snapshot=None, full_refresh=False)
+    current, reconciler, _, _, _ = _run(snapshot=None, full_refresh=False)
 
     call = reconciler.reconcile.call_args
     assert call.kwargs["previous_plan"] is current
     assert call.kwargs["current_plan"] is current
+
+
+def test_night_window_keeps_todays_workout_on_the_watch():
+    """>=21h BRT o Garmin já fechou o dia (UTC): reenviar o treino de HOJE o
+    faria sumir do relógio (bug de 23/09). Hoje fica INTOCADO — só de amanhã em
+    diante é purgado/reenviado. Ver [[project_mover_pra_hoje_relogio]]."""
+
+    # today = MONDAY; treino de hoje já no relógio
+    current = _plan(
+        ["Monday", "Thursday"],
+        records={
+            "Monday": {"workout_id": 10, "schedule_id": 100,
+                       "date": "2026-07-13", "fingerprint": "m"},
+            "Thursday": {"workout_id": 22, "schedule_id": 222,
+                         "date": "2026-07-16", "fingerprint": "b"},
+        },
+    )
+
+    current, reconciler, _, g, results = _run(None, current=current, closed=True)
+
+    deleted = {c.args[0] for c in g.delete_workout.call_args_list}
+    assert deleted == {22}                                   # hoje NÃO apagado
+    assert current.find_session_by_day("Monday").garmin["workout_id"] == 10
+    assert reconciler.reconcile.call_args.kwargs["reference_date"] == date(2026, 7, 14)
+    assert results == []                                     # nada de 'late'
+
+
+def test_night_window_flags_workout_just_moved_to_today():
+    """Treino que acabou de vir pra HOJE à noite (sem registro no relógio) não
+    tem como descer: vira 'late_today' pro chamador avisar com honestidade."""
+
+    current = _plan(["Monday", "Thursday"])
+
+    _, reconciler, _, g, results = _run(None, current=current, closed=True)
+
+    assert [r["action"] for r in results] == ["late_today"]
+    assert results[0]["day"] == "Monday"
+
+
+def test_day_time_repushes_today_normally():
+    """De dia (Garmin ainda no mesmo dia) o treino de hoje é reenviado normal —
+    é o que fez o 'mover pra hoje' funcionar no teste de 24/09."""
+
+    current = _plan(
+        ["Monday"],
+        records={"Monday": {"workout_id": 10, "schedule_id": 100,
+                            "date": "2026-07-13", "fingerprint": "m"}},
+    )
+
+    current, reconciler, _, g, results = _run(None, current=current, closed=False)
+
+    g.delete_workout.assert_called_once_with(10)
+    assert reconciler.reconcile.call_args.kwargs["reference_date"] == MONDAY
+    assert results == []

@@ -6,10 +6,14 @@ não exemplos.
 Passa pela reconciliação: o plano guarda o que já pôs no relógio, então
 chamar de novo NÃO duplica — só empurra o que falta ou mudou."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.application.garmin.garmin_push import sweep_orphan_workouts
-from app.application.garmin.garmin_reconciler import GarminReconciler
+from app.application.garmin.garmin_reconciler import (
+    _RUNNING_KINDS,
+    GarminReconciler,
+)
+from app.application.garmin.watch_day import watch_day_closed
 from app.application.planner.current_plan_provider import (
     CurrentPlanProvider,
 )
@@ -47,6 +51,33 @@ async def push_current_plan(
 
     reference = today_local() if only_future else date.min
 
+    # JANELA DA NOITE (>=21h BRT): o Garmin já fechou o dia de hoje (data UTC).
+    # Reenviar o treino de hoje agora o faria SUMIR do relógio (apaga o que
+    # está lá e o novo não desce mais). Então hoje fica INTOCADO: não apaga,
+    # não reenvia — só de amanhã em diante. Treino que acabou de vir pra hoje
+    # (sem registro no relógio) não tem como descer: vira 'late_today' pro
+    # chamador avisar o atleta com honestidade. Ver [[project_mover_pra_hoje_relogio]].
+    late_today: list[dict] = []
+
+    if only_future and watch_day_closed():
+
+        today = reference
+
+        reference = today + timedelta(days=1)
+
+        late_today = [
+            {
+                "day": s.day,
+                "ok": False,
+                "action": "late_today",
+                "workout": s.workout_type,
+                "date": today.isoformat(),
+            }
+            for s in plan.sessions
+            if plan.session_date(s) == today and not (s.garmin or {}).get("workout_id")
+            and s.kind in _RUNNING_KINDS
+        ]
+
     # conecta UMA vez e reusa em todas as ops (antes: um login por sessão)
     garmin = GarminClient.connect(profile)
 
@@ -80,7 +111,7 @@ async def push_current_plan(
         reference_date=reference,
         garmin=garmin,
         done_days=done_days,
-    )
+    ) + [r for r in late_today if r["day"].lower() not in {d.lower() for d in done_days}]
 
     # persiste os registros de push (workout_id/schedule_id) gravados nas
     # sessões, pra próxima mudança saber o que já está no relógio

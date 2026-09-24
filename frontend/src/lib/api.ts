@@ -257,6 +257,7 @@ export interface WorkoutsResponse {
   week: WorkoutDay[];
   race: RaceInfo | null;
   garmin_connected?: boolean;
+  watch_day_closed?: boolean;
 }
 
 export async function getWorkouts(): Promise<WorkoutsResponse | null> {
@@ -1005,7 +1006,7 @@ export async function unsubscribePush(endpoint: string): Promise<boolean> {
 export async function moveWorkout(
   fromDay: string,
   toDay: string,
-): Promise<{ ok: boolean; message: string; watch?: "sent" | "failed" | "none" }> {
+): Promise<{ ok: boolean; message: string; watch?: "sent" | "late" | "failed" | "none" }> {
   const r = await apiFetch("/plan/move", {
     method: "POST",
     body: JSON.stringify({ from_day: fromDay, to_day: toDay }),

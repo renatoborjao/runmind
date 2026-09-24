@@ -147,6 +147,14 @@ class GarminSync:
 
         sent = [r for r in results if r.get("ok")]
 
+        from app.application.garmin.watch_day import LATE_TODAY_NOTE
+
+        late = any(r.get("action") == "late_today" for r in results)
+
+        if late and not sent:
+
+            return f"{runner.name}, {LATE_TODAY_NOTE}"
+
         if not sent:
 
             return (
@@ -164,4 +172,5 @@ class GarminSync:
             "É só sincronizar o relógio com o app que eles aparecem em "
             "Treino → Programados, cada um agendado no seu dia. "
             "Bons treinos! 🏃"
+            + (f"\n\nSó o de hoje: {LATE_TODAY_NOTE}" if late else "")
         )

@@ -92,6 +92,14 @@ async def push_watch(profile: str = Depends(current_profile)):
 
     pushed = [r for r in results if r.get("ok")]
 
+    from app.application.garmin.watch_day import LATE_TODAY_NOTE
+
+    late = any(r.get("action") == "late_today" for r in results)
+
+    if late and not pushed:
+
+        return {"ok": True, "pushed": 0, "message": LATE_TODAY_NOTE}
+
     return {
         "ok": True,
         "pushed": len(pushed),
@@ -100,7 +108,7 @@ async def push_watch(profile: str = Depends(current_profile)):
             "com o app que eles aparecem em Treino → Programados. 🏃"
             if pushed
             else "Teu relógio já está com os treinos da semana. 👍"
-        ),
+        ) + (" " + LATE_TODAY_NOTE if late else ""),
     }
 
 
@@ -205,9 +213,15 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
     # do relógio (oferta no chat) cobre — nunca vira limbo. Ver [[project_rede_relogio]].
     watch = await _push_watch_after_move(profile)
 
+    from app.application.garmin.watch_day import LATE_TODAY_NOTE
+
     if watch == "sent":
 
         coach_tail = " Já atualizei teu relógio — sincroniza o Garmin que aparece em Treino → Programados. ⌚"
+
+    elif watch == "late":
+
+        coach_tail = " " + LATE_TODAY_NOTE
 
     elif watch == "failed":
 
@@ -243,6 +257,10 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
 
         message += " Relógio atualizado — sincroniza o Garmin. ⌚"
 
+    elif watch == "late":
+
+        message += " " + LATE_TODAY_NOTE
+
     elif watch == "failed":
 
         message += " Não consegui falar com teu Garmin agora; toca em 'Enviar pro relógio' pra tentar de novo."
@@ -252,7 +270,9 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
 
 async def _push_watch_after_move(profile: str) -> str:
     """Empurra a semana (já com o treino no dia novo) pro Garmin.
-    'sent' | 'failed' | 'none' (sem Garmin conectado → nada a fazer)."""
+    'sent' | 'late' | 'failed' | 'none' (sem Garmin conectado → nada a fazer).
+    'late' = moveu pra HOJE na janela da noite: o Garmin já fechou o dia, o
+    treino não tem como descer (o resto da semana foi normalmente)."""
 
     from app.application.garmin.push_current_plan import push_current_plan
     from app.infrastructure.integrations.garmin.garmin_client import GarminClient
@@ -264,6 +284,10 @@ async def _push_watch_after_move(profile: str) -> str:
             return "none"
 
         _, _, results = await push_current_plan(profile)
+
+        if any(r.get("action") == "late_today" for r in results):
+
+            return "late"
 
         # tinha o que mandar e NADA subiu = falhou (não finge sucesso)
         if results and not any(r.get("ok") for r in results):
