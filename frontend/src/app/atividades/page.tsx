@@ -406,6 +406,8 @@ function AtividadesInner() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mapCard, setMapCard] = useState<HTMLCanvasElement | null>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // adornos da atividade (título custom + foto), só na MINHA tela
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [metaOpen, setMetaOpen] = useState(false);
@@ -551,6 +553,31 @@ function AtividadesInner() {
     buildMapCard(pts, 1080, 1350).then((c) => { if (alive) setMapCard(c); });
     return () => { alive = false; };
   }, [editor, styleIdx, photoImg, track]);
+
+  // troca de estilo pelo chip mantém o chip ativo visível na fileira (que
+  // agora rola escondida, sem barra) — importante quando o swipe no card
+  // muda pra um estilo fora da tela.
+  useEffect(() => {
+    if (!editor) return;
+    chipRefs.current[styleIdx]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [editor, styleIdx]);
+
+  // deslizar o CARD (não só tocar no chip) também troca de estilo — gesto
+  // natural tipo carrossel. Pointer events cobrem toque e mouse igual.
+  function onPreviewPointerDown(e: React.PointerEvent) {
+    swipeStart.current = { x: e.clientX, y: e.clientY };
+  }
+  function onPreviewPointerUp(e: React.PointerEvent) {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+    setStyleIdx((i) => {
+      const next = dx < 0 ? i + 1 : i - 1;
+      return Math.max(0, Math.min(CARD_STYLES.length - 1, next));
+    });
+  }
 
   // redesenha o preview quando muda estilo/foto/atividade/mapa
   useEffect(() => {
@@ -706,13 +733,20 @@ function AtividadesInner() {
                 <span style={{ width: 34 }} />
               </header>
 
-              <div className="se-preview">
+              <div className="se-preview" onPointerDown={onPreviewPointerDown} onPointerUp={onPreviewPointerUp}>
                 <canvas ref={previewRef} className={`se-canvas${CARD_STYLES[styleIdx].transparent ? " transp" : ""}`} />
               </div>
 
               <div className="se-styles">
                 {CARD_STYLES.map((s, i) => (
-                  <button key={s.key} className={`se-chip${i === styleIdx ? " on" : ""}`} onClick={() => setStyleIdx(i)}>{s.label}</button>
+                  <button
+                    key={s.key}
+                    ref={(el) => { chipRefs.current[i] = el; }}
+                    className={`se-chip${i === styleIdx ? " on" : ""}`}
+                    onClick={() => setStyleIdx(i)}
+                  >
+                    {s.label}
+                  </button>
                 ))}
               </div>
 
