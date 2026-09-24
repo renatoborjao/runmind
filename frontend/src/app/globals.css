@@ -840,3 +840,12 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .wz-row .field { flex: 1; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* confirmação "tem certeza?" (ex.: trocar treino de dia) — bottom sheet */
+.confirm-overlay { position: fixed; inset: 0; z-index: 1500; background: rgba(6,7,12,.55); display: flex; align-items: flex-end; justify-content: center; }
+.confirm-sheet { width: 100%; max-width: 430px; background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -8px 30px rgba(0,0,0,.25); }
+.confirm-sheet h3 { font-family: var(--font-display), sans-serif; margin: 0; font-size: 19px; }
+.confirm-sheet p { margin: 0; color: var(--ink-soft); font-size: 14.5px; line-height: 1.45; }
+.confirm-sheet .confirm-watch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--accent-ink); }
+.confirm-sheet .btn-primary, .confirm-sheet .btn-ghost { width: 100%; margin: 0; }
+.confirm-sheet .btn-primary { margin-top: 6px; }

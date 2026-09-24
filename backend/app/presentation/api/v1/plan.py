@@ -199,6 +199,29 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
 
     pt_from, pt_to = _DAY_PT[from_day], _DAY_PT[to_day]
 
+    # o atleta JÁ confirmou no app ("tem certeza?" → sim) e a tela avisa que o
+    # relógio vai junto — então quem tem Garmin recebe a semana atualizada na
+    # hora. Se o Garmin falhar, o treino continua movido e a rede de segurança
+    # do relógio (oferta no chat) cobre — nunca vira limbo. Ver [[project_rede_relogio]].
+    watch = await _push_watch_after_move(profile)
+
+    if watch == "sent":
+
+        coach_tail = " Já atualizei teu relógio — sincroniza o Garmin que aparece em Treino → Programados. ⌚"
+
+    elif watch == "failed":
+
+        from app.application.garmin.watch_offer import watch_update_offer
+
+        coach_tail = (
+            " Não consegui falar com teu Garmin agora."
+            + (watch_update_offer(profile) or " Toca em 'Enviar pro relógio' no app pra tentar de novo.")
+        )
+
+    else:
+
+        coach_tail = " 👊"
+
     # coach a par: registra a troca na MESMA conversa (nada se perde)
     try:
 
@@ -207,12 +230,50 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
         repo.append_turn(
             profile,
             "assistant",
-            f"Feito! Movi teu {source.workout_type} de {pt_from} pra {pt_to}. "
-            "Toca em 'Enviar pro relógio' pra atualizar o Garmin. 👊",
+            f"Feito! Movi teu {source.workout_type} de {pt_from} pra {pt_to}.{coach_tail}",
         )
 
     except Exception as e:
 
         print(f"Falha ao registrar move na conversa de '{profile}': {e}")
 
-    return {"ok": True, "message": f"Treino movido de {pt_from} para {pt_to}."}
+    message = f"Treino movido de {pt_from} para {pt_to}."
+
+    if watch == "sent":
+
+        message += " Relógio atualizado — sincroniza o Garmin. ⌚"
+
+    elif watch == "failed":
+
+        message += " Não consegui falar com teu Garmin agora; toca em 'Enviar pro relógio' pra tentar de novo."
+
+    return {"ok": True, "message": message, "watch": watch}
+
+
+async def _push_watch_after_move(profile: str) -> str:
+    """Empurra a semana (já com o treino no dia novo) pro Garmin.
+    'sent' | 'failed' | 'none' (sem Garmin conectado → nada a fazer)."""
+
+    from app.application.garmin.push_current_plan import push_current_plan
+    from app.infrastructure.integrations.garmin.garmin_client import GarminClient
+
+    try:
+
+        if not GarminClient.is_connected(profile):
+
+            return "none"
+
+        _, _, results = await push_current_plan(profile)
+
+        # tinha o que mandar e NADA subiu = falhou (não finge sucesso)
+        if results and not any(r.get("ok") for r in results):
+
+            return "failed"
+
+        return "sent"
+
+    except Exception as e:
+
+        print(f"Falha ao empurrar relógio após move de '{profile}': {e}")
+
+        return "failed"

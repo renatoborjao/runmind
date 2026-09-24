@@ -62,6 +62,8 @@ function DetalheInner() {
   const [target, setTarget] = useState<WorkoutDay | null>(null);
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [moved, setMoved] = useState<{ message: string; watchFailed: boolean } | null>(null);
   const [garminConnected, setGarminConnected] = useState(false);
 
   async function onPushWatch() {
@@ -76,8 +78,10 @@ function DetalheInner() {
     const res = await moveWorkout(day.day_en, toDay);
     setMoving(false);
     if (res.ok) {
-      router.push("/treino");
+      // confirmação do que aconteceu (inclusive o relógio) antes de voltar
+      setMoved({ message: res.message, watchFailed: res.watch === "failed" });
     } else {
+      setConfirming(false);
       setMoveMsg(res.message);
       setPicking(false);
     }
@@ -189,8 +193,8 @@ function DetalheInner() {
                     </div>
                     {target && (
                       <button className="btn-primary" style={{ marginTop: 12 }} disabled={moving}
-                        onClick={() => onMove(target.day_en)}>
-                        {moving ? "Movendo…" : `Confirmar: mover pra ${target.day_pt} ${target.date_num}`}
+                        onClick={() => setConfirming(true)}>
+                        {`Mover pra ${target.day_pt} ${target.date_num}`}
                       </button>
                     )}
                   </>
@@ -210,6 +214,39 @@ function DetalheInner() {
             )}
           </div>
         </>
+      )}
+
+      {confirming && target && day && session && (
+        <div className="confirm-overlay" role="dialog" aria-modal="true"
+          onClick={() => { if (!moving && !moved) setConfirming(false); }}>
+          <div className="confirm-sheet" onClick={(e) => e.stopPropagation()}>
+            {moved ? (
+              <>
+                <h3>{moved.watchFailed ? "Treino movido" : "Pronto! ✅"}</h3>
+                <p>{moved.message}</p>
+                <button className="btn-primary" onClick={() => router.push("/treino")}>Ver minha semana</button>
+              </>
+            ) : (
+              <>
+                <h3>Tem certeza?</h3>
+                <p>
+                  Teu <b>{session.workout_type}</b> sai de <b>{day.day_pt} {day.date_num}</b> e vai
+                  pra <b>{target.day_pt} {target.date_num}</b>.
+                </p>
+                {garminConnected && (
+                  <p className="confirm-watch">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="3" width="12" height="18" rx="3" /><path d="M12 7v4l2 1" /></svg>
+                    Já mando a semana atualizada pro teu relógio.
+                  </p>
+                )}
+                <button className="btn-primary" disabled={moving} onClick={() => onMove(target.day_en)}>
+                  {moving ? (garminConnected ? "Movendo e enviando pro relógio…" : "Movendo…") : "Sim, mover"}
+                </button>
+                <button className="btn-ghost" disabled={moving} onClick={() => setConfirming(false)}>Cancelar</button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </>
   );

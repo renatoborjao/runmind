@@ -996,12 +996,15 @@ export async function unsubscribePush(endpoint: string): Promise<boolean> {
 
 // ---- Trocar treino de dia ----
 
-export async function moveWorkout(fromDay: string, toDay: string): Promise<{ ok: boolean; message: string }> {
+export async function moveWorkout(
+  fromDay: string,
+  toDay: string,
+): Promise<{ ok: boolean; message: string; watch?: "sent" | "failed" | "none" }> {
   const r = await apiFetch("/plan/move", {
     method: "POST",
     body: JSON.stringify({ from_day: fromDay, to_day: toDay }),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return { ok: false, message: data.detail || "Não consegui trocar o dia." };
-  return { ok: true, message: data.message || "Treino movido." };
+  return { ok: true, message: data.message || "Treino movido.", watch: data.watch };
 }
