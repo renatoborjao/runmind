@@ -3,6 +3,7 @@ sem tocar no resto do plano nem passar pelo reconciliador da semana. É o que
 o 'quer no relógio? SIM' do treino avulso chama, inclusive pra atleta de
 treinador externo (o avulso é NOSSO, não do treinador)."""
 
+import asyncio
 from datetime import date
 
 from app.application.garmin.garmin_push import push_session
@@ -39,9 +40,10 @@ async def push_one_off(profile: str, on_date: date) -> dict:
 
         return {"ok": False, "error": "garmin desconectado"}
 
-    garmin = GarminClient.connect(profile)
+    # lib do Garmin é síncrona: em thread, não trava o servidor
+    garmin = await asyncio.to_thread(GarminClient.connect, profile)
 
-    outcome = push_session(profile, session, on_date, garmin)
+    outcome = await asyncio.to_thread(push_session, profile, session, on_date, garmin)
 
     if outcome.get("ok"):
 

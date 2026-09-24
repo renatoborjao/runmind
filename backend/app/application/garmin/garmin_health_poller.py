@@ -9,6 +9,7 @@ leitura da manhã roda num tick FREQUENTE (a cada 15 min) pra o sono da noite
 aparecer logo que o relógio sincroniza; os scans caros (VO₂/body-context/prova)
 ficam no tick horário. Ver GarminHealthPoller.poll_one e weekly_plan_scheduler."""
 
+import asyncio
 import time
 from datetime import timedelta
 
@@ -309,8 +310,13 @@ class GarminHealthPoller:
 
             try:
 
-                GarminHealthPoller.poll_one(
-                    profile, repo, recovery_only=recovery_only
+                # lib do Garmin é SÍNCRONA (rede + pausas de ritmo): em thread,
+                # senão o servidor inteiro para de atender enquanto o poll roda
+                await asyncio.to_thread(
+                    GarminHealthPoller.poll_one,
+                    profile,
+                    repo,
+                    recovery_only=recovery_only,
                 )
 
             except Exception as e:

@@ -5,6 +5,7 @@ Proteção contra backfill: na PRIMEIRA passada de um atleta recém-conectado,
 o histórico é marcado como 'já processado' sem analisar — senão a gente
 mandaria feedback de treinos antigos de uma vez."""
 
+import asyncio
 from datetime import timedelta
 from pathlib import Path
 
@@ -175,15 +176,17 @@ class GarminActivityPoller:
 
         # atleta sem seed (logou antes deste fluxo): seed agora, sem
         # analisar — evita despejar o histórico antigo de uma vez
+        # lib do Garmin é SÍNCRONA: rede em thread, senão o servidor inteiro
+        # para de atender enquanto o poll roda (ver GarminClient._login_lock)
         if not _seeded_marker(profile).exists():
 
-            GarminActivityPoller.seed_history(profile)
+            await asyncio.to_thread(GarminActivityPoller.seed_history, profile)
 
             return
 
-        garmin = GarminClient.connect(profile)
-
-        activities = garmin.get_activities(0, _RECENT_LIMIT) or []
+        activities = await asyncio.to_thread(
+            GarminActivityPoller._recent_activities, profile
+        )
 
         guard = ProcessedActivityGuard()
 
@@ -208,6 +211,13 @@ class GarminActivityPoller:
                 continue
 
             await GarminActivityPoller._analyze(profile, activity_id)
+
+    @staticmethod
+    def _recent_activities(profile: str) -> list[dict]:
+
+        garmin = GarminClient.connect(profile)
+
+        return garmin.get_activities(0, _RECENT_LIMIT) or []
 
     @staticmethod
     def _capture_cross_training(profile: str, item: dict) -> bool:
@@ -257,7 +267,8 @@ class GarminActivityPoller:
             # então o _exact_interval aplica o filtro de tiros-caminhada
             runner = RunnerProfileRepository().load(profile)
 
-            activity = GarminActivitySource.fetch(
+            activity = await asyncio.to_thread(
+                GarminActivitySource.fetch,
                 profile,
                 activity_id,
                 external_coach=bool(getattr(runner, "external_coach", False)),

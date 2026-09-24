@@ -3,6 +3,7 @@ na data da prova e PROTEGIDO do sweep. Reusável: companheiro de prova (oferta n
 semana) e on-demand. Devolve o resultado do push, ou None se não dá pra montar
 (sem prova/distância/forma). Ver [[RaceWorkoutComposer]]."""
 
+import asyncio
 from app.application.coach.planning.race_strategy_engine import (
     RaceStrategyEngine,
 )
@@ -76,7 +77,8 @@ async def push_race_workout(profile: str) -> dict | None:
         structure=structure,
     )
 
-    result = push_session(profile, session, goal.race_date)
+    # lib do Garmin é síncrona: em thread, não trava o servidor
+    result = await asyncio.to_thread(push_session, profile, session, goal.race_date)
 
     if result.get("ok") and result.get("workout_id"):
 

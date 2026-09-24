@@ -6,6 +6,7 @@ não exemplos.
 Passa pela reconciliação: o plano guarda o que já pôs no relógio, então
 chamar de novo NÃO duplica — só empurra o que falta ou mudou."""
 
+import asyncio
 from datetime import date, timedelta
 
 from app.application.garmin.garmin_push import sweep_orphan_workouts
@@ -79,7 +80,9 @@ async def push_current_plan(
         ]
 
     # conecta UMA vez e reusa em todas as ops (antes: um login por sessão)
-    garmin = GarminClient.connect(profile)
+    # lib do Garmin é SÍNCRONA: toda a conversa com ele roda em thread, senão o
+    # servidor inteiro trava enquanto a semana sobe pro relógio
+    garmin = await asyncio.to_thread(GarminClient.connect, profile)
 
     # reconcilia o plano ATUAL contra o ÚLTIMO que foi empurrado (snapshot).
     # Assim, se o plano foi REGENERADO desde o último push (troca de dia,
@@ -100,11 +103,12 @@ async def push_current_plan(
         # registros. O reconciliador re-empurra só os NÃO-feitos (done_days
         # pula os cumpridos), então o relógio repovoa "Programado" só com os
         # faltantes, como no domingo.
-        _purge_future(plan, reference, garmin)
+        await asyncio.to_thread(_purge_future, plan, reference, garmin)
 
         previous = None  # nada "já no relógio" -> reconcilia tudo como novo
 
-    results = GarminReconciler.reconcile(
+    results = await asyncio.to_thread(
+        GarminReconciler.reconcile,
         profile,
         previous_plan=previous or plan,
         current_plan=plan,
@@ -129,7 +133,7 @@ async def push_current_plan(
         if session.garmin and session.garmin.get("workout_id")
     }
 
-    sweep_orphan_workouts(profile, keep_ids, garmin)
+    await asyncio.to_thread(sweep_orphan_workouts, profile, keep_ids, garmin)
 
     return runner, plan, results
 

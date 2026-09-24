@@ -5,6 +5,7 @@ token salvo e o renovamos sozinho enquanto valer.
 
 Token por atleta em storage/garmin/{profile}/ (fora do git)."""
 
+import threading
 from pathlib import Path
 
 from garminconnect import Garmin
@@ -12,6 +13,21 @@ from garminconnect import Garmin
 _STORAGE = (
     Path(__file__).resolve().parents[4] / "storage" / "garmin"
 )
+
+
+# O trabalho do Garmin (lib síncrona) roda em THREAD (asyncio.to_thread) pra não
+# travar o servidor. O login pode RENOVAR e regravar o token em disco — dois
+# logins do mesmo atleta ao mesmo tempo (poller + push do app) se atropelariam.
+# Uma trava por atleta serializa só o login; atletas diferentes seguem em paralelo.
+_LOGIN_LOCKS: dict[str, threading.Lock] = {}
+_LOGIN_LOCKS_GUARD = threading.Lock()
+
+
+def _login_lock(profile: str) -> threading.Lock:
+
+    with _LOGIN_LOCKS_GUARD:
+
+        return _LOGIN_LOCKS.setdefault(profile, threading.Lock())
 
 
 class GarminNotConnected(Exception):
@@ -84,6 +100,8 @@ class GarminClient:
         garmin = Garmin()
 
         # resume a sessão a partir dos tokens salvos (sem senha)
-        garmin.login(str(token_dir))
+        with _login_lock(profile):
+
+            garmin.login(str(token_dir))
 
         return garmin

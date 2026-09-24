@@ -1,5 +1,6 @@
 from datetime import date, time
 
+import asyncio
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
@@ -122,8 +123,9 @@ class MorningBriefingNotifier:
 
         if has_garmin:
 
-            data_ready = MorningBriefingNotifier._night_data_ready(
-                profile, local.date()
+            # rede síncrona do Garmin em thread (não trava o servidor)
+            data_ready = await asyncio.to_thread(
+                MorningBriefingNotifier._night_data_ready, profile, local.date()
             )
 
             if not data_ready and local.hour < LAST_RESORT_HOUR:
