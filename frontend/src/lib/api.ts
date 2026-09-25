@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b21 · strava no app";
+export const APP_BUILD = "b22 · audio e foto no coach";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -334,6 +334,13 @@ export interface ChatMsg {
   kind?: string | null;
   title?: string | null;
   url?: string | null;
+  image_url?: string | null;   // foto que o atleta mandou (servida pela API)
+  local_image?: string | null; // prévia local (data URL) antes do servidor responder
+}
+
+// URL absoluta de uma mídia servida pela API (em produção é relativa).
+export function apiMediaSrc(path: string): string {
+  return `${API_BASE}${path}`;
 }
 
 export async function getCoachMessages(): Promise<ChatMsg[] | null> {
@@ -351,6 +358,30 @@ export async function sendCoachMessage(text: string): Promise<string | null> {
   if (!r.ok) return null;
   const data = await r.json();
   return data.reply ?? null;
+}
+
+// Foto (ou PDF) pro coach — `data` é data URL. O coach VÊ a imagem e responde.
+export async function sendCoachPhoto(data: string, caption: string): Promise<string | null> {
+  const r = await apiFetch("/coach/photo", {
+    method: "POST",
+    body: JSON.stringify({ data, caption }),
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return d.reply ?? null;
+}
+
+// Áudio pro coach — transcreve no servidor e segue como mensagem.
+export async function sendCoachVoice(
+  data: string,
+  duration: number,
+): Promise<{ transcript: string | null; reply: string } | null> {
+  const r = await apiFetch("/coach/voice", {
+    method: "POST",
+    body: JSON.stringify({ data, duration }),
+  });
+  if (!r.ok) return null;
+  return r.json();
 }
 
 // ---- Evolução (progresso) ----

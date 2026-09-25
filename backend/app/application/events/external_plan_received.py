@@ -30,19 +30,29 @@ class ExternalPlanEvent:
     @staticmethod
     async def execute(
         profile: str,
-        media: dict,
+        media: dict | None = None,
+        media_bytes: bytes | None = None,
+        mimetype: str = "",
+        notify: bool = True,
     ) -> str:
+        """`media` (id nativo do canal) é baixado aqui; quem já tem os bytes
+        (app, ou o roteador de mídia que já baixou) passa `media_bytes`.
+        `notify=False`: não reenvia pelo canal (o app mostra na tela)."""
 
         runner = LoadRunnerProfile.execute(profile)
 
-        media_bytes, mimetype = await download_media(
-            runner.channel,
-            media,
-        )
+        if media_bytes is None:
+
+            media_bytes, downloaded_type = await download_media(
+                runner.channel,
+                media or {},
+            )
+
+            mimetype = (media or {}).get("mimetype") or downloaded_type
 
         sessions = await ExternalPlanExtractionEngine.extract(
             media_bytes,
-            media.get("mimetype") or mimetype,
+            mimetype,
         )
 
         plan = ExternalPlanService.apply(
@@ -70,9 +80,11 @@ class ExternalPlanEvent:
                 "foto de novo que eu atualizo."
             )
 
-        await NotificationService.send(
-            runner,
-            reply,
-        )
+        if notify:
+
+            await NotificationService.send(
+                runner,
+                reply,
+            )
 
         return reply
