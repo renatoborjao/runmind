@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b22 · audio e foto no coach";
+export const APP_BUILD = "b23 · login com senha e google";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -32,6 +32,71 @@ export interface Me {
   email: string | null;
   goal: string;
   onboarding_complete: boolean;
+  has_password?: boolean;
+  google_linked?: boolean;
+}
+
+// erro legível da API ({"detail": "..."}), ou o genérico
+async function apiError(r: Response, fallback: string): Promise<string> {
+  try {
+    const body = await r.json();
+    if (typeof body?.detail === "string") return body.detail;
+  } catch { /* mantém o genérico */ }
+  return fallback;
+}
+
+/** Login por e-mail + senha. */
+export async function loginWithPassword(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await apiError(r, "Não consegui entrar agora. Tenta de novo.") };
+}
+
+/** Entrar com Google (credential = ID token do Google). Conta nova pede convite. */
+export async function googleLogin(
+  credential: string,
+  inviteCode?: string,
+): Promise<{ ok: boolean; needsInvite?: boolean; created?: boolean; error?: string }> {
+  const r = await apiFetch("/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential, invite_code: inviteCode || null }),
+  });
+  if (!r.ok) return { ok: false, error: await apiError(r, "Não consegui entrar com o Google.") };
+  const body = await r.json();
+  if (body.needs_invite) return { ok: false, needsInvite: true };
+  return { ok: true, created: !!body.created };
+}
+
+/** Configuração da tela de login (Client ID do Google, se ligado). */
+export async function getAuthConfig(): Promise<{ google_client_id: string | null }> {
+  try {
+    const r = await apiFetch("/auth/config");
+    if (r.ok) return r.json();
+  } catch { /* sem config: só e-mail/senha */ }
+  return { google_client_id: null };
+}
+
+/** Cria (1ª vez) ou troca a senha do atleta logado. */
+export async function setPassword(newPassword: string, currentPassword?: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword, current_password: currentPassword || null }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await apiError(r, "Não consegui salvar a senha.") };
+}
+
+/** Senha nova com a permissão que o link/código de acesso entrega. */
+export async function resetPassword(resetToken: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/password/reset", {
+    method: "POST",
+    body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await apiError(r, "Não consegui salvar a senha.") };
 }
 
 /** Pede o magic link. Resposta sempre genérica (não revela se o e-mail existe). */
@@ -50,10 +115,11 @@ export async function requestLogin(email: string): Promise<boolean> {
 export async function signup(
   email: string,
   inviteCode: string,
+  password: string,
 ): Promise<{ ok: boolean; loggedIn?: boolean; message?: string; error?: string }> {
   const r = await apiFetch("/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ email, invite_code: inviteCode }),
+    body: JSON.stringify({ email, invite_code: inviteCode, password }),
   });
   if (r.ok) {
     try {
@@ -116,12 +182,16 @@ export async function completeOnboarding(
 }
 
 /** Troca o magic token pela sessão (seta o cookie). */
-export async function verifyToken(token: string): Promise<boolean> {
+/** Troca link/código de acesso por sessão. Devolve a permissão de redefinir
+ *  a senha (15 min) — quem entrou por link provou que é o dono. */
+export async function verifyToken(token: string): Promise<{ resetToken: string; hasPassword: boolean } | null> {
   const r = await apiFetch("/auth/verify", {
     method: "POST",
     body: JSON.stringify({ token }),
   });
-  return r.ok;
+  if (!r.ok) return null;
+  const body = await r.json();
+  return { resetToken: body.reset_token, hasPassword: !!body.has_password };
 }
 
 /** Quem está logado? null se não há sessão válida. */

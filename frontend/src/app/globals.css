@@ -721,6 +721,11 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .btn-tg { background: #229ED9; color: #fff; display: flex; align-items: center; justify-content: center; gap: 9px; text-decoration: none; }
 .btn-tg:active { transform: scale(.99); }
 .auth-hint { margin: 10px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); text-align: center; }
+/* senha com "mostrar" + botão do Google */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 78px; }
+.pw-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 8px; }
+.gsi-slot { display: flex; justify-content: center; min-height: 44px; margin: 6px 0 2px; }
 .auth-or { display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; color: var(--muted); font-size: 12px; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 

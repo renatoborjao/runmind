@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # Vazio = modo DEV: o link é impresso no log em vez de enviado (dá pra
     # testar sem SMTP). Preenchido = envia de verdade (ex.: Gmail com app
     # password, grátis: smtp.gmail.com:587).
+    # Login com Google (Google Identity Services): o "Client ID" do OAuth
+    # client tipo "Aplicativo da Web" no Google Cloud Console. Vazio = o botão
+    # do Google some do app (e-mail/senha continua funcionando).
+    google_client_id: str = ""
+
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

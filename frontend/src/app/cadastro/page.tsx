@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signup } from "@/lib/api";
+import GoogleButton from "../google-button";
+import PasswordField from "../password-field";
+import { googleLogin, signup } from "@/lib/api";
 
 function Wordmark() {
   return (
@@ -22,6 +24,7 @@ export default function CadastroPage() {
 
   const [email, setEmail] = useState("");
   const [invite, setInvite] = useState("");
+  const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const [exists, setExists] = useState(false);
@@ -29,10 +32,11 @@ export default function CadastroPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !invite.trim()) return;
+    if (password.length < 8) { setErr("A senha precisa de pelo menos 8 caracteres."); return; }
     setSending(true);
     setErr("");
     setExists(false);
-    const res = await signup(email.trim(), invite.trim());
+    const res = await signup(email.trim(), invite.trim(), password);
     if (res.ok && res.loggedIn) {
       // conta criada e logada: segue direto pro wizard de onboarding
       router.replace("/onboarding");
@@ -48,6 +52,20 @@ export default function CadastroPage() {
     setSending(false);
   }
 
+  // Google: o convite vai junto (conta nova); se o Google já tem conta, só entra
+  async function onGoogle(credential: string) {
+    if (!invite.trim()) {
+      setErr("Coloca o código de convite primeiro, depois toca no Google.");
+      return;
+    }
+    setSending(true);
+    setErr("");
+    const res = await googleLogin(credential, invite.trim());
+    if (res.ok) { router.replace(res.created ? "/onboarding" : "/inicio"); return; }
+    setErr(res.error || "Não consegui criar a conta com o Google.");
+    setSending(false);
+  }
+
   return (
     <main className="stage">
       <div className="phone" style={{ justifyContent: "center", flex: 1, maxWidth: 400 }}>
@@ -58,8 +76,8 @@ export default function CadastroPage() {
         <div className="card">
           <h1 className="auth-title">Criar conta no Ritmind</h1>
           <p className="auth-sub">
-            O acesso é <b>por convite</b>. Coloca seu código e seu e-mail pra
-            começar — leva 1 minuto.
+            O acesso é <b>por convite</b>. Coloca teu código e cria a conta
+            com o Google ou com e-mail e senha — leva 1 minuto.
           </p>
 
           <form onSubmit={onSubmit}>
@@ -76,6 +94,8 @@ export default function CadastroPage() {
                 required
               />
             </div>
+            <GoogleButton text="signup_with" onCredential={onGoogle} />
+
             <div className="field">
               <label htmlFor="email">Seu e-mail</label>
               <input
@@ -89,6 +109,14 @@ export default function CadastroPage() {
                 required
               />
             </div>
+
+            <PasswordField
+              id="password"
+              label="Crie uma senha (mín. 8 caracteres)"
+              value={password}
+              onChange={(v) => { setPassword(v); if (err) setErr(""); }}
+              autoComplete="new-password"
+            />
 
             {err && <p className="notice err" style={{ marginTop: 0 }}>{err}</p>}
             {exists && (
