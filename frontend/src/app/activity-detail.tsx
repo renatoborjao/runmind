@@ -148,8 +148,9 @@ function fmtPaceSec(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Zonas de FC (Z1..Z5, por %FCmáx) — mesma leitura que o Strava mostra: quanto
-// tempo o atleta passou em cada intensidade. Os valores vêm em MINUTOS.
+// Zonas de FC (Z1..Z5) na régua do atleta — as do relógio Garmin quando há,
+// senão reserva de FC/%FCmáx: quanto tempo passou em cada intensidade. Os
+// valores vêm em MINUTOS; `floors` = piso em bpm de cada zona.
 const ZONE_META = [
   { n: "Z1", t: "Recuperação", c: "#6FCF97" },
   { n: "Z2", t: "Leve", c: "#0FB499" },
@@ -157,7 +158,11 @@ const ZONE_META = [
   { n: "Z4", t: "Limiar", c: "#F2994A" },
   { n: "Z5", t: "Máximo", c: "#E24666" },
 ];
-function HrZones({ zones }: { zones: number[] }) {
+function zoneRange(floors: number[] | null | undefined, i: number): string | null {
+  if (!floors || floors.length !== 5) return null;
+  return i < 4 ? `${floors[i]}–${floors[i + 1] - 1}` : `${floors[i]}+`;
+}
+function HrZones({ zones, floors }: { zones: number[]; floors?: number[] | null }) {
   const total = zones.reduce((a, b) => a + (b || 0), 0);
   if (total <= 0 || zones.length !== 5) return null;
   const max = Math.max(...zones, 0.01);
@@ -171,7 +176,7 @@ function HrZones({ zones }: { zones: number[] }) {
           const w = Math.max(3, Math.round((z / max) * 100));
           return (
             <div className="hrz-row" key={i}>
-              <span className="hrz-tag"><b>{meta.n}</b> {meta.t}</span>
+              <span className="hrz-tag"><b>{meta.n}</b> {meta.t}{zoneRange(floors, i) && <small>{zoneRange(floors, i)} bpm</small>}</span>
               <span className="hrz-bar"><i style={{ width: `${w}%`, background: meta.c }} /></span>
               <span className="hrz-val">{pct}%<small>{z >= 1 ? ` ${Math.round(z)} min` : " <1 min"}</small></span>
             </div>
@@ -448,7 +453,7 @@ export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot, sh
 
       {analysisSlot}
 
-      {item.hr_zones && <HrZones zones={item.hr_zones} />}
+      {item.hr_zones && <HrZones zones={item.hr_zones} floors={item.hr_zone_floors} />}
 
       {item.has_track ? (
         loadingTrack || !track ? (

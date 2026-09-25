@@ -19,6 +19,7 @@ from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
 )
+from app.domain.value_objects.hr_zones import zone_share_label
 
 # Pro pensa (thinking) e isso conta no orçamento de saída + é cobrado como
 # output. Teto de thinking EXPLÍCITO + max_output com folga pra caber
@@ -361,9 +362,19 @@ class AIAnalysisWriter:
             f"Executado: {activity.distance / 1000:.1f} km, "
             f"pace médio {PaceFormatter.format(executed.pace_min_km)} min/km, "
             f"tipo identificado {workout_type_label(executed.training_type)}, "
-            f"intensidade {intensity_label(executed.intensity)}, "
-            f"zona {executed.estimated_zone}"
+            f"intensidade {intensity_label(executed.intensity)}"
+            + (
+                f", FC média na zona {executed.estimated_zone}"
+                if executed.estimated_zone
+                else ""
+            )
         )
+
+        zone_facts = AIAnalysisWriter._hr_zone_facts(executed)
+
+        if zone_facts:
+
+            lines.append(zone_facts)
 
         if activity.average_heartrate:
 
@@ -426,6 +437,43 @@ class AIAnalysisWriter:
             lines.append(memory_facts)
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _hr_zone_facts(executed) -> str | None:
+        """Régua de zonas do atleta + tempo em cada zona — a IA só fala de
+        zona com ISTO (a mesma leitura do gráfico do app e do relógio)."""
+
+        zones = getattr(executed, "hr_zones", None)
+
+        shares = zone_share_label(
+            getattr(executed.activity, "hr_zone_minutes", None)
+        )
+
+        if zones is None and not shares:
+
+            return None
+
+        parts = []
+
+        if zones is not None:
+
+            source = (
+                "do relógio Garmin do atleta"
+                if zones.method.startswith("garmin")
+                else "calculadas pela FC máx/repouso do atleta"
+            )
+
+            parts.append(f"Zonas de FC ({source}): {zones.describe()} bpm")
+
+        if shares:
+
+            parts.append(f"tempo em cada zona neste treino: {shares}")
+
+        return (
+            "; ".join(parts)
+            + ". Ao citar zona de FC, use SÓ estes números (são os que o "
+            "atleta vê no app e no relógio)."
+        )
 
     @staticmethod
     def _pain_facts(profile: str, injuries: list[str]) -> str:

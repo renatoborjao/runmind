@@ -494,6 +494,7 @@ export interface FeedItem {
   max_hr: number | null;
   elevation_gain: number | null;
   hr_zones: number[] | null;
+  hr_zone_floors?: number[] | null;
   air_temp_c: number | null;
   name: string;
   has_track: boolean;

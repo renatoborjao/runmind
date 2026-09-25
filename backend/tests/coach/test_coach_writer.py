@@ -498,3 +498,43 @@ def test_greeting_uses_runner_name():
     message = CoachWriter.write(context, summary)
 
     assert message.greeting == "Parabéns pelo treino, Renato! 👊"
+
+
+def test_hr_line_shows_time_in_each_zone():
+    """A ficha mostra a MESMA distribuição do gráfico do app (caso real do
+    Renato 25/09: rodagem leve quase toda em Z2 pelo relógio)."""
+
+    activity = make_activity(
+        average_heartrate=144.0,
+        max_heartrate=159.0,
+    )
+
+    activity.hr_zone_minutes = [11.78, 38.5, 0.57, 0.0, 0.0]
+
+    executed = make_enriched_activity(activity=activity, estimated_zone="Z2")
+
+    message = CoachWriter.write(
+        make_context(executed=executed), CoachSummary(runner_name="Renato")
+    )
+
+    joined = "\n".join(message.executed_lines)
+
+    assert "FC média: 144 · máx 159 bpm (Z2)" in joined
+    assert "Zonas de FC: Z2 76% · Z1 23% · Z3 1%" in joined
+
+
+def test_hr_line_without_zone_ruler_has_no_zone_label():
+
+    executed = make_enriched_activity(
+        activity=make_activity(average_heartrate=150.0, max_heartrate=170.0),
+        estimated_zone="",
+    )
+
+    message = CoachWriter.write(
+        make_context(executed=executed), CoachSummary(runner_name="Renato")
+    )
+
+    joined = "\n".join(message.executed_lines)
+
+    assert "FC média: 150 · máx 170 bpm" in joined
+    assert "bpm (" not in joined

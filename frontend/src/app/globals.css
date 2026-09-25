@@ -286,6 +286,7 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .hrz-row { display: grid; grid-template-columns: 108px 1fr auto; align-items: center; gap: 10px; }
 .hrz-tag { font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hrz-tag b { font-family: var(--font-mono), monospace; font-weight: 700; color: var(--ink); margin-right: 4px; }
+.hrz-tag small { display: block; font-family: var(--font-mono), monospace; font-size: 10px; color: var(--muted); margin-top: 1px; }
 .hrz-bar { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .hrz-bar > i { display: block; height: 100%; border-radius: 999px; }
 .hrz-val { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13px; min-width: 40px; text-align: right; }

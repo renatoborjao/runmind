@@ -1,3 +1,4 @@
+from app.application.history.hr_zone_resolver import HrZoneResolver
 from app.application.history.pace_model_builder import PaceModelBuilder
 from app.application.history.weekly_volume_analyzer import WeeklyVolumeAnalyzer
 from app.domain.entities.runner_metrics import RunnerMetrics
@@ -37,4 +38,14 @@ class RunnerMetricsBuilder:
             average_hr=history.average_hr or 0,
             max_long_run=round(history.longest_run.distance / 1000, 1),
             weekly_volume=weekly["average_4_weeks"],
+            hr_zones=RunnerMetricsBuilder._hr_zones(history, runner),
         )
+
+    @staticmethod
+    def _hr_zones(history: TrainingHistory, runner: RunnerProfile | None):
+
+        if runner is None:
+
+            return None
+
+        return HrZoneResolver.for_profile(runner.id, runner, history.activities)

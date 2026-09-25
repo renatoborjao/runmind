@@ -1,5 +1,6 @@
 from app.application.history.activity_enricher import ActivityEnricher
 from app.domain.entities.runner_metrics import RunnerMetrics
+from app.domain.value_objects.hr_zones import HrZones
 from tests.coach.factories import make_activity
 
 
@@ -55,8 +56,10 @@ def test_without_hr_fast_pace_is_very_high():
     assert enriched.estimated_zone == "Z5"
 
 
-def test_with_hr_keeps_hr_based_intensity():
+def test_with_hr_without_zone_ruler_keeps_relative_intensity_but_no_zone():
 
+    # sem régua de zonas (sem idade/FC máx) a intensidade é só relativa à FC
+    # de costume — não é zona de FC, então não rotula "Zn"
     activity = make_activity(
         average_heartrate=150.0,
     )
@@ -64,7 +67,41 @@ def test_with_hr_keeps_hr_based_intensity():
     enriched = ActivityEnricher.enrich(activity, _metrics())
 
     assert enriched.intensity == "MEDIUM"
-    assert enriched.estimated_zone == "Z3"
+    assert enriched.estimated_zone == ""
+
+
+def test_zone_comes_from_athlete_ruler_not_from_usual_hr():
+
+    # caso real do Renato (25/09): rodagem leve a 144 bpm, zonas do relógio
+    # (reserva de FC, máx 194/repouso 66). A FC de costume dele é ~153 — o
+    # rótulo relativo dizia "Z2" por acaso e o gráfico (%FCmáx por idade)
+    # dizia Z3/Z4. Agora os dois leem a MESMA régua: Z2.
+    zones = HrZones(floors=(130, 143, 156, 168, 181), method="garmin")
+
+    activity = make_activity(average_heartrate=144.0)
+
+    enriched = ActivityEnricher.enrich(
+        activity, _metrics(average_hr=153.0, hr_zones=zones)
+    )
+
+    assert enriched.estimated_zone == "Z2"
+    assert enriched.intensity == "LOW"
+    assert enriched.hr_zones is zones
+
+
+def test_hard_effort_by_ruler_even_below_usual_hr():
+
+    # atleta que corre tudo forte: FC de costume 170. Um treino a 165 seria
+    # "abaixo da média" no relativo — na régua do atleta é Z4 (forte).
+    zones = HrZones(floors=(130, 143, 156, 164, 181), method="hrr")
+
+    enriched = ActivityEnricher.enrich(
+        make_activity(average_heartrate=165.0),
+        _metrics(average_hr=170.0, hr_zones=zones),
+    )
+
+    assert enriched.estimated_zone == "Z4"
+    assert enriched.intensity == "HIGH"
 
 
 def test_below_10km_is_never_long_run_even_with_long_duration():

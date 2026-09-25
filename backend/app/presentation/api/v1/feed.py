@@ -153,13 +153,35 @@ def _dedup_archived(items: list[dict]) -> list[dict]:
             dup["track_source"] = it["track_source"]
             dup["track_id"] = it["track_id"]
 
-        for k in ("avg_hr", "max_hr", "elevation_gain", "hr_zones", "air_temp_c", "pace"):
+        for k in ("avg_hr", "max_hr", "elevation_gain", "hr_zones", "hr_zone_floors", "air_temp_c", "pace"):
 
             if dup.get(k) is None and it.get(k) is not None:
 
                 dup[k] = it[k]
 
     return out
+
+
+def _zone_floors(profile: str, archived: list) -> list[int] | None:
+
+    try:
+
+        from app.application.history.hr_zone_resolver import HrZoneResolver
+        from app.infrastructure.persistence.runner_profile_repository import (
+            RunnerProfileRepository,
+        )
+
+        zones = HrZoneResolver.for_profile(
+            profile, RunnerProfileRepository().load(profile), archived
+        )
+
+        return list(zones.floors) if zones is not None else None
+
+    except Exception as e:
+
+        print(f"Feed: zonas de FC indisponíveis p/ {profile}: {e}")
+
+        return None
 
 
 def build_feed(profile: str) -> list[dict]:
@@ -174,6 +196,10 @@ def build_feed(profile: str) -> list[dict]:
     ]
 
     tracks = ActivityTrackRepository().load(profile)  # id_str -> {points,splits}
+
+    # faixas de bpm da régua de zonas do atleta (a do relógio, quando há) —
+    # o app mostra junto do tempo em cada zona
+    zone_floors = _zone_floors(profile, archived)
 
     items: list[dict] = []
 
@@ -195,6 +221,7 @@ def build_feed(profile: str) -> list[dict]:
                 "max_hr": int(a.max_heartrate) if a.max_heartrate else None,
                 "elevation_gain": round(a.elevation_gain) if a.elevation_gain else None,
                 "hr_zones": a.hr_zone_minutes,
+                "hr_zone_floors": zone_floors if a.hr_zone_minutes else None,
                 "air_temp_c": round(a.air_temp_c) if a.air_temp_c is not None else None,
                 "name": a.name,
                 "has_track": has_arch_track,
@@ -256,6 +283,7 @@ def build_feed(profile: str) -> list[dict]:
                 "max_hr": None,
                 "elevation_gain": None,
                 "hr_zones": None,
+                "hr_zone_floors": None,
                 "air_temp_c": None,
                 "name": "Corrida no app",
                 "has_track": True,

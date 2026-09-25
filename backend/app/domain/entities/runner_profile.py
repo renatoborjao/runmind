@@ -99,6 +99,11 @@ class RunnerProfile:
     # no %FCR linear). Coletado no onboarding.
     sex: str | None = None
 
+    # Zonas de FC CONFIGURADAS no relógio (Garmin) — {"floors": [5 bpm],
+    # "method", "max_hr", "resting_hr"}. Gravado sozinho a cada treino do
+    # Garmin; None = sem relógio, zonas calculadas. Ver [[HrZoneResolver]].
+    hr_zones: dict | None = None
+
     # Foto do atleta pro app — data URL (base64, imagem já redimensionada no
     # cliente pra ficar leve). Opcional; None = usa as iniciais. Só o app usa.
     avatar: str | None = None

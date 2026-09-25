@@ -43,6 +43,7 @@ from app.domain.entities.enriched_activity import (
 from app.domain.entities.planned_session import (
     PlannedSession,
 )
+from app.domain.value_objects.hr_zones import zone_share_label
 
 
 class CoachWriter:
@@ -174,9 +175,18 @@ class CoachWriter:
 
                 hr += f" · máx {int(activity.max_heartrate)}"
 
-            lines.append(
-                f"{hr} bpm ({executed.estimated_zone})"
+            zone = (
+                f" ({executed.estimated_zone})" if executed.estimated_zone else ""
             )
+
+            lines.append(f"{hr} bpm{zone}")
+
+            # tempo em cada zona (a mesma distribuição do gráfico do app)
+            shares = zone_share_label(activity.hr_zone_minutes)
+
+            if shares:
+
+                lines.append(f"Zonas de FC: {shares}")
 
         structure = executed.structure
 

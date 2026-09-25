@@ -213,13 +213,14 @@ class GarminActivitySource:
 
         activity = GarminActivitySource._to_activity(activity_id, summary, raw)
 
-        # distribuição nas zonas de FC (pra a carga de Edwards) — do stream +
-        # FCmáx (idade). Best-effort: sem stream/idade fica None e a carga cai
-        # no método por FC média. Ver [[HrZoneCalculator]].
+        # distribuição nas zonas de FC (gráfico, mensagem e carga de Edwards)
+        # — as zonas DO RELÓGIO (o que o atleta vê no Garmin Connect); sem
+        # elas, o stream na régua do [[HrZoneResolver]]. Best-effort: None e a
+        # carga cai no método por FC média.
         try:
 
             activity.hr_zone_minutes = GarminActivitySource._zone_minutes(
-                profile, raw, activity.moving_time
+                profile, garmin, activity_id, raw, activity.moving_time
             )
 
         except Exception as e:
@@ -229,24 +230,126 @@ class GarminActivitySource:
         return activity
 
     @staticmethod
-    def _zone_minutes(profile: str, raw: dict, moving_time: int):
+    def _zone_minutes(
+        profile: str,
+        garmin,
+        activity_id,
+        raw: dict,
+        moving_time: int,
+    ):
 
-        from app.application.history.hr_zone_calculator import (
-            HrZoneCalculator,
+        from app.application.history.hr_zone_resolver import HrZoneResolver
+        from app.infrastructure.persistence.activity_archive_repository import (
+            ActivityArchiveRepository,
         )
         from app.infrastructure.persistence.runner_profile_repository import (
             RunnerProfileRepository,
         )
 
+        try:
+
+            watch = GarminActivitySource._watch_zone_minutes(
+                profile, garmin, activity_id
+            )
+
+            if watch is not None:
+
+                return watch
+
+        except Exception as e:
+
+            print(f"Garmin: zonas do relógio indisponíveis p/ {activity_id}: {e}")
+
         runner = RunnerProfileRepository().load(profile)
 
-        age = getattr(runner, "age", None)
+        zones = HrZoneResolver.for_profile(
+            profile,
+            runner,
+            ActivityArchiveRepository().load_activities(profile),
+        )
 
-        max_hr = round(208 - 0.7 * age) if age and age > 0 else None
+        if zones is None:
+
+            return None
 
         heartrate = (raw.get("_streams") or {}).get("heartrate") or []
 
-        return HrZoneCalculator.zone_minutes(heartrate, moving_time, max_hr)
+        return zones.minutes(heartrate, moving_time)
+
+    @staticmethod
+    def _watch_zone_minutes(profile: str, garmin, activity_id):
+        """Minutos por zona CALCULADOS PELO GARMIN com as zonas do relógio, e
+        grava essas zonas no perfil (régua única pro resto do app — inclusive
+        treinos que chegam só pelo Strava). None se o Garmin não devolver."""
+
+        buckets = garmin.get_activity_hr_in_timezones(activity_id) or []
+
+        by_zone = {
+            int(b.get("zoneNumber")): b
+            for b in buckets
+            if isinstance(b, dict) and b.get("zoneNumber") in (1, 2, 3, 4, 5)
+        }
+
+        if len(by_zone) != 5:
+
+            return None
+
+        minutes = [
+            round(float(by_zone[z].get("secsInZone") or 0) / 60, 2)
+            for z in range(1, 6)
+        ]
+
+        floors = [by_zone[z].get("zoneLowBoundary") for z in range(1, 6)]
+
+        GarminActivitySource._remember_watch_zones(profile, garmin, floors)
+
+        return minutes if sum(minutes) > 0 else None
+
+    @staticmethod
+    def _remember_watch_zones(profile: str, garmin, floors: list) -> None:
+        """Grava as zonas do relógio no perfil quando mudaram (atleta ajustou
+        FC máx/repouso no Garmin). Método/FC máx/repouso vêm da config de
+        zonas do Garmin — best-effort, os pisos já bastam."""
+
+        from app.domain.value_objects.hr_zones import HrZones
+        from app.infrastructure.persistence.runner_profile_repository import (
+            RunnerProfileRepository,
+        )
+
+        repo = RunnerProfileRepository()
+
+        current = HrZones.from_dict(getattr(repo.load(profile), "hr_zones", None))
+
+        if current is not None and list(current.floors) == floors:
+
+            return
+
+        data = {"floors": floors, "method": "garmin"}
+
+        try:
+
+            configs = garmin.connectapi("/biometric-service/heartRateZones") or []
+
+            config = next(
+                (c for c in configs if c.get("sport") == "RUNNING"),
+                next((c for c in configs if c.get("sport") == "DEFAULT"), None),
+            )
+
+            if config:
+
+                data["method"] = f"garmin:{config.get('trainingMethod')}"
+                data["max_hr"] = config.get("maxHeartRateUsed")
+                data["resting_hr"] = config.get("restingHeartRateUsed")
+
+        except Exception as e:
+
+            print(f"Garmin: config de zonas indisponível p/ {profile}: {e}")
+
+        if HrZones.from_dict(data) is None:
+
+            return
+
+        repo.update_fields(profile, {"hr_zones": data})
 
     # ------------------------------------------------------------------
 
