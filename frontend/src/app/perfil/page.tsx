@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMySocial, getProfile, logout, saveProfile, setMySocial, type MySocial, type Profile } from "@/lib/api";
+import { getMySocial, getProfile, logout, saveProfile, setMySocial, stravaConnectUrl, type MySocial, type Profile } from "@/lib/api";
 
 function SocialSettings() {
   const [s, setS] = useState<MySocial | null>(null);
@@ -71,6 +71,33 @@ function fileToAvatar(file: File): Promise<string> {
   });
 }
 
+// Conexões: Strava o próprio atleta conecta daqui (OAuth). Garmin ainda é
+// liberado pela gente enquanto a Garmin não abre a conexão oficial.
+function Connections({ p, result }: { p: Profile; result: string | null }) {
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Conexões</span></div>
+      {result === "ok" && <p className="notice ok" style={{ margin: "0 0 10px" }}>✅ Strava conectado! Vou ler seu histórico e ajustar seu plano — te aviso no coach.</p>}
+      {result === "erro" && <p className="notice err" style={{ margin: "0 0 10px" }}>Não consegui conectar o Strava. Tenta de novo.</p>}
+      <div className="prow">
+        <span className="pl">Strava</span>
+        {p.strava_connected ? (
+          <span className="pv">Conectado ✓ · <a className="link" href={stravaConnectUrl("perfil")}>reconectar</a></span>
+        ) : (
+          <span className="pv muted">Não conectado</span>
+        )}
+      </div>
+      {!p.strava_connected && (
+        <a className="btn btn-strava" href={stravaConnectUrl("perfil")} style={{ marginTop: 10 }}>Conectar com Strava</a>
+      )}
+      <div className="prow">
+        <span className="pl">Garmin</span>
+        <span className="pv">{p.garmin_connected ? "Conectado ✓" : <span className="muted">Em breve</span>}</span>
+      </div>
+    </section>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="prow">
@@ -113,9 +140,13 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [stravaResult, setStravaResult] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
+      // volta do Strava: ?strava=ok|erro (lê e limpa a URL)
+      const result = new URLSearchParams(window.location.search).get("strava");
+      if (result) { setStravaResult(result); router.replace("/perfil"); }
       const data = await getProfile();
       if (!data) { router.replace("/entrar"); return; }
       setP(data);
@@ -315,6 +346,8 @@ export default function PerfilPage() {
           <Row label="Dias preferidos" value={p.preferred_running_days.length ? p.preferred_running_days.join(", ") : "—"} />
           <p className="muted" style={{ margin: "10px 2px 0", fontSize: 12 }}>Isso é dinâmico — ajuste com o coach. 💬</p>
         </section>
+
+        <Connections p={p} result={stravaResult} />
 
         {/* provas */}
         <section className="card tap" onClick={() => router.push("/provas")}>

@@ -64,19 +64,37 @@ class SessionToken:
         return _b64e(mac)
 
     @staticmethod
-    def issue(profile: str, ttl_days: int | None = None) -> str:
-        """Emite um token de sessão pro perfil, válido por `ttl_days`."""
+    def issue(
+        profile: str,
+        ttl_days: int | None = None,
+        purpose: str | None = None,
+        ttl_seconds: int | None = None,
+    ) -> str:
+        """Emite um token pro perfil, válido por `ttl_days` (ou `ttl_seconds`).
 
-        days = (
-            ttl_days
-            if ttl_days is not None
-            else get_settings().auth_session_ttl_days
-        )
+        Com `purpose` (ex.: "strava_connect") vira um token de USO RESTRITO: só
+        `verify(token, purpose=...)` com a mesma finalidade aceita, e nunca vale
+        como sessão. É o que deixa mandar a identidade do atleta num `state` de
+        OAuth (que passa por URL de terceiro) sem vazar um cookie de sessão."""
+
+        if ttl_seconds is None:
+
+            days = (
+                ttl_days
+                if ttl_days is not None
+                else get_settings().auth_session_ttl_days
+            )
+
+            ttl_seconds = days * 86400
 
         payload = {
             "sub": profile,
-            "exp": int(time.time()) + days * 86400,
+            "exp": int(time.time()) + ttl_seconds,
         }
+
+        if purpose:
+
+            payload["aud"] = purpose
 
         payload_b64 = _b64e(
             json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -85,9 +103,10 @@ class SessionToken:
         return f"{payload_b64}.{SessionToken._sign(payload_b64)}"
 
     @staticmethod
-    def verify(token: str | None) -> str | None:
-        """Devolve o perfil se o token é válido (assinatura ok e não vencido);
-        None caso contrário. Nunca levanta."""
+    def verify(token: str | None, purpose: str | None = None) -> str | None:
+        """Devolve o perfil se o token é válido (assinatura ok, não vencido e da
+        MESMA finalidade — sessão = sem `purpose`); None caso contrário. Nunca
+        levanta."""
 
         if not token or "." not in token:
 
@@ -107,6 +126,10 @@ class SessionToken:
             payload = json.loads(_b64d(payload_b64))
 
             if int(payload.get("exp", 0)) < int(time.time()):
+
+                return None
+
+            if payload.get("aud") != purpose:
 
                 return None
 

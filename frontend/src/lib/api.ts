@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b20 · coach prescreve forca";
+export const APP_BUILD = "b21 · strava no app";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -400,6 +400,15 @@ export interface Profile {
   target_race: string | null;
   race_date: string | null;
   target_time: string | null;
+  strava_connected: boolean;
+  garmin_connected: boolean;
+}
+
+// Conectar o Strava pelo app: navegação de página inteira (não fetch) — o
+// backend lê o cookie de sessão, manda pro Strava e devolve o atleta pra tela
+// de origem com `?strava=ok|erro`.
+export function stravaConnectUrl(back: "perfil" | "onboarding"): string {
+  return `${API_BASE}/api/v1/strava/app-connect?back=${back}`;
 }
 
 export async function getProfile(): Promise<Profile | null> {

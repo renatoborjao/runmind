@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from fastapi import BackgroundTasks
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi.responses import RedirectResponse
 import httpx
 
@@ -29,6 +30,7 @@ from app.infrastructure.persistence.onboarding_state_repository import (
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+from app.infrastructure.security.session_token import SessionToken
 from app.infrastructure.storage.token_store import (
     TokenStore,
 )
@@ -43,10 +45,20 @@ router = APIRouter(
 # OAUTH
 # ==========================================================
 
-@router.get("/connect")
-async def connect(state: str = ""):
-    """`state` carrega o telefone normalizado do corredor — é assim que
-    o callback sabe de quem são os tokens (multiatleta/onboarding)."""
+# Link do Strava pro atleta do APP: a identidade vai no `state` como token
+# assinado de uso restrito (não é a sessão), vence rápido e só serve pra isso.
+APP_STATE_PREFIX = "app:"
+
+APP_STATE_PURPOSE = "strava_connect"
+
+_APP_STATE_TTL_SECONDS = 30 * 60
+
+# pra onde o atleta volta no app depois do Strava (lista fechada: nada de
+# redirect aberto vindo de parâmetro)
+_APP_BACK = {"perfil": "/perfil", "onboarding": "/onboarding"}
+
+
+def _authorize_url(state: str) -> str:
 
     settings = get_settings()
 
@@ -70,18 +82,141 @@ async def connect(state: str = ""):
 
         url += f"&state={state}"
 
-    return RedirectResponse(url)
+    return url
+
+
+def _app_state(back: str, token: str) -> str:
+    """`app:<volta>:<token>` — o token (base64url + ponto) nunca tem ':'."""
+
+    return f"{APP_STATE_PREFIX}{back}:{token}"
+
+
+def _split_app_state(state: str) -> tuple[str, str]:
+    """`app:<volta>:<token>` -> (volta, token). Volta desconhecida = perfil."""
+
+    rest = state[len(APP_STATE_PREFIX):]
+
+    back, _, token = rest.partition(":")
+
+    if back not in _APP_BACK:
+
+        return "perfil", rest
+
+    return back, token
+
+
+def _app_redirect(state: str, status: str) -> RedirectResponse:
+    """Volta pra tela do app de onde o atleta saiu (`?strava=ok|erro`)."""
+
+    back, _ = _split_app_state(state)
+
+    base = get_settings().app_base_url.rstrip("/")
+
+    return RedirectResponse(f"{base}{_APP_BACK[back]}?strava={status}")
+
+
+@router.get("/connect")
+async def connect(state: str = ""):
+    """`state` carrega o telefone normalizado do corredor — é assim que
+    o callback sabe de quem são os tokens (multiatleta/onboarding)."""
+
+    return RedirectResponse(_authorize_url(state))
+
+
+@router.get("/app-connect")
+async def app_connect(request: Request, back: str = "perfil"):
+    """Botão "Conectar Strava" do app (Perfil ou passo do cadastro): o navegador
+    vem pra cá com o cookie de sessão; a gente troca a sessão por um `state` de
+    uso restrito e manda pro Strava. Sem sessão, volta pro login do app."""
+
+    profile = SessionToken.verify(
+        request.cookies.get(get_settings().auth_cookie_name)
+    )
+
+    if not profile:
+
+        base = get_settings().app_base_url.rstrip("/")
+
+        return RedirectResponse(f"{base}/entrar")
+
+    token = SessionToken.issue(
+        profile,
+        purpose=APP_STATE_PURPOSE,
+        ttl_seconds=_APP_STATE_TTL_SECONDS,
+    )
+
+    back = back if back in _APP_BACK else "perfil"
+
+    return RedirectResponse(_authorize_url(_app_state(back, token)))
 
 
 @router.get("/callback")
 async def callback(
     background_tasks: BackgroundTasks,
-    code: str,
+    code: str = "",
     state: str = "",
     scope: str = "",
+    error: str = "",
 ):
 
+    # Veio do app: o atleta volta pra tela de onde saiu (Perfil ou cadastro)
+    # com o resultado — nunca cai num JSON cru nem numa tela de erro.
+    if state.startswith(APP_STATE_PREFIX):
+
+        if error or not code:
+
+            return _app_redirect(state, "erro")
+
+        try:
+
+            await _complete_connection(
+                background_tasks, code, state, scope,
+            )
+
+        except Exception as e:
+
+            print(f"Falha ao conectar Strava pelo app: {getattr(e, 'detail', e)}")
+
+            return _app_redirect(state, "erro")
+
+        return _app_redirect(state, "ok")
+
+    if error or not code:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Conexão com o Strava não autorizada.",
+        )
+
+    profile = await _complete_connection(
+        background_tasks, code, state, scope,
+    )
+
+    return {
+
+        "message": "Strava conectado com sucesso.",
+
+        "profile": profile,
+
+        "saved": True,
+
+    }
+
+
+async def _complete_connection(
+    background_tasks: BackgroundTasks,
+    code: str,
+    state: str,
+    scope: str,
+) -> str:
+    """Troca o `code` pelos tokens, grava no perfil certo e dispara o que vem
+    depois da conexão (refresh do plano / pré-carga do histórico). Devolve o
+    perfil. Levanta HTTPException se a troca falhar ou o `state` não resolver."""
+
     settings = get_settings()
+
+    # resolve ANTES de trocar o code: state inválido não gasta a autorização
+    profile, source = _resolve_token_target(state)
 
     async with httpx.AsyncClient() as client:
 
@@ -113,8 +248,6 @@ async def callback(
     data = response.json()
 
     athlete_id = (data.get("athlete") or {}).get("id")
-
-    profile, source = _resolve_token_target(state)
 
     TokenStore(profile).save(
         {
@@ -183,24 +316,21 @@ async def callback(
                 f"na conexão do Strava: {e}"
             )
 
-    return {
-
-        "message": "Strava conectado com sucesso.",
-
-        "profile": profile,
-
-        "saved": True,
-
-    }
+    return profile
 
 
 def _parse_state(state: str) -> tuple[str, str]:
     """`state` do OAuth -> (channel, address_key).
 
+    - "app:<volta>:<token>" -> ("app", token assinado de uso restrito)
     - "tg:<chat_id>"  -> ("telegram", chat_id)
     - "wa:<telefone>" -> ("whatsapp", telefone normalizado)
     - sem prefixo     -> ("whatsapp", telefone normalizado) [retrocompat]
     """
+
+    if state.startswith(APP_STATE_PREFIX):
+
+        return "app", _split_app_state(state)[1]
 
     if state.startswith("tg:"):
 
@@ -236,6 +366,27 @@ def _resolve_token_target(state: str) -> tuple[str, str]:
 
     repo = RunnerProfileRepository()
 
+    if channel == "app":
+
+        # token do app: assinado, com finalidade e prazo; o perfil tem que
+        # existir (o atleta do app sempre já tem perfil — nasce no cadastro)
+        slug = SessionToken.verify(address, purpose=APP_STATE_PURPOSE)
+
+        if slug and repo.exists(slug):
+
+            # conectou no MEIO do cadastro (perfil-esqueleto): igual ao bot, só
+            # arquiva o histórico — o plano sai na conclusão, já com ele
+            if not repo.load(slug).onboarding_complete:
+
+                return slug, "app_onboarding"
+
+            return slug, "profile"
+
+        raise HTTPException(
+            status_code=400,
+            detail="Link do Strava vencido ou inválido. Tente de novo pelo app.",
+        )
+
     if channel == "telegram":
 
         profile = repo.find_by_telegram_id(address)
@@ -270,7 +421,8 @@ def _persist_athlete_id(
     athlete_id: int,
 ) -> None:
 
-    if source == "profile":
+    # atleta do app sempre tem perfil (mesmo em cadastro): o id vai direto nele
+    if source in ("profile", "app_onboarding"):
 
         RunnerProfileRepository().update_fields(
             profile,

@@ -133,6 +133,8 @@ body {
 .btn:active { transform: scale(.99); }
 .btn:disabled { opacity: .5; cursor: default; }
 
+/* botão de conexão do Strava (laranja da marca, pedido pelas diretrizes deles) */
+.btn.btn-strava { background: #FC4C02; color: #fff; text-decoration: none; }
 .notice { border-radius: 12px; padding: 13px 15px; font-size: 13.5px; }
 .notice.ok { background: var(--accent-wash); color: var(--accent-ink); }
 .notice.err { background: color-mix(in srgb, var(--rose) 16%, var(--surface)); color: var(--rose); }

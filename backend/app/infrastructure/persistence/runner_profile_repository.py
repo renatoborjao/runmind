@@ -49,6 +49,13 @@ class RunnerProfileRepository:
             if key in known
         })
 
+    def exists(
+        self,
+        profile: str,
+    ) -> bool:
+
+        return (self.storage / f"{profile}.json").exists()
+
     def save(
         self,
         profile: str,
