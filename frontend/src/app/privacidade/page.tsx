@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 // Política de Privacidade — página PÚBLICA (sem login): exigida pelo Google pro
 // "Entrar com Google" e pela LGPD (o Ritmind trata dados de saúde). Fala a
@@ -17,7 +18,7 @@ export default function PrivacidadePage() {
     <main className="stage">
       <div className="phone legal" style={{ maxWidth: 680 }}>
         <header className="legal-head">
-          <a href="/" className="legal-brand">Rit<b>mind</b></a>
+          <Link href="/" className="legal-brand">Rit<b>mind</b></Link>
           <h1>Política de Privacidade</h1>
           <p className="muted">Última atualização: {UPDATED}</p>
         </header>
@@ -70,7 +71,7 @@ export default function PrivacidadePage() {
             <li><b>Google (Gemini):</b> a inteligência artificial do coach. Recebe o contexto necessário pra responder e analisar (treinos, mensagens, fotos que você manda) — nunca tua senha.</li>
             <li><b>Strava e Garmin:</b> só se você conectar. A gente lê teus treinos/saúde e, quando você pede, envia treinos pro teu relógio ou renomeia a atividade no Strava.</li>
             <li><b>Telegram e WhatsApp:</b> se você conversa com o coach por eles, as mensagens passam por esses serviços.</li>
-            <li><b>Google (login):</b> se você escolher "Continuar com Google", recebemos teu nome, e-mail e identificador — nada mais.</li>
+            <li><b>Google (login):</b> se você escolher &ldquo;Continuar com Google&rdquo;, recebemos teu nome, e-mail e identificador — nada mais.</li>
             <li><b>Oracle Cloud:</b> onde o Ritmind roda e os dados ficam guardados (servidor no Brasil).</li>
             <li><b>Microsoft OneDrive:</b> cópias de segurança (backup), pra não perder teus dados.</li>
           </ul>
@@ -115,7 +116,7 @@ export default function PrivacidadePage() {
         </section>
 
         <p className="muted center" style={{ margin: "8px 0 24px" }}>
-          <a className="link" href="/">Voltar pro Ritmind</a>
+          <Link className="link" href="/">Voltar pro Ritmind</Link>
         </p>
       </div>
     </main>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import GoogleButton from "../google-button";
 import PasswordField from "../password-field";
@@ -318,7 +319,7 @@ function EntrarInner() {
         <a className="link" href={TELEGRAM_COACH} target="_blank" rel="noopener noreferrer">coach</a>. 📲
       </p>
       <p className="legal-foot muted">
-        <a className="link" href="/privacidade">Política de Privacidade</a>
+        <Link className="link" href="/privacidade">Política de Privacidade</Link>
       </p>
     </div>
   );

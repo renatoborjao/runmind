@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import GoogleButton from "../google-button";
 import PasswordField from "../password-field";
@@ -139,7 +140,7 @@ export default function CadastroPage() {
           </p>
           <p className="legal-foot muted">
             Ao criar a conta, você concorda com a{" "}
-            <a className="link" href="/privacidade">Política de Privacidade</a>.
+            <Link className="link" href="/privacidade">Política de Privacidade</Link>.
           </p>
         </div>
       </div>
