@@ -140,3 +140,19 @@ class SessionToken:
         except Exception:
 
             return None
+
+    @staticmethod
+    def expires_at(token: str | None) -> int | None:
+        """Vencimento (epoch) de uma SESSÃO válida; None se não é uma."""
+
+        if not SessionToken.verify(token):
+
+            return None
+
+        try:
+
+            return int(json.loads(_b64d(token.rsplit(".", 1)[0]))["exp"])
+
+        except Exception:
+
+            return None

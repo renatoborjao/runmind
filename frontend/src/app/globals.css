@@ -716,6 +716,11 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .email-capture .ec-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
 .email-capture .ec-row .ib-btn { margin: 0; flex: none; }
 .email-capture .ec-err { font-size: 12px; color: var(--rose); }
+/* ✕ e botão do cartão (antes só tinham estilo dentro do .install-banner) */
+.email-capture .ib-x { position: absolute; top: 8px; right: 10px; border: none; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.email-capture > .ec-body > .ib-btn { align-self: flex-start; margin-top: 6px; border: none; cursor: pointer; background: var(--accent); color: #04231d; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: 11px; }
+.email-capture .ib-btn:disabled { opacity: .6; cursor: default; }
+.email-capture .ec-show { flex: none; border: none; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; padding: 0 6px; }
 
 /* login: botão Telegram + divisor */
 .btn-tg { background: #229ED9; color: #fff; display: flex; align-items: center; justify-content: center; gap: 9px; text-decoration: none; }

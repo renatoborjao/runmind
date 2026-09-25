@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from app.application.auth.google_auth_service import (
@@ -274,9 +276,42 @@ async def verify_login(body: VerifyRequest, response: Response):
     }
 
 
+# sessão renovada no máximo 1x por dia (não reescreve o cookie a cada tela)
+_RENEW_AFTER_SECONDS = 86400
+
+
+def _renew_session_if_old(request: Request, response: Response, profile: str) -> None:
+    """Sessão DESLIZANTE: quem usa o app não é deslogado. Todo app aberto passa
+    pelo /me; se a sessão já tem mais de um dia, emite uma nova (30 dias a
+    partir de agora). Só cai quem ficar o prazo inteiro sem abrir o app."""
+
+    settings = get_settings()
+
+    exp = SessionToken.expires_at(request.cookies.get(settings.auth_cookie_name))
+
+    if exp is None:
+
+        return
+
+    ttl = settings.auth_session_ttl_days * 86400
+
+    issued_ago = ttl - (exp - int(time.time()))
+
+    if issued_ago >= _RENEW_AFTER_SECONDS:
+
+        _set_session_cookie(response, SessionToken.issue(profile))
+
+
 @router.get("/me")
-async def me(profile: str = Depends(current_profile)):
-    """Dados básicos do atleta logado (pra o app saber quem é)."""
+async def me(
+    request: Request,
+    response: Response,
+    profile: str = Depends(current_profile),
+):
+    """Dados básicos do atleta logado (pra o app saber quem é). De quebra,
+    renova a sessão de quem está usando o app."""
+
+    _renew_session_if_old(request, response, profile)
 
     runner = RunnerProfileRepository().load(profile)
 

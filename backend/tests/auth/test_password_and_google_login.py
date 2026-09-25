@@ -359,3 +359,41 @@ def test_signup_with_short_password_does_not_burn_invite(env):
 
     assert r.status_code == 400
     invites.return_value.consume.assert_not_called()
+
+
+# ------------------------------------------------------------- sessão deslizante
+
+def test_me_renews_old_session_but_not_fresh_one(env):
+
+    _, _, add = env
+    add("joana", "joana@mail.com")
+
+    client = TestClient(app)
+
+    # sessão emitida agora: não reescreve o cookie
+    client.cookies.set("rm_session", SessionToken.issue("joana"))
+
+    fresh = client.get("/api/v1/auth/me")
+
+    assert fresh.status_code == 200
+    assert "rm_session" not in fresh.headers.get("set-cookie", "")
+
+    # sessão emitida há ~29 dias (falta 1): renova por mais 30
+    old = SessionToken.issue("joana", ttl_seconds=86400)
+
+    client.cookies.set("rm_session", old)
+
+    renewed = client.get("/api/v1/auth/me")
+
+    new_token = renewed.cookies.get("rm_session")
+
+    assert new_token and new_token != old
+    assert SessionToken.expires_at(new_token) > SessionToken.expires_at(old) + 28 * 86400
+
+
+def test_expires_at_ignores_scoped_tokens():
+
+    scoped = SessionToken.issue("joana", purpose="password_reset", ttl_seconds=60)
+
+    assert SessionToken.expires_at(scoped) is None
+    assert SessionToken.expires_at("lixo") is None
