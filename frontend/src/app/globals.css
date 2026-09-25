@@ -883,3 +883,15 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .confirm-sheet .confirm-watch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--accent-ink); }
 .confirm-sheet .btn-primary, .confirm-sheet .btn-ghost { width: 100%; margin: 0; }
 .confirm-sheet .btn-primary { margin-top: 6px; }
+
+/* páginas legais (privacidade) — texto corrido, legível no celular */
+.legal .legal-head { padding: 18px 4px 4px; }
+.legal .legal-head h1 { font-family: var(--font-display), sans-serif; font-size: 26px; margin: 10px 0 4px; }
+.legal .legal-brand { font-family: var(--font-display), sans-serif; font-size: 18px; color: var(--ink); text-decoration: none; }
+.legal .card h2 { font-family: var(--font-display), sans-serif; font-size: 16px; margin: 0 0 8px; }
+.legal .card p, .legal .card li { font-size: 14px; line-height: 1.6; }
+.legal .card p { margin: 0 0 10px; }
+.legal .card p:last-child { margin-bottom: 0; }
+.legal .card ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+.legal-foot { text-align: center; font-size: 12px; margin-top: 12px; }
+

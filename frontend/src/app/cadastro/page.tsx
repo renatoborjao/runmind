@@ -137,6 +137,10 @@ export default function CadastroPage() {
               Entrar
             </a>
           </p>
+          <p className="legal-foot muted">
+            Ao criar a conta, você concorda com a{" "}
+            <a className="link" href="/privacidade">Política de Privacidade</a>.
+          </p>
         </div>
       </div>
     </main>

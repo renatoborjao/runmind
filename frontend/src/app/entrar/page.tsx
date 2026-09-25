@@ -317,6 +317,9 @@ function EntrarInner() {
         Já é atleta pelo Telegram? Mande <b>&quot;quero o app&quot;</b> ao{" "}
         <a className="link" href={TELEGRAM_COACH} target="_blank" rel="noopener noreferrer">coach</a>. 📲
       </p>
+      <p className="legal-foot muted">
+        <a className="link" href="/privacidade">Política de Privacidade</a>
+      </p>
     </div>
   );
 }
