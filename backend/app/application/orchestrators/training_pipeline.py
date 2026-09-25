@@ -1,3 +1,5 @@
+from app.application.history.hr_zone_history import HrZoneHistory
+from app.core.clock import today_local
 from app.application.coach.planning.plan_adjustment_engine import (
     PlanAdjustmentEngine,
 )
@@ -74,6 +76,19 @@ class TrainingPipeline:
         # --------------------------------------------------
 
         TrainingPipeline._record_best_effort(profile, coach_context)
+
+        # --------------------------------------------------
+        # Régua VIVA de zonas de FC: a FC muda com a evolução (repouso cai,
+        # teto muda) — grava a régua de hoje se mudou, ANTES da IA escrever,
+        # pra análise deste treino já poder comentar a mudança. Best-effort.
+        # --------------------------------------------------
+
+        HrZoneHistory.record(
+            profile,
+            runner,
+            getattr(coach_context.executed, "hr_zones", None),
+            today_local(),
+        )
 
         # --------------------------------------------------
         # Mensagem do coach

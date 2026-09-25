@@ -19,6 +19,8 @@ from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
 )
+from app.application.history.hr_zone_history import HrZoneHistory
+from app.core.clock import today_local
 from app.domain.value_objects.hr_zones import zone_share_label
 
 # Pro pensa (thinking) e isso conta no orçamento de saída + é cobrado como
@@ -370,7 +372,7 @@ class AIAnalysisWriter:
             )
         )
 
-        zone_facts = AIAnalysisWriter._hr_zone_facts(executed)
+        zone_facts = AIAnalysisWriter._hr_zone_facts(executed, runner)
 
         if zone_facts:
 
@@ -439,9 +441,11 @@ class AIAnalysisWriter:
         return "\n".join(lines)
 
     @staticmethod
-    def _hr_zone_facts(executed) -> str | None:
+    def _hr_zone_facts(executed, runner=None) -> str | None:
         """Régua de zonas do atleta + tempo em cada zona — a IA só fala de
-        zona com ISTO (a mesma leitura do gráfico do app e do relógio)."""
+        zona com ISTO (a mesma leitura do gráfico do app e do relógio). Se a
+        régua mudou há pouco (FC de repouso/máx do atleta mudou), avisa — a
+        IA pode citar como sinal de evolução (ou de alerta), com cuidado."""
 
         zones = getattr(executed, "hr_zones", None)
 
@@ -469,11 +473,27 @@ class AIAnalysisWriter:
 
             parts.append(f"tempo em cada zona neste treino: {shares}")
 
-        return (
+        text = (
             "; ".join(parts)
             + ". Ao citar zona de FC, use SÓ estes números (são os que o "
             "atleta vê no app e no relógio)."
         )
+
+        change = HrZoneHistory.recent_change(
+            getattr(runner, "hr_zones_history", None), today_local()
+        )
+
+        if change is not None:
+
+            text += (
+                " As zonas do atleta MUDARAM recentemente "
+                f"({HrZoneHistory.describe_change(*change)}). FC de repouso "
+                "caindo costuma indicar evolução aeróbica; subindo pode ser "
+                "fadiga/estresse. Cite só se ajudar a entender este treino, "
+                "sem alarde."
+            )
+
+        return text
 
     @staticmethod
     def _pain_facts(profile: str, injuries: list[str]) -> str:

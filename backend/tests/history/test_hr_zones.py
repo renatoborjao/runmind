@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date, datetime
 from types import SimpleNamespace
 
 from app.application.history.hr_zone_resolver import HrZoneResolver
@@ -82,11 +83,15 @@ def test_describe_ranges():
 # ---------------------------------------------------------------- resolver
 
 
+_TODAY = date(2026, 9, 25)
+
+
 @dataclass
 class _Run:
 
     max_heartrate: float | None
     sport: str = "Run"
+    start_date: datetime = datetime(2026, 9, 20)
 
 
 def _runner(age=34, hr_zones=None):
@@ -98,7 +103,7 @@ def test_resolver_prefers_watch_zones():
 
     watch = {"floors": [130, 143, 156, 168, 181], "method": "garmin:HR_RESERVE"}
 
-    zones = HrZoneResolver.resolve(_runner(hr_zones=watch), [_Run(200)], 50)
+    zones = HrZoneResolver.resolve(_runner(hr_zones=watch), [_Run(170)], 50, _TODAY)
 
     assert zones.floors == (130, 143, 156, 168, 181)
 
@@ -106,7 +111,7 @@ def test_resolver_prefers_watch_zones():
 def test_resolver_hrr_with_observed_max_above_tanaka():
     """Tanaka(34)=184; observada 190 manda (é piso real do teto)."""
 
-    zones = HrZoneResolver.resolve(_runner(), [_Run(190), _Run(178)], 60)
+    zones = HrZoneResolver.resolve(_runner(), [_Run(190), _Run(178)], 60, _TODAY)
 
     assert zones.method == "hrr"
     assert zones.max_hr == 190
@@ -115,7 +120,7 @@ def test_resolver_hrr_with_observed_max_above_tanaka():
 
 def test_resolver_falls_back_to_pct_max_without_resting():
 
-    zones = HrZoneResolver.resolve(_runner(), [_Run(178)], None)
+    zones = HrZoneResolver.resolve(_runner(), [_Run(178)], None, _TODAY)
 
     assert zones.method == "max"
     assert zones.max_hr == 184
@@ -124,7 +129,7 @@ def test_resolver_falls_back_to_pct_max_without_resting():
 def test_resolver_ignores_implausible_peaks_and_non_runs():
 
     zones = HrZoneResolver.resolve(
-        _runner(), [_Run(240), _Run(199, sport="Ride")], None
+        _runner(), [_Run(240), _Run(199, sport="Ride")], None, _TODAY
     )
 
     assert zones.max_hr == 184
@@ -132,7 +137,7 @@ def test_resolver_ignores_implausible_peaks_and_non_runs():
 
 def test_resolver_none_without_age_or_peaks():
 
-    assert HrZoneResolver.resolve(_runner(age=None), [], None) is None
+    assert HrZoneResolver.resolve(_runner(age=None), [], None, _TODAY) is None
 
 
 # ------------------------------------------- persistência das zonas do relógio
@@ -212,3 +217,125 @@ def test_legacy_stored_zones_without_as_of_are_replaced(monkeypatch):
     _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
 
     assert repo.data["hr_zones"]["floors"] == [130, 143, 156, 168, 181]
+
+
+# ------------------------------------------------------------ régua VIVA
+
+
+_WATCH = {
+    "floors": [130, 143, 156, 168, 181],
+    "method": "garmin:HR_RESERVE",
+    "max_hr": 194,
+    "resting_hr": 66,
+    "as_of": "2026-09-25",
+}
+
+
+def test_watch_zones_dropped_when_watch_max_was_exceeded():
+    """A FC máx do relógio (194) já foi ultrapassada (199) numa corrida
+    recente: a config do relógio ficou pra trás — régua calculada assume,
+    com o pico real como teto."""
+
+    zones = HrZoneResolver.resolve(
+        _runner(hr_zones=_WATCH), [_Run(199)], 60, _TODAY
+    )
+
+    assert zones.method == "hrr"
+    assert zones.max_hr == 199
+
+
+def test_watch_zones_dropped_when_stale():
+    """Relógio sem treino novo há 60+ dias (largou o Garmin)."""
+
+    stale = {**_WATCH, "as_of": "2026-06-01"}
+
+    zones = HrZoneResolver.resolve(_runner(hr_zones=stale), [], 60, _TODAY)
+
+    assert zones.method == "hrr"
+
+
+def test_old_peaks_do_not_hold_the_ceiling_forever():
+    """Pico de 2 anos atrás não descreve o atleta de hoje: o teto sai do
+    último ano (ou Tanaka)."""
+
+    runs = [_Run(200, start_date=datetime(2024, 8, 1)), _Run(178)]
+
+    assert HrZoneResolver.max_hr(34, runs, _TODAY) == 184
+
+
+def test_resting_hr_drop_moves_the_zones():
+    """Evolução: repouso caiu 66→58 — mesma FC máx, zonas descem (o mesmo
+    esforço fica numa zona 'mais alta' relativa, como o Garmin faz)."""
+
+    before = HrZoneResolver.resolve(_runner(), [_Run(190)], 66, _TODAY)
+    after = HrZoneResolver.resolve(_runner(), [_Run(190)], 58, _TODAY)
+
+    assert after.floors[1] < before.floors[1]
+
+
+# --------------------------------------------------------------- histórico
+
+
+def test_history_records_baseline_then_only_real_changes():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    z1 = HrZones.from_hrr(194, 66)
+
+    history = HrZoneHistory.append([], z1, date(2026, 9, 1))
+
+    assert len(history) == 1
+
+    # ruído de 1 bpm no repouso não vira mudança
+    assert HrZoneHistory.append(history, HrZones.from_hrr(194, 67), _TODAY) is None
+
+    # queda real do repouso vira entrada
+    history = HrZoneHistory.append(history, HrZones.from_hrr(194, 60), _TODAY)
+
+    assert len(history) == 2
+
+
+def test_recent_change_is_reported_with_cause():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    history = [
+        HrZoneHistory.entry(HrZones.from_hrr(194, 66), date(2026, 8, 1)),
+        HrZoneHistory.entry(HrZones.from_hrr(194, 60), date(2026, 9, 20)),
+    ]
+
+    before, after = HrZoneHistory.recent_change(history, _TODAY)
+
+    text = HrZoneHistory.describe_change(before, after)
+
+    assert "20/09" in text
+    assert "FC repouso 66→60" in text
+    assert "Z2 era 143-155 bpm" in text
+
+
+def test_old_change_is_not_recent_and_baseline_is_not_change():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    base = [HrZoneHistory.entry(HrZones.from_hrr(194, 66), date(2026, 9, 24))]
+
+    assert HrZoneHistory.recent_change(base, _TODAY) is None
+
+    old = base + [
+        HrZoneHistory.entry(HrZones.from_hrr(194, 60), date(2026, 7, 1)),
+    ]
+
+    assert HrZoneHistory.recent_change(old, _TODAY) is None
+
+
+def test_switch_between_watch_and_computed_is_a_change():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    watch = HrZones.from_dict(_WATCH)
+
+    history = HrZoneHistory.append([], watch, date(2026, 9, 1))
+
+    computed = HrZones(floors=watch.floors, method="hrr", max_hr=194, resting_hr=66)
+
+    assert HrZoneHistory.append(history, computed, _TODAY) is not None
