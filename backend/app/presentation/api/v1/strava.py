@@ -353,7 +353,9 @@ async def register_webhook():
         "/api/v1/webhooks/strava"
     )
 
-    return await WebhookService.register(
+    # reaponta: apaga inscrição velha (outro domínio) e cria a nova numa
+    # chamada só — o Strava recusa registrar com uma antiga no lugar
+    return await WebhookService.repoint(
         callback_url,
     )
 
