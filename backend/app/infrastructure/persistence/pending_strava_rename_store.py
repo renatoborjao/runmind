@@ -25,7 +25,7 @@ class PendingStravaRenameStore:
         return _STORAGE / f"{profile}.json"
 
     @staticmethod
-    def list(profile: str) -> list[dict]:
+    def items(profile: str) -> list[dict]:
 
         file = PendingStravaRenameStore._file(profile)
 
@@ -64,7 +64,7 @@ class PendingStravaRenameStore:
         activity_id — reanálise do mesmo treino não duplica."""
 
         items = [
-            i for i in PendingStravaRenameStore.list(profile)
+            i for i in PendingStravaRenameStore.items(profile)
             if str(i.get("activity_id")) != str(activity_id)
         ]
 
@@ -82,7 +82,7 @@ class PendingStravaRenameStore:
     def remove(profile: str, activity_id) -> None:
 
         items = [
-            i for i in PendingStravaRenameStore.list(profile)
+            i for i in PendingStravaRenameStore.items(profile)
             if str(i.get("activity_id")) != str(activity_id)
         ]
 

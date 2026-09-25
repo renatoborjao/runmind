@@ -149,7 +149,7 @@ def _retry(pending, strava_recent, update=True):
 
     store = MagicMock()
     store.profiles.return_value = ["renato2"]
-    store.list.return_value = pending
+    store.items.return_value = pending
 
     with (
         patch(f"{MOD}.StravaClient", return_value=client),

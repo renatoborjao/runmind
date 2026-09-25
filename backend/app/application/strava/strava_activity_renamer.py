@@ -155,7 +155,7 @@ class StravaActivityRenamer:
 
         for p in profiles:
 
-            items = PendingStravaRenameStore.list(p)
+            items = PendingStravaRenameStore.items(p)
 
             if not items:
 
