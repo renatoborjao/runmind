@@ -133,3 +133,82 @@ def test_resolver_ignores_implausible_peaks_and_non_runs():
 def test_resolver_none_without_age_or_peaks():
 
     assert HrZoneResolver.resolve(_runner(age=None), [], None) is None
+
+
+# ------------------------------------------- persistência das zonas do relógio
+
+
+class _FakeRepo:
+
+    def __init__(self, hr_zones=None):
+
+        self.data = {"hr_zones": hr_zones}
+
+    def load(self, profile):
+
+        return SimpleNamespace(**self.data)
+
+    def update_fields(self, profile, updates):
+
+        self.data.update(updates)
+
+
+class _FakeGarmin:
+
+    def connectapi(self, path):
+
+        return [{
+            "sport": "DEFAULT",
+            "trainingMethod": "HR_RESERVE",
+            "maxHeartRateUsed": 194,
+            "restingHeartRateUsed": 66,
+        }]
+
+
+def _remember(monkeypatch, repo, floors, day):
+
+    from datetime import datetime
+
+    from app.infrastructure.integrations.garmin import garmin_activity_source
+    from app.infrastructure.persistence import runner_profile_repository
+
+    monkeypatch.setattr(
+        runner_profile_repository, "RunnerProfileRepository", lambda: repo
+    )
+
+    garmin_activity_source.GarminActivitySource._remember_watch_zones(
+        "x", _FakeGarmin(), floors, datetime.fromisoformat(day)
+    )
+
+
+def test_backfill_of_old_activity_does_not_overwrite_current_zones(monkeypatch):
+    """Bug do backfill (25/09): re-buscar treino ANTIGO trazia os pisos da
+    config da época e sobrescrevia a atual. Só treino mais novo grava."""
+
+    repo = _FakeRepo()
+
+    _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
+    _remember(monkeypatch, repo, [128, 153, 179, 204, 230], "2026-08-01")
+
+    assert repo.data["hr_zones"]["floors"] == [130, 143, 156, 168, 181]
+    assert repo.data["hr_zones"]["as_of"] == "2026-09-25"
+    assert repo.data["hr_zones"]["max_hr"] == 194
+
+
+def test_newer_activity_with_new_config_updates_zones(monkeypatch):
+
+    repo = _FakeRepo()
+
+    _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
+    _remember(monkeypatch, repo, [131, 144, 157, 170, 182], "2026-09-27")
+
+    assert repo.data["hr_zones"]["floors"] == [131, 144, 157, 170, 182]
+
+
+def test_legacy_stored_zones_without_as_of_are_replaced(monkeypatch):
+
+    repo = _FakeRepo({"floors": [128, 153, 179, 204, 230], "method": "garmin"})
+
+    _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
+
+    assert repo.data["hr_zones"]["floors"] == [130, 143, 156, 168, 181]

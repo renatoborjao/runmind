@@ -220,7 +220,8 @@ class GarminActivitySource:
         try:
 
             activity.hr_zone_minutes = GarminActivitySource._zone_minutes(
-                profile, garmin, activity_id, raw, activity.moving_time
+                profile, garmin, activity_id, raw, activity.moving_time,
+                activity.start_date,
             )
 
         except Exception as e:
@@ -236,6 +237,7 @@ class GarminActivitySource:
         activity_id,
         raw: dict,
         moving_time: int,
+        start_date=None,
     ):
 
         from app.application.history.hr_zone_resolver import HrZoneResolver
@@ -249,7 +251,7 @@ class GarminActivitySource:
         try:
 
             watch = GarminActivitySource._watch_zone_minutes(
-                profile, garmin, activity_id
+                profile, garmin, activity_id, start_date
             )
 
             if watch is not None:
@@ -277,7 +279,7 @@ class GarminActivitySource:
         return zones.minutes(heartrate, moving_time)
 
     @staticmethod
-    def _watch_zone_minutes(profile: str, garmin, activity_id):
+    def _watch_zone_minutes(profile: str, garmin, activity_id, start_date=None):
         """Minutos por zona CALCULADOS PELO GARMIN com as zonas do relógio, e
         grava essas zonas no perfil (régua única pro resto do app — inclusive
         treinos que chegam só pelo Strava). None se o Garmin não devolver."""
@@ -301,15 +303,24 @@ class GarminActivitySource:
 
         floors = [by_zone[z].get("zoneLowBoundary") for z in range(1, 6)]
 
-        GarminActivitySource._remember_watch_zones(profile, garmin, floors)
+        GarminActivitySource._remember_watch_zones(
+            profile, garmin, floors, start_date
+        )
 
         return minutes if sum(minutes) > 0 else None
 
     @staticmethod
-    def _remember_watch_zones(profile: str, garmin, floors: list) -> None:
+    def _remember_watch_zones(
+        profile: str,
+        garmin,
+        floors: list,
+        start_date=None,
+    ) -> None:
         """Grava as zonas do relógio no perfil quando mudaram (atleta ajustou
-        FC máx/repouso no Garmin). Método/FC máx/repouso vêm da config de
-        zonas do Garmin — best-effort, os pisos já bastam."""
+        FC máx/repouso no Garmin). Só de treino MAIS RECENTE que o já gravado
+        (`as_of`): re-buscar um treino antigo (backfill) traz os pisos da
+        config DA ÉPOCA e não pode sobrescrever a atual. Método/FC máx/repouso
+        vêm da config de zonas do Garmin — best-effort, os pisos já bastam."""
 
         from app.domain.value_objects.hr_zones import HrZones
         from app.infrastructure.persistence.runner_profile_repository import (
@@ -318,13 +329,26 @@ class GarminActivitySource:
 
         repo = RunnerProfileRepository()
 
-        current = HrZones.from_dict(getattr(repo.load(profile), "hr_zones", None))
+        stored = getattr(repo.load(profile), "hr_zones", None) or {}
 
-        if current is not None and list(current.floors) == floors:
+        as_of = start_date.date().isoformat() if start_date else None
+
+        if as_of and (stored.get("as_of") or "") > as_of:
 
             return
 
-        data = {"floors": floors, "method": "garmin"}
+        current = HrZones.from_dict(stored)
+
+        if current is not None and list(current.floors) == floors:
+
+            # mesma config: só avança o `as_of` (sem chamar a config de novo)
+            if as_of and stored.get("as_of") != as_of:
+
+                repo.update_fields(profile, {"hr_zones": {**stored, "as_of": as_of}})
+
+            return
+
+        data = {"floors": floors, "method": "garmin", "as_of": as_of}
 
         try:
 
