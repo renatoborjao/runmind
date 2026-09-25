@@ -243,6 +243,21 @@ class OnDemandAnswers:
 
             parts = [p for p in (projection, strategy) if p]
 
+            # percurso/clima da prova REAL (dossiê pesquisado na web), se houver
+            if strategy:
+
+                from app.application.races.race_intel_service import (
+                    RaceIntelService,
+                )
+
+                course = RaceIntelService.briefing(
+                    RaceIntelService.for_runner(runner)
+                )
+
+                if course:
+
+                    parts.append(course)
+
             if parts:
 
                 return "\n\n".join(parts)

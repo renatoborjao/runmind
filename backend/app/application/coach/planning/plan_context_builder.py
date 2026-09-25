@@ -44,6 +44,29 @@ class PlanContextBuilder:
             PlanContextBuilder._goal_line(goal, weeks_to_race, days_to_race)
         )
 
+        # DOSSIÊ da prova real (percurso com subida -> treino de subida; largada
+        # cedo/calor -> ajuste) quando a prova está no horizonte do bloco.
+        # Só lê o cache (pesquisa é job de fundo). Best-effort.
+        if weeks_to_race is not None and weeks_to_race <= 16:
+
+            try:
+
+                from app.application.races.race_intel_service import (
+                    RaceIntelService,
+                )
+
+                dossier = RaceIntelService.render_context(
+                    RaceIntelService.for_runner(runner)
+                )
+
+                if dossier:
+
+                    lines.append(dossier)
+
+            except Exception as e:
+
+                print(f"Falha ao ler dossiê da prova no plano: {e}")
+
         # iniciante que começa correndo-caminhando: os dados do onboarding
         # (peso/altura/capacidade) guiam a IA a montar caminhada + run/walk
         if run_walk:

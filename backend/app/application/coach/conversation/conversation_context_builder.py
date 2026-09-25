@@ -132,6 +132,26 @@ class ConversationContextBuilder:
 
             facts = f"{facts}{race_line}\n"
 
+            # DOSSIÊ da prova real (percurso, subidas, largada, clima), se já
+            # pesquisado — só LÊ o cache, nunca pesquisa aqui (latência/custo).
+            try:
+
+                from app.application.races.race_intel_service import (
+                    RaceIntelService,
+                )
+
+                dossier = RaceIntelService.render_context(
+                    RaceIntelService.for_runner(runner)
+                )
+
+                if dossier:
+
+                    facts = f"{facts}{dossier}\n"
+
+            except Exception as e:
+
+                print(f"Falha ao ler dossiê da prova de '{profile}': {e}")
+
         week_plan = ConversationContextBuilder._week_plan_summary(
             plan,
             history,

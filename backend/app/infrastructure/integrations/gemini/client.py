@@ -182,9 +182,13 @@ async def generate_text(
     config: types.GenerateContentConfig,
     *,
     require_text: bool = False,
+    capture: list | None = None,
 ) -> str:
     """Chama o Gemini com retry+backoff em falhas transitórias e devolve o
     texto da resposta.
+
+    capture: se passada, recebe a resposta COMPLETA do SDK (append) — pra quem
+    precisa de metadados além do texto (ex.: fontes da busca no Google).
 
     require_text=True (chat com o atleta): texto vazio vira falha e é
     reenviado; se persistir, levanta EmptyGeminiResponse para o chamador
@@ -231,6 +235,10 @@ async def generate_text(
                 if require_text and not text.strip():
 
                     raise EmptyGeminiResponse()
+
+                if capture is not None:
+
+                    capture.append(response)
 
                 if candidate != model:
 

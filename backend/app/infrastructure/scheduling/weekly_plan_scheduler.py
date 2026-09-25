@@ -21,6 +21,7 @@ from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.monthly_recap_notifier import (
     MonthlyRecapNotifier,
 )
+from app.application.races.race_intel_service import RaceIntelService
 from app.application.review.race_companion_notifier import (
     RaceCompanionNotifier,
 )
@@ -225,6 +226,19 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="race_companion",
+    )
+
+    # Dossiê das provas — 05h20: pesquisa na web (Gemini + Google) o percurso/
+    # altimetria/largada/clima de cada prova futura (uma busca por prova,
+    # compartilhada) e atualiza a previsão do tempo na última semana. Roda
+    # antes do acompanhante de prova e do plano, que leem o cache.
+    _scheduler.add_job(
+        RaceIntelService.refresh_all,
+        trigger="cron",
+        hour=5,
+        minute=20,
+        misfire_grace_time=3600,
+        id="race_intel_refresh",
     )
 
     # Re-engajamento — 17h local (gate no ReengagementNotifier): quando o

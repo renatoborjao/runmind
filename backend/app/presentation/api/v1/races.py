@@ -1,8 +1,9 @@
 from datetime import date as date_cls
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.application.races.race_intel_service import RaceIntelService
 from app.application.races.race_service import RaceService
 from app.presentation.api.deps import current_profile
 
@@ -25,7 +26,11 @@ class RaceIn(BaseModel):
 
 
 @router.post("")
-async def add_race(body: RaceIn, profile: str = Depends(current_profile)):
+async def add_race(
+    body: RaceIn,
+    background_tasks: BackgroundTasks,
+    profile: str = Depends(current_profile),
+):
     """Cadastra uma prova. A prova futura mais próxima passa a ancorar o plano
     (sem virar a semana atual — o caminho mirando ela sai na próxima geração)."""
 
@@ -58,6 +63,10 @@ async def add_race(body: RaceIn, profile: str = Depends(current_profile)):
         raise HTTPException(status_code=422, detail="Tempo-alvo inválido (ex.: 0:50:00).")
 
     record = RaceService.add(profile, name, d.isoformat(), target_time)
+
+    # pesquisa a prova na web em segundo plano (dossiê de percurso/clima pro
+    # coach) — não atrasa a resposta; genérica ("10 km") é ignorada
+    background_tasks.add_task(RaceIntelService.ensure, name, d.isoformat())
 
     return {"ok": True, "race": record}
 

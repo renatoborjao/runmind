@@ -263,6 +263,18 @@ class RaceCompanionNotifier:
 
         pace_line = await RaceCompanionNotifier._pace_line(profile, runner, goal)
 
+        # percurso + previsão do tempo da prova REAL (dossiê pesquisado na web),
+        # emendado na linha de pace. Sem dossiê, a mensagem segue igual.
+        from app.application.races.race_intel_service import RaceIntelService
+
+        course = RaceIntelService.briefing(
+            RaceIntelService.for_runner(runner), with_tips=touch != "race_week",
+        )
+
+        if course:
+
+            pace_line = f"{pace_line}\n\n{course}" if pace_line else course
+
         if touch == "race_week":
 
             extra = f"\n\n{pace_line}" if pace_line else ""
