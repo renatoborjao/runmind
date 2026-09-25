@@ -642,12 +642,21 @@ class CoachConversationEvent:
 
                 reply_text = BUSY_REPLY
 
+        # mensagem de mídia (foto/áudio): o app mostra legenda + mídia
+        media_turn = {
+            key: value
+            for key, value in (
+                ("display_text", display_text),
+                ("attachment", attachment),
+            )
+            if value is not None
+        }
+
         repo.append_turn(
             profile,
             role="user",
             text=incoming_text,
-            display_text=display_text,
-            attachment=attachment,
+            **media_turn,
         )
 
         repo.append_turn(
