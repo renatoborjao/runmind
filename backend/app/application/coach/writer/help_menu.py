@@ -65,9 +65,14 @@ class HelpMenu:
                 "",
                 "🎙️ Pode me mandar áudio",
                 "Grave uma nota de voz que eu te entendo (te respondo por "
-                "escrito). E eu te falo em áudio nos momentos que importam — "
-                'dia da prova, recorde batido. Prefere nem isso? É só dizer '
-                '"prefiro sem áudio".',
+                "escrito) — aqui ou no app. E eu te falo em áudio nos "
+                "momentos que importam — dia da prova, recorde batido. "
+                'Prefere nem isso? É só dizer "prefiro sem áudio".',
+                "",
+                "📷 E foto também",
+                "Print do relógio ou da esteira, resultado de prova, o tênis, "
+                "onde doeu — manda a foto (com ou sem legenda) que eu olho e "
+                "te respondo levando em conta seu histórico.",
                 "",
                 "💬 E pode falar comigo normal",
                 "Me conta como se sente (\"dormi mal\", \"perna doendo\"), "
