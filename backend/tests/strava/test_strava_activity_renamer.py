@@ -30,7 +30,7 @@ def _session(workout_type="Tempo", km=6.0, minutes=None):
 
 
 def _run(profile, done, session, strava_recent, active=True, update=True,
-         executed_type=None):
+         executed_type=None, store=None):
 
     client = MagicMock()
     client.get_last_activities = AsyncMock(return_value=strava_recent)
@@ -43,6 +43,7 @@ def _run(profile, done, session, strava_recent, active=True, update=True,
     with (
         patch(f"{MOD}.StravaClient", return_value=client),
         patch(f"{MOD}.get_settings", return_value=settings),
+        patch(f"{MOD}.PendingStravaRenameStore", store or MagicMock()),
     ):
 
         result = asyncio.run(
@@ -108,6 +109,112 @@ def test_skips_when_no_match_on_strava():
     assert ok is False
 
 
+def test_copy_not_on_strava_yet_becomes_pending():
+    """O caso de 25/09: análise via Garmin rodou ANTES da cópia chegar no
+    Strava -> o nome fica pendente (antes desistia calado)."""
+
+    store = MagicMock()
+    done = _activity(dist=8530.0, act_id=24491175906)
+
+    ok, client = _run("renato2", done, _session("Rodagem Leve", 8.5), [],
+                      store=store)
+
+    assert ok is False
+    client.update_activity.assert_not_awaited()
+    store.add.assert_called_once_with(
+        "renato2", 24491175906, done.start_date.timestamp(), 8530.0,
+        "Ritmind · Rodagem Leve 8.5km",
+    )
+
+
+def test_custom_name_is_not_pending():
+    """Achou no Strava com nome manual -> não vira pendência."""
+
+    store = MagicMock()
+    strava = [_activity(dist=6000.0, name="PR no parque 🔥")]
+
+    _run("renato2", _activity(dist=6000.0), _session(), strava, store=store)
+
+    store.add.assert_not_called()
+
+
+# ---- pendências: aplicadas quando a cópia chega no Strava ----------------
+
+
+def _retry(pending, strava_recent, update=True):
+
+    client = MagicMock()
+    client.get_last_activities = AsyncMock(return_value=strava_recent)
+    client.update_activity = AsyncMock(return_value=update)
+
+    store = MagicMock()
+    store.profiles.return_value = ["renato2"]
+    store.list.return_value = pending
+
+    with (
+        patch(f"{MOD}.StravaClient", return_value=client),
+        patch(f"{MOD}.PendingStravaRenameStore", store),
+    ):
+
+        n = asyncio.run(StravaActivityRenamer.retry_pending())
+
+    return n, client, store
+
+
+def _pending(age_s=600.0):
+
+    import time
+
+    return {
+        "activity_id": "24491175906",
+        "start_ts": datetime.fromisoformat("2026-09-01T05:30:00").timestamp(),
+        "distance_m": 8530.0,
+        "name": "Ritmind · Rodagem Leve 8.5km",
+        "created_at": time.time() - age_s,
+    }
+
+
+def test_retry_renames_when_copy_arrives_and_clears():
+
+    strava = [_activity(dist=8520.0, act_id=777, name="Corrida matinal")]
+
+    n, client, store = _retry([_pending()], strava)
+
+    assert n == 1
+    client.update_activity.assert_awaited_once_with(
+        777, "Ritmind · Rodagem Leve 8.5km"
+    )
+    store.remove.assert_called_once_with("renato2", "24491175906")
+
+
+def test_retry_keeps_pending_while_copy_missing():
+
+    n, client, store = _retry([_pending()], [])
+
+    assert n == 0
+    store.remove.assert_not_called()
+
+
+def test_retry_drops_expired_without_calling_strava():
+
+    n, client, store = _retry([_pending(age_s=25 * 3600)], [])
+
+    assert n == 0
+    client.get_last_activities.assert_not_awaited()
+    store.remove.assert_called_once_with("renato2", "24491175906")
+
+
+def test_retry_drops_when_athlete_named_it():
+
+    strava = [_activity(dist=8530.0, name="Com a galera 🏃")]
+
+    n, client, store = _retry([_pending()], strava)
+
+    assert n == 0
+    client.update_activity.assert_not_awaited()
+    store.remove.assert_called_once()
+
+
 def test_idempotent_when_already_named():
 
     strava = [_activity(dist=6000.0, name="Ritmind · Tempo 6.0km")]
@@ -132,6 +239,45 @@ def test_skips_when_executed_type_diverges_from_plan():
 
     assert ok is False
     client.update_activity.assert_not_awaited()
+
+
+def test_executed_structured_workout_overrides_classifier():
+    """O caso do Leonardo (25/09): Tempo Run executado bloco a bloco pelo
+    relógio, mas o classificador leu 'leve' na média -> renomeia mesmo assim
+    (as voltas do Garmin provam que ele rodou o treino prescrito)."""
+
+    strava = [_activity(dist=7520.0, name="Corrida matinal")]
+    comparison = SimpleNamespace(blocks=[object()], missing=[])
+
+    with patch(
+        f"{MOD}.PlannedExecutionMatcher.match", return_value=comparison
+    ):
+
+        ok, client = _run("leonardo", _activity(dist=7520.0),
+                          _session("Tempo Run", 7.5), strava,
+                          executed_type="EASY")
+
+    assert ok is True
+    client.update_activity.assert_awaited_once_with(
+        1, "Ritmind · Tempo Run 7.5km"
+    )
+
+
+def test_structured_with_missing_blocks_still_uses_type_gate():
+    """Parou antes de terminar a série -> não é prova de execução; vale a
+    trava de tipo."""
+
+    strava = [_activity(dist=6000.0, name="Corrida matinal")]
+    comparison = SimpleNamespace(blocks=[object()], missing=["Tiro 5"])
+
+    with patch(
+        f"{MOD}.PlannedExecutionMatcher.match", return_value=comparison
+    ):
+
+        ok, _ = _run("leonardo", _activity(dist=6000.0),
+                     _session("Tempo", 6.0), strava, executed_type="EASY")
+
+    assert ok is False
 
 
 def test_renames_when_executed_type_matches_plan():

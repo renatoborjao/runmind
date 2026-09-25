@@ -26,6 +26,9 @@ from app.application.garmin.garmin_activity_poller import (
 from app.application.notifications.notification_service import (
     NotificationService,
 )
+from app.application.strava.strava_activity_renamer import (
+    StravaActivityRenamer,
+)
 from app.application.use_cases.owner_resolver import (
     OwnerResolver,
 )
@@ -341,6 +344,11 @@ async def _process_strava_activity(
             # o traçado (mapa+parciais) é capturado DENTRO do poll do Garmin,
             # com o id do Garmin (mesmo id do arquivo) — independe do Strava.
             await GarminActivityPoller.poll_one(profile)
+
+            # a cópia do Strava ACABOU de chegar (é este webhook): aplica o
+            # nome do plano que ficou pendente quando a análise do Garmin
+            # rodou antes do sync. Ver [[project_strava_rename]].
+            await StravaActivityRenamer.retry_pending(profile)
 
             return
 

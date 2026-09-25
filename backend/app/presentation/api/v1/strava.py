@@ -346,8 +346,10 @@ async def me():
 @router.post("/register-webhook")
 async def register_webhook():
 
+    # domínio público atual (settings), nunca fixo: a URL cravada no ngrok
+    # velho deixou o webhook do Strava mudo desde a migração pra Oracle.
     callback_url = (
-        "https://unopened-employed-cedar.ngrok-free.dev"
+        f"{get_settings().public_base_url.rstrip('/')}"
         "/api/v1/webhooks/strava"
     )
 

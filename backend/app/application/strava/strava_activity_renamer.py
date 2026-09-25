@@ -5,6 +5,9 @@ lugar do genérico do Strava ("Corrida matinal"). Best-effort ponta a ponta:
 - só treinos que CASAM com uma sessão do plano (nunca corrida avulsa/prova);
 - localiza a atividade NO STRAVA por data+distância (o id que chega no evento
   pode ser do Garmin, não do Strava — o treino sincroniza Garmin→Strava);
+- se a cópia ainda NÃO chegou no Strava (análise via Garmin é mais rápida que
+  o sync), o nome fica PENDENTE e é aplicado quando ela aparecer (webhook do
+  Strava ou varredura periódica) — nunca desiste calado;
 - só sobrescreve nome GENÉRICO do Strava (respeita nome que o atleta pôs à mão);
 - idempotente: se já está com o nome certo, não bate na API.
 
@@ -12,10 +15,18 @@ Ver [[project_tracker_tenis]] (roadmap de escrita no Strava) e
 [[feedback_free_tools_preference]]."""
 
 import re
+import time
 
 from app.application.coach.writer.labels import plan_session_title
+from app.application.history.planned_execution_matcher import (
+    PlannedExecutionMatcher,
+)
 from app.core.config import get_settings
 from app.infrastructure.integrations.strava.client import StravaClient
+from app.infrastructure.persistence.pending_strava_rename_store import (
+    MAX_AGE_SECONDS,
+    PendingStravaRenameStore,
+)
 
 # nomes automáticos do Strava = "{período} {esporte}" — só esses a gente
 # sobrescreve (nome próprio do atleta fica intacto). PT + EN.
@@ -77,10 +88,21 @@ class StravaActivityRenamer:
                 return False
 
             # o executado bate com o planejado? (planejou tempo, correu leve =
-            # não carimba). Permissivo quando não dá pra classificar.
-            if not StravaActivityRenamer._types_consistent(
+            # não carimba). Se o atleta EXECUTOU o treino estruturado que foi
+            # pro relógio (voltas do Garmin casam bloco a bloco), o nome do
+            # plano é o fato — o palpite do classificador não barra (tempo run
+            # com aquecimento/desaquecimento longos lê "leve" na média).
+            if not StravaActivityRenamer._executed_prescribed(
+                planned_session, activity
+            ) and not StravaActivityRenamer._types_consistent(
                 getattr(planned_session, "workout_type", ""), executed_type
             ):
+
+                print(
+                    f"Renomear Strava [{profile}]: tipo executado "
+                    f"({executed_type}) não bate com o planejado "
+                    f"({getattr(planned_session, 'workout_type', '')}) — mantém"
+                )
 
                 return False
 
@@ -94,30 +116,140 @@ class StravaActivityRenamer:
 
                 return False
 
-            client = StravaClient(profile)
+            start_ts = activity.start_date.timestamp()
 
-            target = await StravaActivityRenamer._find_on_strava(client, activity)
+            distance_m = activity.distance or 0
 
-            if target is None:
+            outcome = await StravaActivityRenamer._apply(
+                StravaClient(profile), start_ts, distance_m, name
+            )
 
-                return False
+            if outcome == "not_found":
 
-            # respeita nome que o atleta deu à mão — só troca o genérico
-            if not StravaActivityRenamer._is_generic(target.name):
+                # a cópia ainda não chegou no Strava — fica pendente
+                PendingStravaRenameStore.add(
+                    profile, activity.id, start_ts, distance_m, name
+                )
 
-                return False
+            print(f"Renomear Strava [{profile}] '{name}': {outcome}")
 
-            if (target.name or "").strip() == name:
-
-                return False  # já está certo (idempotente)
-
-            return await client.update_activity(target.id, name)
+            return outcome == "renamed"
 
         except Exception as e:
 
             print(f"Renomear Strava falhou p/ '{profile}': {e}")
 
             return False
+
+    @staticmethod
+    async def retry_pending(profile: str | None = None) -> int:
+        """Aplica os nomes pendentes (corrida que ainda não estava no Strava na
+        hora da análise). Chamado pelo webhook do Strava (a cópia acabou de
+        chegar) e por varredura periódica. Pendência resolvida (renomeou, nome
+        manual, já certo) ou velha (>24h) sai da fila. Devolve quantas
+        renomeou."""
+
+        renamed = 0
+
+        profiles = [profile] if profile else PendingStravaRenameStore.profiles()
+
+        for p in profiles:
+
+            items = PendingStravaRenameStore.list(p)
+
+            if not items:
+
+                continue
+
+            client = StravaClient(p)
+
+            for item in items:
+
+                try:
+
+                    if time.time() - item.get("created_at", 0) > MAX_AGE_SECONDS:
+
+                        PendingStravaRenameStore.remove(p, item["activity_id"])
+
+                        print(
+                            f"Renomear Strava pendente [{p}] expirou: "
+                            f"{item.get('name')}"
+                        )
+
+                        continue
+
+                    outcome = await StravaActivityRenamer._apply(
+                        client,
+                        item["start_ts"],
+                        item["distance_m"],
+                        item["name"],
+                    )
+
+                    if outcome == "not_found":
+
+                        continue  # ainda não chegou — tenta na próxima
+
+                    PendingStravaRenameStore.remove(p, item["activity_id"])
+
+                    print(
+                        f"Renomear Strava pendente [{p}] "
+                        f"'{item['name']}': {outcome}"
+                    )
+
+                    if outcome == "renamed":
+
+                        renamed += 1
+
+                except Exception as e:
+
+                    print(f"Renomear Strava pendente [{p}] falhou: {e}")
+
+        return renamed
+
+    @staticmethod
+    async def _apply(
+        client: StravaClient, start_ts: float, distance_m: float, name: str
+    ) -> str:
+        """Acha a corrida no Strava e aplica o nome. Resultado: 'renamed' |
+        'not_found' | 'custom_name' | 'already' | 'write_failed'."""
+
+        target = await StravaActivityRenamer._find_on_strava(
+            client, start_ts, distance_m
+        )
+
+        if target is None:
+
+            return "not_found"
+
+        # respeita nome que o atleta deu à mão — só troca o genérico
+        if not StravaActivityRenamer._is_generic(target.name):
+
+            return "custom_name"
+
+        if (target.name or "").strip() == name:
+
+            return "already"  # idempotente
+
+        ok = await client.update_activity(target.id, name)
+
+        return "renamed" if ok else "write_failed"
+
+    @staticmethod
+    def _executed_prescribed(planned_session, activity) -> bool:
+        """O atleta rodou o treino ESTRUTURADO que mandamos pro relógio? (voltas
+        rotuladas do Garmin pareiam com os passos do plano, sem bloco
+        faltando). Só dá True com dado do Garmin — sem ele, vale a trava de
+        tipo."""
+
+        try:
+
+            comparison = PlannedExecutionMatcher.match(planned_session, activity)
+
+        except Exception:
+
+            return False
+
+        return comparison is not None and not comparison.missing
 
     # ------------------------------------------------------------------
 
@@ -186,16 +318,14 @@ class StravaActivityRenamer:
         return plan_session_title(session, executed_km)
 
     @staticmethod
-    async def _find_on_strava(client: StravaClient, activity):
+    async def _find_on_strava(
+        client: StravaClient, target_ts: float, target_dist: float
+    ):
         """Acha a atividade correspondente NO Strava (por distância ~igual +
         janela de tempo) — o evento pode trazer o id do Garmin. O match mais
         próximo no tempo vence. None se nada casar."""
 
         recent = await client.get_last_activities(limit=15)
-
-        target_dist = activity.distance or 0
-
-        target_ts = activity.start_date.timestamp()
 
         best = None
 
