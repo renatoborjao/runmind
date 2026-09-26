@@ -17,6 +17,7 @@ export interface SummaryCardStyle {
 export const SUMMARY_STYLES: SummaryCardStyle[] = [
   { key: "sticker", label: "Sticker", transparent: true },
   { key: "barras", label: "Barras + dados", transparent: true },
+  { key: "clean", label: "Clean", transparent: true },
   { key: "card", label: "Card", transparent: false },
 ];
 
@@ -112,11 +113,42 @@ function drawBarsAndData(ctx: CanvasRenderingContext2D, W: number, H: number, s:
   withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 100, H - 50), 46, true));
 }
 
+// CLEAN — sem gráfico: título, datas e os números empilhados no centro
+// (mesma linguagem do estilo "Central" das corridas).
+function drawClean(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
+  const cx = W / 2;
+  const items: [string, string][] = [
+    ["Distância", `${fmtKm(s.km, 2)} km`],
+    ["Treinos", String(s.runs)],
+    ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
+    ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
+  ];
+  withShadow(ctx, () => {
+    ctx.textAlign = "center";
+    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.title.toUpperCase(), cx, 200, 6);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.label, cx, 280, 8);
+
+    let y = 430;
+    for (const [lab, val] of items) {
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 44px ${CANVAS_FONT}`;
+      outlinedText(ctx, lab, cx, y, 5);
+      ctx.font = `800 96px ${CANVAS_FONT}`;
+      outlinedText(ctx, val, cx, y + 100, 9);
+      y += 205;
+    }
+    ctx.textAlign = "left";
+  });
+  withShadow(ctx, () => drawBrand(ctx, cx, 1275, 50, true));
+}
+
 export function drawSummaryCard(
   ctx: CanvasRenderingContext2D, W: number, H: number,
   s: PeriodSummary, styleKey: string, photo: HTMLImageElement | null,
 ) {
   if (styleKey === "barras") { drawBarsAndData(ctx, W, H, s); return; }
+  if (styleKey === "clean") { drawClean(ctx, W, H, s); return; }
 
   const cx = W / 2;
   const left = 110, right = W - 110;
