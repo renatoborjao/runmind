@@ -245,3 +245,22 @@ export function drawPill(ctx: CanvasRenderingContext2D, cx: number, baseY: numbe
   ctx.fillText(text, cx, baseY);
   ctx.textAlign = "left";
 }
+
+// fundo da versão "Card" de QUALQUER modelo (corrida e resumo): foto do atleta
+// ou mapa real da corrida (escurecidos pra leitura) ou, sem nenhum, escuro com
+// brilho teal suave (não fica chapado)
+export function drawCardBackground(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  photo: HTMLImageElement | null, mapCard: HTMLCanvasElement | null,
+) {
+  drawBg(ctx, W, H, photo, mapCard);
+  if (photo || mapCard) {
+    ctx.fillStyle = "rgba(6,7,12,0.28)"; ctx.fillRect(0, 0, W, H);
+    topScrim(ctx, W); bottomScrim(ctx, W, H, Math.round(H * 0.28));
+    return;
+  }
+  const gy = Math.min(520, H / 2);
+  const g = ctx.createRadialGradient(W / 2, gy, 40, W / 2, gy, Math.max(W, H) * 0.7);
+  g.addColorStop(0, "rgba(31,217,184,0.20)"); g.addColorStop(1, "rgba(31,217,184,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}

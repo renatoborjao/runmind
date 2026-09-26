@@ -4,8 +4,8 @@
 
 import { fmtKm, fmtPace, type PeriodSummary } from "./period-summary";
 import {
-  CANVAS_FONT, CARD_H, bottomScrim, drawBg, drawBrand, drawStatsSpread, fmtDur,
-  outlinedText, roundRect, topScrim, withShadow,
+  CANVAS_FONT, CARD_H, drawCardBackground, drawBrand, drawStatsSpread, fmtDur,
+  outlinedText, roundRect, withShadow,
 } from "./share-canvas";
 
 // MODELO (layout) e FUNDO são escolhas independentes: qualquer modelo sai
@@ -153,21 +153,6 @@ function drawClean(ctx: CanvasRenderingContext2D, W: number, H: number, s: Perio
     ctx.textAlign = "left";
   });
   withShadow(ctx, () => drawBrand(ctx, cx, 1275, 50, true));
-}
-
-// fundo dos estilos "Card": foto do atleta (escurecida pra leitura) ou
-// escuro com brilho teal suave (não fica chapado)
-function drawCardBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null) {
-  drawBg(ctx, W, H, photo, null);
-  if (photo) {
-    ctx.fillStyle = "rgba(6,7,12,0.28)"; ctx.fillRect(0, 0, W, H);
-    topScrim(ctx, W); bottomScrim(ctx, W, H, Math.round(H * 0.28));
-    return;
-  }
-  const gy = Math.min(520, H / 2);
-  const g = ctx.createRadialGradient(W / 2, gy, 40, W / 2, gy, Math.max(W, H) * 0.7);
-  g.addColorStop(0, "rgba(31,217,184,0.20)"); g.addColorStop(1, "rgba(31,217,184,0)");
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 
 // DEITADO — faixa horizontal justa no texto (canvas de 440px de altura, igual
@@ -327,7 +312,7 @@ export function drawSummaryCard(
   s: PeriodSummary, layout: string, background: SummaryBackground,
   photo: HTMLImageElement | null,
 ) {
-  if (background === "card") drawCardBg(ctx, W, H, photo);
+  if (background === "card") drawCardBackground(ctx, W, H, photo, null);
   if (layout === "barras") { drawBarsAndData(ctx, W, H, s); return; }
   if (layout === "clean") { drawClean(ctx, W, H, s); return; }
   if (layout === "deitado") { drawDeitado(ctx, W, H, s); return; }

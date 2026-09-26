@@ -21,9 +21,9 @@ import {
 import { drawCoachDiz, drawPeito, drawPlanoFeito, planHasTargets, type RunExtras } from "@/lib/run-card-extras";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
 import {
-  CANVAS_FONT, bottomScrim, canvasBlob, copyBlob, drawBg, drawBrand,
+  CANVAS_FONT, drawCardBackground, canvasBlob, copyBlob, drawBrand,
   drawStatsSpread, fmtDur, outlinedText, paintWhenFontsReady, roundRect,
-  shareBlob, topScrim, withShadow,
+  shareBlob, withShadow,
 } from "@/lib/share-canvas";
 
 // Leaflet carregado sob demanda dentro do card compartilhável (mapa REAL de
@@ -39,16 +39,35 @@ function Mark() {
   );
 }
 
-// ---- mapa REAL de fundo (estilo Strava): tiles escuros do CARTO (grátis, com
-// CORS -> canvas exportável) + a rota por cima, renderizados num canvas offscreen ----
+// ---- mapa REAL de fundo (estilo Strava): tiles do OpenStreetMap (grátis, com
+// CORS -> canvas exportável) ESCURECIDOS no próprio canvas + a rota por cima,
+// num canvas offscreen. (O CARTO dark passou a exigir API key e devolvia tile
+// com marca d'água "API KEY REQUIRED" — 2026-09-26.) ----
 function _lon2x(lon: number, z: number) { return ((lon + 180) / 360) * 256 * Math.pow(2, z); }
 function _lat2y(lat: number, z: number) {
   const r = (lat * Math.PI) / 180;
   return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 256 * Math.pow(2, z);
 }
 function _tileURL(z: number, x: number, y: number) {
-  const subs = ["a", "b", "c", "d"];
-  return `https://${subs[(x + y) % subs.length]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`;
+  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+}
+// deixa o mapa claro do OSM no tom escuro do app: inverte a luminância e tinge
+// de azul-petróleo (fundo claro vira quase preto; água/parque/rótulos ficam
+// levemente mais claros). Pixel a pixel porque ctx.filter não existe no
+// Safari/iOS mais antigo.
+function _darkenMap(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  try {
+    const img = ctx.getImageData(0, 0, W, H);
+    const px = img.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const lum = 0.3 * px[i] + 0.59 * px[i + 1] + 0.11 * px[i + 2];
+      const v = 255 - lum;
+      px[i] = 14 + v * 0.34;
+      px[i + 1] = 18 + v * 0.42;
+      px[i + 2] = 28 + v * 0.46;
+    }
+    ctx.putImageData(img, 0, 0);
+  } catch { /* canvas "sujo" (tile sem CORS): fica o mapa claro */ }
 }
 function _loadTile(url: string): Promise<HTMLImageElement | null> {
   return new Promise((res) => {
@@ -86,6 +105,7 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
     }
   }
   await Promise.all(jobs);
+  _darkenMap(ctx, W, H);
   ctx.save();
   ctx.shadowColor = "rgba(31,217,184,0.5)"; ctx.shadowBlur = 16;
   ctx.strokeStyle = "#1FD9B8"; ctx.lineWidth = 8; ctx.lineJoin = "round"; ctx.lineCap = "round";
@@ -218,10 +238,11 @@ function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
   drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 40);
 }
 
-// COM MAPA — card completo (não transparente): mapa/foto de fundo + stats.
-function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo, d.mapCard);
-  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 420);
+// CLÁSSICO — marca + data em cima, dados embaixo, rodapé (ex-"Com mapa": o
+// mapa/foto virou FUNDO do Card, vale pra qualquer modelo).
+function styleClassico(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  // sem mapa/foto de fundo, o traçado ocupa o meio (senão fica um vazio)
+  if (!d.mapCard && !d.photo && d.pts.length >= 2) drawRouteBox(ctx, d.pts, 170, 250, W - 340, H - 620, "#1FD9B8", 12);
   brandDate(ctx, W, d);
   drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 36);
   footer(ctx, W, H);
@@ -233,21 +254,39 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
 // (halo), igual ao traçado da rota. Também mais estreito/baixo que a v1 —
 // não precisa ocupar o card inteiro pra ser legível.
 function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawParciais(ctx, W, H, d, false);
+  centeredBlock(ctx, W, false, () => drawParciais(ctx, W, H, d, false));
+}
+
+// o bloco das parciais (rótulo..pace) centralizado na largura do card — no
+// Card com fundo, encostado à esquerda sobrava um vazio do lado direito
+function parciaisValueX(W: number, withStats: boolean): number {
+  return Math.round(W * (withStats ? 0.72 : 0.62));
+}
+function centeredBlock(ctx: CanvasRenderingContext2D, W: number, withStats: boolean, fn: () => void) {
+  const dx = (W - (90 + parciaisValueX(W, withStats))) / 2;
+  ctx.save(); ctx.translate(dx, 0); fn(); ctx.restore();
+}
+// altura do card das parciais = a do conteúdo (mesma conta do drawParciais)
+function parciaisHeight(d: CardData, withStats: boolean): number {
+  const n = d.splits.filter((s) => s.sec > 0).length;
+  if (!n) return withStats ? 560 : 420;
+  const rowH = withStats ? Math.max(20, Math.min(46, 720 / n)) : Math.max(30, Math.min(46, 900 / n));
+  const listBottom = 244 + n * rowH;
+  return Math.min(1350, Math.round(withStats ? listBottom + 64 + 62 + 70 + 60 : listBottom + 56 + 90));
 }
 
 // COMPLETO — parciais + linha de dados (distância/ritmo/tempo) + UMA marca só.
 // Antes o atleta colava 2 stickers (Parciais + Cantinho) e o "Ritmind" saía
 // duplicado no story (pedido do Renato).
 function styleCompleto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawParciais(ctx, W, H, d, true);
+  centeredBlock(ctx, W, true, () => drawParciais(ctx, W, H, d, true));
 }
 
 function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData, withStats: boolean) {
   const splits = d.splits.filter((s) => s.sec > 0);
   const titleY = 200;
   // com a linha de dados o bloco alarga um pouco (3 números grandes precisam caber)
-  const labelX = 90, barX = 172, valueX = Math.round(W * (withStats ? 0.72 : 0.62));
+  const labelX = 90, barX = 172, valueX = parciaisValueX(W, withStats);
   const blockCenterX = (labelX + valueX) / 2; // marca centraliza no BLOCO, não no card
   const statsCells = shareCells(d.it).slice(0, 3);
 
@@ -328,19 +367,21 @@ function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: Ca
   withShadow(ctx, () => drawBrand(ctx, blockCenterX, brandY, 40, true));
 }
 
-// `needs`: estilo que depende de dado do backend (sessão do plano / frase do
-// coach) só aparece quando esse dado existe pra corrida
-interface CardStyle { key: string; label: string; transparent: boolean; needs?: "planned" | "quote"; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
+// MODELO e FUNDO são escolhas independentes (Transparente | Card) — todo
+// modelo funciona nos dois. `height`: modelo compacto tem canvas justo ao
+// conteúdo (faixa), senão 1350. `needs`: modelo que depende de dado do backend
+// (sessão do plano / frase do coach) só aparece quando esse dado existe.
+interface CardStyle { key: string; label: string; height?: number | ((d: CardData) => number); needs?: "planned" | "quote"; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
 const CARD_STYLES: CardStyle[] = [
-  { key: "centralizado", label: "Central", transparent: true, draw: styleCentralizado },
-  { key: "rota", label: "Rota", transparent: true, draw: styleRota },
-  { key: "cantinho", label: "Cantinho", transparent: true, draw: styleCantinho },
-  { key: "parciais", label: "Parciais", transparent: true, draw: styleParciais },
-  { key: "completo", label: "Parciais + dados", transparent: true, draw: styleCompleto },
-  { key: "plano", label: "Plano × feito", transparent: true, needs: "planned", draw: (c, W, H, d) => drawPlanoFeito(c, W, H, d.it, d.extras) },
-  { key: "coach", label: "Coach diz", transparent: true, needs: "quote", draw: (c, W, H, d) => drawCoachDiz(c, W, H, d.it, d.extras) },
-  { key: "peito", label: "Número de peito", transparent: true, draw: (c, W, H, d) => drawPeito(c, W, H, d.it, d.extras) },
-  { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
+  { key: "centralizado", label: "Central", draw: styleCentralizado },
+  { key: "rota", label: "Rota", draw: styleRota },
+  { key: "cantinho", label: "Cantinho", height: 400, draw: styleCantinho },
+  { key: "parciais", label: "Parciais", height: (d) => parciaisHeight(d, false), draw: styleParciais },
+  { key: "completo", label: "Parciais + dados", height: (d) => parciaisHeight(d, true), draw: styleCompleto },
+  { key: "plano", label: "Plano × feito", needs: "planned", draw: (c, W, H, d) => drawPlanoFeito(c, W, H, d.it, d.extras) },
+  { key: "coach", label: "Coach diz", needs: "quote", draw: (c, W, H, d) => drawCoachDiz(c, W, H, d.it, d.extras) },
+  { key: "peito", label: "Número de peito", draw: (c, W, H, d) => drawPeito(c, W, H, d.it, d.extras) },
+  { key: "classico", label: "Clássico", draw: styleClassico },
 ];
 
 function AtividadesInner() {
@@ -356,6 +397,7 @@ function AtividadesInner() {
   const [sharing, setSharing] = useState(false);
   const [editor, setEditor] = useState(false);
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
+  const [bg, setBg] = useState<"transparent" | "card">("transparent");
   // estilo escolhido pela CHAVE (a lista muda quando os extras do backend
   // chegam — índice apontaria pra outro estilo)
   const [styleKey, setStyleKey] = useState(CARD_STYLES[0].key);
@@ -496,7 +538,7 @@ function AtividadesInner() {
   }
 
   function openEditor() {
-    setPhotoImg(null); setStyleKey(CARD_STYLES[0].key); setResultUrl(null); setEditor(true);
+    setPhotoImg(null); setBg("transparent"); setStyleKey(CARD_STYLES[0].key); setResultUrl(null); setEditor(true);
     // extras do backend (plano da sessão + frase do coach): os estilos que
     // dependem deles aparecem quando chegam
     setShareCtx(null);
@@ -512,15 +554,22 @@ function AtividadesInner() {
     img.src = URL.createObjectURL(file);
   }
 
-  // monta o mapa REAL de fundo (tiles + rota) só no estilo "Com mapa" e sem foto
+  const transparent = bg === "transparent";
+  const cardH = style.height === undefined ? 1350
+    : typeof style.height === "number" ? style.height
+    : style.height({ splits: track?.splits ?? [] } as CardData);
+
+  // monta o mapa REAL de fundo (tiles + rota) no Card sem foto — no tamanho do
+  // modelo. O modelo "Rota" já desenha o traçado grande: lá o fundo fica escuro
+  // (duas rotas em projeções diferentes não casariam).
   useEffect(() => {
-    if (!editor || style.transparent || photoImg) { setMapCard(null); return; }
+    if (!editor || transparent || photoImg || style.key === "rota") { setMapCard(null); return; }
     const pts = track?.points ?? [];
     if (pts.length < 2) { setMapCard(null); return; }
     let alive = true;
-    buildMapCard(pts, 1080, 1350).then((c) => { if (alive) setMapCard(c); });
+    buildMapCard(pts, 1080, cardH).then((c) => { if (alive) setMapCard(c); });
     return () => { alive = false; };
-  }, [editor, style, photoImg, track]);
+  }, [editor, transparent, style.key, cardH, photoImg, track]);
 
   // troca de estilo pelo chip mantém o chip ativo visível na fileira (que
   // agora rola escondida, sem barra) — importante quando o swipe no card
@@ -550,11 +599,12 @@ function AtividadesInner() {
     const cv = previewRef.current;
     if (!cv) return;
     const paint = () => {
-      cv.width = 1080; cv.height = 1350;
+      cv.width = 1080; cv.height = cardH;
       const ctx = cv.getContext("2d");
       if (!ctx) return;
       ctx.textBaseline = "alphabetic";
-      ctx.clearRect(0, 0, 1080, 1350);
+      ctx.clearRect(0, 0, 1080, cardH);
+      if (!transparent) drawCardBackground(ctx, 1080, cardH, photoImg, mapCard);
       const d: CardData = {
         it: sel,
         pts: track?.points ?? [],
@@ -570,10 +620,10 @@ function AtividadesInner() {
           quote: shareCtx?.quote ?? null,
         },
       };
-      style.draw(ctx, 1080, 1350, d);
+      style.draw(ctx, 1080, cardH, d);
     };
     paintWhenFontsReady(paint);
-  }, [editor, style, photoImg, sel, track, mapCard, shareCtx]);
+  }, [editor, style, cardH, transparent, photoImg, sel, track, mapCard, shareCtx]);
 
   // PNG (mantém a transparência) do card atual
   const makeBlob = () => canvasBlob(previewRef.current);
@@ -670,7 +720,7 @@ function AtividadesInner() {
               </header>
 
               <div className="se-preview" onPointerDown={onPreviewPointerDown} onPointerUp={onPreviewPointerUp}>
-                <canvas ref={previewRef} className={`se-canvas${style.transparent ? " transp" : ""}`} />
+                <canvas ref={previewRef} className={`se-canvas${transparent ? " transp" : ""}${cardH < 1080 ? " wide" : ""}`} />
               </div>
 
               <div className="se-styles">
@@ -686,7 +736,12 @@ function AtividadesInner() {
                 ))}
               </div>
 
-              {style.transparent ? (
+              <div className="seg" style={{ marginBottom: 6 }}>
+                <button className={transparent ? "on" : ""} onClick={() => setBg("transparent")}>Transparente</button>
+                <button className={!transparent ? "on" : ""} onClick={() => setBg("card")}>Card</button>
+              </div>
+
+              {transparent ? (
                 <p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
               ) : (
                 <div className="se-photo">
