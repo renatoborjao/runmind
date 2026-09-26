@@ -75,30 +75,73 @@ export function drawPulse(ctx: CanvasRenderingContext2D, x: number, y: number, s
   ctx.restore();
 }
 
-// marca dos cards = SELO: pílula teal com o pulso do app + "ritmind" escuro
-// (escolha do Renato, 2026-09-26 — a palavra solta "Ritmind" era "comum
-// demais"). Mesma assinatura de antes: `baseY` ≈ linha de base do texto,
-// `center=true` centraliza em x, senão a pílula começa em x.
+// palavra "ritmind" da marca: as letras EXATAS escolhidas pelo Renato (opção
+// 13 do compilado, gerada no Gemini e recortada como molde branco com
+// transparência em /brand/ritmind-wordmark.png). Pintada na cor pedida via
+// composição 'source-in' (cache por cor).
+let wordmarkImg: HTMLImageElement | null = null;
+let wordmarkLoading: Promise<void> | null = null;
+export function loadWordmark(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (!wordmarkLoading) {
+    wordmarkLoading = new Promise((res) => {
+      const im = new Image();
+      im.onload = () => { wordmarkImg = im; res(); };
+      im.onerror = () => res();
+      im.src = "/brand/ritmind-wordmark.png";
+    });
+  }
+  return wordmarkLoading;
+}
+const tintCache = new Map<string, HTMLCanvasElement>();
+function tintedWordmark(color: string): HTMLCanvasElement | null {
+  if (!wordmarkImg) return null;
+  const hit = tintCache.get(color);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = wordmarkImg.naturalWidth; c.height = wordmarkImg.naturalHeight;
+  const x = c.getContext("2d");
+  if (!x) return null;
+  x.drawImage(wordmarkImg, 0, 0);
+  x.globalCompositeOperation = "source-in";
+  x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+  tintCache.set(color, c);
+  return c;
+}
+
+// marca dos cards = ÍCONE DO APP (quadrado teal com o pulso) + "ritmind" na
+// letra da opção 13 (escolha do Renato, 2026-09-26 — antes: palavra solta,
+// depois selo). Mesma assinatura de sempre: `baseY` ≈ linha de base do texto,
+// `center=true` centraliza em x, senão começa em x. Sem a imagem carregada
+// (1º frame), cai no texto em Space Grotesk — o card repinta quando carrega.
 export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  const s = Math.round(size * 1.25);
-  const fs = Math.round(s * 0.8);
-  ctx.font = `800 ${fs}px ${BRAND_FONT}`;
-  const tw = ctx.measureText("ritmind").width;
-  const ic = s * 0.62, gap = s * 0.2, padX = s * 0.45, h = s * 1.25;
-  const w = padX * 2 + ic + gap + tw;
+  const s = Math.round(size * 1.2);
+  const wm = tintedWordmark("#34E3C8");
+  const wmH = s * 1.02;
+  let wmW: number;
+  if (wm) {
+    wmW = wmH * (wm.width / wm.height);
+  } else {
+    ctx.font = `700 ${s}px ${BRAND_FONT}`;
+    wmW = ctx.measureText("ritmind").width;
+  }
+  const ic = wmH * 1.02, gap = s * 0.3;
+  const w = ic + gap + wmW;
   const left = center ? x - w / 2 : x;
-  // pílula ocupa ~o mesmo vão vertical que a palavra antiga ocupava (não
-  // encosta na linha de dados de cima)
-  const top = baseY - s * 0.15 - h / 2;
-  ctx.fillStyle = "#34E3C8";
-  roundRect(ctx, left, top, w, h, h / 2); ctx.fill();
-  // o que vem depois (pulso/texto) sem a sombra do chamador
-  ctx.save();
-  ctx.shadowColor = "transparent";
-  drawPulse(ctx, left + padX, top + h / 2, ic / 20, "#06201B", s * 0.085);
-  ctx.fillStyle = "#06201B"; ctx.textAlign = "left";
-  ctx.fillText("ritmind", left + padX + ic + gap, top + h * 0.7);
-  ctx.restore();
+  const mid = baseY - s * 0.36;
+  const top = mid - ic / 2;
+  const g = ctx.createLinearGradient(left, top, left + ic, top + ic);
+  g.addColorStop(0, "#34E3C8"); g.addColorStop(1, "#12B89F");
+  ctx.fillStyle = g;
+  roundRect(ctx, left, top, ic, ic, ic * 0.28); ctx.fill();
+  drawPulse(ctx, left + ic * 0.14, mid, ic * 0.036, "#FFFFFF", ic * 0.095);
+  const tx = left + ic + gap;
+  if (wm) {
+    ctx.drawImage(wm, tx, mid - wmH / 2, wmW, wmH);
+  } else {
+    ctx.fillStyle = "#34E3C8"; ctx.textAlign = "left";
+    ctx.fillText("ritmind", tx, baseY);
+  }
 }
 
 // Texto/traçado LIMPOS, sem sombra nem contorno (padrão Strava): o card
@@ -176,6 +219,7 @@ export function paintWhenFontsReady(paint: () => void): () => void {
   const brand = BRAND_FONT.split(",")[0].trim();
   if (typeof document === "undefined" || !document.fonts || !fam) return () => { alive = false; };
   Promise.all([
+    loadWordmark(),
     document.fonts.load(`800 100px ${fam}`),
     document.fonts.load(`900 100px ${fam}`),
     document.fonts.load(`700 40px ${fam}`),
