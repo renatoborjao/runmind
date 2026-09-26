@@ -53,20 +53,16 @@ def plan_workout_label(
     return workout_type_label(code)
 
 
-# fração da distância planejada a partir da qual consideramos que o atleta
-# "cumpriu" o treino (pra decidir se o nome no Strava leva a distância).
-DISTANCE_COMPLETED_RATIO = 0.9
-
-
 def plan_session_title(session, executed_km: float | None = None) -> str:
     """Título do treino como vai pro RELÓGIO (Garmin) e pro STRAVA — uma fonte
     só, sem drift. Ex.: 'Ritmind · Longão Aeróbico 13.0km' / 'Ritmind ·
     Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava.
 
-    `executed_km` (só o Strava passa, PÓS-corrida): quando o atleta ficou aquém
-    da distância planejada, o nome sai SEM a distância (senão diria '15km' numa
-    corrida de 10 — conflitando com o que o Strava já mostra). Sem `executed_km`
-    (relógio, PRÉ-corrida) o alvo planejado é o certo e a distância entra."""
+    `executed_km` (só o Strava passa, PÓS-corrida): se o atleta correu MENOS
+    que o planejado (na casa decimal do título), o nome leva o km REAL — nunca
+    '14.5km' numa corrida de 13.5. Correu igual ou mais → mantém o planejado
+    (o título é o do treino, não o do excedente). Sem `executed_km` (relógio,
+    PRÉ-corrida) o alvo planejado é o certo."""
 
     label = plan_workout_label(
         getattr(session, "workout_type", "") or "",
@@ -75,16 +71,16 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
 
     km = getattr(session, "planned_distance_km", None)
 
-    completed = (
-        executed_km is None
-        or (km and executed_km >= km * DISTANCE_COMPLETED_RATIO)
-    )
+    if not km:
 
-    if km and completed:
+        return f"Ritmind · {label}"
 
-        return f"Ritmind · {label} {km:.1f}km"
+    # compara na mesma precisão do título (0.1 km): 14.46 de 14.5 é "14.5"
+    if executed_km and round(executed_km, 1) < round(km, 1):
 
-    return f"Ritmind · {label}"
+        km = executed_km
+
+    return f"Ritmind · {label} {km:.1f}km"
 
 
 def intensity_label(intensity: str) -> str:
