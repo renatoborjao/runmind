@@ -8,20 +8,21 @@ import {
   outlinedText, roundRect, topScrim, withShadow,
 } from "./share-canvas";
 
-export interface SummaryCardStyle {
+// MODELO (layout) e FUNDO são escolhas independentes: qualquer modelo sai
+// transparente (sticker pra colar na foto) ou em card (fundo escuro ou foto).
+export interface SummaryLayout {
   key: string;
   label: string;
-  transparent: boolean;
 }
 
-export const SUMMARY_STYLES: SummaryCardStyle[] = [
-  { key: "sticker", label: "Sticker", transparent: true },
-  { key: "barras", label: "Barras + dados", transparent: true },
-  { key: "clean", label: "Clean", transparent: true },
-  { key: "deitado", label: "Deitado", transparent: true },
-  { key: "card", label: "Card", transparent: false },
-  { key: "card-clean", label: "Card clean", transparent: false },
+export const SUMMARY_LAYOUTS: SummaryLayout[] = [
+  { key: "destaque", label: "Destaque" },
+  { key: "barras", label: "Barras + dados" },
+  { key: "clean", label: "Clean" },
+  { key: "deitado", label: "Deitado" },
 ];
+
+export type SummaryBackground = "transparent" | "card";
 
 const TEAL = "#1FD9B8";
 const TEAL_LIGHT = "#34E3C8";
@@ -181,17 +182,21 @@ function drawDeitado(ctx: CanvasRenderingContext2D, W: number, H: number, s: Per
 
 export function drawSummaryCard(
   ctx: CanvasRenderingContext2D, W: number, H: number,
-  s: PeriodSummary, styleKey: string, photo: HTMLImageElement | null,
+  s: PeriodSummary, layout: string, background: SummaryBackground,
+  photo: HTMLImageElement | null,
 ) {
-  if (styleKey === "barras") { drawBarsAndData(ctx, W, H, s); return; }
-  if (styleKey === "clean") { drawClean(ctx, W, H, s); return; }
-  if (styleKey === "deitado") { drawDeitado(ctx, W, H, s); return; }
-  if (styleKey === "card-clean") { drawCardBg(ctx, W, H, photo); drawClean(ctx, W, H, s); return; }
+  if (background === "card") drawCardBg(ctx, W, H, photo);
+  if (layout === "barras") { drawBarsAndData(ctx, W, H, s); return; }
+  if (layout === "clean") { drawClean(ctx, W, H, s); return; }
+  if (layout === "deitado") { drawDeitado(ctx, W, H, s); return; }
+  drawDestaque(ctx, W, H, s);
+}
 
+// DESTAQUE — km gigante no topo, variação, barras e a linha de dados
+function drawDestaque(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
   const cx = W / 2;
   const left = 110, right = W - 110;
 
-  if (styleKey === "card") drawCardBg(ctx, W, H, photo);
 
   withShadow(ctx, () => {
     ctx.textAlign = "center";

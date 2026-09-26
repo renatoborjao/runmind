@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getFeed, type FeedItem } from "@/lib/api";
 import { fmtKm, fmtPace, periodSummary, type PeriodKind, type PeriodSummary } from "@/lib/period-summary";
 import { CARD_H, CARD_W, canvasBlob, copyBlob, fmtDur, paintWhenFontsReady, shareBlob } from "@/lib/share-canvas";
-import { SUMMARY_STYLES, drawSummaryCard } from "@/lib/summary-card";
+import { SUMMARY_LAYOUTS, drawSummaryCard, type SummaryBackground } from "@/lib/summary-card";
 
 // semana: km por dia; mês: km por semana (rótulo "7–13")
 function Bars({ s }: { s: PeriodSummary }) {
@@ -100,14 +100,16 @@ export default function ResumoSection() {
 }
 
 function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void }) {
-  const [styleIdx, setStyleIdx] = useState(0);
+  const [layoutIdx, setLayoutIdx] = useState(0);
+  const [background, setBackground] = useState<SummaryBackground>("transparent");
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const style = SUMMARY_STYLES[styleIdx];
+  const layout = SUMMARY_LAYOUTS[layoutIdx];
+  const transparent = background === "transparent";
   const filename = s.kind === "week" ? "ritmind-semana.png" : "ritmind-mes.png";
 
   useEffect(() => {
@@ -119,9 +121,9 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
       if (!ctx) return;
       ctx.textBaseline = "alphabetic";
       ctx.clearRect(0, 0, CARD_W, CARD_H);
-      drawSummaryCard(ctx, CARD_W, CARD_H, s, style.key, style.transparent ? null : photo);
+      drawSummaryCard(ctx, CARD_W, CARD_H, s, layout.key, background, transparent ? null : photo);
     });
-  }, [s, style, photo]);
+  }, [s, layout, background, transparent, photo]);
 
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -166,18 +168,23 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
 
         <div className="se-preview">
-          <canvas ref={previewRef} className={`se-canvas${style.transparent ? " transp" : ""}`} />
+          <canvas ref={previewRef} className={`se-canvas${transparent ? " transp" : ""}`} />
         </div>
 
         <div className="se-styles">
-          {SUMMARY_STYLES.map((st, i) => (
-            <button key={st.key} className={`se-chip${i === styleIdx ? " on" : ""}`} onClick={() => setStyleIdx(i)}>
-              {st.label}
+          {SUMMARY_LAYOUTS.map((l, i) => (
+            <button key={l.key} className={`se-chip${i === layoutIdx ? " on" : ""}`} onClick={() => setLayoutIdx(i)}>
+              {l.label}
             </button>
           ))}
         </div>
 
-        {style.transparent ? (
+        <div className="seg" style={{ marginBottom: 6 }}>
+          <button className={transparent ? "on" : ""} onClick={() => setBackground("transparent")}>Transparente</button>
+          <button className={!transparent ? "on" : ""} onClick={() => setBackground("card")}>Card</button>
+        </div>
+
+        {transparent ? (
           <p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
         ) : (
           <div className="se-photo">
