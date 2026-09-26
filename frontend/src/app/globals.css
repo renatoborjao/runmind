@@ -763,6 +763,8 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
    estilo (JS), sem brigar com o back-swipe nativo do navegador/OS */
 .se-preview { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 8px 0; touch-action: pan-y; }
 .se-canvas { width: auto; height: 100%; max-height: 100%; max-width: 100%; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.4); background: #0C0D16; }
+/* card baixo e largo (resumo "Deitado"): largura manda, altura segue a proporção */
+.se-canvas.wide { width: 100%; height: auto; }
 /* xadrez = mostra que o card é transparente (igual ao Strava) */
 .se-canvas.transp {
   background-color: #2a2c36;

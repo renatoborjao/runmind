@@ -4,7 +4,7 @@
 
 import { fmtKm, fmtPace, type PeriodSummary } from "./period-summary";
 import {
-  CANVAS_FONT, bottomScrim, drawBg, drawBrand, drawStatsSpread, fmtDur,
+  CANVAS_FONT, CARD_H, bottomScrim, drawBg, drawBrand, drawStatsSpread, fmtDur,
   outlinedText, roundRect, topScrim, withShadow,
 } from "./share-canvas";
 
@@ -13,14 +13,21 @@ import {
 export interface SummaryLayout {
   key: string;
   label: string;
+  // altura própria do canvas (largura é sempre CARD_W) — o Deitado é uma
+  // faixa justa no texto; sem isso o card dele viraria um retângulo vazio
+  height?: number;
 }
 
 export const SUMMARY_LAYOUTS: SummaryLayout[] = [
   { key: "destaque", label: "Destaque" },
   { key: "barras", label: "Barras + dados" },
   { key: "clean", label: "Clean" },
-  { key: "deitado", label: "Deitado" },
+  { key: "deitado", label: "Deitado", height: 440 },
 ];
+
+export function summaryCanvasHeight(layoutKey: string): number {
+  return SUMMARY_LAYOUTS.find((l) => l.key === layoutKey)?.height ?? CARD_H;
+}
 
 export type SummaryBackground = "transparent" | "card";
 
@@ -152,27 +159,29 @@ function drawCardBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: 
   drawBg(ctx, W, H, photo, null);
   if (photo) {
     ctx.fillStyle = "rgba(6,7,12,0.28)"; ctx.fillRect(0, 0, W, H);
-    topScrim(ctx, W); bottomScrim(ctx, W, H, 380);
+    topScrim(ctx, W); bottomScrim(ctx, W, H, Math.round(H * 0.28));
     return;
   }
-  const g = ctx.createRadialGradient(W / 2, 520, 40, W / 2, 520, 760);
+  const gy = Math.min(520, H / 2);
+  const g = ctx.createRadialGradient(W / 2, gy, 40, W / 2, gy, Math.max(W, H) * 0.7);
   g.addColorStop(0, "rgba(31,217,184,0.20)"); g.addColorStop(1, "rgba(31,217,184,0)");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 
-// DEITADO — números lado a lado no canto de baixo (igual ao "Cantinho" das
-// corridas): marca, título + datas e a linha Distância/Treinos/Tempo/Ritmo.
-function drawDeitado(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
+// DEITADO — faixa horizontal justa no texto (canvas de 440px de altura, igual
+// ao espírito do "Cantinho" das corridas): marca, título + datas e a linha
+// Distância/Treinos/Tempo/Ritmo lado a lado.
+function drawDeitado(ctx: CanvasRenderingContext2D, W: number, _H: number, s: PeriodSummary) {
   const left = 64, right = W - 64;
-  withShadow(ctx, () => drawBrand(ctx, left, H - 380, 46, false));
+  withShadow(ctx, () => drawBrand(ctx, left, 96, 46, false));
   withShadow(ctx, () => {
     ctx.textAlign = "left";
     ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 38px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), left, H - 300, 5);
+    outlinedText(ctx, s.title.toUpperCase(), left, 172, 5);
     ctx.fillStyle = "#FFFFFF"; ctx.font = `800 54px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, left, H - 240, 7);
+    outlinedText(ctx, s.label, left, 236, 7);
   });
-  drawStatsSpread(ctx, left, right, H - 150, [
+  drawStatsSpread(ctx, left, right, 312, [
     ["Distância", `${fmtKm(s.km, 1)} km`],
     ["Treinos", String(s.runs)],
     ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
