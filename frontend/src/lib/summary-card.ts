@@ -16,6 +16,7 @@ export interface SummaryCardStyle {
 
 export const SUMMARY_STYLES: SummaryCardStyle[] = [
   { key: "sticker", label: "Sticker", transparent: true },
+  { key: "barras", label: "Barras + dados", transparent: true },
   { key: "card", label: "Card", transparent: false },
 ];
 
@@ -78,10 +79,45 @@ function drawBars(
   ctx.textAlign = "left";
 }
 
+// BARRAS + DADOS — sem o número gigante: título, barras e a distância total
+// EMBAIXO junto com ritmo/tempo (mesma leitura do sticker "Parciais + dados").
+function drawBarsAndData(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
+  const cx = W / 2;
+  const left = 110, right = W - 110;
+
+  withShadow(ctx, () => {
+    ctx.textAlign = "center";
+    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.title.toUpperCase(), cx, 250, 6);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.label, cx, 330, 8);
+
+    const bits = [`${s.runs} ${s.runs === 1 ? "treino" : "treinos"}`];
+    if (s.deltaPct != null) bits.push(`${s.deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(s.deltaPct)}% ${s.vsLabel}`);
+    ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = `700 38px ${CANVAS_FONT}`;
+    outlinedText(ctx, bits.join("  ·  "), cx, 392, 5);
+    ctx.textAlign = "left";
+  });
+
+  const bottom = 800;
+  drawBars(ctx, s, left, right, 450, bottom);
+
+  const statsY = bottom + (s.kind === "month" ? 170 : 140);
+  const statsEnd = drawStatsSpread(ctx, left, right, statsY, [
+    ["Distância", `${fmtKm(s.km, 2)} km`],
+    ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
+    ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
+  ], 70, 44);
+
+  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 100, H - 50), 46, true));
+}
+
 export function drawSummaryCard(
   ctx: CanvasRenderingContext2D, W: number, H: number,
   s: PeriodSummary, styleKey: string, photo: HTMLImageElement | null,
 ) {
+  if (styleKey === "barras") { drawBarsAndData(ctx, W, H, s); return; }
+
   const cx = W / 2;
   const left = 110, right = W - 110;
 
