@@ -1,10 +1,11 @@
-// Card de compartilhar do RESUMO semanal/mensal (1080×1350). Mesma linguagem
-// visual dos cards de corrida (contorno no texto, barras com halo, marca
-// Ritmind única) — peças em share-canvas.
+// Card de compartilhar do RESUMO semanal/mensal. Desenha num quadro de
+// 1080×1350 e o editor CORTA justo ao conteúdo (paintTight) — colado no story
+// vira um sticker compacto, não um bloco que cobre a foto. Enxuto, na escala
+// do Strava: um cabeçalho só (o período), números médios, barras sem datas.
 
 import { fmtKm, fmtPace, type PeriodSummary } from "./period-summary";
 import {
-  CANVAS_FONT, CARD_H, drawCardBackground, drawBrand, drawStatsSpread, fmtDur,
+  CANVAS_FONT, CARD_H, drawBrand, drawStatsSpread, fmtDur,
   outlinedText, roundRect, withShadow,
 } from "./share-canvas";
 
@@ -13,8 +14,7 @@ import {
 export interface SummaryLayout {
   key: string;
   label: string;
-  // altura própria do canvas (largura é sempre CARD_W) — o Deitado é uma
-  // faixa justa no texto; sem isso o card dele viraria um retângulo vazio
+  // altura do quadro de DESENHO (o card final é cortado justo ao conteúdo)
   height?: number;
 }
 
@@ -36,159 +36,150 @@ export type SummaryBackground = "transparent" | "card";
 const TEAL = "#1FD9B8";
 const TEAL_LIGHT = "#34E3C8";
 
-export function summaryCells(s: PeriodSummary): [string, string][] {
-  return [
-    ["Treinos", String(s.runs)],
-    ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
-    ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
-  ];
+// escala única dos números do resumo (padrão Strava: rótulo ~metade do valor)
+const VAL = 56, LAB = 30, BRAND = 40;
+
+function periodWord(s: PeriodSummary): string {
+  return s.kind === "week" ? "semana" : "mês";
 }
 
-// barras do resumo (semana: por dia; mês: por semana) — km em cima de cada
-// barra com corrida, rótulo embaixo
+// cabeçalho ÚNICO: o período em branco (o "Resumo do mês" em cima era
+// redundante com "Setembro 2026").
+function drawHeader(ctx: CanvasRenderingContext2D, x: number, s: PeriodSummary, y: number, align: CanvasTextAlign = "center") {
+  withShadow(ctx, () => {
+    ctx.textAlign = align;
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 46px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.label, x, y, 0);
+    ctx.textAlign = "left";
+  });
+}
+
+// barras (semana: por dia; mês: por semana). Mês: só as semanas que já
+// começaram (a S5 vazia do futuro era ruído); sem a linha de datas embaixo.
 function drawBars(
   ctx: CanvasRenderingContext2D, s: PeriodSummary,
   left: number, right: number, top: number, bottom: number,
 ) {
-  const n = s.bars.length;
-  const gap = s.kind === "week" ? 26 : 40;
-  const bw = (right - left - gap * (n - 1)) / n;
-  const max = Math.max(1, ...s.bars.map((d) => d.km));
-  const maxH = bottom - top - 58; // espaço do valor em cima
-  const stub = 10;
-  const r = Math.min(14, bw / 2);
+  const bars = s.kind === "month" ? s.bars.filter((b) => !b.future) : s.bars;
+  const n = Math.max(1, bars.length);
+  const gap = s.kind === "week" ? 22 : 36;
+  // barra fina e o conjunto centralizado (4 semanas não viram "tijolos")
+  const bw = Math.min(110, (right - left - gap * (n - 1)) / n);
+  left += (right - left - (bw * n + gap * (n - 1))) / 2;
+  const max = Math.max(1, ...bars.map((d) => d.km));
+  const maxH = bottom - top - 44; // espaço do valor em cima
+  const stub = 8;
+  const r = Math.min(12, bw / 2);
 
-  s.bars.forEach((d, i) => {
+  bars.forEach((d, i) => {
     const x = left + i * (bw + gap);
     const h = d.km > 0 ? Math.max(stub * 2, (maxH * d.km) / max) : stub;
     const y = bottom - h;
 
     withShadow(ctx, () => {
       if (d.km > 0) {
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        roundRect(ctx, x - 2, y - 2, bw + 4, h + 4, r + 2); ctx.fill();
         const g = ctx.createLinearGradient(0, bottom, 0, y);
         g.addColorStop(0, TEAL); g.addColorStop(1, TEAL_LIGHT);
         ctx.fillStyle = g;
       } else {
-        ctx.fillStyle = d.future ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.28)";
+        ctx.fillStyle = d.future ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.3)";
       }
       roundRect(ctx, x, y, bw, h, r); ctx.fill();
-    });
 
-    ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center";
-    if (d.km > 0) {
-      ctx.font = `800 42px ${CANVAS_FONT}`;
-      outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 16, 6);
-    }
-    ctx.font = `800 38px ${CANVAS_FONT}`;
-    outlinedText(ctx, d.label, x + bw / 2, bottom + 52, 6);
-    if (d.sub) {
-      ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.font = `700 30px ${CANVAS_FONT}`;
-      outlinedText(ctx, d.sub, x + bw / 2, bottom + 92, 5);
-      ctx.fillStyle = "#FFFFFF";
-    }
+      ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center";
+      if (d.km > 0) {
+        ctx.font = `800 30px ${CANVAS_FONT}`;
+        outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 12, 0);
+      }
+      ctx.font = `700 28px ${CANVAS_FONT}`;
+      outlinedText(ctx, d.label, x + bw / 2, bottom + 40, 0);
+    });
   });
   ctx.textAlign = "left";
 }
 
-// BARRAS + DADOS — sem o número gigante: título, barras e a distância total
-// EMBAIXO junto com ritmo/tempo (mesma leitura do sticker "Parciais + dados").
-function drawBarsAndData(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
-  const cx = W / 2;
-  const left = 110, right = W - 110;
+function brandBelow(ctx: CanvasRenderingContext2D, cx: number, y: number) {
+  withShadow(ctx, () => drawBrand(ctx, cx, y, BRAND, true));
+}
+
+// DESTAQUE — período, km em destaque + variação, barras e a linha de dados
+function drawDestaque(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
+  const cx = W / 2, left = 150, right = W - 150;
+  drawHeader(ctx, cx, s, 200);
 
   withShadow(ctx, () => {
-    ctx.textAlign = "center";
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), cx, 250, 6);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, cx, 330, 8);
-
-    const bits = [`${s.runs} ${s.runs === 1 ? "treino" : "treinos"}`];
-    if (s.deltaPct != null) bits.push(`${s.deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(s.deltaPct)}% ${s.vsLabel}`);
-    ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = `700 38px ${CANVAS_FONT}`;
-    outlinedText(ctx, bits.join("  ·  "), cx, 392, 5);
+    const num = fmtKm(s.km), unit = " km";
+    ctx.font = `800 140px ${CANVAS_FONT}`; const wn = ctx.measureText(num).width;
+    ctx.font = `800 56px ${CANVAS_FONT}`; const wu = ctx.measureText(unit).width;
+    const x0 = cx - (wn + wu) / 2;
+    ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF";
+    ctx.font = `800 140px ${CANVAS_FONT}`; outlinedText(ctx, num, x0, 350, 0);
+    ctx.font = `800 56px ${CANVAS_FONT}`; outlinedText(ctx, unit, x0 + wn, 350, 0);
+    if (s.deltaPct != null) {
+      const up = s.deltaPct >= 0;
+      ctx.textAlign = "center";
+      ctx.fillStyle = up ? TEAL_LIGHT : "#FFFFFF"; ctx.font = `700 30px ${CANVAS_FONT}`;
+      outlinedText(ctx, `${up ? "▲" : "▼"} ${Math.abs(s.deltaPct)}% ${s.vsLabel}`, cx, 404, 0);
+    }
     ctx.textAlign = "left";
   });
 
-  const bottom = 800;
-  drawBars(ctx, s, left, right, 450, bottom);
-
-  const statsY = bottom + (s.kind === "month" ? 170 : 140);
-  const statsEnd = drawStatsSpread(ctx, left, right, statsY, [
-    ["Distância", `${fmtKm(s.km, 2)} km`],
-    ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
-    ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
-  ], 70, 44);
-
-  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 100, H - 50), 46, true));
+  drawBars(ctx, s, left, right, 450, 640);
+  const statsEnd = drawStatsSpread(ctx, left, right, 740, summaryCells(s), VAL, LAB);
+  brandBelow(ctx, cx, statsEnd + 90);
 }
 
-// CLEAN — sem gráfico: título, datas e os números empilhados no centro
-// (mesma linguagem do estilo "Central" das corridas).
-function drawClean(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
+// BARRAS + DADOS — sem o número gigante: período, barras e os dados embaixo
+function drawBarsAndData(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
+  const cx = W / 2, left = 150, right = W - 150;
+  drawHeader(ctx, cx, s, 200);
+  drawBars(ctx, s, left, right, 250, 500);
+  const statsEnd = drawStatsSpread(ctx, left, right, 600, [
+    ["Distância", `${fmtKm(s.km, 1)} km`],
+    ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
+    ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
+  ], VAL, LAB);
+  brandBelow(ctx, cx, statsEnd + 90);
+}
+
+// CLEAN — sem gráfico: período e os números empilhados no centro
+// (mesma linguagem do "Central" das corridas).
+function drawClean(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
   const cx = W / 2;
   const items: [string, string][] = [
-    ["Distância", `${fmtKm(s.km, 2)} km`],
+    ["Distância", `${fmtKm(s.km, 1)} km`],
     ["Treinos", String(s.runs)],
     ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
     ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
   ];
+  drawHeader(ctx, cx, s, 200);
+  let y = 300;
   withShadow(ctx, () => {
-    ctx.textAlign = "center";
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), cx, 200, 6);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, cx, 280, 8);
-
-    let y = 430;
+    ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
     for (const [lab, val] of items) {
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 44px ${CANVAS_FONT}`;
-      outlinedText(ctx, lab, cx, y, 5);
-      ctx.font = `800 96px ${CANVAS_FONT}`;
-      outlinedText(ctx, val, cx, y + 100, 9);
-      y += 205;
+      ctx.font = `700 34px ${CANVAS_FONT}`; outlinedText(ctx, lab, cx, y, 0);
+      ctx.font = `800 76px ${CANVAS_FONT}`; outlinedText(ctx, val, cx, y + 80, 0);
+      y += 160;
     }
     ctx.textAlign = "left";
   });
-  withShadow(ctx, () => drawBrand(ctx, cx, 1275, 50, true));
+  brandBelow(ctx, cx, y + 10);
 }
 
-// DEITADO — faixa horizontal justa no texto (canvas de 440px de altura, igual
-// ao espírito do "Cantinho" das corridas): marca, título + datas e a linha
-// Distância/Treinos/Tempo/Ritmo lado a lado.
-function drawDeitado(ctx: CanvasRenderingContext2D, W: number, _H: number, s: PeriodSummary) {
+// DEITADO — faixa horizontal: marca, período e a linha de dados lado a lado.
+function drawDeitado(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
   const left = 64, right = W - 64;
-  withShadow(ctx, () => drawBrand(ctx, left, 96, 46, false));
-  withShadow(ctx, () => {
-    ctx.textAlign = "left";
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 38px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), left, 172, 5);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 54px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, left, 236, 7);
-  });
-  drawStatsSpread(ctx, left, right, 312, [
+  withShadow(ctx, () => drawBrand(ctx, left, 96, BRAND, false));
+  drawHeader(ctx, left, s, 186, "left");
+  drawStatsSpread(ctx, left, right, 262, [
     ["Distância", `${fmtKm(s.km, 1)} km`],
     ["Treinos", String(s.runs)],
     ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
     ["Ritmo", `${fmtPace(s.paceSec)} /km`],
-  ], 62, 40);
+  ], VAL, LAB);
 }
 
 const WEEK_HEAD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-
-// cabeçalho comum dos cards novos: eyebrow teal + período em branco
-function drawHeader(ctx: CanvasRenderingContext2D, cx: number, s: PeriodSummary, y: number) {
-  withShadow(ctx, () => {
-    ctx.textAlign = "center";
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), cx, y, 6);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, cx, y + 76, 8);
-    ctx.textAlign = "left";
-  });
-}
 
 // cor da célula do calendário: mais km = teal mais forte
 function cellFill(km: number, max: number, future: boolean): string {
@@ -197,23 +188,22 @@ function cellFill(km: number, max: number, future: boolean): string {
   return `rgba(31,217,184,${a.toFixed(2)})`;
 }
 
-// CALENDÁRIO — um quadrado por dia (estilo "contribuições do GitHub"), verde
+// CALENDÁRIO — um quadrado por dia (estilo "contribuições do GitHub"), teal
 // mais forte = mais km. Mês: grade seg–dom; semana: 7 dias grandes.
-function drawCalendario(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
-  const cx = W / 2, left = 110, right = W - 110;
-  const gap = 14, cols = 7;
+function drawCalendario(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
+  const cx = W / 2, left = 150, right = W - 150;
+  const gap = 12, cols = 7;
   const cell = (right - left - gap * (cols - 1)) / cols;
   const max = Math.max(1, ...s.days.map((d) => d.km));
-  drawHeader(ctx, cx, s, 190);
+  drawHeader(ctx, cx, s, 200);
 
   const week = s.kind === "week";
-  const cellH = week ? 230 : cell;
-  const top = week ? 430 : 400;
-  // semana: rótulo do dia DENTRO da célula; mês: cabeçalho Seg…Dom em cima
+  const cellH = week ? 190 : cell;
+  const top = week ? 250 : 290;
   if (!week) {
     withShadow(ctx, () => {
-      ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF"; ctx.font = `800 30px ${CANVAS_FONT}`;
-      WEEK_HEAD.forEach((h, i) => outlinedText(ctx, h, left + i * (cell + gap) + cell / 2, top - 22, 4));
+      ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF"; ctx.font = `700 24px ${CANVAS_FONT}`;
+      WEEK_HEAD.forEach((h, i) => outlinedText(ctx, h, left + i * (cell + gap) + cell / 2, top - 18, 0));
     });
   }
   const firstCol = s.days[0]?.weekday ?? 0;
@@ -225,134 +215,82 @@ function drawCalendario(ctx: CanvasRenderingContext2D, W: number, H: number, s: 
     bottom = Math.max(bottom, y + cellH);
     withShadow(ctx, () => {
       ctx.fillStyle = cellFill(d.km, max, d.future);
-      roundRect(ctx, x, y, cell, cellH, 18); ctx.fill();
+      roundRect(ctx, x, y, cell, cellH, 14); ctx.fill();
+      ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
+      if (week) {
+        ctx.font = `800 28px ${CANVAS_FONT}`;
+        outlinedText(ctx, WEEK_HEAD[d.weekday], x + cell / 2, y + 46, 0);
+        if (d.km > 0) {
+          ctx.font = `800 34px ${CANVAS_FONT}`;
+          outlinedText(ctx, fmtKm(d.km), x + cell / 2, y + 128, 0);
+        }
+      } else if (d.km > 0) {
+        // mês: só o km no dia com corrida (o número do dia era ruído)
+        ctx.font = `800 26px ${CANVAS_FONT}`;
+        outlinedText(ctx, fmtKm(d.km), x + cell / 2, y + cell / 2 + 9, 0);
+      }
     });
-    ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
-    if (week) {
-      ctx.font = `800 34px ${CANVAS_FONT}`;
-      outlinedText(ctx, WEEK_HEAD[d.weekday], x + cell / 2, y + 54, 4);
-      if (d.km > 0) {
-        ctx.font = `800 40px ${CANVAS_FONT}`;
-        outlinedText(ctx, fmtKm(d.km), x + cell / 2, y + 150, 5);
-        ctx.font = `700 26px ${CANVAS_FONT}`;
-        outlinedText(ctx, "km", x + cell / 2, y + 188, 3);
-      }
-    } else {
-      ctx.textAlign = "left"; ctx.font = `700 22px ${CANVAS_FONT}`;
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillText(String(d.day), x + 12, y + 30);
-      if (d.km > 0) {
-        ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF"; ctx.font = `800 32px ${CANVAS_FONT}`;
-        outlinedText(ctx, fmtKm(d.km), x + cell / 2, y + cell / 2 + 22, 4);
-      }
-    }
     ctx.textAlign = "left";
   });
 
-  const statsEnd = drawStatsSpread(ctx, left, right, bottom + 90, [
-    ["Distância", `${fmtKm(s.km)} km`],
+  const statsEnd = drawStatsSpread(ctx, left, right, bottom + 80, [
+    ["Distância", `${fmtKm(s.km, 1)} km`],
     ["Treinos", String(s.runs)],
     ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
-  ], 62, 40);
-  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 90, H - 40), 46, true));
+  ], VAL, LAB);
+  brandBelow(ctx, cx, statsEnd + 90);
 }
 
 // META — anel de progresso: km feitos × meta de km do PLANO no período
-function drawMeta(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
-  const cx = W / 2, cy = 640, r = 280, lw = 54;
+function drawMeta(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
+  const cx = W / 2, cy = 480, r = 210, lw = 38;
   const goal = s.goalKm && s.goalKm > 0 ? s.goalKm : Math.max(s.km, 1);
   const frac = s.km / goal;
-  drawHeader(ctx, cx, s, 190);
+  drawHeader(ctx, cx, s, 200);
 
   const a0 = -Math.PI / 2;
   withShadow(ctx, () => {
     ctx.lineCap = "round";
     ctx.strokeStyle = "rgba(255,255,255,0.22)"; ctx.lineWidth = lw;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-  });
-  ctx.save();
-  ctx.lineCap = "round"; ctx.lineWidth = lw;
-  const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
-  g.addColorStop(0, TEAL); g.addColorStop(1, TEAL_LIGHT);
-  ctx.strokeStyle = g;
-  ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + Math.PI * 2 * Math.min(frac, 1)); ctx.stroke();
-  if (frac > 1) {
-    // passou da meta: segunda volta mais clara por cima
-    ctx.strokeStyle = "#B9FFF2"; ctx.lineWidth = lw * 0.45;
-    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + Math.PI * 2 * Math.min(frac - 1, 1)); ctx.stroke();
-  }
-  ctx.restore();
+    const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+    g.addColorStop(0, TEAL); g.addColorStop(1, TEAL_LIGHT);
+    ctx.strokeStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + Math.PI * 2 * Math.min(frac, 1)); ctx.stroke();
+    if (frac > 1) {
+      // passou da meta: segunda volta mais clara por cima
+      ctx.strokeStyle = "#B9FFF2"; ctx.lineWidth = lw * 0.45;
+      ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + Math.PI * 2 * Math.min(frac - 1, 1)); ctx.stroke();
+    }
 
-  withShadow(ctx, () => {
     ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
-    ctx.font = `800 150px ${CANVAS_FONT}`; outlinedText(ctx, fmtKm(s.km), cx, cy + 30, 10);
-    ctx.font = `700 46px ${CANVAS_FONT}`; outlinedText(ctx, `de ${fmtKm(goal, 0)} km`, cx, cy + 100, 5);
+    ctx.font = `800 110px ${CANVAS_FONT}`; outlinedText(ctx, fmtKm(s.km), cx, cy + 22, 0);
+    ctx.font = `700 34px ${CANVAS_FONT}`; outlinedText(ctx, `de ${fmtKm(goal, 0)} km`, cx, cy + 76, 0);
     const pct = Math.round(frac * 100);
-    const msg = frac >= 1
-      ? `Meta ${s.kind === "week" ? "da semana" : "do mês"} batida! ${pct}%`
-      : `${pct}% da meta ${s.kind === "week" ? "da semana" : "do mês"}`;
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 46px ${CANVAS_FONT}`;
-    outlinedText(ctx, msg, cx, cy + r + 110, 6);
+    const msg = frac >= 1 ? `Meta do ${periodWord(s)} batida! ${pct}%` : `${pct}% da meta do ${periodWord(s)}`;
+    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 36px ${CANVAS_FONT}`;
+    outlinedText(ctx, msg, cx, cy + r + 90, 0);
     ctx.textAlign = "left";
   });
 
-  const statsEnd = drawStatsSpread(ctx, 110, W - 110, cy + r + 190, [
+  const statsEnd = drawStatsSpread(ctx, 150, W - 150, cy + r + 180, summaryCells(s), VAL, LAB);
+  brandBelow(ctx, cx, statsEnd + 90);
+}
+
+export function summaryCells(s: PeriodSummary): [string, string][] {
+  return [
     ["Treinos", String(s.runs)],
     ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
     ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
-  ], 58, 38);
-  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 80, H - 36), 44, true));
+  ];
 }
 
-export function drawSummaryCard(
-  ctx: CanvasRenderingContext2D, W: number, H: number,
-  s: PeriodSummary, layout: string, background: SummaryBackground,
-  photo: HTMLImageElement | null,
-) {
-  if (background === "card") drawCardBackground(ctx, W, H, photo, null);
-  if (layout === "barras") { drawBarsAndData(ctx, W, H, s); return; }
-  if (layout === "clean") { drawClean(ctx, W, H, s); return; }
-  if (layout === "deitado") { drawDeitado(ctx, W, H, s); return; }
-  if (layout === "calendario") { drawCalendario(ctx, W, H, s); return; }
-  if (layout === "meta") { drawMeta(ctx, W, H, s); return; }
-  drawDestaque(ctx, W, H, s);
-}
-
-// DESTAQUE — km gigante no topo, variação, barras e a linha de dados
-function drawDestaque(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
-  const cx = W / 2;
-  const left = 110, right = W - 110;
-
-
-  withShadow(ctx, () => {
-    ctx.textAlign = "center";
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), cx, 190, 6);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, cx, 270, 8);
-
-    // km em destaque: número grande + unidade menor, centralizados juntos
-    const num = fmtKm(s.km), unit = " km";
-    ctx.font = `800 210px ${CANVAS_FONT}`; const wn = ctx.measureText(num).width;
-    ctx.font = `800 80px ${CANVAS_FONT}`; const wu = ctx.measureText(unit).width;
-    const x0 = cx - (wn + wu) / 2;
-    ctx.textAlign = "left";
-    ctx.font = `800 210px ${CANVAS_FONT}`; outlinedText(ctx, num, x0, 490, 12);
-    ctx.font = `800 80px ${CANVAS_FONT}`; outlinedText(ctx, unit, x0 + wn, 490, 7);
-
-    if (s.deltaPct != null) {
-      const up = s.deltaPct >= 0;
-      const txt = `${up ? "▲" : "▼"} ${Math.abs(s.deltaPct)}% ${s.vsLabel}`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = up ? TEAL_LIGHT : "#FFFFFF"; ctx.font = `800 42px ${CANVAS_FONT}`;
-      outlinedText(ctx, txt, cx, 566, 6);
-    }
-    ctx.textAlign = "left";
-  });
-
-  drawBars(ctx, s, left, right, 616, 880);
-
-  const statsEnd = drawStatsSpread(ctx, left, right, s.kind === "month" ? 1066 : 1036, summaryCells(s), 70, 44);
-
-  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 110, H - 50), 46, true));
+// só o CONTEÚDO (sem fundo) — o fundo e o corte justo são do paintTight
+export function drawSummaryContent(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary, layout: string) {
+  if (layout === "barras") return drawBarsAndData(ctx, W, s);
+  if (layout === "clean") return drawClean(ctx, W, s);
+  if (layout === "deitado") return drawDeitado(ctx, W, s);
+  if (layout === "calendario") return drawCalendario(ctx, W, s);
+  if (layout === "meta") return drawMeta(ctx, W, s);
+  drawDestaque(ctx, W, s);
 }

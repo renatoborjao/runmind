@@ -393,3 +393,48 @@ export function drawCardBackground(
   g.addColorStop(0, "rgba(31,217,184,0.20)"); g.addColorStop(1, "rgba(31,217,184,0)");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
+
+// Linhas [topo, pé] com pixel visível num canvas transparente (alpha > 8).
+function contentRows(cv: HTMLCanvasElement): [number, number] | null {
+  const ctx = cv.getContext("2d");
+  if (!ctx) return null;
+  const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+  const rowHas = (y: number) => {
+    for (let i = y * cv.width * 4 + 3, end = i + cv.width * 4; i < end; i += 4) if (data[i] > 8) return true;
+    return false;
+  };
+  let top = 0, bottom = cv.height - 1;
+  while (top < cv.height && !rowHas(top)) top++;
+  if (top >= cv.height) return null;
+  while (bottom > top && !rowHas(bottom)) bottom--;
+  return [top, bottom];
+}
+
+// Canvas JUSTO ao conteúdo: desenha num quadro W×maxH transparente, mede onde
+// há pixel e o card final fica com essa altura + `pad` em cima/embaixo. Assim
+// o sticker colado no story é compacto (não um 1080×1350 que cobre a foto).
+// Com foto de fundo não corta (a foto é o card, mantém o 4:5 inteiro).
+// Devolve a altura final.
+export function paintTight(
+  target: HTMLCanvasElement, W: number, maxH: number,
+  drawContent: (ctx: CanvasRenderingContext2D) => void,
+  background: "transparent" | "card", photo: HTMLImageElement | null, pad = 72,
+): number {
+  const off = document.createElement("canvas");
+  off.width = W; off.height = maxH;
+  const octx = off.getContext("2d");
+  if (!octx) return target.height;
+  octx.textBaseline = "alphabetic";
+  drawContent(octx);
+  const rows = photo ? null : contentRows(off);
+  const srcTop = rows ? Math.max(0, rows[0] - pad) : 0;
+  const srcBot = rows ? Math.min(maxH, rows[1] + 1 + pad) : maxH;
+  const H = srcBot - srcTop;
+  target.width = W; target.height = H;
+  const ctx = target.getContext("2d");
+  if (!ctx) return H;
+  ctx.clearRect(0, 0, W, H);
+  if (background === "card") drawCardBackground(ctx, W, H, photo, null);
+  ctx.drawImage(off, 0, srcTop, W, H, 0, 0, W, H);
+  return H;
+}

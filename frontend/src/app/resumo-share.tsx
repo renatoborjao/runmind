@@ -6,8 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getFeed, getPeriodGoal, type FeedItem } from "@/lib/api";
 import { fmtKm, fmtPace, periodSummary, type PeriodKind, type PeriodSummary } from "@/lib/period-summary";
-import { CARD_W, canvasBlob, copyBlob, fmtDur, paintWhenFontsReady, shareBlob } from "@/lib/share-canvas";
-import { SUMMARY_LAYOUTS, drawSummaryCard, summaryCanvasHeight, type SummaryBackground } from "@/lib/summary-card";
+import { CARD_W, canvasBlob, copyBlob, fmtDur, paintTight, paintWhenFontsReady, shareBlob } from "@/lib/share-canvas";
+import { SUMMARY_LAYOUTS, drawSummaryContent, summaryCanvasHeight, type SummaryBackground } from "@/lib/summary-card";
 
 // semana: km por dia; mês: km por semana (rótulo "7–13")
 function Bars({ s }: { s: PeriodSummary }) {
@@ -129,6 +129,8 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
   const layout = layouts[Math.min(layoutIdx, layouts.length - 1)];
   const transparent = background === "transparent";
   const cardH = summaryCanvasHeight(layout.key);
+  // altura FINAL (o card é cortado justo ao conteúdo) — decide o encaixe da prévia
+  const [outH, setOutH] = useState(cardH);
   const filename = s.kind === "week" ? "ritmind-semana.png" : "ritmind-mes.png";
 
   useEffect(() => {
@@ -136,12 +138,11 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
     if (!cv) return;
     // cleanup cancela a repintura agendada deste modelo ao trocar
     return paintWhenFontsReady(() => {
-      cv.width = CARD_W; cv.height = cardH;
-      const ctx = cv.getContext("2d");
-      if (!ctx) return;
-      ctx.textBaseline = "alphabetic";
-      ctx.clearRect(0, 0, CARD_W, cardH);
-      drawSummaryCard(ctx, CARD_W, cardH, s, layout.key, background, transparent ? null : photo);
+      setOutH(paintTight(
+        cv, CARD_W, cardH,
+        (ctx) => drawSummaryContent(ctx, CARD_W, s, layout.key),
+        background, transparent ? null : photo,
+      ));
     });
   }, [s, layout, background, transparent, photo, cardH]);
 
@@ -188,7 +189,7 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
 
         <div className="se-preview">
-          <canvas ref={previewRef} className={`se-canvas${transparent ? " transp" : ""}${cardH < CARD_W ? " wide" : ""}`} />
+          <canvas ref={previewRef} className={`se-canvas${transparent ? " transp" : ""}${outH < CARD_W ? " wide" : ""}`} />
         </div>
 
         <div className="se-styles">
