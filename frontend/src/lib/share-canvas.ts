@@ -101,23 +101,19 @@ export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: numbe
   ctx.restore();
 }
 
-// sombra suave: deixa texto/rota legíveis sobre QUALQUER foto (o card é
-// transparente e vai ser colado por cima da foto do atleta no Instagram).
+// Texto/traçado LIMPOS, sem sombra nem contorno (padrão Strava): o card
+// transparente é colado por cima da foto no story, e a sombra/contorno escuro
+// virava uma "mancha" em volta de tudo. `withShadow` segue como ponto único
+// (isola o estado do ctx) caso um dia volte algum tratamento.
 export function withShadow(ctx: CanvasRenderingContext2D, fn: () => void) {
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
   fn();
   ctx.restore();
 }
 
-// texto com CONTORNO escuro (não só sombra difusa) — a mesma ideia do traçado
-// da rota (drawRouteBox: stroke escuro por baixo, cor por cima), aplicada a
-// texto: segura contraste em QUALQUER foto. Padrão em TODOS os estilos de
-// compartilhar (pedido do Renato: padronizar o tratamento de texto).
-export function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, lineW: number) {
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = lineW;
-  ctx.strokeText(text, x, y);
+// texto do card: só o preenchimento (sem contorno escuro). `lineW` ignorado,
+// mantido na assinatura pra não mexer nos N chamadores.
+export function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, _lineW: number) {
   ctx.fillText(text, x, y);
 }
 

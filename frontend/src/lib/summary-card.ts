@@ -267,14 +267,11 @@ function drawMeta(ctx: CanvasRenderingContext2D, W: number, H: number, s: Period
   const a0 = -Math.PI / 2;
   withShadow(ctx, () => {
     ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = lw + 8;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = "rgba(255,255,255,0.22)"; ctx.lineWidth = lw;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
   });
   ctx.save();
   ctx.lineCap = "round"; ctx.lineWidth = lw;
-  ctx.shadowColor = TEAL; ctx.shadowBlur = 24;
   const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
   g.addColorStop(0, TEAL); g.addColorStop(1, TEAL_LIGHT);
   ctx.strokeStyle = g;

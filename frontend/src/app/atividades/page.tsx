@@ -125,7 +125,7 @@ function shortDate(iso: string): string {
 
 interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; extras: RunExtras; }
 
-// traçado dentro de uma caixa (fit + início/fim), com brilho — pra fundo transparente
+// traçado dentro de uma caixa (fit + início/fim) — pra fundo transparente
 function drawRouteBox(
   ctx: CanvasRenderingContext2D, pts: { lat: number; lon: number }[],
   bx: number, by: number, bw: number, bh: number, color: string, lw: number,
@@ -141,13 +141,8 @@ function drawRouteBox(
   const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
   const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
   ctx.save();
-  // glow na cor do traçado (vida) + contorno escuro sutil pra legibilidade
+  // traçado limpo (sem glow nem contorno escuro), padrão Strava
   ctx.lineJoin = "round"; ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = lw + 4; ctx.shadowBlur = 0;
-  ctx.beginPath();
-  good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
-  ctx.stroke();
-  ctx.shadowColor = color; ctx.shadowBlur = 10;
   ctx.strokeStyle = color; ctx.lineWidth = lw;
   ctx.beginPath();
   good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
