@@ -187,12 +187,16 @@ function drawBrandIcone13(ctx: CanvasRenderingContext2D, x: number, baseY: numbe
   }
 }
 
-// Texto/traçado LIMPOS, sem sombra nem contorno (padrão Strava): o card
-// transparente é colado por cima da foto no story, e a sombra/contorno escuro
-// virava uma "mancha" em volta de tudo. `withShadow` segue como ponto único
-// (isola o estado do ctx) caso um dia volte algum tratamento.
+// Sombra CURTA e grudada na letra (sem contorno): o halo largo de antes
+// (blur 16) virava mancha sobre a foto do story; sem nada, branco some em
+// foto clara (céu/areia). Blur 4 + leve deslocamento = leitura sem "borda".
+// Ponto único: texto, marca e rota usam a mesma.
+export function applySoftShadow(ctx: CanvasRenderingContext2D) {
+  ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 2;
+}
 export function withShadow(ctx: CanvasRenderingContext2D, fn: () => void) {
   ctx.save();
+  applySoftShadow(ctx);
   fn();
   ctx.restore();
 }

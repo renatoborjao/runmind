@@ -23,7 +23,7 @@ import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb }
 import {
   CANVAS_FONT, drawCardBackground, canvasBlob, copyBlob, drawBrand,
   drawStatsSpread, fmtDur, outlinedText, paintWhenFontsReady, roundRect,
-  shareBlob, withShadow,
+  applySoftShadow, shareBlob, withShadow,
 } from "@/lib/share-canvas";
 
 // Leaflet carregado sob demanda dentro do card compartilhável (mapa REAL de
@@ -141,7 +141,8 @@ function drawRouteBox(
   const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
   const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
   ctx.save();
-  // traçado limpo (sem glow nem contorno escuro), padrão Strava
+  // traçado sem glow nem contorno, só a sombra curta do texto
+  applySoftShadow(ctx);
   ctx.lineJoin = "round"; ctx.lineCap = "round";
   ctx.strokeStyle = color; ctx.lineWidth = lw;
   ctx.beginPath();
