@@ -140,20 +140,29 @@ export function drawStatsSpread(
   return baseY + valSize + 8; // baseline do valor (pra posicionar a marca)
 }
 
-// garante as fontes do card (Inter + Space Grotesk) antes de pintar — o canvas
-// cai no fallback se desenhar antes. Pinta já e repinta quando carregarem.
-export function paintWhenFontsReady(paint: () => void) {
+// garante as fontes do card (Inter + Space Grotesk + pesos extras dos modelos)
+// antes de pintar — o canvas cai no fallback se desenhar antes. Pinta já e
+// repinta quando carregarem. Devolve um CANCELADOR: o useEffect chama na troca
+// de modelo/fundo, senão a repintura agendada do modelo ANTERIOR chega depois
+// (fonte ainda carregando) e pinta o card velho por cima do novo — o bug do
+// "fundo preso" ao trocar de modelo.
+export function paintWhenFontsReady(paint: () => void): () => void {
+  let alive = true;
+  const run = () => { if (alive) paint(); };
   refreshCanvasFont();
-  paint();
+  run();
   const fam = CANVAS_FONT.split(",")[0].trim();
   const brand = BRAND_FONT.split(",")[0].trim();
-  if (typeof document === "undefined" || !document.fonts || !fam) return;
+  if (typeof document === "undefined" || !document.fonts || !fam) return () => { alive = false; };
   Promise.all([
     document.fonts.load(`800 100px ${fam}`),
+    document.fonts.load(`900 100px ${fam}`),
     document.fonts.load(`700 40px ${fam}`),
+    document.fonts.load(`italic 700 40px ${fam}`),
     document.fonts.load(`700 48px ${brand}`),
-  ]).then(paint).catch(() => {});
-  document.fonts.ready.then(paint).catch(() => {});
+  ]).then(run).catch(() => {});
+  document.fonts.ready.then(run).catch(() => {});
+  return () => { alive = false; };
 }
 
 export function canvasBlob(cv: HTMLCanvasElement | null): Promise<Blob | null> {

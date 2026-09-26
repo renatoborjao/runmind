@@ -622,7 +622,9 @@ function AtividadesInner() {
       };
       style.draw(ctx, 1080, cardH, d);
     };
-    paintWhenFontsReady(paint);
+    // cleanup cancela a repintura agendada deste modelo ao trocar (senão o
+    // modelo anterior pinta por cima — "fundo preso")
+    return paintWhenFontsReady(paint);
   }, [editor, style, cardH, transparent, photoImg, sel, track, mapCard, shareCtx]);
 
   // PNG (mantém a transparência) do card atual

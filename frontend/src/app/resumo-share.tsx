@@ -134,7 +134,8 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
   useEffect(() => {
     const cv = previewRef.current;
     if (!cv) return;
-    paintWhenFontsReady(() => {
+    // cleanup cancela a repintura agendada deste modelo ao trocar
+    return paintWhenFontsReady(() => {
       cv.width = CARD_W; cv.height = cardH;
       const ctx = cv.getContext("2d");
       if (!ctx) return;
