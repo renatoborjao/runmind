@@ -114,7 +114,34 @@ function tintedWordmark(color: string): HTMLCanvasElement | null {
 // depois selo). Mesma assinatura de sempre: `baseY` ≈ linha de base do texto,
 // `center=true` centraliza em x, senão começa em x. Sem a imagem carregada
 // (1º frame), cai no texto em Space Grotesk — o card repinta quando carrega.
+// qual marca vai nos cards — as duas ficam prontas pra comparar/voltar:
+// "icone13" = ícone do app + letra da opção 13; "ponto" = opção 4 do
+// compilado ("ritmind." minúsculo, ponto teal, pulso sublinhando)
+export const BRAND_STYLE: "icone13" | "ponto" = "ponto";
+
 export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+  if (BRAND_STYLE === "ponto") { drawBrandPonto(ctx, x, baseY, size, center); return; }
+  drawBrandIcone13(ctx, x, baseY, size, center);
+}
+
+// opção 4: "ritmind" branco (Space Grotesk) + ponto teal + pulso teal fininho
+// sublinhando a palavra inteira
+function drawBrandPonto(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+  const s = Math.round(size * 1.2);
+  ctx.font = `700 ${s}px ${BRAND_FONT}`;
+  const tw = ctx.measureText("ritmind").width;
+  const d = s * 0.14;
+  const w = tw + d * 2.4;
+  const left = center ? x - w / 2 : x;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText("ritmind", left, baseY);
+  ctx.fillStyle = "#34E3C8";
+  ctx.beginPath(); ctx.arc(left + tw + d * 1.3, baseY - d, d, 0, Math.PI * 2); ctx.fill();
+  drawPulse(ctx, left, baseY + s * 0.3, tw / 20, "#34E3C8", Math.max(3, s * 0.06), s * 0.022);
+}
+
+function drawBrandIcone13(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
   const s = Math.round(size * 1.2);
   const wm = tintedWordmark("#34E3C8");
   const wmH = s * 1.02;
