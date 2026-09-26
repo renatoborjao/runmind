@@ -27,7 +27,6 @@ export function summaryCells(s: PeriodSummary): [string, string][] {
     ["Treinos", String(s.runs)],
     ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
     ["Ritmo médio", `${fmtPace(s.paceSec)} /km`],
-    ["Maior", `${fmtKm(s.longestKm)} km`],
   ];
 }
 
@@ -41,7 +40,7 @@ function drawBars(
   const gap = s.kind === "week" ? 26 : 40;
   const bw = (right - left - gap * (n - 1)) / n;
   const max = Math.max(1, ...s.bars.map((d) => d.km));
-  const maxH = bottom - top - 50; // espaço do valor em cima
+  const maxH = bottom - top - 58; // espaço do valor em cima
   const stub = 10;
   const r = Math.min(14, bw / 2);
 
@@ -65,11 +64,11 @@ function drawBars(
 
     ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center";
     if (d.km > 0) {
-      ctx.font = `800 34px ${CANVAS_FONT}`;
-      outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 16, 4);
+      ctx.font = `800 42px ${CANVAS_FONT}`;
+      outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 16, 6);
     }
-    ctx.font = `700 ${s.kind === "week" ? 34 : 30}px ${CANVAS_FONT}`;
-    outlinedText(ctx, d.label, x + bw / 2, bottom + 48, 4);
+    ctx.font = `800 ${s.kind === "week" ? 40 : 36}px ${CANVAS_FONT}`;
+    outlinedText(ctx, d.label, x + bw / 2, bottom + 54, 6);
   });
   ctx.textAlign = "left";
 }
@@ -95,10 +94,10 @@ export function drawSummaryCard(
 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 36px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.title.toUpperCase(), cx, 190, 5);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 54px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, cx, 262, 6);
+    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.title.toUpperCase(), cx, 190, 6);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 58px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.label, cx, 266, 7);
 
     // km em destaque: número grande + unidade menor, centralizados juntos
     const num = fmtKm(s.km), unit = " km";
@@ -113,15 +112,15 @@ export function drawSummaryCard(
       const up = s.deltaPct >= 0;
       const txt = `${up ? "▲" : "▼"} ${Math.abs(s.deltaPct)}% ${s.vsLabel}`;
       ctx.textAlign = "center";
-      ctx.fillStyle = up ? TEAL_LIGHT : "#FFFFFF"; ctx.font = `700 36px ${CANVAS_FONT}`;
-      outlinedText(ctx, txt, cx, 562, 5);
+      ctx.fillStyle = up ? TEAL_LIGHT : "#FFFFFF"; ctx.font = `800 42px ${CANVAS_FONT}`;
+      outlinedText(ctx, txt, cx, 566, 6);
     }
     ctx.textAlign = "left";
   });
 
-  drawBars(ctx, s, left, right, 620, 900);
+  drawBars(ctx, s, left, right, 616, 880);
 
-  const statsEnd = drawStatsSpread(ctx, left, right, 1030, summaryCells(s));
+  const statsEnd = drawStatsSpread(ctx, left, right, 1036, summaryCells(s), 70, 44);
 
   withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 110, H - 50), 46, true));
 }

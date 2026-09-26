@@ -11,7 +11,7 @@ import { SUMMARY_STYLES, drawSummaryCard } from "@/lib/summary-card";
 
 // semana: km por dia; mês: km por semana (rótulo "7–13")
 function Bars({ s }: { s: PeriodSummary }) {
-  const W = 340, H = 104, padB = 16, padT = 14;
+  const W = 340, H = 124, padB = 20, padT = 20;
   const n = s.bars.length;
   const gap = s.kind === "week" ? 10 : 16;
   const bw = (W - gap * (n - 1)) / n;
@@ -25,11 +25,11 @@ function Bars({ s }: { s: PeriodSummary }) {
         return (
           <g key={i}>
             {d.km > 0 && (
-              <text x={x + bw / 2} y={y - 4} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--ink-soft)">{fmtKm(d.km)}</text>
+              <text x={x + bw / 2} y={y - 5} textAnchor="middle" fontSize="12" fontWeight="700" fontFamily="var(--font-display)" fill="var(--ink)">{fmtKm(d.km)}</text>
             )}
             <rect x={x} y={y} width={bw} height={h} rx={3}
               fill={d.km > 0 ? "var(--accent)" : "var(--line)"} opacity={d.future ? 0.5 : 1} />
-            <text x={x + bw / 2} y={H - 3} textAnchor="middle" fontSize="8" fontFamily="var(--font-mono)" fill="var(--muted)">{d.label}</text>
+            <text x={x + bw / 2} y={H - 4} textAnchor="middle" fontSize="11.5" fontWeight="600" fontFamily="var(--font-display)" fill="var(--ink-soft)">{d.label}</text>
           </g>
         );
       })}

@@ -109,10 +109,11 @@ export function fmtDur(s: number): string {
 // fonte até caber, pra acompanhar exatamente a largura das barras/bloco.
 export function drawStatsSpread(
   ctx: CanvasRenderingContext2D, left: number, right: number, baseY: number,
-  cells: [string, string][],
+  cells: [string, string][], valStart = 54, labStart = 32,
 ): number {
   const blockW = right - left, minGap = 28;
-  let valSize = 54, labSize = 32;
+  const ratio = labStart / valStart;
+  let valSize = valStart, labSize = labStart;
   let widths: number[] = [];
   const measure = () => {
     widths = cells.map(([lab, val]) => {
@@ -122,7 +123,7 @@ export function drawStatsSpread(
     });
     return widths.reduce((a, b) => a + b, 0) + minGap * (cells.length - 1);
   };
-  while (measure() > blockW && valSize > 30) { valSize -= 2; labSize = Math.round(valSize * 0.6); }
+  while (measure() > blockW && valSize > 30) { valSize -= 2; labSize = Math.round(valSize * ratio); }
   const free = blockW - widths.reduce((a, b) => a + b, 0);
   const gap = cells.length > 1 ? free / (cells.length - 1) : 0;
   let cx = left;
