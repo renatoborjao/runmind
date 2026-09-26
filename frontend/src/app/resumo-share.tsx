@@ -11,7 +11,9 @@ import { SUMMARY_STYLES, drawSummaryCard } from "@/lib/summary-card";
 
 // semana: km por dia; mês: km por semana (rótulo "7–13")
 function Bars({ s }: { s: PeriodSummary }) {
-  const W = 340, H = 124, padB = 20, padT = 20;
+  const W = 340, padT = 20;
+  const padB = s.kind === "month" ? 32 : 20;
+  const H = 104 + padB;
   const n = s.bars.length;
   const gap = s.kind === "week" ? 10 : 16;
   const bw = (W - gap * (n - 1)) / n;
@@ -29,7 +31,10 @@ function Bars({ s }: { s: PeriodSummary }) {
             )}
             <rect x={x} y={y} width={bw} height={h} rx={3}
               fill={d.km > 0 ? "var(--accent)" : "var(--line)"} opacity={d.future ? 0.5 : 1} />
-            <text x={x + bw / 2} y={H - 4} textAnchor="middle" fontSize="11.5" fontWeight="600" fontFamily="var(--font-display)" fill="var(--ink-soft)">{d.label}</text>
+            <text x={x + bw / 2} y={d.sub ? H - 17 : H - 4} textAnchor="middle" fontSize="11.5" fontWeight="700" fontFamily="var(--font-display)" fill="var(--ink-soft)">{d.label}</text>
+            {d.sub && (
+              <text x={x + bw / 2} y={H - 3} textAnchor="middle" fontSize="10.5" fontWeight="600" fontFamily="var(--font-display)" fill="var(--muted)">{d.sub}</text>
+            )}
           </g>
         );
       })}

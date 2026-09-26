@@ -899,7 +899,7 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 /* resumo semanal/mensal (Evolução) */
 .rs-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .rs-nav .icon-btn:disabled { opacity: .3; cursor: default; }
-.rs-label { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; text-transform: capitalize; }
+.rs-label { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; }
 .rs-km { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin-bottom: 8px; }
 .rs-km .big { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 36px; letter-spacing: -.02em; }
 .rs-km small { font-size: 14px; font-weight: 600; color: var(--muted); font-family: var(--font-mono), monospace; }

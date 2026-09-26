@@ -12,7 +12,7 @@ export interface PeriodSummary {
   offset: number;          // 0 = período atual, -1 = anterior…
   isCurrent: boolean;
   title: string;           // "Resumo da semana" / "Resumo do mês"
-  label: string;           // "22 – 28 set" / "Setembro 2026"
+  label: string;           // "22 a 28 de setembro" / "Setembro 2026"
   km: number;
   runs: number;
   seconds: number;
@@ -21,14 +21,15 @@ export interface PeriodSummary {
   // barras do gráfico — semana: 1 por DIA (S T Q…); mês: 1 por SEMANA
   // (seg–dom recortada no mês, rótulo "7–13"). 30 barras diárias no mês não
   // diziam nada; por semana mostra como o mês evoluiu.
-  bars: { label: string; km: number; future: boolean }[];
+  // label = rótulo principal ("Seg" / "Sem 2"); sub = datas da semana no mês
+  bars: { label: string; sub?: string; km: number; future: boolean }[];
   // variação de km vs o período anterior — no período ATUAL (incompleto)
   // compara com o mesmo trecho do anterior (seg–qua × seg–qua), senão mente.
   deltaPct: number | null;
   vsLabel: string;         // "vs semana passada" / "vs mês passado"
 }
 
-const WEEKDAY = ["S", "T", "Q", "Q", "S", "S", "D"];
+const WEEKDAY = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
@@ -100,12 +101,12 @@ export function periodSummary(
     }
     // mês: nova barra a cada segunda (ou no dia 1)
     if (!bucket || d.getDay() === 1) {
-      bucket = { label: "", km: 0, future: d > t };
+      bucket = { label: `Sem ${bars.length + 1}`, km: 0, future: d > t };
       bucketFrom = d.getDate();
       bars.push(bucket);
     }
     bucket.km += v?.km ?? 0;
-    bucket.label = bucketFrom === d.getDate() ? String(bucketFrom) : `${bucketFrom}–${d.getDate()}`;
+    bucket.sub = bucketFrom === d.getDate() ? String(bucketFrom) : `${bucketFrom}–${d.getDate()}`;
   }
 
   // anterior: período cheio; se o atual está em andamento, só o mesmo trecho
@@ -121,8 +122,8 @@ export function periodSummary(
 
   const label = kind === "week"
     ? (start.getMonth() === end.getMonth()
-      ? `${start.getDate()} – ${end.getDate()} ${shortMonth(end.getMonth())}`
-      : `${start.getDate()} ${shortMonth(start.getMonth())} – ${end.getDate()} ${shortMonth(end.getMonth())}`)
+      ? `${start.getDate()} a ${end.getDate()} de ${MONTHS[end.getMonth()]}`
+      : `${start.getDate()} ${shortMonth(start.getMonth())} a ${end.getDate()} ${shortMonth(end.getMonth())}`)
     : `${MONTHS[start.getMonth()][0].toUpperCase()}${MONTHS[start.getMonth()].slice(1)} ${start.getFullYear()}`;
 
   return {

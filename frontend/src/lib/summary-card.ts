@@ -67,8 +67,13 @@ function drawBars(
       ctx.font = `800 42px ${CANVAS_FONT}`;
       outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 16, 6);
     }
-    ctx.font = `800 ${s.kind === "week" ? 40 : 36}px ${CANVAS_FONT}`;
-    outlinedText(ctx, d.label, x + bw / 2, bottom + 54, 6);
+    ctx.font = `800 38px ${CANVAS_FONT}`;
+    outlinedText(ctx, d.label, x + bw / 2, bottom + 52, 6);
+    if (d.sub) {
+      ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.font = `700 30px ${CANVAS_FONT}`;
+      outlinedText(ctx, d.sub, x + bw / 2, bottom + 92, 5);
+      ctx.fillStyle = "#FFFFFF";
+    }
   });
   ctx.textAlign = "left";
 }
@@ -96,8 +101,8 @@ export function drawSummaryCard(
     ctx.textAlign = "center";
     ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
     outlinedText(ctx, s.title.toUpperCase(), cx, 190, 6);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 58px ${CANVAS_FONT}`;
-    outlinedText(ctx, s.label, cx, 266, 7);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 62px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.label, cx, 270, 8);
 
     // km em destaque: número grande + unidade menor, centralizados juntos
     const num = fmtKm(s.km), unit = " km";
@@ -120,7 +125,7 @@ export function drawSummaryCard(
 
   drawBars(ctx, s, left, right, 616, 880);
 
-  const statsEnd = drawStatsSpread(ctx, left, right, 1036, summaryCells(s), 70, 44);
+  const statsEnd = drawStatsSpread(ctx, left, right, s.kind === "month" ? 1066 : 1036, summaryCells(s), 70, 44);
 
   withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 110, H - 50), 46, true));
 }
