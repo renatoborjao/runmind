@@ -35,7 +35,7 @@ def _entry(tier, would_notify=True) -> ReadinessDiaryEntry:
 
 def _block(
     tier, *, flag, would_notify=True, illness=None, already_sent=False,
-    strained=False, strain_last_key=None,
+    strained=False, strain_last_key=None, session=None,
 ):
     """Roda block() com tudo mockado; devolve a mensagem (ou None)."""
 
@@ -53,6 +53,10 @@ def _block(
         patch(f"{MOD}.GarminHealthRepository"),
         patch(f"{MOD}.AcuteStrainAnalyzer") as strain_cls,
         patch(f"{MOD}.today_local", return_value=date(2026, 8, 14)),
+        patch.object(
+            ReadinessNotifier, "_todays_session",
+            new=AsyncMock(return_value=session),
+        ),
     ):
 
         svc.evaluate = AsyncMock(
@@ -185,6 +189,35 @@ def test_estresse_agudo_fora_do_cooldown_alerta_de_novo():
 
     assert msg is not None
     assert "estresse fisiológico" in msg
+
+
+def test_cooldown_do_estresse_nao_engole_a_cautela_do_dia_puxado():
+    """Caso Renato 22/09: alerta agudo em cooldown (saiu 18/09) calava TUDO —
+    inclusive a conduta do fartlek num episódio de CAUTION. Agora a cautela
+    do dia puxado ainda sai (o 'pode puxar' continua travado)."""
+
+    fartlek = SimpleNamespace(workout_type="Fartlek")
+
+    msg = _block(
+        READINESS_CAUTION, flag=True, strained=True,
+        strain_last_key="2026-08-12", session=fartlek,
+    )
+
+    assert msg is not None
+    assert "*Fartlek*" in msg and "Conduta" in msg
+
+
+def test_message_caution_fala_do_treino_de_hoje():
+
+    v = _verdict(READINESS_CAUTION, signals=("seu HRV vem caindo",))
+
+    longao = SimpleNamespace(workout_type="Longão Progressivo")
+
+    msg = ReadinessNotifier._message(v, longao)
+
+    assert "*Longão Progressivo*" in msg
+    assert "seu HRV vem caindo" in msg
+    assert "só progride se as pernas responderem" in msg
 
 
 def test_doenca_tem_prioridade_sobre_estresse():

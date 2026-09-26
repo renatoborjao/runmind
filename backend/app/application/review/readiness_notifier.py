@@ -87,25 +87,58 @@ class ReadinessNotifier:
 
         if strain.is_strained:
 
-            if ReadinessNotifier._in_cooldown(
+            if not ReadinessNotifier._in_cooldown(
                 DispatchGuard.last_key("readiness_strain", profile),
                 today_local(),
             ):
 
-                return None  # em cooldown: cala, mas NÃO libera o "pode puxar"
+                DispatchGuard.mark(
+                    "readiness_strain", profile, today_local().isoformat()
+                )
 
-            DispatchGuard.mark(
-                "readiness_strain", profile, today_local().isoformat()
-            )
+                return ReadinessNotifier._strain_message(strain)
 
-            return ReadinessNotifier._strain_message(strain)
+            # em cooldown: o alerta agudo não se repete e NUNCA libera o "pode
+            # puxar" — mas a conduta do DIA PUXADO (cautela) ainda sai. Antes o
+            # cooldown engolia tudo (fartlek do Renato, 22/09, sem aviso).
+            if verdict.tier != READINESS_CAUTION:
 
-        # só a lacuna (CAUTION/GREEN) e só quando o estado VIROU (would_notify)
+                return None
+
+        # só a lacuna (CAUTION/GREEN) e só quando é momento NOVO (would_notify:
+        # 1º do episódio, piora, ou dia puxado dentro do alerta)
         if verdict.tier not in _ALERT_TIERS or not entry.would_notify:
 
             return None
 
-        return ReadinessNotifier._message(verdict)
+        session = await ReadinessNotifier._todays_session(profile)
+
+        return ReadinessNotifier._message(verdict, session)
+
+    @staticmethod
+    async def _todays_session(profile: str):
+        """Sessão de HOJE (pra a conduta falar DAQUELE treino). Best-effort."""
+
+        try:
+
+            from app.application.planner.current_plan_provider import (
+                CurrentPlanProvider,
+            )
+
+            _, plan = await CurrentPlanProvider.for_profile(profile)
+
+            today = today_local()
+
+            return next(
+                (s for s in plan.sessions if plan.session_date(s) == today),
+                None,
+            )
+
+        except Exception as e:
+
+            print(f"Sessão de hoje (prontidão) falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def _in_cooldown(last_key: str | None, today: date) -> bool:
@@ -155,11 +188,27 @@ class ReadinessNotifier:
         )
 
     @staticmethod
-    def _message(verdict: ReadinessVerdict) -> str:
+    def _message(verdict: ReadinessVerdict, session=None) -> str:
 
         # narra o PORQUÊ: cita os sinais reais na voz do coach, em vez do
         # genérico. Sem sinais capturados, cai num texto ainda humano.
         observed = ReadinessNotifier._join_pt(verdict.signals)
+
+        if verdict.tier == READINESS_CAUTION and session is not None:
+
+            # conduta DO TREINO de hoje (não um "pega leve" genérico): é o que
+            # faz a fala do dia puxado ser orientação nova, não repetição
+            why = (
+                f"teu corpo segue pedindo atenção ({observed})"
+                if observed
+                else "tua recuperação segue pedindo atenção"
+            )
+
+            return (
+                f"Bom dia! Hoje é *{session.workout_type}* e {why}. 🩺\n"
+                f"👉 Conduta: {ReadinessNotifier._conduct(session)} "
+                "Completar bem vale mais que forçar hoje — a decisão é tua. 💪"
+            )
 
         if verdict.tier == READINESS_CAUTION:
 
@@ -187,6 +236,40 @@ class ReadinessNotifier:
         return (
             f"{abertura} — e hoje o treino pede intensidade. Pode ir com "
             "confiança, o momento está a favor. 🚀"
+        )
+
+    @staticmethod
+    def _conduct(session) -> str:
+        """Como ajustar ESTE tipo de treino puxado com a recuperação em queda."""
+
+        kind = (session.workout_type or "").lower()
+
+        if "longão" in kind or "longao" in kind or "progress" in kind:
+
+            return (
+                "faz a parte leve normal e só progride se as pernas "
+                "responderem; se a FC subir antes do esperado, fecha em ritmo "
+                "leve e, se precisar, encurta uns km."
+            )
+
+        if any(k in kind for k in ("tiro", "interval", "fartlek", "vo2", "série")):
+
+            return (
+                "mantém a estrutura, mas segura os trechos fortes no limite de "
+                "BAIXO da faixa; se o 1º bloco já vier pesado, corta 1–2 "
+                "repetições."
+            )
+
+        if any(k in kind for k in ("limiar", "tempo", "ritmo")):
+
+            return (
+                "segura o trecho forte no limite de baixo da faixa e encurta "
+                "se a FC disparar."
+            )
+
+        return (
+            "começa leve e deixa o corpo dizer se dá pra entregar o treino "
+            "inteiro; se não vier, reduz a intensidade."
         )
 
     @staticmethod

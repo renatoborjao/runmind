@@ -70,7 +70,7 @@ class ReadinessService:
         # de decisão do episódio de alerta e quando PIORA; cala nas repetições.
         would_notify = (
             verdict.should_speak
-            and ReadinessService._is_new_orientation(history, verdict)
+            and ReadinessService._is_new_orientation(history, verdict, demand)
         )
 
         entry = ReadinessDiaryEntry(
@@ -98,6 +98,7 @@ class ReadinessService:
     def _is_new_orientation(
         history: list[ReadinessDiaryEntry],
         verdict: ReadinessVerdict,
+        demand: str = DEMAND_UNKNOWN,
     ) -> bool:
         """Momento NOVO de orientar (o coach orienta, não repete):
 
@@ -119,6 +120,16 @@ class ReadinessService:
 
             # verde/neutro: só é novidade se mudou de tier (entrou agora)
             return not history or history[-1].tier != verdict.tier
+
+        # DIA PUXADO dentro de um episódio de alerta é decisão NOVA (é outro
+        # treino — um fartlek, um longão): o coach orienta a conduta DAQUELE
+        # treino. Calar aqui deixou o Renato sem aviso no fartlek (22/09) e no
+        # longão (26/09) de um episódio de 10 dias no vermelho. Dias leves/
+        # descanso seguem calados (aí sim seria repetir). BRAKE tem caminho
+        # próprio (proposta de aliviar, com dedup dela) — não entra aqui.
+        if verdict.tier == READINESS_CAUTION and demand == DEMAND_DEMANDING:
+
+            return True
 
         # varre o episódio de alerta contíguo (do mais recente pra trás): já
         # falamos nele? em que severidade no máximo? um dia SEM alerta encerra

@@ -199,6 +199,22 @@ def test_orientacao_verde_fala_ao_entrar_e_nao_repete():
     ) is False
 
 
+def test_orientacao_dia_puxado_no_episodio_fala_de_novo():
+    """Caso Renato (22/09 fartlek, 26/09 longão): episódio de CAUTION em que o
+    coach JÁ falou — dia puxado é treino novo, conduta nova → fala. Dia leve
+    no mesmo episódio segue calado (não vira ladainha)."""
+
+    history = [_diary(READINESS_CAUTION, True), _diary(READINESS_CAUTION, False)]
+
+    assert ReadinessService._is_new_orientation(
+        history, _verdict(READINESS_CAUTION), DEMAND_DEMANDING,
+    ) is True
+
+    assert ReadinessService._is_new_orientation(
+        history, _verdict(READINESS_CAUTION), DEMAND_REST,
+    ) is False
+
+
 def _evaluate_pairs(tmp_path, pairs):
     """Como _evaluate_sequence, mas cada item é (state, demand) — pra simular
     dias de descanso (o vigia cala) intercalados com dias puxados."""
