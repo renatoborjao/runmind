@@ -151,9 +151,33 @@ def planned_session(
     }
 
 
+# ritmo de referência (min/km) pra estimar km de sessão por TEMPO sem
+# estimativa guardada — só pesa a distribuição da semana, o total vem do
+# weekly_volume do plano
+_EST_MIN_PER_KM = 6.0
+
+
+def _session_km(session) -> float:
+
+    km = session.effective_distance_km
+
+    if km:
+
+        return km
+
+    if session.planned_duration_minutes:
+
+        return session.planned_duration_minutes / _EST_MIN_PER_KM
+
+    return 0.0
+
+
 def period_goal_km(profile: str, start: date, end: date) -> float | None:
-    """Meta de km do período = soma das sessões planejadas (com distância)
-    cujas datas caem em [start, end]. None quando não há plano no período."""
+    """Meta de km do período pelo PLANO. O total de cada semana é o
+    `weekly_volume` do plano (o que o coach prescreveu), distribuído pelas
+    sessões na proporção do km de cada uma (sessão por tempo entra pelo km
+    estimado) — assim o mês pega só os dias dele e treino "45 min" não some
+    da meta. None quando não há plano no período."""
 
     total = 0.0
 
@@ -161,7 +185,17 @@ def period_goal_km(profile: str, start: date, end: date) -> float | None:
 
     for plan in _plans(profile):
 
-        for session in plan.sessions:
+        weights = [(session, _session_km(session)) for session in plan.sessions]
+
+        week_w = sum(w for _, w in weights)
+
+        if week_w <= 0:
+
+            continue
+
+        target = plan.weekly_volume if (plan.weekly_volume or 0) > 0 else week_w
+
+        for session, w in weights:
 
             try:
 
@@ -171,9 +205,9 @@ def period_goal_km(profile: str, start: date, end: date) -> float | None:
 
                 continue
 
-            if start <= d <= end and (session.planned_distance_km or 0) > 0:
+            if start <= d <= end and w > 0:
 
-                total += session.planned_distance_km
+                total += w * target / week_w
 
                 found = True
 

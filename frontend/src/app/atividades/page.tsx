@@ -18,7 +18,7 @@ import {
   type ShareContext,
   type TrackData,
 } from "@/lib/api";
-import { drawCoachDiz, drawPeito, drawPlanoFeito, type RunExtras } from "@/lib/run-card-extras";
+import { drawCoachDiz, drawPeito, drawPlanoFeito, planHasTargets, type RunExtras } from "@/lib/run-card-extras";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
 import {
   CANVAS_FONT, bottomScrim, canvasBlob, copyBlob, drawBg, drawBrand,
@@ -361,7 +361,7 @@ function AtividadesInner() {
   const [styleKey, setStyleKey] = useState(CARD_STYLES[0].key);
   const [shareCtx, setShareCtx] = useState<ShareContext | null>(null);
   const styles = useMemo(
-    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? shareCtx?.planned : shareCtx?.quote)),
+    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : shareCtx?.quote)),
     [shareCtx],
   );
   const styleIdx = Math.max(0, styles.findIndex((st) => st.key === styleKey));

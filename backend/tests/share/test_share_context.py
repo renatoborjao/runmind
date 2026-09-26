@@ -116,6 +116,29 @@ def test_period_goal_sums_sessions_inside_period(monkeypatch):
     assert month == 35.0  # 01/10 fica fora de setembro
 
 
+def test_period_goal_uses_weekly_volume_with_time_based_sessions(monkeypatch):
+    """Semana com sessões por TEMPO (sem km): a meta é o weekly_volume do plano,
+    não só a soma das sessões com distância (caso real renato2: 14,5 vs 27,5)."""
+
+    plan = _plan(
+        WEEK,
+        _session("Tuesday", "Fartlek", None),
+        _session("Thursday", "Rodagem Leve", None),
+        _session("Saturday", "Longão Progressivo", 14.5),
+    )
+    plan.sessions[0].planned_duration_minutes = 50
+    plan.sessions[1].planned_duration_minutes = 45
+    plan.weekly_volume = 27.5
+
+    _with_plans(monkeypatch, plan)
+
+    assert share_context.period_goal_km("renato", WEEK, date(2026, 9, 27)) == 27.5
+
+    # recorte: só terça+quinta (proporcional ao km estimado de cada sessão)
+    part = share_context.period_goal_km("renato", WEEK, date(2026, 9, 24))
+    assert part == 14.4  # (50+45 min ÷ 6) de 30,3 km-peso × 27,5
+
+
 def test_period_goal_none_without_plan(monkeypatch):
 
     _with_plans(monkeypatch)

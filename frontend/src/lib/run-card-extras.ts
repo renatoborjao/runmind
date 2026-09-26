@@ -33,13 +33,28 @@ function paceToSec(p: string | null | undefined): number | null {
 function km2(v: number): string { return v.toFixed(2).replace(".", ","); }
 function km1(v: number): string { return v.toFixed(1).replace(".", ","); }
 function durOf(it: FeedItem): number { return it.duration_s || (it.duration_min || 0) * 60; }
+// tempo sem segundos ("48min" / "1h20") — cabe na coluna do Plano × feito
+function durShort(sec: number): string {
+  const m = Math.round(sec / 60), h = Math.floor(m / 60);
+  return h > 0 ? `${h}h${String(m % 60).padStart(2, "0")}` : `${m}min`;
+}
 
-// veredito curto do Plano × feito: distância cumprida? ritmo vs alvo?
+// o plano tem algo pra comparar? (sessão sem distância, tempo nem ritmo não
+// rende o card — só o nome do treino)
+export function planHasTargets(p: PlannedSession | null | undefined): boolean {
+  return !!p && !!(p.distance_km || p.duration_min || p.pace_min || p.pace_max);
+}
+
+// veredito curto do Plano × feito: distância (ou tempo, na sessão por tempo)
+// cumprida? ritmo vs alvo?
 export function planVerdict(it: FeedItem, p: PlannedSession): string {
   const parts: string[] = [];
   if (p.distance_km) {
     const pct = Math.round((it.distance_km / p.distance_km) * 100);
     parts.push(pct >= 95 ? "✅ Distância cumprida" : `${pct}% da distância`);
+  } else if (p.duration_min) {
+    const pct = Math.round((durOf(it) / (p.duration_min * 60)) * 100);
+    parts.push(pct >= 95 ? "✅ Tempo cumprido" : `${pct}% do tempo`);
   }
   const done = paceToSec(it.pace), lo = paceToSec(p.pace_min), hi = paceToSec(p.pace_max) ?? lo;
   if (done != null && lo != null && hi != null) {
@@ -55,27 +70,35 @@ export function planVerdict(it: FeedItem, p: PlannedSession): string {
 export function drawPlanoFeito(ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras) {
   const p = x.planned;
   const cx = W / 2, left = 110;
-  const colP = 600, colF = 860;
+  const colP = 560, colF = 830;
   if (!p) return;
+
+  const plannedPace = p.pace_min && p.pace_max && p.pace_min !== p.pace_max
+    ? `${p.pace_min}–${p.pace_max}` : (p.pace_min || p.pace_max || null);
+  // distância e ritmo sempre (o que o plano não fixou aparece "livre"); tempo
+  // só quando o plano é por tempo
+  const rows: [string, string, string][] = [];
+  rows.push(["Distância", p.distance_km ? `${km1(p.distance_km)} km` : "livre", `${km2(it.distance_km)} km`]);
+  if (p.duration_min) rows.push(["Tempo", durShort(p.duration_min * 60), durShort(durOf(it))]);
+  rows.push(["Ritmo", plannedPace ?? "livre", it.pace ?? "—"]);
+  const verdict = planVerdict(it, p);
+
+  // bloco inteiro centralizado na vertical
+  const rowH = 140;
+  const blockH = 340 + rows.length * rowH + (verdict ? 130 : 0) + 130;
+  const top = Math.max(60, (H - blockH) / 2);
 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
-    outlinedText(ctx, "PLANO × FEITO", cx, 200, 6);
+    outlinedText(ctx, "PLANO × FEITO", cx, top + 50, 6);
     ctx.fillStyle = "#FFFFFF"; ctx.font = `800 66px ${CANVAS_FONT}`;
-    outlinedText(ctx, fitText(ctx, p.workout_type, W - 160), cx, 285, 8);
+    outlinedText(ctx, fitText(ctx, p.workout_type, W - 160), cx, top + 135, 8);
     ctx.font = `700 34px ${CANVAS_FONT}`; ctx.fillStyle = "rgba(255,255,255,0.9)";
-    outlinedText(ctx, x.date, cx, 340, 4);
+    outlinedText(ctx, x.date, cx, top + 190, 4);
   });
 
-  const plannedPace = p.pace_min && p.pace_max && p.pace_min !== p.pace_max
-    ? `${p.pace_min}–${p.pace_max}` : (p.pace_min || p.pace_max || "—");
-  const rows: [string, string, string][] = [];
-  rows.push(["Distância", p.distance_km ? `${km1(p.distance_km)} km` : "—", `${km2(it.distance_km)} km`]);
-  rows.push(["Ritmo", plannedPace, it.pace ?? "—"]);
-  if (p.duration_min) rows.push(["Tempo", fmtDur(p.duration_min * 60), fmtDur(durOf(it))]);
-
-  let y = 470;
+  let y = top + 300;
   withShadow(ctx, () => {
     ctx.textAlign = "center"; ctx.font = `800 32px ${CANVAS_FONT}`;
     ctx.fillStyle = "rgba(255,255,255,0.8)"; outlinedText(ctx, "PLANEJADO", colP, y, 4);
@@ -88,18 +111,24 @@ export function drawPlanoFeito(ctx: CanvasRenderingContext2D, W: number, H: numb
     withShadow(ctx, () => {
       ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF"; ctx.font = `700 38px ${CANVAS_FONT}`;
       outlinedText(ctx, lab, left, base - 8, 5);
-      ctx.textAlign = "center"; ctx.font = `700 50px ${CANVAS_FONT}`;
-      ctx.fillStyle = "rgba(255,255,255,0.85)"; outlinedText(ctx, pv, colP, base, 6);
-      ctx.font = `800 58px ${CANVAS_FONT}`; ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      ctx.font = pv === "livre" ? `italic 700 42px ${CANVAS_FONT}` : `700 50px ${CANVAS_FONT}`;
+      ctx.fillStyle = pv === "livre" ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.85)";
+      outlinedText(ctx, pv, colP, base, 6);
+      // valor do FEITO: encolhe a fonte até caber na coluna (nunca corta)
+      const maxW = 2 * (W - 70 - colF);
+      let fs = 58;
+      ctx.font = `800 ${fs}px ${CANVAS_FONT}`;
+      while (ctx.measureText(fv).width > maxW && fs > 34) { fs -= 2; ctx.font = `800 ${fs}px ${CANVAS_FONT}`; }
+      ctx.fillStyle = "#FFFFFF";
       outlinedText(ctx, fv, colF, base, 7);
     });
-    y += 140;
+    y += rowH;
   }
   ctx.fillStyle = "rgba(255,255,255,0.28)"; ctx.fillRect(left, y, W - 2 * left, 3);
 
-  const verdict = planVerdict(it, p);
-  if (verdict) drawPill(ctx, cx, y + 120, verdict, 40, TEAL_LIGHT);
-  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(y + 250, H - 40), 46, true));
+  if (verdict) { drawPill(ctx, cx, y + 120, verdict, 40, TEAL_LIGHT); y += 130; }
+  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(y + 120, H - 40), 46, true));
 }
 
 // COACH DIZ — frase do coach sobre o treino em destaque + os números
