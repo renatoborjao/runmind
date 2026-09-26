@@ -117,11 +117,27 @@ function tintedWordmark(color: string): HTMLCanvasElement | null {
 // qual marca vai nos cards — as duas ficam prontas pra comparar/voltar:
 // "icone13" = ícone do app + letra da opção 13; "ponto" = opção 4 do
 // compilado ("ritmind." minúsculo, ponto teal, pulso sublinhando)
-export const BRAND_STYLE: "icone13" | "ponto" = "ponto";
+// "classico" = a escrita ORIGINAL ("Rit" teal + "mind" branco, Space
+// Grotesk) + o pulso fininho sublinhando (pedido do Renato: voltar a escrita
+// de antes mantendo o traçado)
+export const BRAND_STYLE: "classico" | "icone13" | "ponto" = "classico";
 
 export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+  if (BRAND_STYLE === "classico") { drawBrandClassico(ctx, x, baseY, size, center); return; }
   if (BRAND_STYLE === "ponto") { drawBrandPonto(ctx, x, baseY, size, center); return; }
   drawBrandIcone13(ctx, x, baseY, size, center);
+}
+
+function drawBrandClassico(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+  const s = Math.round(size * 1.15);
+  ctx.font = `700 ${s}px ${BRAND_FONT}`;
+  const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
+  const w = wRit + wMind;
+  const left = center ? x - w / 2 : x;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", left, baseY);
+  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", left + wRit, baseY);
+  drawPulse(ctx, left, baseY + s * 0.3, w / 20, "#34E3C8", Math.max(3, s * 0.06), s * 0.022);
 }
 
 // opção 4: "ritmind" branco (Space Grotesk) + ponto teal + pulso teal fininho
