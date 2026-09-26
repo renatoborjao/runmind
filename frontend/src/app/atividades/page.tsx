@@ -17,6 +17,11 @@ import {
   type TrackData,
 } from "@/lib/api";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
+import {
+  CANVAS_FONT, bottomScrim, canvasBlob, copyBlob, drawBg, drawBrand,
+  drawStatsSpread, fmtDur, outlinedText, paintWhenFontsReady, roundRect,
+  shareBlob, topScrim, withShadow,
+} from "@/lib/share-canvas";
 
 // Leaflet carregado sob demanda dentro do card compartilhável (mapa REAL de
 // fundo). O detalhe da atividade (mapa herói + stats + splits) vive no
@@ -91,89 +96,6 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
 // ---- estilos de card compartilhável (foto OU mapa real de fundo) ----
 interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; }
 
-// cantinho arredondado — sem depender de ctx.roundRect (suporte irregular em
-// PWA/iOS mais antigo); usado só pela trilha/barra do estilo Parciais.
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, h / 2, Math.max(w, 0) / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
-
-function drawBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null, mapCard: HTMLCanvasElement | null) {
-  if (photo && photo.width) {
-    const s = Math.max(W / photo.width, H / photo.height);
-    const dw = photo.width * s, dh = photo.height * s;
-    ctx.drawImage(photo, (W - dw) / 2, (H - dh) / 2, dw, dh);
-  } else if (mapCard) {
-    ctx.drawImage(mapCard, 0, 0, W, H);
-  } else {
-    ctx.fillStyle = "#0C0D16"; ctx.fillRect(0, 0, W, H);
-  }
-}
-function topScrim(ctx: CanvasRenderingContext2D, W: number) {
-  const g = ctx.createLinearGradient(0, 0, 0, 240);
-  g.addColorStop(0, "rgba(6,7,12,0.72)"); g.addColorStop(1, "rgba(6,7,12,0)");
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 240);
-}
-function bottomScrim(ctx: CanvasRenderingContext2D, W: number, H: number, fromY: number) {
-  const g = ctx.createLinearGradient(0, fromY, 0, H);
-  g.addColorStop(0, "rgba(6,7,12,0)"); g.addColorStop(0.55, "rgba(6,7,12,0.78)"); g.addColorStop(1, "rgba(6,7,12,0.96)");
-  ctx.fillStyle = g; ctx.fillRect(0, fromY, W, H - fromY);
-}
-// família usada no canvas do card de compartilhar: Inter (grotesca neutra e
-// limpa, estilo Strava), via next/font (--font-share). Resolvida do CSS em
-// runtime; fallback pra Archivo/system se não carregar.
-let CANVAS_FONT = "system-ui, sans-serif";   // Inter (stats)
-let BRAND_FONT = "system-ui, sans-serif";    // Space Grotesk (wordmark Ritmind)
-function refreshCanvasFont() {
-  if (typeof window === "undefined") return;
-  const cs = getComputedStyle(document.body);
-  const share = cs.getPropertyValue("--font-share").trim();
-  const disp = cs.getPropertyValue("--font-display").trim();
-  const brand = cs.getPropertyValue("--font-brand").trim();
-  if (share || disp) CANVAS_FONT = `${share || disp}, system-ui, sans-serif`;
-  if (brand || disp) BRAND_FONT = `${brand || disp}, system-ui, sans-serif`;
-}
-
-// wordmark "Ritmind" — "Rit" na cor da marca (teal) + "mind" branco, na fonte
-// descolada (Space Grotesk). `center=true` centraliza em x. Leve aumento +
-// contorno escuro (pedido do Renato: "dar mais vida") — mesma técnica de
-// contraste do resto do card (outlinedText), aplicada às duas cores do wordmark.
-function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  const s = Math.round(size * 1.15);
-  ctx.font = `700 ${s}px ${BRAND_FONT}`;
-  ctx.lineJoin = "round";
-  const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
-  const startX = center ? x - (wRit + wMind) / 2 : x;
-  ctx.textAlign = "left";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = Math.max(3, s * 0.1);
-  ctx.strokeText("Rit", startX, baseY); ctx.strokeText("mind", startX + wRit, baseY);
-  ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", startX, baseY);
-  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", startX + wRit, baseY);
-}
-// sombra suave: deixa texto/rota legíveis sobre QUALQUER foto (o card é
-// transparente e vai ser colado por cima da foto do atleta no Instagram).
-function withShadow(ctx: CanvasRenderingContext2D, fn: () => void) {
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
-  fn();
-  ctx.restore();
-}
-// texto com CONTORNO escuro (não só sombra difusa) — a mesma ideia do traçado
-// da rota (drawRouteBox: stroke escuro por baixo, cor por cima), aplicada a
-// texto: segura contraste em QUALQUER foto. Padrão em TODOS os estilos de
-// compartilhar (pedido do Renato: padronizar o tratamento de texto).
-function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, lineW: number) {
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = lineW;
-  ctx.strokeText(text, x, y);
-  ctx.fillText(text, x, y);
-}
 // traçado dentro de uma caixa (fit + início/fim), com brilho — pra fundo transparente
 function drawRouteBox(
   ctx: CanvasRenderingContext2D, pts: { lat: number; lon: number }[],
@@ -215,13 +137,6 @@ function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.textAlign = "left";
 }
 
-// tempo tipo Strava: "53min 24s" (ou "1h05" em corrida longa)
-function fmtDur(s: number): string {
-  s = Math.round(s);
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  if (h > 0) return `${h}h${String(m).padStart(2, "0")}`;
-  return ss > 0 ? `${m}min ${ss}s` : `${m}min`;
-}
 // [rótulo, valor com unidade] — Distância / Ritmo / Tempo (+ FC quando tem)
 function shareCells(it: FeedItem): [string, string][] {
   const c: [string, string][] = [
@@ -317,41 +232,6 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
 // duplicado no story (pedido do Renato).
 function styleCompleto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   drawParciais(ctx, W, H, d, true);
-}
-
-// linha de dados JUSTIFICADA na largura do bloco das parciais (1ª coluna
-// alinhada à esquerda, última à direita, meio centralizado no vão) — encolhe a
-// fonte até caber, pra acompanhar exatamente a largura das barras.
-function drawStatsSpread(
-  ctx: CanvasRenderingContext2D, left: number, right: number, baseY: number,
-  cells: [string, string][],
-): number {
-  const blockW = right - left, minGap = 28;
-  let valSize = 54, labSize = 32;
-  let widths: number[] = [];
-  const measure = () => {
-    widths = cells.map(([lab, val]) => {
-      ctx.font = `800 ${valSize}px ${CANVAS_FONT}`; const wv = ctx.measureText(val).width;
-      ctx.font = `700 ${labSize}px ${CANVAS_FONT}`; const wl = ctx.measureText(lab).width;
-      return Math.max(wv, wl);
-    });
-    return widths.reduce((a, b) => a + b, 0) + minGap * (cells.length - 1);
-  };
-  while (measure() > blockW && valSize > 30) { valSize -= 2; labSize = Math.round(valSize * 0.6); }
-  const free = blockW - widths.reduce((a, b) => a + b, 0);
-  const gap = cells.length > 1 ? free / (cells.length - 1) : 0;
-  let cx = left;
-  withShadow(ctx, () => {
-    ctx.textAlign = "left";
-    cells.forEach(([lab, val], i) => {
-      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${labSize}px ${CANVAS_FONT}`;
-      outlinedText(ctx, lab, cx, baseY, Math.max(3, labSize * 0.11));
-      ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
-      outlinedText(ctx, val, cx, baseY + valSize + 8, Math.max(3, valSize * 0.11));
-      cx += widths[i] + gap;
-    });
-  });
-  return baseY + valSize + 8; // baseline do valor (pra posicionar a marca)
 }
 
 function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData, withStats: boolean) {
@@ -644,7 +524,6 @@ function AtividadesInner() {
     if (!editor || !sel) return;
     const cv = previewRef.current;
     if (!cv) return;
-    refreshCanvasFont();
     const paint = () => {
       cv.width = 1080; cv.height = 1350;
       const ctx = cv.getContext("2d");
@@ -663,46 +542,24 @@ function AtividadesInner() {
       };
       CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
     };
-    paint();
-    // garante a fonte do card (Inter) carregada antes de desenhar — o canvas cai
-    // no fallback se pintar antes. Carrega os pesos usados e repinta.
-    const fam = CANVAS_FONT.split(",")[0].trim();
-    const brand = BRAND_FONT.split(",")[0].trim();
-    if (document.fonts && fam) {
-      Promise.all([
-        document.fonts.load(`800 100px ${fam}`),
-        document.fonts.load(`700 40px ${fam}`),
-        document.fonts.load(`700 48px ${brand}`),  // wordmark Ritmind (Space Grotesk)
-      ]).then(paint).catch(() => {});
-      document.fonts.ready.then(paint).catch(() => {});
-    }
+    paintWhenFontsReady(paint);
   }, [editor, styleIdx, photoImg, sel, track, mapCard]);
 
   // PNG (mantém a transparência) do card atual
-  async function makeBlob(): Promise<Blob | null> {
-    const cv = previewRef.current;
-    if (!cv) return null;
-    return new Promise((res) => cv.toBlob((b) => res(b), "image/png"));
-  }
+  const makeBlob = () => canvasBlob(previewRef.current);
 
   // COPIAR a imagem pro clipboard — pra colar direto no Instagram/story
   async function copyImage() {
     if (!sel) return;
     setSharing(true);
-    try {
-      const blob = await makeBlob();
-      if (!blob) throw new Error("no blob");
-      const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
-      if (navigator.clipboard && CI) {
-        await navigator.clipboard.write([new CI({ "image/png": blob })]);
+    const blob = await makeBlob();
+    if (blob) {
+      if (await copyBlob(blob)) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
       } else {
         setResultUrl(URL.createObjectURL(blob));
       }
-    } catch {
-      const blob = await makeBlob();
-      if (blob) setResultUrl(URL.createObjectURL(blob));
     }
     setSharing(false);
   }
@@ -710,22 +567,11 @@ function AtividadesInner() {
   async function shareCurrent() {
     if (!sel) return;
     setSharing(true);
-    try {
-      const blob = await makeBlob();
-      if (!blob) throw new Error("no blob");
-      const file = new File([blob], "ritmind-corrida.png", { type: "image/png" });
-      const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
-      if (navShare.canShare && navShare.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], text: `${km(sel.distance_km)} km no Ritmind 🏃` });
-          setSharing(false);
-          return;
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") { setSharing(false); return; }
-        }
-      }
-      setResultUrl(URL.createObjectURL(blob));
-    } catch { /* indisponível */ }
+    const blob = await makeBlob();
+    if (blob) {
+      const r = await shareBlob(blob, "ritmind-corrida.png", `${km(sel.distance_km)} km no Ritmind 🏃`);
+      if (r === "unsupported") setResultUrl(URL.createObjectURL(blob));
+    }
     setSharing(false);
   }
 
