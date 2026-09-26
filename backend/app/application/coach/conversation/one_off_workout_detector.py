@@ -43,6 +43,19 @@ class OneOffWorkoutDetector:
         return has_treino and has_build
 
     @staticmethod
+    def wants_watch(text: str) -> bool:
+        """O atleta já PEDIU pra mandar pro relógio ("monta e envia pro
+        relógio", "joga no Garmin") — pedido explícito dispensa as duas
+        confirmações (adicionar + relógio)."""
+
+        norm = OneOffWorkoutDetector._normalize(text)
+
+        return bool(re.search(
+            r"\b(envi|mand|jog|coloc|sob|pass|bot)\w*\b.*\b(relogio|garmin)\b",
+            norm,
+        ))
+
+    @staticmethod
     def resolve_target_date(text: str, today: date) -> date | None:
         """Data concreta pedida na mensagem, ou None se não deu pra saber.
         Dia da semana resolve pra a PRÓXIMA ocorrência (hoje conta)."""

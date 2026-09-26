@@ -12,6 +12,9 @@ from app.application.coach.planning.one_off_workout_engine import (
 )
 from app.application.garmin.push_one_off import push_one_off
 from app.application.history.runner_portrait import build_portrait
+from app.application.history.weekly_evolution_digest import (
+    WeeklyEvolutionDigest,
+)
 from app.application.planner.current_plan_provider import CurrentPlanProvider
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
@@ -82,6 +85,7 @@ class OneOffWorkoutFlow:
         athlete_context: str = "",
         forced_date: date | None = None,
         day_hint: str | None = None,
+        commit_now: bool = False,
     ) -> str | None:
         """Núcleo SEM o portão de palavra-chave: resolve o dia, monta a sessão
         avulsa ancorada no histórico + estado atual do atleta e oferece o
@@ -90,6 +94,7 @@ class OneOffWorkoutFlow:
         texto — usado quando é uma CORREÇÃO de um avulso já montado ("não, 1km
         só"), em que o dia já é conhecido e o texto não tem data.
         `day_hint` é o dia (ex.: 'Sunday') que o cérebro leu da conversa.
+        `commit_now` (pedido explícito de relógio) grava e manda sem perguntar.
         Ver [[project_roteador_acao_ia]]."""
 
         today = today_local()
@@ -171,6 +176,16 @@ class OneOffWorkoutFlow:
 
         portrait = build_portrait(runner, history)
 
+        # a curva semana a semana: pelo cérebro ela já vem no athlete_context;
+        # no caminho determinístico (sem contexto) entra aqui
+        if "EVOLUÇÃO SEMANA A SEMANA" not in (athlete_context or ""):
+
+            evolution = WeeklyEvolutionDigest.for_profile(profile)
+
+            if evolution:
+
+                portrait = f"{portrait}\n{evolution}"
+
         week_context = ExecutedWeekSummary.build(
             plan, history.activities, today
         ) or OneOffWorkoutFlow._plan_context(plan, target_day)
@@ -196,6 +211,17 @@ class OneOffWorkoutFlow:
         if workout is None:
 
             return None
+
+        # o atleta JÁ pediu "monta e manda pro relógio": o pedido explícito é a
+        # confirmação — grava e manda direto, sem o SIM duplo
+        if commit_now:
+
+            OneOffProposalStore.clear(profile)
+
+            return await OneOffWorkoutFlow._commit_and_offer(
+                profile, runner, target_date, workout.session,
+                send_to_watch=True, intro=workout.message,
+            )
 
         # CONFIRMAR ANTES DE ENTRAR: não grava agora — guarda a proposta e pede
         # o 'SIM'. Um 'não' descarta e NADA fica no plano/app (o atleta pediu
@@ -230,19 +256,9 @@ class OneOffWorkoutFlow:
 
         if norm in _AFFIRMATIVE:
 
-            OneOffProposalStore.clear(profile)
-
-            target_date = date.fromisoformat(data["date"])
-
-            target_day = WEEKDAYS[target_date.weekday()]
-
-            plan, new_session = await OneOffWorkoutFlow._commit_session(
-                profile, target_day, data["session"]
-            )
-
-            return OneOffWorkoutFlow._compose_added(
-                profile, plan, new_session, target_date,
-                weekday_label(target_day),
+            return await OneOffWorkoutFlow.commit_pending(
+                profile, runner,
+                send_to_watch=OneOffWorkoutDetector.wants_watch(incoming_text),
             )
 
         if norm in _NEGATIVE:
@@ -255,6 +271,73 @@ class OneOffWorkoutFlow:
 
         # resposta ambígua com proposta pendente: deixa a conversa seguir
         return None
+
+    @staticmethod
+    async def commit_pending(
+        profile: str,
+        runner: RunnerProfile,
+        send_to_watch: bool = False,
+    ) -> str | None:
+        """Grava a proposta PENDENTE do avulso (o atleta aceitou — pelo 'sim'
+        determinístico ou pelo cérebro lendo "beleza, pode colocar"). Com
+        `send_to_watch` (ele já pediu o relógio), manda direto — sem a 2ª
+        pergunta. None se não há proposta válida."""
+
+        data = OneOffProposalStore.pending(profile)
+
+        if data is None:
+
+            return None
+
+        OneOffProposalStore.clear(profile)
+
+        return await OneOffWorkoutFlow._commit_and_offer(
+            profile, runner, date.fromisoformat(data["date"]),
+            data["session"], send_to_watch,
+        )
+
+    @staticmethod
+    async def _commit_and_offer(
+        profile: str,
+        runner: RunnerProfile,
+        target_date: date,
+        session_dict: dict,
+        send_to_watch: bool,
+        intro: str = "",
+    ) -> str:
+        """Grava o avulso no plano e fecha: manda pro relógio (se pedido e
+        conectado) ou oferece mandar."""
+
+        target_day = WEEKDAYS[target_date.weekday()]
+
+        plan, new_session = await OneOffWorkoutFlow._commit_session(
+            profile, target_day, session_dict
+        )
+
+        if send_to_watch and GarminClient.is_connected(profile):
+
+            single = replace(plan, sessions=[new_session])
+
+            lines = "\n".join(
+                WeeklyPlanMessageFormatter.session_lines(single)
+            ).strip()
+
+            watch = await OneOffWorkoutFlow._push_to_watch(
+                profile, runner, target_date
+            )
+
+            head = f"{intro}\n\n" if intro else ""
+
+            return (
+                f"{head}✅ Adicionei teu treino de "
+                f"{weekday_label(target_day)}:\n\n{lines}\n\n{watch}"
+            )
+
+        added = OneOffWorkoutFlow._compose_added(
+            profile, plan, new_session, target_date, weekday_label(target_day),
+        )
+
+        return f"{intro}\n\n{added}" if intro else added
 
     @staticmethod
     async def resolve_watch_reply(

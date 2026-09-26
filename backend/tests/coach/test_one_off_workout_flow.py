@@ -79,6 +79,9 @@ def _enter_common(stack, plan, engine_result=None, garmin_connected=True):
     stack.enter_context(
         patch(f"{MODULE}.build_portrait", return_value="retrato")
     )
+    stack.enter_context(patch(
+        f"{MODULE}.WeeklyEvolutionDigest.for_profile", return_value="",
+    ))
     stack.enter_context(
         patch(f"{MODULE}.ExecutedWeekSummary.build", return_value="contexto")
     )
@@ -415,6 +418,85 @@ def test_proposal_reply_yes_commits_and_offers_watch():
     assert sunday is not None and sunday.origin == "oneoff"
     assert "adicionei" in reply.lower()
     assert "relógio" in reply.lower()
+
+
+def test_wants_watch_detects_explicit_request():
+
+    from app.application.coach.conversation.one_off_workout_detector import (
+        OneOffWorkoutDetector as D,
+    )
+
+    assert D.wants_watch("Beleza, monta o treino e envie ao relógio  por favor")
+    assert D.wants_watch("manda pro garmin")
+    assert D.wants_watch("joga no relógio")
+    assert not D.wants_watch("sim")
+    assert not D.wants_watch("monta um treino pra domingo")
+
+
+def test_commit_now_saves_and_pushes_without_asking():
+    """Pedido explícito "monta e manda pro relógio": grava E manda direto —
+    sem o SIM de adicionar nem o SIM do relógio (pedido do Renato 26/09)."""
+
+    runner = make_runner(external_coach=True)
+
+    plan = _plan([_session("Tuesday")])
+
+    with ExitStack() as stack:
+
+        plan_repo, proposal = _enter_common(
+            stack, plan, engine_result=_oneoff_result()
+        )
+
+        push = stack.enter_context(patch(
+            f"{MODULE}.push_one_off",
+            new=AsyncMock(return_value={"ok": True}),
+        ))
+
+        reply = _run(
+            OneOffWorkoutFlow.build_for(
+                "mauricio", runner, "monta pra domingo e manda pro relógio",
+                commit_now=True,
+            )
+        )
+
+    plan_repo.save.assert_called_once()
+    proposal.set_pending.assert_not_called()
+    push.assert_awaited_once()
+    assert "Adicionei" in reply and "Garmin" in reply
+    assert "Responde *SIM*" not in reply
+
+
+def test_commit_pending_with_watch_pushes_directly():
+
+    runner = make_runner(external_coach=False)
+
+    plan = _plan([_session("Tuesday")], source="runmind")
+
+    plan_repo = MagicMock()
+
+    with (
+        patch(f"{MODULE}.OneOffProposalStore.pending", return_value=_pending_sunday()),
+        patch(f"{MODULE}.OneOffProposalStore.clear"),
+        patch(
+            f"{MODULE}.CurrentPlanProvider.for_profile",
+            new=AsyncMock(return_value=(None, plan)),
+        ),
+        patch(f"{MODULE}.WeeklyPlanRepository", return_value=plan_repo),
+        patch(f"{MODULE}.GarminClient.is_connected", return_value=True),
+        patch(
+            f"{MODULE}.push_one_off", new=AsyncMock(return_value={"ok": True}),
+        ) as push,
+    ):
+
+        reply = _run(
+            OneOffWorkoutFlow.commit_pending(
+                "renato2", runner, send_to_watch=True,
+            )
+        )
+
+    plan_repo.save.assert_called_once()
+    push.assert_awaited_once()
+    assert "Responde *SIM*" not in reply
 
 
 def test_proposal_reply_no_discards_and_saves_nothing():

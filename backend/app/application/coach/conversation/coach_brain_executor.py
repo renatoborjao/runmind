@@ -33,6 +33,9 @@ from app.application.planner.weekly_plan_message_formatter import (
 from app.core.clock import now_local, today_local
 from app.domain.entities.plan_proposal import PlanProposal
 from app.domain.entities.runner_profile import RunnerProfile
+from app.infrastructure.integrations.garmin.one_off_proposal_store import (
+    OneOffProposalStore,
+)
 from app.infrastructure.persistence.plan_proposal_repository import (
     PlanProposalRepository,
 )
@@ -77,11 +80,21 @@ class CoachBrainExecutor:
 
         pending = repo.load(profile)
 
+        # a proposta de TREINO AVULSO também é pendência que o cérebro precisa
+        # ver: sem isso, "beleza, monta e manda pro relógio" (aceite) virava um
+        # avulso NOVO — remontado, diferente, pedindo SIM de novo (log 26/09)
+        oneoff_pending = (
+            None if pending else OneOffProposalStore.pending(profile)
+        )
+
         decision = await CoachBrain.decide(
             runner_name=runner.name,
             context_facts=context_facts,
             incoming_text=incoming_text,
-            pending_preview=pending.preview if pending else None,
+            pending_preview=(
+                pending.preview if pending
+                else CoachBrainExecutor._oneoff_preview(oneoff_pending)
+            ),
             conversation_history=conversation_history,
         )
 
@@ -107,6 +120,21 @@ class CoachBrainExecutor:
                 profile, runner, decision, pending, repo, incoming_text,
                 context_facts,
             )
+
+        # 1b) resposta à proposta pendente de treino AVULSO (aceite grava a
+        # proposta como está — não remonta; refine cai nas ações abaixo, que
+        # remontam a partir dela)
+        if oneoff_pending is not None and decision.on_pending in (
+            "apply", "reject",
+        ):
+
+            resolved = await CoachBrainExecutor._resolve_oneoff_pending(
+                profile, runner, decision, incoming_text,
+            )
+
+            if resolved is not None:
+
+                return resolved
 
         # 2) pedido(s) de MUDANÇA no plano — uma OU VÁRIAS numa proposta só
         if decision.all_actions:
@@ -137,6 +165,43 @@ class CoachBrainExecutor:
         return decision.say or None
 
     # ==================================================================
+
+    @staticmethod
+    def _oneoff_preview(data: dict | None) -> str | None:
+
+        if not data:
+
+            return None
+
+        return (
+            f"Treino AVULSO proposto pra {data['date']} (aguardando o atleta "
+            f"aceitar pra entrar no plano): {data.get('message', '')}"
+        )
+
+    @staticmethod
+    async def _resolve_oneoff_pending(
+        profile, runner, decision: BrainDecision, incoming_text,
+    ) -> str | None:
+
+        from app.application.coach.conversation.one_off_workout_detector import (
+            OneOffWorkoutDetector,
+        )
+        from app.application.coach.conversation.one_off_workout_flow import (
+            OneOffWorkoutFlow,
+        )
+
+        if decision.on_pending == "reject":
+
+            OneOffProposalStore.clear(profile)
+
+            return decision.say or (
+                "Beleza, não adicionei nada. 👍 Qualquer hora é só pedir."
+            )
+
+        return await OneOffWorkoutFlow.commit_pending(
+            profile, runner,
+            send_to_watch=OneOffWorkoutDetector.wants_watch(incoming_text),
+        )
 
     @staticmethod
     async def _resolve_pending(
@@ -279,9 +344,14 @@ class CoachBrainExecutor:
                     f"{action.content_change}"
                 )
 
+            from app.application.coach.conversation.one_off_workout_detector import (
+                OneOffWorkoutDetector,
+            )
+
             return await CoachBrainExecutor._one_off(
                 profile, runner, request, context_facts,
                 day_hint=action.target_day,
+                commit_now=OneOffWorkoutDetector.wants_watch(incoming_text),
             )
 
         if action.type == "routine":
@@ -423,6 +493,7 @@ class CoachBrainExecutor:
     @staticmethod
     async def _one_off(
         profile, runner, incoming_text, context_facts="", day_hint=None,
+        commit_now=False,
     ) -> str | None:
         """Treino AVULSO pra um dia que o plano não cobre ("monta um treino pra
         domingo") — monta UMA sessão ancorada no histórico/evolução do atleta e
@@ -437,7 +508,7 @@ class CoachBrainExecutor:
 
         return await OneOffWorkoutFlow.build_for(
             profile, runner, incoming_text, athlete_context=context_facts,
-            day_hint=day_hint,
+            day_hint=day_hint, commit_now=commit_now,
         )
 
     @staticmethod

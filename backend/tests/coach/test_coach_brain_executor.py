@@ -46,7 +46,10 @@ def _plan_patch():
     )
 
 
-def _run(decision, pending=None, extra_patches=(), runner=None):
+def _run(
+    decision, pending=None, extra_patches=(), runner=None, oneoff_pending=None,
+    text="mensagem",
+):
     """Roda o executor com contexto/repo/cérebro mockados. Devolve (reply, repo)."""
 
     repo = MagicMock()
@@ -56,6 +59,7 @@ def _run(decision, pending=None, extra_patches=(), runner=None):
         patch(f"{M}.ConversationContextBuilder.build", new=AsyncMock(return_value="FATOS")),
         patch(f"{M}.PlanProposalRepository", return_value=repo),
         patch(f"{M}.CoachBrain.decide", new=AsyncMock(return_value=decision)),
+        patch(f"{M}.OneOffProposalStore.pending", return_value=oneoff_pending),
         *extra_patches,
     ]
 
@@ -64,7 +68,7 @@ def _run(decision, pending=None, extra_patches=(), runner=None):
 
     try:
         reply = asyncio.run(
-            CoachBrainExecutor.handle("renato", runner or make_runner(), "mensagem")
+            CoachBrainExecutor.handle("renato", runner or make_runner(), text)
         )
     finally:
         for c in reversed(ctx):
@@ -216,6 +220,41 @@ def test_one_off_routes_to_flow():
 
     assert reply == "Montei teu treino de domingo 👇 ..."
     repo.save.assert_not_called()  # o fluxo do avulso grava por conta própria
+
+
+def test_accepting_pending_oneoff_commits_it_without_rebuilding():
+    """Log do Renato (26/09, 20:05): "beleza, monta o treino e envie ao
+    relógio" com um avulso PROPOSTO — o cérebro decidiu 'apply', mas só via
+    proposta de plano; remontou outro treino e pediu SIM de novo. Agora grava
+    a proposta como está e manda pro relógio direto."""
+
+    decision = BrainDecision(
+        say="Boa! Coloco e mando.", on_pending="apply",
+        action=BrainAction("one_off", "single_session", "Sunday", "treino"),
+    )
+
+    commit = AsyncMock(return_value="✅ Adicionei ... ⌚ Mandei")
+    build_for = AsyncMock(return_value="NÃO DEVERIA REMONTAR")
+
+    reply, _ = _run(
+        decision,
+        oneoff_pending={"date": "2026-09-27", "session": {}, "message": "35 min"},
+        text="Beleza, monta o treino e envie ao relógio por favor",
+        extra_patches=[
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.commit_pending", new=commit,
+            ),
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.build_for", new=build_for,
+            ),
+        ],
+    )
+
+    assert reply.startswith("✅ Adicionei")
+    build_for.assert_not_awaited()
+    assert commit.await_args.kwargs["send_to_watch"] is True
 
 
 def test_one_off_carries_brain_change_and_day_to_flow():

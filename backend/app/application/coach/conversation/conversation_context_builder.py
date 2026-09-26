@@ -183,6 +183,16 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{state}\n"
 
+        # a CURVA semana a semana (volume, longão, custo cardíaco, corpo/sono):
+        # sempre presente — toda decisão de treino (avulso, ajuste, "dá pra
+        # aumentar?") pesa a trajetória, não só o retrato do dia. Pedido do
+        # Renato (26/09): quanto mais base, mais assertivo.
+        evolution = ConversationContextBuilder._weekly_evolution(profile)
+
+        if evolution:
+
+            facts = f"{facts}\n{evolution}\n"
+
         # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
         # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
         # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir
@@ -652,6 +662,15 @@ class ConversationContextBuilder:
             f"{first_label}; maior treino: "
             f"{stats['longest_km']:.1f} km\n"
         )
+
+    @staticmethod
+    def _weekly_evolution(profile: str) -> str:
+
+        from app.application.history.weekly_evolution_digest import (
+            WeeklyEvolutionDigest,
+        )
+
+        return WeeklyEvolutionDigest.for_profile(profile)
 
     @staticmethod
     def _history_digest(
