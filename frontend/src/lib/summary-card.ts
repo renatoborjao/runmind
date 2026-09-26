@@ -18,7 +18,9 @@ export const SUMMARY_STYLES: SummaryCardStyle[] = [
   { key: "sticker", label: "Sticker", transparent: true },
   { key: "barras", label: "Barras + dados", transparent: true },
   { key: "clean", label: "Clean", transparent: true },
+  { key: "deitado", label: "Deitado", transparent: true },
   { key: "card", label: "Card", transparent: false },
+  { key: "card-clean", label: "Card clean", transparent: false },
 ];
 
 const TEAL = "#1FD9B8";
@@ -143,27 +145,53 @@ function drawClean(ctx: CanvasRenderingContext2D, W: number, H: number, s: Perio
   withShadow(ctx, () => drawBrand(ctx, cx, 1275, 50, true));
 }
 
+// fundo dos estilos "Card": foto do atleta (escurecida pra leitura) ou
+// escuro com brilho teal suave (não fica chapado)
+function drawCardBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null) {
+  drawBg(ctx, W, H, photo, null);
+  if (photo) {
+    ctx.fillStyle = "rgba(6,7,12,0.28)"; ctx.fillRect(0, 0, W, H);
+    topScrim(ctx, W); bottomScrim(ctx, W, H, 380);
+    return;
+  }
+  const g = ctx.createRadialGradient(W / 2, 520, 40, W / 2, 520, 760);
+  g.addColorStop(0, "rgba(31,217,184,0.20)"); g.addColorStop(1, "rgba(31,217,184,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// DEITADO — números lado a lado no canto de baixo (igual ao "Cantinho" das
+// corridas): marca, título + datas e a linha Distância/Treinos/Tempo/Ritmo.
+function drawDeitado(ctx: CanvasRenderingContext2D, W: number, H: number, s: PeriodSummary) {
+  const left = 64, right = W - 64;
+  withShadow(ctx, () => drawBrand(ctx, left, H - 380, 46, false));
+  withShadow(ctx, () => {
+    ctx.textAlign = "left";
+    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 38px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.title.toUpperCase(), left, H - 300, 5);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 54px ${CANVAS_FONT}`;
+    outlinedText(ctx, s.label, left, H - 240, 7);
+  });
+  drawStatsSpread(ctx, left, right, H - 150, [
+    ["Distância", `${fmtKm(s.km, 1)} km`],
+    ["Treinos", String(s.runs)],
+    ["Tempo", s.seconds > 0 ? fmtDur(s.seconds) : "—"],
+    ["Ritmo", `${fmtPace(s.paceSec)} /km`],
+  ], 62, 40);
+}
+
 export function drawSummaryCard(
   ctx: CanvasRenderingContext2D, W: number, H: number,
   s: PeriodSummary, styleKey: string, photo: HTMLImageElement | null,
 ) {
   if (styleKey === "barras") { drawBarsAndData(ctx, W, H, s); return; }
   if (styleKey === "clean") { drawClean(ctx, W, H, s); return; }
+  if (styleKey === "deitado") { drawDeitado(ctx, W, H, s); return; }
+  if (styleKey === "card-clean") { drawCardBg(ctx, W, H, photo); drawClean(ctx, W, H, s); return; }
 
   const cx = W / 2;
   const left = 110, right = W - 110;
 
-  if (styleKey === "card") {
-    drawBg(ctx, W, H, photo, null);
-    if (photo) {
-      topScrim(ctx, W); bottomScrim(ctx, W, H, 380);
-    } else {
-      // fundo escuro com um brilho teal suave (não fica chapado)
-      const g = ctx.createRadialGradient(cx, 520, 40, cx, 520, 760);
-      g.addColorStop(0, "rgba(31,217,184,0.20)"); g.addColorStop(1, "rgba(31,217,184,0)");
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
-  }
+  if (styleKey === "card") drawCardBg(ctx, W, H, photo);
 
   withShadow(ctx, () => {
     ctx.textAlign = "center";
