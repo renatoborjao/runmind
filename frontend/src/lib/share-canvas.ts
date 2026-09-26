@@ -59,21 +59,46 @@ export function refreshCanvasFont() {
   if (brand || disp) BRAND_FONT = `${brand || disp}, system-ui, sans-serif`;
 }
 
-// wordmark "Ritmind" — "Rit" na cor da marca (teal) + "mind" branco, na fonte
-// descolada (Space Grotesk). `center=true` centraliza em x. Leve aumento +
-// contorno escuro (pedido do Renato: "dar mais vida") — mesma técnica de
-// contraste do resto do card (outlinedText), aplicada às duas cores do wordmark.
+// o "pulso" do ícone do app (path M2 12h4l2.5-7 4 15 2.5-8H22 da marca),
+// desenhado a partir de (x, y) = começo da linha, na escala `sx` (e `sy`)
+export function drawPulse(ctx: CanvasRenderingContext2D, x: number, y: number, sx: number, color: string, lw: number, sy = sx) {
+  const P = [[2, 12], [6, 12], [8.5, 5], [12.5, 20], [15, 12], [22, 12]];
+  ctx.save();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = color; ctx.lineWidth = lw;
+  ctx.beginPath();
+  P.forEach(([px, py], i) => {
+    const X = x + (px - 2) * sx, Y = y + (py - 12) * sy;
+    if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+// marca dos cards = SELO: pílula teal com o pulso do app + "ritmind" escuro
+// (escolha do Renato, 2026-09-26 — a palavra solta "Ritmind" era "comum
+// demais"). Mesma assinatura de antes: `baseY` ≈ linha de base do texto,
+// `center=true` centraliza em x, senão a pílula começa em x.
 export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  const s = Math.round(size * 1.15);
-  ctx.font = `700 ${s}px ${BRAND_FONT}`;
-  ctx.lineJoin = "round";
-  const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
-  const startX = center ? x - (wRit + wMind) / 2 : x;
-  ctx.textAlign = "left";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = Math.max(3, s * 0.1);
-  ctx.strokeText("Rit", startX, baseY); ctx.strokeText("mind", startX + wRit, baseY);
-  ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", startX, baseY);
-  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", startX + wRit, baseY);
+  const s = Math.round(size * 1.25);
+  const fs = Math.round(s * 0.8);
+  ctx.font = `800 ${fs}px ${BRAND_FONT}`;
+  const tw = ctx.measureText("ritmind").width;
+  const ic = s * 0.62, gap = s * 0.2, padX = s * 0.45, h = s * 1.25;
+  const w = padX * 2 + ic + gap + tw;
+  const left = center ? x - w / 2 : x;
+  // pílula ocupa ~o mesmo vão vertical que a palavra antiga ocupava (não
+  // encosta na linha de dados de cima)
+  const top = baseY - s * 0.15 - h / 2;
+  ctx.fillStyle = "#34E3C8";
+  roundRect(ctx, left, top, w, h, h / 2); ctx.fill();
+  // o que vem depois (pulso/texto) sem a sombra do chamador
+  ctx.save();
+  ctx.shadowColor = "transparent";
+  drawPulse(ctx, left + padX, top + h / 2, ic / 20, "#06201B", s * 0.085);
+  ctx.fillStyle = "#06201B"; ctx.textAlign = "left";
+  ctx.fillText("ritmind", left + padX + ic + gap, top + h * 0.7);
+  ctx.restore();
 }
 
 // sombra suave: deixa texto/rota legíveis sobre QUALQUER foto (o card é
