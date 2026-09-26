@@ -348,16 +348,16 @@ def test_plan_name_empty_without_type():
     assert StravaActivityRenamer._plan_name(_session("", km=6.0)) == ""
 
 
-def test_plan_name_uses_executed_km_when_athlete_fell_short():
-    """Correu 13,5 num Longão de 14,5 → nome com o km REAL (não mente '14.5')."""
+def test_plan_name_drops_distance_when_athlete_fell_short():
+    """Correu 13,5 num Longão de 14,5 → nome SEM distância (não mente '14.5')."""
 
     assert StravaActivityRenamer._plan_name(
         _session("Longão Progressivo", km=14.5), executed_km=13.52
-    ) == "Ritmind · Longão Progressivo 13.5km"
+    ) == "Ritmind · Longão Progressivo"
 
     assert StravaActivityRenamer._plan_name(
         _session("Longão Aeróbico", km=15.0), executed_km=10.66
-    ) == "Ritmind · Longão Aeróbico 10.7km"
+    ) == "Ritmind · Longão Aeróbico"
 
 
 def test_plan_name_keeps_planned_when_completed_or_exceeded():

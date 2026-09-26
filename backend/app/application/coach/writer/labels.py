@@ -59,8 +59,9 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
     Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava.
 
     `executed_km` (só o Strava passa, PÓS-corrida): se o atleta correu MENOS
-    que o planejado (na casa decimal do título), o nome leva o km REAL — nunca
-    '14.5km' numa corrida de 13.5. Correu igual ou mais → mantém o planejado
+    que o planejado (na casa decimal do título), o nome sai SEM distância
+    ('Longão Progressivo') — nunca '14.5km' numa corrida de 13.5; o km real o
+    Strava já mostra. Correu igual ou mais → mantém o planejado
     (o título é o do treino, não o do excedente). Sem `executed_km` (relógio,
     PRÉ-corrida) o alvo planejado é o certo."""
 
@@ -78,7 +79,7 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
     # compara na mesma precisão do título (0.1 km): 14.46 de 14.5 é "14.5"
     if executed_km and round(executed_km, 1) < round(km, 1):
 
-        km = executed_km
+        return f"Ritmind · {label}"
 
     return f"Ritmind · {label} {km:.1f}km"
 

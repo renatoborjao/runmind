@@ -106,8 +106,8 @@ class StravaActivityRenamer:
 
                 return False
 
-            # distância executada (km): correu menos que o planejado → o nome leva
-            # o km REAL ("Longão 13.5km"); igual ou mais → o nome padrão do plano.
+            # distância executada (km): correu menos que o planejado → o nome sai
+            # sem distância ("Longão"); igual ou mais → o nome padrão do plano.
             executed_km = (getattr(activity, "distance", 0) or 0) / 1000
 
             name = StravaActivityRenamer._plan_name(planned_session, executed_km)
@@ -308,7 +308,7 @@ class StravaActivityRenamer:
     def _plan_name(session, executed_km: float | None = None) -> str:
         """Nome do treino = o MESMO que foi pro relógio (Garmin), via a fonte
         única `plan_session_title`. Vazio quando a sessão não tem tipo.
-        `executed_km` põe o km REAL no nome quando o atleta correu menos que o
+        `executed_km` tira a distância do nome quando o atleta correu menos que o
         planejado (ver plan_session_title)."""
 
         if not (getattr(session, "workout_type", "") or "").strip():
