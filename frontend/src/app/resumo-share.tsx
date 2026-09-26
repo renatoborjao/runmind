@@ -126,7 +126,10 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
   const fileRef = useRef<HTMLInputElement>(null);
   // "Meta" só aparece quando o período tem plano
   const layouts = SUMMARY_LAYOUTS.filter((l) => l.key !== "meta" || s.goalKm != null);
-  const layout = layouts[Math.min(layoutIdx, layouts.length - 1)];
+  const curIdx = Math.min(layoutIdx, layouts.length - 1);
+  const layout = layouts[curIdx];
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const transparent = background === "transparent";
   const cardH = summaryCanvasHeight(layout.key);
   // altura FINAL (o card é cortado justo ao conteúdo) — decide o encaixe da prévia
@@ -145,6 +148,24 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
       ));
     });
   }, [s, layout, background, transparent, photo, cardH]);
+
+  // chip ativo sempre visível na fileira (o swipe pode ir pra um fora da tela)
+  useEffect(() => {
+    chipRefs.current[curIdx]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [curIdx]);
+
+  // deslizar o CARD troca de modelo (mesmo gesto do compartilhar da corrida)
+  function onPreviewPointerDown(e: React.PointerEvent) {
+    swipeStart.current = { x: e.clientX, y: e.clientY };
+  }
+  function onPreviewPointerUp(e: React.PointerEvent) {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+    setLayoutIdx(Math.max(0, Math.min(layouts.length - 1, curIdx + (dx < 0 ? 1 : -1))));
+  }
 
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -188,13 +209,13 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
 
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
 
-        <div className="se-preview">
+        <div className="se-preview" onPointerDown={onPreviewPointerDown} onPointerUp={onPreviewPointerUp}>
           <canvas ref={previewRef} className={`se-canvas${transparent ? " transp" : ""}${outH < CARD_W ? " wide" : ""}`} />
         </div>
 
         <div className="se-styles">
           {layouts.map((l, i) => (
-            <button key={l.key} className={`se-chip${i === layoutIdx ? " on" : ""}`} onClick={() => setLayoutIdx(i)}>
+            <button key={l.key} ref={(el) => { chipRefs.current[i] = el; }} className={`se-chip${i === curIdx ? " on" : ""}`} onClick={() => setLayoutIdx(i)}>
               {l.label}
             </button>
           ))}
