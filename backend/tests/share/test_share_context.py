@@ -57,6 +57,7 @@ def test_planned_session_matches_same_day(monkeypatch):
     assert got == {
         "workout_type": "Longão Progressivo", "distance_km": 14.5,
         "pace_min": "6:15", "pace_max": "6:25", "duration_min": None,
+        "pace_label": "6:15–6:25", "pace_structured": False,
     }
 
 
@@ -222,3 +223,71 @@ def test_clean_quote_trims_long_text():
     q = share_context._clean_quote(long)
 
     assert len(q) <= share_context.QUOTE_MAX_CHARS + 1 and q.endswith("…")
+
+
+# ---- ritmo do plano vindo dos PASSOS (target_pace_* vazio) ------------------
+
+from app.domain.entities.workout_step import WorkoutStep  # noqa: E402
+
+
+def _stepped(kind_text, steps):
+
+    s = _session("Saturday", kind_text, 14.5, None, None)
+    s.steps = steps
+    return s
+
+
+def test_pace_continuous_from_steps_is_comparable():
+
+    got = share_context._planned_pace(_stepped("Rodagem Leve", [
+        WorkoutStep(kind="run", duration_sec=2700, pace_min="6:20", pace_max="6:45"),
+    ]))
+
+    assert got == {"pace_min": "6:20", "pace_max": "6:45", "pace_label": "6:20–6:45", "pace_structured": False}
+
+
+def test_pace_progressive_is_structured_label():
+
+    got = share_context._planned_pace(_stepped("Longão Progressivo", [
+        WorkoutStep(kind="run", distance_m=10000, pace_min="6:20", pace_max="6:45"),
+        WorkoutStep(kind="interval", distance_m=4000, pace_min="5:25", pace_max="5:40"),
+        WorkoutStep(kind="cooldown", distance_m=500, pace_min="6:50", pace_max="7:30"),
+    ]))
+
+    assert got["pace_structured"] is True and got["pace_min"] is None
+    assert got["pace_label"] == "6:20–6:45 → 5:25–5:40"
+
+
+def test_pace_intervals_show_the_reps_pace():
+    """Fartlek: ritmo do tiro, sem aquecimento/trote; e sem comparar média."""
+
+    got = share_context._planned_pace(_stepped("Fartlek", [
+        WorkoutStep(kind="warmup", duration_sec=600),
+        WorkoutStep(kind="repeat", reps=8, steps=[
+            WorkoutStep(kind="interval", duration_sec=120, pace_min="4:50", pace_max="5:05"),
+            WorkoutStep(kind="recovery", duration_sec=90),
+        ]),
+        WorkoutStep(kind="cooldown", duration_sec=720),
+    ]))
+
+    assert got == {"pace_min": None, "pace_max": None, "pace_label": "4:50–5:05 (tiros)", "pace_structured": True}
+
+
+def test_pace_repeated_km_blocks_same_pace_is_continuous():
+    """Rodagem dividida em 8x1 km no mesmo ritmo (bipe por km) = contínua."""
+
+    got = share_context._planned_pace(_stepped("Rodagem", [
+        WorkoutStep(kind="repeat", reps=8, steps=[
+            WorkoutStep(kind="run", distance_m=1000, pace_min="6:30", pace_max="7:10"),
+        ]),
+        WorkoutStep(kind="run", distance_m=500, pace_min="6:30", pace_max="7:10"),
+    ]))
+
+    assert got["pace_structured"] is False and got["pace_label"] == "6:30–7:10"
+
+
+def test_pace_nowhere_is_free():
+
+    got = share_context._planned_pace(_stepped("Rodagem", []))
+
+    assert got["pace_label"] is None and got["pace_structured"] is False

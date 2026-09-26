@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b38 · corrida modelo x fundo + mapa OSM";
+export const APP_BUILD = "b39 · plano x feito com ritmo dos passos";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -1136,6 +1136,8 @@ export interface ShareContext {
     pace_min: string | null;
     pace_max: string | null;
     duration_min: number | null;
+    pace_label?: string | null;
+    pace_structured?: boolean;
   } | null;
   quote: string | null;
 }

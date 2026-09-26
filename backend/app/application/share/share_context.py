@@ -20,6 +20,7 @@ from google.genai import types
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.core.config import get_settings
 from app.domain.entities.training_plan import TrainingPlan
+from app.domain.entities.workout_step import INTERVAL, RUN, WorkoutStep
 from app.infrastructure.integrations.gemini.client import generate_text
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
@@ -142,13 +143,96 @@ def planned_session(
 
         return None
 
+    pace = _planned_pace(session)
+
     return {
         "workout_type": session.workout_type,
         "distance_km": session.planned_distance_km,
-        "pace_min": session.target_pace_min,
-        "pace_max": session.target_pace_max,
         "duration_min": session.planned_duration_minutes,
+        **pace,
     }
+
+
+def _main_blocks(steps: list[WorkoutStep]) -> list[tuple[str, str | None, str | None]]:
+    """Blocos PRINCIPAIS com ritmo, em ordem (achata repetições; aquecimento,
+    recuperação e desaquecimento ficam de fora): (tipo, pace_min, pace_max)."""
+
+    out: list[tuple[str, str | None, str | None]] = []
+
+    for step in steps:
+
+        if step.is_repeat:
+
+            out.extend(_main_blocks(step.steps))
+
+        elif step.kind in (RUN, INTERVAL) and (step.pace_min or step.pace_max):
+
+            out.append((step.kind, step.pace_min, step.pace_max))
+
+    return out
+
+
+def _range(pmin: str | None, pmax: str | None) -> str:
+
+    if pmin and pmax and pmin != pmax:
+
+        return f"{pmin}–{pmax}"
+
+    return pmin or pmax or ""
+
+
+def _planned_pace(session) -> dict:
+    """Ritmo do plano pro card. O ritmo quase sempre mora nos PASSOS do treino
+    (os campos target_pace_* ficam vazios no treino estruturado) — sem isso o
+    card dizia "ritmo livre" num treino com ritmo prescrito.
+
+    - contínuo (todos os blocos principais no mesmo ritmo): pace_min/pace_max
+      preenchidos → o card compara com a média do atleta;
+    - estruturado (progressivo / tiros): só `pace_label` descritivo
+      ("6:20–6:45 → 5:25–5:40", "4:50–5:05 (tiros)") e SEM comparação — a
+      média de um fartlek mistura tiro e trote e daria veredito falso;
+    - nada em lugar nenhum: tudo None (o card mostra "livre")."""
+
+    if session.target_pace_min or session.target_pace_max:
+
+        return {
+            "pace_min": session.target_pace_min,
+            "pace_max": session.target_pace_max,
+            "pace_label": _range(session.target_pace_min, session.target_pace_max),
+            "pace_structured": False,
+        }
+
+    blocks = _main_blocks(session.steps or [])
+
+    if not blocks:
+
+        return {"pace_min": None, "pace_max": None, "pace_label": None, "pace_structured": False}
+
+    ranges: list[str] = []
+
+    for _, pmin, pmax in blocks:
+
+        r = _range(pmin, pmax)
+
+        if not ranges or ranges[-1] != r:
+
+            ranges.append(r)
+
+    if len(ranges) == 1 and all(kind == RUN for kind, _, _ in blocks):
+
+        _, pmin, pmax = blocks[0]
+
+        return {"pace_min": pmin, "pace_max": pmax, "pace_label": ranges[0], "pace_structured": False}
+
+    if all(kind == INTERVAL for kind, _, _ in blocks):
+
+        label = f"{ranges[0]} (tiros)" if len(ranges) == 1 else " / ".join(ranges)
+
+    else:
+
+        label = " → ".join(ranges)
+
+    return {"pace_min": None, "pace_max": None, "pace_label": label, "pace_structured": True}
 
 
 # ritmo de referência (min/km) pra estimar km de sessão por TEMPO sem

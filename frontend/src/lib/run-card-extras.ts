@@ -17,6 +17,11 @@ export interface PlannedSession {
   pace_min: string | null;   // "6:15"
   pace_max: string | null;   // "6:25"
   duration_min: number | null;
+  // ritmo como o plano descreve (vem dos PASSOS do treino): "6:20–6:45",
+  // "6:20–6:45 → 5:25–5:40", "4:50–5:05 (tiros)"
+  pace_label?: string | null;
+  // treino estruturado (progressivo/tiros): NÃO compara com a média do atleta
+  pace_structured?: boolean;
 }
 
 export interface RunExtras {
@@ -42,7 +47,7 @@ function durShort(sec: number): string {
 // o plano tem algo pra comparar? (sessão sem distância, tempo nem ritmo não
 // rende o card — só o nome do treino)
 export function planHasTargets(p: PlannedSession | null | undefined): boolean {
-  return !!p && !!(p.distance_km || p.duration_min || p.pace_min || p.pace_max);
+  return !!p && !!(p.distance_km || p.duration_min || p.pace_min || p.pace_max || p.pace_label);
 }
 
 // veredito curto do Plano × feito: distância (ou tempo, na sessão por tempo)
@@ -56,8 +61,10 @@ export function planVerdict(it: FeedItem, p: PlannedSession): string {
     const pct = Math.round((durOf(it) / (p.duration_min * 60)) * 100);
     parts.push(pct >= 95 ? "✅ Tempo cumprido" : `${pct}% do tempo`);
   }
+  // ritmo só se compara em treino CONTÍNUO (a média de um progressivo/fartlek
+  // mistura blocos e daria veredito falso)
   const done = paceToSec(it.pace), lo = paceToSec(p.pace_min), hi = paceToSec(p.pace_max) ?? lo;
-  if (done != null && lo != null && hi != null) {
+  if (!p.pace_structured && done != null && lo != null && hi != null) {
     const fast = Math.min(lo, hi), slow = Math.max(lo, hi);
     if (done < fast) parts.push(`${fast - done}s/km mais rápido`);
     else if (done > slow) parts.push(`${done - slow}s/km mais lento`);
@@ -73,14 +80,17 @@ export function drawPlanoFeito(ctx: CanvasRenderingContext2D, W: number, H: numb
   const colP = 560, colF = 830;
   if (!p) return;
 
-  const plannedPace = p.pace_min && p.pace_max && p.pace_min !== p.pace_max
-    ? `${p.pace_min}–${p.pace_max}` : (p.pace_min || p.pace_max || null);
-  // distância e ritmo sempre (o que o plano não fixou aparece "livre"); tempo
+  const plannedPace = p.pace_label
+    || (p.pace_min && p.pace_max && p.pace_min !== p.pace_max
+      ? `${p.pace_min}–${p.pace_max}` : (p.pace_min || p.pace_max || null));
+  // distância e ritmo sempre (o que o plano não fixou: "livre"/"por tempo"); tempo
   // só quando o plano é por tempo
   const rows: [string, string, string][] = [];
-  rows.push(["Distância", p.distance_km ? `${km1(p.distance_km)} km` : "livre", `${km2(it.distance_km)} km`]);
+  // sessão por TEMPO não tem distância prescrita: "por tempo" (não "livre")
+  rows.push(["Distância", p.distance_km ? `${km1(p.distance_km)} km` : (p.duration_min ? "por tempo" : "livre"), `${km2(it.distance_km)} km`]);
   if (p.duration_min) rows.push(["Tempo", durShort(p.duration_min * 60), durShort(durOf(it))]);
-  rows.push(["Ritmo", plannedPace ?? "livre", it.pace ?? "—"]);
+  // treino estruturado: o feito é a MÉDIA (o plano mostra a estrutura)
+  rows.push([p.pace_structured ? "Ritmo (méd.)" : "Ritmo", plannedPace ?? "livre", it.pace ?? "—"]);
   const verdict = planVerdict(it, p);
 
   // bloco inteiro centralizado na vertical
@@ -112,9 +122,33 @@ export function drawPlanoFeito(ctx: CanvasRenderingContext2D, W: number, H: numb
       ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF"; ctx.font = `700 38px ${CANVAS_FONT}`;
       outlinedText(ctx, lab, left, base - 8, 5);
       ctx.textAlign = "center";
-      ctx.font = pv === "livre" ? `italic 700 42px ${CANVAS_FONT}` : `700 50px ${CANVAS_FONT}`;
-      ctx.fillStyle = pv === "livre" ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.85)";
-      outlinedText(ctx, pv, colP, base, 6);
+      const soft = pv === "livre" || pv === "por tempo";
+      ctx.fillStyle = soft ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.85)";
+      if (soft) {
+        ctx.font = `italic 700 42px ${CANVAS_FONT}`;
+      } else {
+        // planejado encolhe até caber entre o rótulo e a coluna do feito
+        // ("6:20–6:45 → 5:25–5:40" é longo)
+        const maxP = 2 * Math.min(colP - (left + 190), colF - 130 - colP);
+        const fit = (txt: string, from: number, min: number) => {
+          let ps = from;
+          ctx.font = `700 ${ps}px ${CANVAS_FONT}`;
+          while (ctx.measureText(txt).width > maxP && ps > min) { ps -= 2; ctx.font = `700 ${ps}px ${CANVAS_FONT}`; }
+          return ctx.measureText(txt).width <= maxP;
+        };
+        // estrutura longa ("A → B"): em duas linhas, quebrando na seta
+        const parts = pv.split(/ (?=→ )| \/ /);
+        if (!fit(pv, 50, 36) && parts.length === 2) {
+          const [l1, l2] = parts;
+          fit(l1.length > l2.length ? l1 : l2, 40, 26);
+          outlinedText(ctx, l1, colP, base - 26, 5);
+          outlinedText(ctx, l2, colP, base + 20, 5);
+        } else {
+          fit(pv, 50, 26);
+          outlinedText(ctx, pv, colP, base, 6);
+        }
+      }
+      if (soft) outlinedText(ctx, pv, colP, base, 6);
       // valor do FEITO: encolhe a fonte até caber na coluna (nunca corta)
       const maxW = 2 * (W - 70 - colF);
       let fs = 58;
