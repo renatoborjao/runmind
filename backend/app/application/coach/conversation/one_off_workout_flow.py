@@ -81,6 +81,7 @@ class OneOffWorkoutFlow:
         incoming_text: str,
         athlete_context: str = "",
         forced_date: date | None = None,
+        day_hint: str | None = None,
     ) -> str | None:
         """Núcleo SEM o portão de palavra-chave: resolve o dia, monta a sessão
         avulsa ancorada no histórico + estado atual do atleta e oferece o
@@ -88,20 +89,40 @@ class OneOffWorkoutFlow:
         handle() determinístico (fallback). `forced_date` pula a resolução por
         texto — usado quando é uma CORREÇÃO de um avulso já montado ("não, 1km
         só"), em que o dia já é conhecido e o texto não tem data.
+        `day_hint` é o dia (ex.: 'Sunday') que o cérebro leu da conversa.
         Ver [[project_roteador_acao_ia]]."""
 
         today = today_local()
 
-        target_date = forced_date or OneOffWorkoutDetector.resolve_target_date(
-            incoming_text, today
+        pending = OneOffProposalStore.pending(profile)
+
+        # o dia: data explícita > texto > dia que o cérebro leu da conversa >
+        # a proposta pendente (é AJUSTE dela: "bora aumentar pra 8km?"). Só
+        # pergunta o dia quando nada disso existe — nunca em loop sobre um
+        # treino que acabou de ser proposto (bug do Renato, 26/09).
+        target_date = (
+            forced_date
+            or OneOffWorkoutDetector.resolve_target_date(incoming_text, today)
+            or OneOffWorkoutFlow._date_for_day(day_hint, today)
+            or (date.fromisoformat(pending["date"]) if pending else None)
         )
 
         if target_date is None:
+
+            OneOffProposalStore.set_awaiting_day(profile, incoming_text)
 
             return (
                 "Boa! Pra qual dia você quer o treino? "
                 "(ex.: 'domingo', 'amanhã', '02/08') 🗓️"
             )
+
+        # a resposta ao "pra qual dia?" ("amanhã") carrega o pedido que ficou
+        # esperando — senão o motor recebe só a data e ignora o que foi pedido
+        waiting = OneOffProposalStore.pop_awaiting_day(profile)
+
+        request = (
+            f"{waiting} — {incoming_text}" if waiting else incoming_text
+        )
 
         if target_date < today:
 
@@ -164,7 +185,10 @@ class OneOffWorkoutFlow:
             portrait=portrait,
             week_context=week_context,
             athlete_context=athlete_context,
-            request=incoming_text,
+            request=request,
+            previous=OneOffWorkoutFlow._previous_text(
+                plan, pending, target_date, existing,
+            ),
         )
 
         # IA não produziu treino utilizável: deixa a conversa seguir (o chat
@@ -329,6 +353,50 @@ class OneOffWorkoutFlow:
         WeeklyPlanRepository().save(profile, plan)
 
         return plan, new_session
+
+    @staticmethod
+    def _date_for_day(day: str | None, today: date) -> date | None:
+        """Próxima ocorrência (hoje conta) do dia da semana ('Sunday')."""
+
+        index = {name: idx for idx, name in WEEKDAYS.items()}.get(day or "")
+
+        if index is None:
+
+            return None
+
+        return today + timedelta(days=(index - today.weekday()) % 7)
+
+    @staticmethod
+    def _previous_text(
+        plan: TrainingPlan,
+        pending: dict | None,
+        target_date: date,
+        existing: PlannedSession | None,
+    ) -> str:
+        """O avulso que JÁ foi montado pra esse dia (proposta pendente ou avulso
+        já gravado): o motor precisa vê-lo pra tratar a mensagem como AJUSTE
+        dele — e, se não der pra atender, dizer por quê — em vez de montar
+        outro treino do zero. Vazio quando é pedido novo."""
+
+        session = None
+
+        if pending and pending.get("date") == target_date.isoformat():
+
+            session = OneOffWorkoutFlow._hydrate(pending["session"])
+
+        elif existing is not None and existing.origin == "oneoff":
+
+            session = existing
+
+        if session is None:
+
+            return ""
+
+        return "\n".join(
+            WeeklyPlanMessageFormatter.session_lines(
+                replace(plan, sessions=[session])
+            )
+        ).strip()
 
     @staticmethod
     def _hydrate(session_dict: dict) -> PlannedSession:

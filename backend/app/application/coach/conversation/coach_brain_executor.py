@@ -268,6 +268,7 @@ class CoachBrainExecutor:
 
             return await CoachBrainExecutor._one_off(
                 profile, runner, incoming_text, context_facts,
+                day_hint=action.target_day,
             )
 
         if action.type == "routine":
@@ -407,11 +408,15 @@ class CoachBrainExecutor:
         )
 
     @staticmethod
-    async def _one_off(profile, runner, incoming_text, context_facts="") -> str | None:
+    async def _one_off(
+        profile, runner, incoming_text, context_facts="", day_hint=None,
+    ) -> str | None:
         """Treino AVULSO pra um dia que o plano não cobre ("monta um treino pra
         domingo") — monta UMA sessão ancorada no histórico/evolução do atleta e
         oferece o relógio. Roteia pro fluxo especialista SEM o portão de
-        palavra-chave (o cérebro já reconheceu). None se não deu (cai na fala)."""
+        palavra-chave (o cérebro já reconheceu). `day_hint` = o dia que o
+        cérebro leu da conversa (o texto atual pode não ter data: "bora
+        aumentar pra 8km?"). None se não deu (cai na fala)."""
 
         from app.application.coach.conversation.one_off_workout_flow import (
             OneOffWorkoutFlow,
@@ -419,6 +424,7 @@ class CoachBrainExecutor:
 
         return await OneOffWorkoutFlow.build_for(
             profile, runner, incoming_text, athlete_context=context_facts,
+            day_hint=day_hint,
         )
 
     @staticmethod

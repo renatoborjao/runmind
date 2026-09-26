@@ -26,7 +26,7 @@ PROMPT_TEMPLATE = """Você é o treinador de corrida do Ritmind. O atleta \
 plano dele não cobre. Meta: {objective}.
 
 DIA ALVO: {target_label}.
-{request_block}
+{request_block}{previous_block}
 O QUE JÁ EXISTE NA SEMANA DELE (não repita à toa, COMPLEMENTE):
 {week_context}
 
@@ -40,6 +40,12 @@ ESTRUTURA (ex.: "1km", "variações a cada 150m", "6x400", "fartlek 1min forte/\
 "steps" (blocos e recuperações, na ordem certa). Ancore no retrato só a \
 INTENSIDADE (paces/FC) e a segurança. Só decida o treino VOCÊ quando o pedido \
 for ABERTO ("monta um treino", "que treino faço?").
+- SE O PEDIDO NÃO CABE COM SEGURANÇA (volume/intensidade acima do que ele \
+sustenta hoje, recuperação ruim, carga da semana alta): NÃO troque em silêncio \
+por outro treino. Monte o mais PRÓXIMO do pedido que for seguro e, na \
+"message", diga com franqueza o que você mudou e POR QUÊ, citando o dado real \
+(ex.: "8 km depois do tiro de hoje empilha carga — fiz 6 km"). Treinador \
+orienta; o atleta decide — deixe claro que ele pode insistir.
 - ANCORE tudo no retrato real (volume, paces, evolução) — nada genérico.
 - COMPLEMENTE a semana: não empilhe dois dias fortes coladinhos; se ele já \
 teve/terá carga forte perto, faça um dia de absorver (rodagem/regenerativo); se \
@@ -103,6 +109,7 @@ class OneOffWorkoutEngine:
         week_context: str,
         athlete_context: str = "",
         request: str = "",
+        previous: str = "",
     ) -> OneOffWorkout | None:
 
         settings = get_settings()
@@ -112,6 +119,7 @@ class OneOffWorkoutEngine:
             objective=objective or runner.goal or "saúde e evolução",
             target_label=target_label,
             request_block=OneOffWorkoutEngine._request_block(request),
+            previous_block=OneOffWorkoutEngine._previous_block(previous),
             week_context=week_context or "(nada registrado nesta semana)",
             portrait=portrait or "(sem retrato disponível)",
             athlete_context=OneOffWorkoutEngine._context_block(athlete_context),
@@ -146,6 +154,28 @@ class OneOffWorkoutEngine:
         return (
             '\nPEDIDO DO ATLETA (texto exato — HONRE o que for explícito): '
             f'"{text}"\n'
+        )
+
+    @staticmethod
+    def _previous_block(previous: str) -> str:
+        """O avulso que VOCÊ já propôs pra esse dia: a mensagem do atleta é um
+        AJUSTE dele ("bora aumentar pra 8km?"), não um pedido novo. Sem isso a
+        IA montava outro treino do zero, diferente e sem explicar (bug 26/09)."""
+
+        text = (previous or "").strip()
+
+        if not text:
+
+            return ""
+
+        return (
+            "\nVOCÊ JÁ PROPÔS ESTE TREINO PRA ESSE DIA (o atleta está "
+            "respondendo a ele — trate como AJUSTE, não como pedido novo):\n"
+            f"{text}\n"
+            "Parta DELE: mude só o que o atleta pediu (ex.: aumentar a "
+            "distância) e mantenha o resto. Se não der pra atender inteiro, "
+            "explique na message o porquê — nunca devolva outro treino sem "
+            "dizer o que mudou.\n"
         )
 
     @staticmethod

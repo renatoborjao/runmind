@@ -64,6 +64,8 @@ def _enter_common(stack, plan, engine_result=None, garmin_connected=True):
 
     plan_repo = MagicMock()
     proposal_store = MagicMock()
+    proposal_store.pending.return_value = None
+    proposal_store.pop_awaiting_day.return_value = None
 
     stack.enter_context(patch(f"{MODULE}.today_local", return_value=MONDAY))
     stack.enter_context(patch(
@@ -113,16 +115,127 @@ def test_asks_for_day_when_no_date():
 
     runner = make_runner(external_coach=True)
 
-    with patch(f"{MODULE}.today_local", return_value=MONDAY):
+    with (
+        patch(f"{MODULE}.today_local", return_value=MONDAY),
+        patch(f"{MODULE}.OneOffProposalStore") as store,
+    ):
+
+        store.pending.return_value = None
 
         reply = _run(
             OneOffWorkoutFlow.handle(
-                "mauricio", runner, "monta um treino pra mim"
+                "mauricio", runner, "monta um treino de 10km pra mim"
             )
         )
 
     assert reply is not None
     assert "qual dia" in reply.lower()
+    # guarda o pedido pra a resposta curta ("amanhã") não chegar sozinha
+    store.set_awaiting_day.assert_called_once_with(
+        "mauricio", "monta um treino de 10km pra mim"
+    )
+
+
+def _pending_sunday():
+    return {
+        "date": "2026-08-02", "session": _oneoff_result().session,
+        "message": "x",
+    }
+
+
+def test_revision_of_pending_proposal_does_not_ask_day():
+    """Bug do Renato (26/09): com proposta pendente pra domingo, "bora aumentar
+    pra 8km?" (sem data) perguntava "pra qual dia?" em LOOP. Agora é ajuste da
+    proposta: usa o dia dela e o motor recebe o treino anterior."""
+
+    runner = make_runner(external_coach=False)
+
+    plan = _plan([_session("Saturday", wtype="Longão")], source="runmind")
+
+    build_mock = AsyncMock(return_value=_oneoff_result())
+
+    with ExitStack() as stack:
+
+        _, proposal = _enter_common(stack, plan)
+
+        proposal.pending.return_value = _pending_sunday()
+        proposal.pop_awaiting_day.return_value = None
+
+        stack.enter_context(
+            patch(f"{MODULE}.OneOffWorkoutEngine.build", new=build_mock)
+        )
+
+        reply = _run(
+            OneOffWorkoutFlow.build_for(
+                "renato2", runner, "Bora aumentar pra 8km?"
+            )
+        )
+
+    assert "qual dia" not in reply.lower()
+    kwargs = build_mock.await_args.kwargs
+    assert kwargs["target_day"] == "Sunday"
+    assert kwargs["request"] == "Bora aumentar pra 8km?"
+    # o motor VÊ o treino anterior -> ajusta/justifica em vez de refazer do zero
+    assert "Longão leve" in kwargs["previous"]
+
+
+def test_brain_day_hint_used_when_text_has_no_date():
+    """O cérebro leu o dia da conversa: usa ele em vez de perguntar."""
+
+    runner = make_runner(external_coach=True)
+
+    plan = _plan([_session("Tuesday")])
+
+    build_mock = AsyncMock(return_value=_oneoff_result())
+
+    with ExitStack() as stack:
+
+        _, proposal = _enter_common(stack, plan)
+
+        proposal.pending.return_value = None
+        proposal.pop_awaiting_day.return_value = None
+
+        stack.enter_context(
+            patch(f"{MODULE}.OneOffWorkoutEngine.build", new=build_mock)
+        )
+
+        _run(
+            OneOffWorkoutFlow.build_for(
+                "mauricio", runner, "quero um de 8km", day_hint="Sunday",
+            )
+        )
+
+    kwargs = build_mock.await_args.kwargs
+    assert kwargs["target_day"] == "Sunday"
+    assert kwargs["previous"] == ""  # pedido novo, sem treino anterior
+
+
+def test_day_answer_carries_the_waiting_request():
+    """Resposta "amanhã" ao "pra qual dia?": o motor recebe o pedido original
+    junto (antes chegava só "amanhã" e o 8km se perdia)."""
+
+    runner = make_runner(external_coach=True)
+
+    plan = _plan([_session("Tuesday")])
+
+    build_mock = AsyncMock(return_value=_oneoff_result())
+
+    with ExitStack() as stack:
+
+        _, proposal = _enter_common(stack, plan)
+
+        proposal.pending.return_value = None
+        proposal.pop_awaiting_day.return_value = "treino de 8km"
+
+        stack.enter_context(
+            patch(f"{MODULE}.OneOffWorkoutEngine.build", new=build_mock)
+        )
+
+        _run(OneOffWorkoutFlow.build_for("mauricio", runner, "amanhã"))
+
+    kwargs = build_mock.await_args.kwargs
+    assert kwargs["target_day"] == "Tuesday"
+    assert "8km" in kwargs["request"]
 
 
 def test_external_coach_fills_empty_day_proposes_before_saving():
