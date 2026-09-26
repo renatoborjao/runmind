@@ -309,10 +309,58 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
 // (halo), igual ao traçado da rota. Também mais estreito/baixo que a v1 —
 // não precisa ocupar o card inteiro pra ser legível.
 function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  drawParciais(ctx, W, H, d, false);
+}
+
+// COMPLETO — parciais + linha de dados (distância/ritmo/tempo) + UMA marca só.
+// Antes o atleta colava 2 stickers (Parciais + Cantinho) e o "Ritmind" saía
+// duplicado no story (pedido do Renato).
+function styleCompleto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  drawParciais(ctx, W, H, d, true);
+}
+
+// linha de dados JUSTIFICADA na largura do bloco das parciais (1ª coluna
+// alinhada à esquerda, última à direita, meio centralizado no vão) — encolhe a
+// fonte até caber, pra acompanhar exatamente a largura das barras.
+function drawStatsSpread(
+  ctx: CanvasRenderingContext2D, left: number, right: number, baseY: number,
+  cells: [string, string][],
+): number {
+  const blockW = right - left, minGap = 28;
+  let valSize = 54, labSize = 32;
+  let widths: number[] = [];
+  const measure = () => {
+    widths = cells.map(([lab, val]) => {
+      ctx.font = `800 ${valSize}px ${CANVAS_FONT}`; const wv = ctx.measureText(val).width;
+      ctx.font = `700 ${labSize}px ${CANVAS_FONT}`; const wl = ctx.measureText(lab).width;
+      return Math.max(wv, wl);
+    });
+    return widths.reduce((a, b) => a + b, 0) + minGap * (cells.length - 1);
+  };
+  while (measure() > blockW && valSize > 30) { valSize -= 2; labSize = Math.round(valSize * 0.6); }
+  const free = blockW - widths.reduce((a, b) => a + b, 0);
+  const gap = cells.length > 1 ? free / (cells.length - 1) : 0;
+  let cx = left;
+  withShadow(ctx, () => {
+    ctx.textAlign = "left";
+    cells.forEach(([lab, val], i) => {
+      ctx.fillStyle = "#FFFFFF"; ctx.font = `700 ${labSize}px ${CANVAS_FONT}`;
+      outlinedText(ctx, lab, cx, baseY, Math.max(3, labSize * 0.11));
+      ctx.font = `800 ${valSize}px ${CANVAS_FONT}`;
+      outlinedText(ctx, val, cx, baseY + valSize + 8, Math.max(3, valSize * 0.11));
+      cx += widths[i] + gap;
+    });
+  });
+  return baseY + valSize + 8; // baseline do valor (pra posicionar a marca)
+}
+
+function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData, withStats: boolean) {
   const splits = d.splits.filter((s) => s.sec > 0);
   const titleY = 200;
-  const labelX = 90, barX = 172, valueX = Math.round(W * 0.62);
+  // com a linha de dados o bloco alarga um pouco (3 números grandes precisam caber)
+  const labelX = 90, barX = 172, valueX = Math.round(W * (withStats ? 0.72 : 0.62));
   const blockCenterX = (labelX + valueX) / 2; // marca centraliza no BLOCO, não no card
+  const statsCells = shareCells(d.it).slice(0, 3);
 
   withShadow(ctx, () => {
     ctx.fillStyle = "#FFFFFF"; ctx.font = `800 44px ${CANVAS_FONT}`; ctx.textAlign = "left";
@@ -324,7 +372,8 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       ctx.fillStyle = "#E7E8F0"; ctx.font = `600 30px ${CANVAS_FONT}`;
       outlinedText(ctx, "Sem parciais nesta corrida", labelX, 250, 5);
     });
-    withShadow(ctx, () => drawBrand(ctx, blockCenterX, 330, 40, true));
+    const afterY = withStats ? drawStatsSpread(ctx, labelX, valueX, 330, statsCells) + 30 : 280;
+    withShadow(ctx, () => drawBrand(ctx, blockCenterX, afterY + 50, 40, true));
     return;
   }
 
@@ -333,7 +382,10 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
   // rowH acompanha esse tamanho; só encolhe de verdade em corrida MUITO
   // longa (meia/maratona), e aí a fonte encolhe junto (proporcional).
   const rowHFull = 46;
-  const rowH = Math.max(30, Math.min(rowHFull, 900 / splits.length));
+  // a linha de dados come ~150px da altura — a lista ganha menos orçamento
+  const rowH = withStats
+    ? Math.max(20, Math.min(rowHFull, 720 / splits.length))
+    : Math.max(30, Math.min(rowHFull, 900 / splits.length));
   const scale = rowH / rowHFull;
   const labelFont = Math.round(34 * scale);
   const paceFont = Math.round(30 * scale);
@@ -376,6 +428,13 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
     ctx.textAlign = "left";
   });
 
+  if (withStats) {
+    // dados logo abaixo das barras, na mesma largura; marca única no pé
+    const statsEnd = drawStatsSpread(ctx, labelX, valueX, listBottom + 64, statsCells);
+    withShadow(ctx, () => drawBrand(ctx, blockCenterX, Math.min(statsEnd + 70, H - 40), 40, true));
+    return;
+  }
+
   // marca colada logo abaixo da última linha, centralizada no BLOCO
   withShadow(ctx, () => drawBrand(ctx, blockCenterX, brandY, 40, true));
 }
@@ -386,6 +445,7 @@ const CARD_STYLES: CardStyle[] = [
   { key: "rota", label: "Rota", transparent: true, draw: styleRota },
   { key: "cantinho", label: "Cantinho", transparent: true, draw: styleCantinho },
   { key: "parciais", label: "Parciais", transparent: true, draw: styleParciais },
+  { key: "completo", label: "Parciais + dados", transparent: true, draw: styleCompleto },
   { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
 ];
 
