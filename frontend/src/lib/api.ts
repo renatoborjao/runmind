@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b39 · plano x feito com ritmo dos passos";
+export const APP_BUILD = "b40 · plano x feito tiro a tiro";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -1129,6 +1129,22 @@ export async function moveWorkout(
 
 // ---- extras dos cards de compartilhar ----
 
+// fase do treino EXECUTADA (vem do backend, das voltas do relógio pareadas com
+// os passos do plano). "tiros" = série de repetições (fartlek/intervalado);
+// "bloco" = trecho contínuo com um alvo (ex.: 10 km leve, 4 km forte).
+export interface PlanPhase {
+  kind: "tiros" | "bloco";
+  label: string;                 // "8× 2min" / "10 km"
+  target: string | null;         // "4:50–5:05"
+  target_min_sec: number | null; // limite RÁPIDO do alvo (s/km)
+  target_max_sec: number | null; // limite LENTO do alvo (s/km)
+  reps: { pace_sec: number | null; ok: boolean | null }[];
+  ok: number;                    // quantos no alvo
+  total: number;
+  avg_pace_sec: number | null;
+}
+
+
 export interface ShareContext {
   planned: {
     workout_type: string;
@@ -1138,6 +1154,7 @@ export interface ShareContext {
     duration_min: number | null;
     pace_label?: string | null;
     pace_structured?: boolean;
+    phases?: PlanPhase[] | null;
   } | null;
   quote: string | null;
 }

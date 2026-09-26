@@ -2,7 +2,7 @@
 // coach) + o "número de peito". Mesma linguagem visual dos demais (contorno no
 // texto, marca única) — peças em share-canvas.
 
-import type { FeedItem } from "./api";
+import type { FeedItem, PlanPhase } from "./api";
 import {
   CANVAS_FONT, drawBrand, drawBrandOnLight, drawPill, drawStatsSpread, fitText,
   fmtDur, outlinedText, roundRect, withShadow, wrapLines,
@@ -22,6 +22,9 @@ export interface PlannedSession {
   pace_label?: string | null;
   // treino estruturado (progressivo/tiros): NÃO compara com a média do atleta
   pace_structured?: boolean;
+  // o EXECUTADO fase a fase (voltas do relógio × passos do plano); null sem
+  // Garmin — aí o card não inventa comparação de ritmo
+  phases?: PlanPhase[] | null;
 }
 
 export interface RunExtras {
@@ -73,12 +76,169 @@ export function planVerdict(it: FeedItem, p: PlannedSession): string {
   return parts.join(" · ");
 }
 
-// PLANO × FEITO — o que o coach passou lado a lado com o que o atleta fez
+function fmtPaceSec(sec: number | null | undefined): string {
+  if (sec == null) return "—";
+  const t = Math.round(sec);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+const OK_COLOR = "#1FD9B8", FAST_COLOR = "#FFB547", SLOW_COLOR = "#9AA0B4";
+// folga de pace do veredito "no alvo" (igual ao _PACE_SLACK do backend)
+const PACE_SLACK = 0.03;
+
+function repColor(pace: number | null, ok: boolean | null, lo: number | null): string {
+  if (ok) return OK_COLOR;
+  if (pace != null && lo != null && pace < lo) return FAST_COLOR;
+  return SLOW_COLOR;
+}
+
+// cabeçalho do Plano × feito (título + treino + data), centrado em `top`
+function planHeader(ctx: CanvasRenderingContext2D, W: number, top: number, name: string, date: string) {
+  const cx = W / 2;
+  withShadow(ctx, () => {
+    ctx.textAlign = "center";
+    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 42px ${CANVAS_FONT}`;
+    outlinedText(ctx, "PLANO × FEITO", cx, top + 50, 6);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 66px ${CANVAS_FONT}`;
+    outlinedText(ctx, fitText(ctx, name, W - 160), cx, top + 135, 8);
+    ctx.font = `700 34px ${CANVAS_FONT}`; ctx.fillStyle = "rgba(255,255,255,0.9)";
+    outlinedText(ctx, date, cx, top + 190, 4);
+  });
+}
+
+// TIROS — uma barra por tiro (mais rápido = mais alta), faixa do alvo por trás,
+// cor por tiro (no alvo / rápido demais / lento)
+function drawTiros(ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras, ph: PlanPhase) {
+  const cx = W / 2, left = 110, right = W - 110;
+  const top = 90;
+  planHeader(ctx, W, top, x.planned?.workout_type ?? "", x.date);
+
+  withShadow(ctx, () => {
+    ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF"; ctx.font = `800 46px ${CANVAS_FONT}`;
+    outlinedText(ctx, ph.target ? `${ph.label} · alvo ${ph.target}` : ph.label, cx, top + 290, 6);
+  });
+
+  // escala de ritmo: rápido em cima. Folga pra faixa do alvo e os extremos
+  const paces = ph.reps.map((r) => r.pace_sec).filter((v): v is number => v != null);
+  const lo = ph.target_min_sec, hi = ph.target_max_sec ?? lo;
+  const fast = Math.min(...paces, lo != null ? lo * (1 - PACE_SLACK) : Infinity) - 12;
+  const slow = Math.max(...paces, hi != null ? hi * (1 + PACE_SLACK) : -Infinity) + 25;
+  const cTop = top + 370, cBot = top + 790;
+  const yOf = (sec: number) => cTop + ((sec - fast) / (slow - fast)) * (cBot - cTop);
+
+  // faixa do alvo — com a MESMA folga de ruído de GPS que o veredito usa
+  // (3%), senão tiro "no alvo" apareceria fora da faixa
+  if (lo != null && hi != null) {
+    const y1 = yOf(lo * (1 - PACE_SLACK)), y2 = yOf(hi * (1 + PACE_SLACK));
+    ctx.fillStyle = "rgba(52,227,200,0.16)";
+    ctx.fillRect(left - 10, y1, right - left + 20, Math.max(6, y2 - y1));
+    ctx.strokeStyle = "rgba(52,227,200,0.6)"; ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
+    ctx.beginPath(); ctx.moveTo(left - 10, y1); ctx.lineTo(right + 10, y1); ctx.moveTo(left - 10, y2); ctx.lineTo(right + 10, y2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  const n = ph.reps.length;
+  const gap = n > 12 ? 8 : 18;
+  const bw = (right - left - gap * (n - 1)) / n;
+  const showVals = n <= 10;
+  ph.reps.forEach((r, i) => {
+    const bx = left + i * (bw + gap);
+    const yTop = r.pace_sec != null ? yOf(r.pace_sec) : cBot - 10;
+    const h = Math.max(10, cBot - yTop);
+    withShadow(ctx, () => {
+      ctx.fillStyle = repColor(r.pace_sec, r.ok, lo);
+      roundRect(ctx, bx, cBot - h, bw, h, Math.min(12, bw / 2)); ctx.fill();
+    });
+    ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
+    if (showVals && r.pace_sec != null) {
+      ctx.font = `800 ${bw > 80 ? 32 : 26}px ${CANVAS_FONT}`;
+      outlinedText(ctx, fmtPaceSec(r.pace_sec), bx + bw / 2, cBot - h - 14, 4);
+    }
+    if (n <= 16 || i % 2 === 0) {
+      ctx.font = `800 30px ${CANVAS_FONT}`;
+      outlinedText(ctx, String(i + 1), bx + bw / 2, cBot + 44, 4);
+    }
+  });
+
+  const statsEnd = drawStatsSpread(ctx, left, right, cBot + 140, [
+    ["No alvo", `${ph.ok}/${ph.total}`],
+    ["Média dos tiros", fmtPaceSec(ph.avg_pace_sec)],
+    ["Distância", `${km2(it.distance_km)} km`],
+  ], 60, 38);
+  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(statsEnd + 100, H - 40), 46, true));
+}
+
+// BLOCOS — uma linha por trecho do plano (10 km leve, 4 km forte…): alvo ×
+// feito com ✓/✗
+function drawBlocos(ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras, phases: PlanPhase[]) {
+  const cx = W / 2, left = 110;
+  const colP = 560, colF = 820;
+  const rowH = 130;
+  const okCount = phases.filter((ph) => ph.ok === ph.total).length;
+  const blockH = 300 + (phases.length + 1) * rowH + 130 + 130;
+  const top = Math.max(60, (H - blockH) / 2);
+  planHeader(ctx, W, top, x.planned?.workout_type ?? "", x.date);
+
+  let y = top + 300;
+  withShadow(ctx, () => {
+    ctx.textAlign = "center"; ctx.font = `800 32px ${CANVAS_FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; outlinedText(ctx, "ALVO", colP, y, 4);
+    ctx.fillStyle = TEAL_LIGHT; outlinedText(ctx, "FEITO", colF, y, 4);
+  });
+  y += 40;
+  const line = (yy: number) => { ctx.fillStyle = "rgba(255,255,255,0.28)"; ctx.fillRect(left, yy, W - 2 * left, 3); };
+  for (const ph of phases) {
+    line(y);
+    const base = y + 88;
+    const allOk = ph.ok === ph.total;
+    withShadow(ctx, () => {
+      ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF"; ctx.font = `800 42px ${CANVAS_FONT}`;
+      outlinedText(ctx, ph.label, left, base - 6, 5);
+      ctx.textAlign = "center"; ctx.font = `700 46px ${CANVAS_FONT}`; ctx.fillStyle = "rgba(255,255,255,0.85)";
+      outlinedText(ctx, ph.target ?? "livre", colP, base, 6);
+      ctx.font = `800 56px ${CANVAS_FONT}`; ctx.fillStyle = "#FFFFFF";
+      outlinedText(ctx, fmtPaceSec(ph.avg_pace_sec), colF, base, 7);
+      // ✓ / ✗ (parcial = "2/3")
+      ctx.textAlign = "left"; ctx.font = `800 44px ${CANVAS_FONT}`;
+      ctx.fillStyle = allOk ? OK_COLOR : FAST_COLOR;
+      outlinedText(ctx, allOk ? "✓" : (ph.total > 1 ? `${ph.ok}/${ph.total}` : "✗"), colF + 100, base, 5);
+    });
+    y += rowH;
+  }
+  // total do treino
+  line(y);
+  withShadow(ctx, () => {
+    ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF"; ctx.font = `700 38px ${CANVAS_FONT}`;
+    outlinedText(ctx, "Total", left, y + 80, 5);
+    const pd = x.planned?.distance_km;
+    ctx.textAlign = "center"; ctx.font = `700 46px ${CANVAS_FONT}`; ctx.fillStyle = "rgba(255,255,255,0.85)";
+    outlinedText(ctx, pd ? `${km1(pd)} km` : "—", colP, y + 86, 6);
+    ctx.font = `800 52px ${CANVAS_FONT}`; ctx.fillStyle = "#FFFFFF";
+    outlinedText(ctx, `${km2(it.distance_km)} km`, colF, y + 86, 7);
+  });
+  y += rowH;
+  line(y);
+
+  const verdict = okCount === phases.length
+    ? `✅ ${phases.length === 1 ? "Bloco" : `Os ${phases.length} blocos`} no alvo`
+    : `${okCount} de ${phases.length} blocos no alvo`;
+  drawPill(ctx, cx, y + 110, verdict, 40, TEAL_LIGHT);
+  withShadow(ctx, () => drawBrand(ctx, cx, Math.min(y + 240, H - 40), 46, true));
+}
+
+// PLANO × FEITO — o que o coach passou lado a lado com o que o atleta fez.
+// Treino estruturado COM as voltas do relógio: tiros viram gráfico tiro a
+// tiro; blocos (progressivo) viram uma linha por bloco. Senão, tabela simples.
 export function drawPlanoFeito(ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras) {
   const p = x.planned;
   const cx = W / 2, left = 110;
   const colP = 560, colF = 830;
   if (!p) return;
+
+  const phases = p.phases ?? [];
+  const tiros = phases.find((ph) => ph.kind === "tiros" && ph.total >= 2);
+  if (tiros) { drawTiros(ctx, W, H, it, x, tiros); return; }
+  if (p.pace_structured && phases.length) { drawBlocos(ctx, W, H, it, x, phases); return; }
 
   const plannedPace = p.pace_label
     || (p.pace_min && p.pace_max && p.pace_min !== p.pace_max
@@ -89,8 +249,9 @@ export function drawPlanoFeito(ctx: CanvasRenderingContext2D, W: number, H: numb
   // sessão por TEMPO não tem distância prescrita: "por tempo" (não "livre")
   rows.push(["Distância", p.distance_km ? `${km1(p.distance_km)} km` : (p.duration_min ? "por tempo" : "livre"), `${km2(it.distance_km)} km`]);
   if (p.duration_min) rows.push(["Tempo", durShort(p.duration_min * 60), durShort(durOf(it))]);
-  // treino estruturado: o feito é a MÉDIA (o plano mostra a estrutura)
-  rows.push([p.pace_structured ? "Ritmo (méd.)" : "Ritmo", plannedPace ?? "livre", it.pace ?? "—"]);
+  // estruturado sem as voltas do relógio: sem linha de ritmo (a média de um
+  // fartlek/progressivo mistura blocos e não diz nada)
+  if (!p.pace_structured) rows.push(["Ritmo", plannedPace ?? "livre", it.pace ?? "—"]);
   const verdict = planVerdict(it, p);
 
   // bloco inteiro centralizado na vertical

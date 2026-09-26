@@ -11,17 +11,26 @@
 
 Ver [[project_app_atleta]]."""
 
+import asyncio
 import re
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 from google.genai import types
 
+from app.application.history.planned_execution_matcher import (
+    PlannedExecutionMatcher,
+)
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.core.config import get_settings
 from app.domain.entities.training_plan import TrainingPlan
 from app.domain.entities.workout_step import INTERVAL, RUN, WorkoutStep
+from app.infrastructure.integrations.garmin.garmin_activity_source import (
+    GarminActivitySource,
+)
+from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.integrations.gemini.client import generate_text
+from app.infrastructure.persistence.share_phases_store import SharePhasesStore
 from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
@@ -103,8 +112,27 @@ def _as_activity(idx: int, item: dict) -> SimpleNamespace:
 def planned_session(
     profile: str, feed: list[dict], date_iso: str, km: float,
 ) -> dict | None:
-    """Sessão do plano que a corrida (data + km) cumpriu, ou None (treino
-    extra, sem plano naquela semana, plano de treinador sem casamento)."""
+    """Sessão do plano que a corrida (data + km) cumpriu, no formato do card,
+    ou None (treino extra, sem plano naquela semana, sem casamento)."""
+
+    session = match_session(profile, feed, date_iso, km)
+
+    return None if session is None else session_card(session)
+
+
+def session_card(session) -> dict:
+
+    return {
+        "workout_type": session.workout_type,
+        "distance_km": session.planned_distance_km,
+        "duration_min": session.planned_duration_minutes,
+        **_planned_pace(session),
+    }
+
+
+def match_session(profile: str, feed: list[dict], date_iso: str, km: float):
+    """A PlannedSession que a corrida cumpriu (WeeklyPlanMatcher: dia
+    primeiro, depois distância) ou None."""
 
     day = date.fromisoformat(date_iso[:10])
 
@@ -143,14 +171,7 @@ def planned_session(
 
         return None
 
-    pace = _planned_pace(session)
-
-    return {
-        "workout_type": session.workout_type,
-        "distance_km": session.planned_distance_km,
-        "duration_min": session.planned_duration_minutes,
-        **pace,
-    }
+    return session
 
 
 def _main_blocks(steps: list[WorkoutStep]) -> list[tuple[str, str | None, str | None]]:
@@ -296,6 +317,170 @@ def period_goal_km(profile: str, start: date, end: date) -> float | None:
                 found = True
 
     return round(total, 1) if found else None
+
+
+# ---- EXECUTADO fase a fase (voltas do relógio × passos do plano) -----------
+
+
+def _pace_sec(value: str | None) -> int | None:
+
+    m = re.match(r"^(\d+):(\d{2})", (value or "").strip())
+
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def _amount(distance_m: float | None, duration_sec: int | None) -> str:
+    """"200m" / "1 km" / "2min" / "90s" — o tamanho de UM passo."""
+
+    if distance_m:
+
+        return f"{distance_m / 1000:g} km" if distance_m >= 1000 else f"{int(round(distance_m))}m"
+
+    if duration_sec:
+
+        return f"{duration_sec // 60}min" if duration_sec % 60 == 0 else f"{duration_sec}s"
+
+    return ""
+
+
+def _total_amount(blocks) -> str:
+    """Tamanho somado de um trecho contínuo ("10 km", "30min")."""
+
+    dist = sum(b.planned_distance_m or 0 for b in blocks)
+
+    if dist:
+
+        return f"{round(dist / 1000, 1):g} km"
+
+    dur = sum(b.planned_duration_sec or 0 for b in blocks)
+
+    if dur:
+
+        return f"{round(dur / 60):g}min"
+
+    return f"{round(sum(b.executed_distance_m for b in blocks) / 1000, 1):g} km"
+
+
+def build_phases(blocks) -> list[dict] | None:
+    """Agrupa os blocos PRINCIPAIS executados (corrida contínua / tiro com
+    alvo de ritmo; aquecimento, recuperação e desaquecimento ficam de fora) em
+    FASES: blocos seguidos com o mesmo alvo viram uma fase. Série de tiros
+    (≥2) = "tiros" (o card mostra tiro a tiro); o resto = "bloco" (uma linha
+    por trecho: 10 km leve, 4 km forte…)."""
+
+    main = [
+        b for b in blocks
+        if b.kind in (RUN, INTERVAL) and (b.pace_min or b.pace_max)
+    ]
+
+    if not main:
+
+        return None
+
+    groups: list[list] = []
+
+    for b in main:
+
+        if groups and (groups[-1][0].kind, groups[-1][0].pace_min, groups[-1][0].pace_max) == (b.kind, b.pace_min, b.pace_max):
+
+            groups[-1].append(b)
+
+        else:
+
+            groups.append([b])
+
+    phases = []
+
+    for g in groups:
+
+        first = g[0]
+
+        tiros = first.kind == INTERVAL and len(g) >= 2
+
+        dist = sum(b.executed_distance_m for b in g)
+
+        dur = sum(b.executed_duration_sec for b in g)
+
+        lo, hi = _pace_sec(first.pace_min), _pace_sec(first.pace_max)
+
+        phases.append({
+            "kind": "tiros" if tiros else "bloco",
+            "label": f"{len(g)}× {_amount(first.planned_distance_m, first.planned_duration_sec)}".strip()
+            if tiros else _total_amount(g),
+            "target": _range(first.pace_min, first.pace_max) or None,
+            "target_min_sec": min(v for v in (lo, hi) if v is not None) if (lo or hi) else None,
+            "target_max_sec": max(v for v in (lo, hi) if v is not None) if (lo or hi) else None,
+            "reps": [
+                {
+                    "pace_sec": round(b.executed_pace * 60) if b.executed_pace else None,
+                    "ok": b.within_target,
+                }
+                for b in g
+            ],
+            "ok": sum(1 for b in g if b.within_target),
+            "total": len(g),
+            "avg_pace_sec": round(dur / (dist / 1000)) if dist > 0 else None,
+        })
+
+    return phases
+
+
+def _garmin_phases(profile: str, date_iso: str, km: float, session) -> list[dict] | None:
+    """Busca as voltas ROTULADAS da corrida no Garmin (lista recente → casa por
+    data + km → typed splits) e pareia com os passos do plano. Síncrono (lib
+    do Garmin) — chamar via asyncio.to_thread."""
+
+    candidates = [
+        a for a in GarminActivitySource.recent(profile, limit=40)
+        if a.start_date.date().isoformat() == date_iso[:10]
+        and abs(a.distance / 1000 - km) < 0.6
+    ]
+
+    if not candidates:
+
+        return None
+
+    act = min(candidates, key=lambda a: abs(a.distance / 1000 - km))
+
+    typed = GarminClient.connect(profile).get_activity_typed_splits(act.id)
+
+    blocks = GarminActivitySource._classify_splits(typed)
+
+    cmp = PlannedExecutionMatcher.match(
+        session, SimpleNamespace(raw={"_garmin_typed_blocks": blocks}),
+    )
+
+    return build_phases(cmp.blocks) if cmp else None
+
+
+async def execution_phases(profile: str, date_iso: str, km: float, session) -> list[dict] | None:
+    """Fases executadas pro card "Plano × feito" (cacheadas por corrida). None
+    quando não dá: sem Garmin, treino sem passos, voltas não pareiam."""
+
+    if session is None or not session.steps or not GarminClient.is_connected(profile):
+
+        return None
+
+    hit, cached = SharePhasesStore.get(profile, date_iso, km)
+
+    if hit:
+
+        return cached
+
+    try:
+
+        phases = await asyncio.to_thread(_garmin_phases, profile, date_iso, km, session)
+
+    except Exception as e:
+
+        # erro de rede/Garmin: NÃO guarda — tenta de novo na próxima
+        print(f"share: voltas do Garmin falharam p/ '{profile}' {date_iso}: {e}")
+
+        return None
+
+    SharePhasesStore.put(profile, date_iso, km, phases)
+
+    return phases
 
 
 def _clean_quote(text: str) -> str:

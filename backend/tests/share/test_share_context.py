@@ -291,3 +291,138 @@ def test_pace_nowhere_is_free():
     got = share_context._planned_pace(_stepped("Rodagem", []))
 
     assert got["pace_label"] is None and got["pace_structured"] is False
+
+
+# ---- executado fase a fase (voltas do relógio × passos) ---------------------
+
+from app.domain.entities.block_comparison import ExecutedBlock  # noqa: E402
+
+
+def _blk(kind, pmin, pmax, pace_min_km, dist=None, dur=None, ok=True, label=""):
+
+    exec_dist = dist or (dur / 60 / pace_min_km * 1000 if dur else 0)
+    exec_dur = exec_dist / 1000 * pace_min_km * 60
+
+    return ExecutedBlock(
+        kind=kind, label=label, planned_distance_m=dist, planned_duration_sec=dur,
+        pace_min=pmin, pace_max=pmax, executed_distance_m=exec_dist,
+        executed_duration_sec=exec_dur, executed_pace=pace_min_km, executed_hr=None,
+        within_target=ok,
+    )
+
+
+def test_build_phases_fartlek_is_one_series_of_reps():
+    """Fartlek real do renato2: 8×2min, aquecimento/trote/desaquecimento fora."""
+
+    paces = [4.64, 4.92, 4.77, 5.06, 5.05, 5.0, 4.87, 4.98]
+    blocks = [_blk("warmup", None, None, 6.49, dur=600)]
+    for i, pc in enumerate(paces):
+        blocks.append(_blk("interval", "4:50", "5:05", pc, dur=120, ok=(i != 0)))
+        blocks.append(_blk("recovery", None, None, 6.5, dur=90))
+    blocks.append(_blk("cooldown", None, None, 7.0, dur=720))
+
+    phases = share_context.build_phases(blocks)
+
+    assert len(phases) == 1
+    ph = phases[0]
+    assert ph["kind"] == "tiros" and ph["label"] == "8× 2min"
+    assert ph["target"] == "4:50–5:05" and (ph["target_min_sec"], ph["target_max_sec"]) == (290, 305)
+    assert ph["ok"] == 7 and ph["total"] == 8
+    assert ph["reps"][0] == {"pace_sec": 278, "ok": False}
+
+
+def test_build_phases_progressive_long_run_is_blocks():
+    """Longão real: 10 km leve + 4 km forte (1 tiro só = bloco, não série)."""
+
+    phases = share_context.build_phases([
+        _blk("run", "6:20", "6:45", 6.35, dist=10000),
+        _blk("interval", "5:25", "5:40", 5.96, dist=4000, ok=False),
+        _blk("cooldown", "6:50", "7:30", 7.0, dist=500),
+    ])
+
+    assert [(p["kind"], p["label"], p["target"], p["ok"], p["total"]) for p in phases] == [
+        ("bloco", "10 km", "6:20–6:45", 1, 1),
+        ("bloco", "4 km", "5:25–5:40", 0, 1),
+    ]
+    assert phases[0]["avg_pace_sec"] == 381
+
+
+def test_build_phases_km_splits_group_by_target():
+    """Longão do Maurício no relógio como 9×1 km + 3×1 km: 2 blocos."""
+
+    blocks = [_blk("run", "6:10", "6:40", 6.3, dist=1000) for _ in range(9)]
+    blocks += [_blk("run", "5:40", "6:00", pc, dist=1000, ok=ok) for pc, ok in [(6.53, False), (5.67, True), (5.6, True)]]
+
+    phases = share_context.build_phases(blocks)
+
+    assert [(p["label"], p["ok"], p["total"]) for p in phases] == [("9 km", 9, 9), ("3 km", 2, 3)]
+
+
+def test_build_phases_none_without_paced_blocks():
+
+    assert share_context.build_phases([_blk("run", None, None, 6.0, dist=8000)]) is None
+
+
+def _session_with_steps():
+
+    s = _session("Tuesday", "Fartlek", None, None, None)
+    s.steps = [WorkoutStep(kind="interval", duration_sec=120, pace_min="4:50", pace_max="5:05")]
+    return s
+
+
+def _isolate_phase_cache(tmp_path, monkeypatch):
+
+    monkeypatch.setattr("app.infrastructure.persistence.share_phases_store._STORAGE", tmp_path)
+    monkeypatch.setattr(share_context.GarminClient, "is_connected", staticmethod(lambda p: True))
+
+
+def test_execution_phases_fetches_once_then_caches(tmp_path, monkeypatch):
+
+    _isolate_phase_cache(tmp_path, monkeypatch)
+    calls = []
+
+    def fake(profile, date_iso, km, session):
+
+        calls.append(date_iso)
+        return [{"kind": "tiros", "label": "8× 2min"}]
+
+    monkeypatch.setattr(share_context, "_garmin_phases", fake)
+
+    s = _session_with_steps()
+    a = asyncio.run(share_context.execution_phases("renato", "2026-09-22", 8.32, s))
+    b = asyncio.run(share_context.execution_phases("renato", "2026-09-22", 8.32, s))
+
+    assert a == b == [{"kind": "tiros", "label": "8× 2min"}]
+    assert len(calls) == 1
+
+
+def test_execution_phases_caches_no_match_but_not_errors(tmp_path, monkeypatch):
+
+    _isolate_phase_cache(tmp_path, monkeypatch)
+    calls = []
+
+    def boom(*args):
+
+        calls.append(1)
+        raise RuntimeError("garmin fora")
+
+    monkeypatch.setattr(share_context, "_garmin_phases", boom)
+    s = _session_with_steps()
+
+    assert asyncio.run(share_context.execution_phases("renato", "2026-09-22", 8.3, s)) is None
+    assert asyncio.run(share_context.execution_phases("renato", "2026-09-22", 8.3, s)) is None
+    assert len(calls) == 2  # erro não fica em cache: tenta de novo
+
+    monkeypatch.setattr(share_context, "_garmin_phases", lambda *a: calls.append(2))
+    asyncio.run(share_context.execution_phases("renato", "2026-09-23", 5.0, s))
+    asyncio.run(share_context.execution_phases("renato", "2026-09-23", 5.0, s))
+    assert calls.count(2) == 1  # "não pareou" (None) fica em cache
+
+
+def test_execution_phases_skips_without_garmin(tmp_path, monkeypatch):
+
+    monkeypatch.setattr("app.infrastructure.persistence.share_phases_store._STORAGE", tmp_path)
+    monkeypatch.setattr(share_context.GarminClient, "is_connected", staticmethod(lambda p: False))
+    monkeypatch.setattr(share_context, "_garmin_phases", lambda *a: (_ for _ in ()).throw(AssertionError("não devia chamar")))
+
+    assert asyncio.run(share_context.execution_phases("renato", "2026-09-22", 8.3, _session_with_steps())) is None

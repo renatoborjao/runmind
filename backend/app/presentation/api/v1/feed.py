@@ -22,8 +22,10 @@ from app.infrastructure.persistence.workout_analysis_repository import (
 )
 from app.application.share.share_context import (
     coach_quote,
+    execution_phases,
+    match_session,
     period_goal_km,
-    planned_session,
+    session_card,
 )
 from app.presentation.api.deps import current_profile
 
@@ -340,18 +342,25 @@ async def share_context(
     profile: str = Depends(current_profile),
 ):
     """Extras dos cards de compartilhar de UMA corrida: a sessão do plano que
-    ela cumpriu (card "Plano × feito") e a frase curta do coach (card "Coach
-    diz"). Cada um vem null quando não se aplica."""
+    ela cumpriu + o executado fase a fase pelas voltas do relógio (card "Plano
+    × feito") e a frase curta do coach (card "Coach diz"). Cada um vem null
+    quando não se aplica."""
+
+    planned = None
 
     try:
 
-        planned = planned_session(profile, build_feed(profile), date, km)
+        session = match_session(profile, build_feed(profile), date, km)
+
+        if session is not None:
+
+            planned = session_card(session)
+
+            planned["phases"] = await execution_phases(profile, date, km, session)
 
     except Exception as e:
 
         print(f"share-context: plano falhou p/ '{profile}': {e}")
-
-        planned = None
 
     return {
         "planned": planned,
