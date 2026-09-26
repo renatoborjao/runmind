@@ -907,3 +907,5 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .rs-km small { font-size: 14px; font-weight: 600; color: var(--muted); font-family: var(--font-mono), monospace; }
 .rs-delta { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .rs-delta.up { color: var(--accent); }
+.rs-goal { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); }
+.rs-goal b { color: var(--ink); }

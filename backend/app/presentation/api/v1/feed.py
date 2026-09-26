@@ -20,6 +20,11 @@ from app.infrastructure.persistence.recorded_run_repository import (
 from app.infrastructure.persistence.workout_analysis_repository import (
     WorkoutAnalysisRepository,
 )
+from app.application.share.share_context import (
+    coach_quote,
+    period_goal_km,
+    planned_session,
+)
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/feed", tags=["Feed"])
@@ -326,6 +331,54 @@ async def activity_feed(profile: str = Depends(current_profile)):
     mapa/parciais. Só o app tem traçado hoje; as arquivadas vêm com stats."""
 
     return {"activities": build_feed(profile)}
+
+
+@router.get("/share-context")
+async def share_context(
+    date: str,
+    km: float,
+    profile: str = Depends(current_profile),
+):
+    """Extras dos cards de compartilhar de UMA corrida: a sessão do plano que
+    ela cumpriu (card "Plano × feito") e a frase curta do coach (card "Coach
+    diz"). Cada um vem null quando não se aplica."""
+
+    try:
+
+        planned = planned_session(profile, build_feed(profile), date, km)
+
+    except Exception as e:
+
+        print(f"share-context: plano falhou p/ '{profile}': {e}")
+
+        planned = None
+
+    return {
+        "planned": planned,
+        "quote": await coach_quote(profile, date, km),
+    }
+
+
+@router.get("/period-goal")
+async def period_goal(
+    start: str,
+    end: str,
+    profile: str = Depends(current_profile),
+):
+    """Meta de km do período (semana/mês) pelo PLANO — card "Meta" do resumo.
+    `goal_km` null quando não há plano no período."""
+
+    from datetime import date as _date
+
+    try:
+
+        goal = period_goal_km(profile, _date.fromisoformat(start), _date.fromisoformat(end))
+
+    except ValueError:
+
+        raise HTTPException(status_code=400, detail="datas inválidas")
+
+    return {"goal_km": goal}
 
 
 @router.get("/analysis")

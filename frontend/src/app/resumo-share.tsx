@@ -4,7 +4,7 @@
 // fluxo do card de corrida: preview ao vivo, estilos, copiar/compartilhar PNG).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getFeed, type FeedItem } from "@/lib/api";
+import { getFeed, getPeriodGoal, type FeedItem } from "@/lib/api";
 import { fmtKm, fmtPace, periodSummary, type PeriodKind, type PeriodSummary } from "@/lib/period-summary";
 import { CARD_W, canvasBlob, copyBlob, fmtDur, paintWhenFontsReady, shareBlob } from "@/lib/share-canvas";
 import { SUMMARY_LAYOUTS, drawSummaryCard, summaryCanvasHeight, type SummaryBackground } from "@/lib/summary-card";
@@ -50,7 +50,17 @@ export default function ResumoSection() {
 
   useEffect(() => { getFeed().then((f) => setFeed(f ?? [])).catch(() => setFeed([])); }, []);
 
-  const s = useMemo(() => (feed ? periodSummary(feed, kind, offset) : null), [feed, kind, offset]);
+  const base = useMemo(() => (feed ? periodSummary(feed, kind, offset) : null), [feed, kind, offset]);
+
+  // meta de km do período pelo PLANO (card "Meta" + linha no app); cache por
+  // período pra não rebuscar ao ir e voltar nas setas
+  const [goals, setGoals] = useState<Record<string, number | null>>({});
+  const goalKey = base ? `${base.startIso}_${base.endIso}` : "";
+  useEffect(() => {
+    if (!base || goalKey in goals) return;
+    getPeriodGoal(base.startIso, base.endIso).then((g) => setGoals((m) => ({ ...m, [goalKey]: g })));
+  }, [base, goalKey, goals]);
+  const s = useMemo(() => (base ? { ...base, goalKm: goals[goalKey] ?? null } : null), [base, goals, goalKey]);
 
   if (!s) return null;
 
@@ -83,6 +93,12 @@ export default function ResumoSection() {
 
       <Bars s={s} />
 
+      {s.goalKm != null && (
+        <p className="rs-goal">
+          Meta do plano: <b>{fmtKm(s.km)} de {fmtKm(s.goalKm, 0)} km</b> · {Math.round((s.km / s.goalKm) * 100)}%
+        </p>
+      )}
+
       <div className="prog-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", marginTop: 10 }}>
         <div className="stat"><div className="k">Treinos</div><div className="big">{s.runs}</div></div>
         <div className="stat"><div className="k">Tempo</div><div className="big" style={{ fontSize: 20 }}>{s.seconds > 0 ? fmtDur(s.seconds) : "—"}</div></div>
@@ -108,7 +124,9 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const layout = SUMMARY_LAYOUTS[layoutIdx];
+  // "Meta" só aparece quando o período tem plano
+  const layouts = SUMMARY_LAYOUTS.filter((l) => l.key !== "meta" || s.goalKm != null);
+  const layout = layouts[Math.min(layoutIdx, layouts.length - 1)];
   const transparent = background === "transparent";
   const cardH = summaryCanvasHeight(layout.key);
   const filename = s.kind === "week" ? "ritmind-semana.png" : "ritmind-mes.png";
@@ -173,7 +191,7 @@ function ResumoEditor({ s, onClose }: { s: PeriodSummary; onClose: () => void })
         </div>
 
         <div className="se-styles">
-          {SUMMARY_LAYOUTS.map((l, i) => (
+          {layouts.map((l, i) => (
             <button key={l.key} className={`se-chip${i === layoutIdx ? " on" : ""}`} onClick={() => setLayoutIdx(i)}>
               {l.label}
             </button>

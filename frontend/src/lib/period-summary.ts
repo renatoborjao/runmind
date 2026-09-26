@@ -27,6 +27,12 @@ export interface PeriodSummary {
   // compara com o mesmo trecho do anterior (seg–qua × seg–qua), senão mente.
   deltaPct: number | null;
   vsLabel: string;         // "vs semana passada" / "vs mês passado"
+  // cada dia do período (card "Calendário")
+  days: { day: number; weekday: number; km: number; future: boolean }[];
+  // meta de km do período vinda do PLANO (card "Meta"); null = sem plano
+  goalKm: number | null;
+  startIso: string;
+  endIso: string;
 }
 
 const WEEKDAY = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -90,11 +96,13 @@ export function periodSummary(
 
   let km = 0, seconds = 0, runs = 0, longestKm = 0;
   const bars: PeriodSummary["bars"] = [];
+  const days: PeriodSummary["days"] = [];
   let bucket: PeriodSummary["bars"][number] | null = null;
   let bucketFrom = 0;
   for (let d = start; d <= end; d = addDays(d, 1)) {
     const v = byDay.get(isoOf(d));
     if (v) { km += v.km; seconds += v.s; runs += v.n; longestKm = Math.max(longestKm, v.max); }
+    days.push({ day: d.getDate(), weekday: (d.getDay() + 6) % 7, km: v?.km ?? 0, future: d > t });
     if (kind === "week") {
       bars.push({ label: WEEKDAY[(d.getDay() + 6) % 7], km: v?.km ?? 0, future: d > t });
       continue;
@@ -120,6 +128,8 @@ export function periodSummary(
   const prevKm = sumKm(byDay, pStart, prevTo);
   const deltaPct = prevKm > 0 ? Math.round(((km - prevKm) / prevKm) * 100) : null;
 
+  const startIso = isoOf(start), endIso = isoOf(end);
+
   const label = kind === "week"
     ? (start.getMonth() === end.getMonth()
       ? `${start.getDate()} a ${end.getDate()} de ${MONTHS[end.getMonth()]}`
@@ -136,6 +146,10 @@ export function periodSummary(
     bars,
     deltaPct,
     vsLabel: kind === "week" ? "vs semana passada" : "vs mês passado",
+    days,
+    goalKm: null,
+    startIso,
+    endIso,
   };
 }
 

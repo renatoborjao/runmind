@@ -187,3 +187,61 @@ export async function shareBlob(blob: Blob, filename: string, text: string): Pro
     return "unsupported";
   }
 }
+
+// quebra `text` em linhas que cabem em maxW (fonte já setada no ctx); corta com
+// "…" se passar de maxLines
+export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number): string[] {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(next).width <= maxW || !cur) { cur = next; continue; }
+    lines.push(cur); cur = w;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    let last = kept[maxLines - 1];
+    while (last && ctx.measureText(`${last}…`).width > maxW) last = last.slice(0, -1);
+    kept[maxLines - 1] = `${last.trimEnd()}…`;
+    return kept;
+  }
+  return lines;
+}
+
+// corta um texto de UMA linha pra caber em maxW (com "…")
+export function fitText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t && ctx.measureText(`${t}…`).width > maxW) t = t.slice(0, -1);
+  return `${t.trimEnd()}…`;
+}
+
+// wordmark pra fundo CLARO (papel do número de peito): "Rit" teal
+// escuro + "mind" quase preto, sem contorno
+export function drawBrandOnLight(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+  const s = Math.round(size * 1.15);
+  ctx.font = `700 ${s}px ${BRAND_FONT}`;
+  const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
+  const startX = center ? x - (wRit + wMind) / 2 : x;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#0E9C85"; ctx.fillText("Rit", startX, baseY);
+  ctx.fillStyle = "#15161C"; ctx.fillText("mind", startX + wRit, baseY);
+}
+
+// selo/pílula centralizado em cx com texto (veredito do Plano × feito etc.)
+export function drawPill(ctx: CanvasRenderingContext2D, cx: number, baseY: number, text: string, size: number, color: string) {
+  ctx.font = `800 ${size}px ${CANVAS_FONT}`;
+  const w = ctx.measureText(text).width + size * 1.4, h = size * 1.9;
+  const x = cx - w / 2, y = baseY - size * 1.28;
+  withShadow(ctx, () => {
+    ctx.fillStyle = "rgba(6,7,12,0.55)";
+    roundRect(ctx, x, y, w, h, h / 2); ctx.fill();
+  });
+  ctx.lineWidth = 4; ctx.strokeStyle = color;
+  roundRect(ctx, x, y, w, h, h / 2); ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = "center";
+  ctx.fillText(text, cx, baseY);
+  ctx.textAlign = "left";
+}

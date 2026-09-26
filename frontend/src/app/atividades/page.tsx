@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
@@ -8,14 +8,17 @@ import {
   getActivityAnalysis,
   getActivityPhoto,
   getFeed,
+  getShareContext,
   getTrack,
   setActivityTitle,
   uploadActivityPhoto,
   type CoachAnalysis,
   type FeedItem,
   type RunSplit,
+  type ShareContext,
   type TrackData,
 } from "@/lib/api";
+import { drawCoachDiz, drawPeito, drawPlanoFeito, type RunExtras } from "@/lib/run-card-extras";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
 import {
   CANVAS_FONT, bottomScrim, canvasBlob, copyBlob, drawBg, drawBrand,
@@ -94,7 +97,13 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
 }
 
 // ---- estilos de card compartilhável (foto OU mapa real de fundo) ----
-interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; }
+const MONTHS_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${d} ${MONTHS_SHORT[m - 1]} ${y}`;
+}
+
+interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; extras: RunExtras; }
 
 // traçado dentro de uma caixa (fit + início/fim), com brilho — pra fundo transparente
 function drawRouteBox(
@@ -319,13 +328,18 @@ function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: Ca
   withShadow(ctx, () => drawBrand(ctx, blockCenterX, brandY, 40, true));
 }
 
-interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
+// `needs`: estilo que depende de dado do backend (sessão do plano / frase do
+// coach) só aparece quando esse dado existe pra corrida
+interface CardStyle { key: string; label: string; transparent: boolean; needs?: "planned" | "quote"; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
 const CARD_STYLES: CardStyle[] = [
   { key: "centralizado", label: "Central", transparent: true, draw: styleCentralizado },
   { key: "rota", label: "Rota", transparent: true, draw: styleRota },
   { key: "cantinho", label: "Cantinho", transparent: true, draw: styleCantinho },
   { key: "parciais", label: "Parciais", transparent: true, draw: styleParciais },
   { key: "completo", label: "Parciais + dados", transparent: true, draw: styleCompleto },
+  { key: "plano", label: "Plano × feito", transparent: true, needs: "planned", draw: (c, W, H, d) => drawPlanoFeito(c, W, H, d.it, d.extras) },
+  { key: "coach", label: "Coach diz", transparent: true, needs: "quote", draw: (c, W, H, d) => drawCoachDiz(c, W, H, d.it, d.extras) },
+  { key: "peito", label: "Número de peito", transparent: true, draw: (c, W, H, d) => drawPeito(c, W, H, d.it, d.extras) },
   { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
 ];
 
@@ -342,7 +356,17 @@ function AtividadesInner() {
   const [sharing, setSharing] = useState(false);
   const [editor, setEditor] = useState(false);
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
-  const [styleIdx, setStyleIdx] = useState(0);
+  // estilo escolhido pela CHAVE (a lista muda quando os extras do backend
+  // chegam — índice apontaria pra outro estilo)
+  const [styleKey, setStyleKey] = useState(CARD_STYLES[0].key);
+  const [shareCtx, setShareCtx] = useState<ShareContext | null>(null);
+  const styles = useMemo(
+    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? shareCtx?.planned : shareCtx?.quote)),
+    [shareCtx],
+  );
+  const styleIdx = Math.max(0, styles.findIndex((st) => st.key === styleKey));
+  const style = styles[styleIdx];
+  const setStyleIdx = (i: number) => setStyleKey(styles[Math.max(0, Math.min(styles.length - 1, i))].key);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mapCard, setMapCard] = useState<HTMLCanvasElement | null>(null);
@@ -472,7 +496,11 @@ function AtividadesInner() {
   }
 
   function openEditor() {
-    setPhotoImg(null); setStyleIdx(0); setResultUrl(null); setEditor(true);
+    setPhotoImg(null); setStyleKey(CARD_STYLES[0].key); setResultUrl(null); setEditor(true);
+    // extras do backend (plano da sessão + frase do coach): os estilos que
+    // dependem deles aparecem quando chegam
+    setShareCtx(null);
+    if (sel) getShareContext(sel).then(setShareCtx);
   }
 
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -486,13 +514,13 @@ function AtividadesInner() {
 
   // monta o mapa REAL de fundo (tiles + rota) só no estilo "Com mapa" e sem foto
   useEffect(() => {
-    if (!editor || CARD_STYLES[styleIdx].transparent || photoImg) { setMapCard(null); return; }
+    if (!editor || style.transparent || photoImg) { setMapCard(null); return; }
     const pts = track?.points ?? [];
     if (pts.length < 2) { setMapCard(null); return; }
     let alive = true;
     buildMapCard(pts, 1080, 1350).then((c) => { if (alive) setMapCard(c); });
     return () => { alive = false; };
-  }, [editor, styleIdx, photoImg, track]);
+  }, [editor, style, photoImg, track]);
 
   // troca de estilo pelo chip mantém o chip ativo visível na fileira (que
   // agora rola escondida, sem barra) — importante quando o swipe no card
@@ -513,10 +541,7 @@ function AtividadesInner() {
     if (!start) return;
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
-    setStyleIdx((i) => {
-      const next = dx < 0 ? i + 1 : i - 1;
-      return Math.max(0, Math.min(CARD_STYLES.length - 1, next));
-    });
+    setStyleIdx(dx < 0 ? styleIdx + 1 : styleIdx - 1);
   }
 
   // redesenha o preview quando muda estilo/foto/atividade/mapa
@@ -539,11 +564,16 @@ function AtividadesInner() {
         photo: photoImg,
         mapCard,
         splits: track?.splits ?? [],
+        extras: {
+          date: shortDate(sel.date_iso),
+          planned: shareCtx?.planned ?? null,
+          quote: shareCtx?.quote ?? null,
+        },
       };
-      CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
+      style.draw(ctx, 1080, 1350, d);
     };
     paintWhenFontsReady(paint);
-  }, [editor, styleIdx, photoImg, sel, track, mapCard]);
+  }, [editor, style, photoImg, sel, track, mapCard, shareCtx]);
 
   // PNG (mantém a transparência) do card atual
   const makeBlob = () => canvasBlob(previewRef.current);
@@ -640,11 +670,11 @@ function AtividadesInner() {
               </header>
 
               <div className="se-preview" onPointerDown={onPreviewPointerDown} onPointerUp={onPreviewPointerUp}>
-                <canvas ref={previewRef} className={`se-canvas${CARD_STYLES[styleIdx].transparent ? " transp" : ""}`} />
+                <canvas ref={previewRef} className={`se-canvas${style.transparent ? " transp" : ""}`} />
               </div>
 
               <div className="se-styles">
-                {CARD_STYLES.map((s, i) => (
+                {styles.map((s, i) => (
                   <button
                     key={s.key}
                     ref={(el) => { chipRefs.current[i] = el; }}
@@ -656,7 +686,7 @@ function AtividadesInner() {
                 ))}
               </div>
 
-              {CARD_STYLES[styleIdx].transparent ? (
+              {style.transparent ? (
                 <p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
               ) : (
                 <div className="se-photo">

@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b35 · deitado justo no texto";
+export const APP_BUILD = "b36 · plano x feito, coach diz, peito, calendario, meta";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -1125,4 +1125,42 @@ export async function moveWorkout(
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return { ok: false, message: data.detail || "Não consegui trocar o dia." };
   return { ok: true, message: data.message || "Treino movido.", watch: data.watch };
+}
+
+// ---- extras dos cards de compartilhar ----
+
+export interface ShareContext {
+  planned: {
+    workout_type: string;
+    distance_km: number | null;
+    pace_min: string | null;
+    pace_max: string | null;
+    duration_min: number | null;
+  } | null;
+  quote: string | null;
+}
+
+/** Sessão do plano que a corrida cumpriu (card "Plano × feito") + frase curta
+ * do coach (card "Coach diz"). Cada campo null quando não se aplica. */
+export async function getShareContext(item: FeedItem): Promise<ShareContext> {
+  try {
+    const r = await apiFetch(
+      `/feed/share-context?date=${encodeURIComponent(item.date_iso)}&km=${item.distance_km}`,
+    );
+    if (!r.ok) return { planned: null, quote: null };
+    return await r.json();
+  } catch {
+    return { planned: null, quote: null };
+  }
+}
+
+/** Meta de km do período pelo plano (card "Meta" do resumo); null sem plano. */
+export async function getPeriodGoal(startIso: string, endIso: string): Promise<number | null> {
+  try {
+    const r = await apiFetch(`/feed/period-goal?start=${startIso}&end=${endIso}`);
+    if (!r.ok) return null;
+    return (await r.json()).goal_km ?? null;
+  } catch {
+    return null;
+  }
 }
