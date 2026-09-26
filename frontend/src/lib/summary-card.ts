@@ -98,6 +98,23 @@ function drawBars(
   ctx.textAlign = "left";
 }
 
+// linha de apoio em DUAS cores, centralizada: o destaque (seta/%) em teal e o
+// resto em BRANCO encorpado — teal fino inteiro sumia em foto clara; o branco
+// + a sombra curta segura a leitura igual aos números. `accentLast` = o teal
+// vai no fim ("Meta batida! 104%").
+function twoTone(
+  ctx: CanvasRenderingContext2D, cx: number, y: number,
+  a: string, b: string, size: number, accentLast = false,
+) {
+  ctx.font = `800 ${size}px ${CANVAS_FONT}`;
+  const wa = ctx.measureText(a).width, wb = ctx.measureText(b).width;
+  let x = cx - (wa + wb) / 2;
+  ctx.textAlign = "left";
+  ctx.fillStyle = accentLast ? "#FFFFFF" : TEAL_LIGHT; outlinedText(ctx, a, x, y, 0);
+  x += wa;
+  ctx.fillStyle = accentLast ? TEAL_LIGHT : "#FFFFFF"; outlinedText(ctx, b, x, y, 0);
+}
+
 function brandBelow(ctx: CanvasRenderingContext2D, cx: number, y: number) {
   withShadow(ctx, () => drawBrand(ctx, cx, y, BRAND, true));
 }
@@ -117,9 +134,7 @@ function drawDestaque(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary
     ctx.font = `800 56px ${CANVAS_FONT}`; outlinedText(ctx, unit, x0 + wn, 350, 0);
     if (s.deltaPct != null) {
       const up = s.deltaPct >= 0;
-      ctx.textAlign = "center";
-      ctx.fillStyle = up ? TEAL_LIGHT : "#FFFFFF"; ctx.font = `700 30px ${CANVAS_FONT}`;
-      outlinedText(ctx, `${up ? "▲" : "▼"} ${Math.abs(s.deltaPct)}% ${s.vsLabel}`, cx, 404, 0);
+      twoTone(ctx, cx, 408, `${up ? "▲" : "▼"} ${Math.abs(s.deltaPct)}%`, ` ${s.vsLabel}`, 34);
     }
     ctx.textAlign = "left";
   });
@@ -267,9 +282,8 @@ function drawMeta(ctx: CanvasRenderingContext2D, W: number, s: PeriodSummary) {
     ctx.font = `800 110px ${CANVAS_FONT}`; outlinedText(ctx, fmtKm(s.km), cx, cy + 22, 0);
     ctx.font = `700 34px ${CANVAS_FONT}`; outlinedText(ctx, `de ${fmtKm(goal, 0)} km`, cx, cy + 76, 0);
     const pct = Math.round(frac * 100);
-    const msg = frac >= 1 ? `Meta do ${periodWord(s)} batida! ${pct}%` : `${pct}% da meta do ${periodWord(s)}`;
-    ctx.fillStyle = TEAL_LIGHT; ctx.font = `800 36px ${CANVAS_FONT}`;
-    outlinedText(ctx, msg, cx, cy + r + 90, 0);
+    if (frac >= 1) twoTone(ctx, cx, cy + r + 90, `Meta do ${periodWord(s)} batida!`, ` ${pct}%`, 38, true);
+    else twoTone(ctx, cx, cy + r + 90, `${pct}%`, ` da meta do ${periodWord(s)}`, 38);
     ctx.textAlign = "left";
   });
 
