@@ -222,8 +222,10 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
 function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const cx = W / 2;
   if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, 110, 250, W - 220, 620, "#1FD9B8", 13);
-  withShadow(ctx, () => drawBrand(ctx, cx, 980, 50, true));
-  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 40, cx);
+  let brandBottom = 0;
+  withShadow(ctx, () => { brandBottom = drawBrand(ctx, cx, 960, 50, true); });
+  // rótulos (40px) começam ~48px abaixo do pé da marca
+  drawStatCols(ctx, 0, brandBottom + 48 + 30, shareCells(d.it).slice(0, 3), 72, 58, 40, cx);
 }
 
 // CANTINHO — marca + stats no canto inferior esquerdo (template 3).

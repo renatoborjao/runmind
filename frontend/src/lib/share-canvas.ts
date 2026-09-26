@@ -122,13 +122,16 @@ function tintedWordmark(color: string): HTMLCanvasElement | null {
 // de antes mantendo o traçado)
 export const BRAND_STYLE: "classico" | "icone13" | "ponto" = "classico";
 
-export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  if (BRAND_STYLE === "classico") { drawBrandClassico(ctx, x, baseY, size, center); return; }
-  if (BRAND_STYLE === "ponto") { drawBrandPonto(ctx, x, baseY, size, center); return; }
-  drawBrandIcone13(ctx, x, baseY, size, center);
+// Devolve o Y do PÉ da marca (pulso/ícone incluso): quem desenha algo ABAIXO
+// dela posiciona a partir daqui — nunca por coordenada fixa (a marca mudou de
+// formato e passou a comer os rótulos do modelo Rota).
+export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean): number {
+  if (BRAND_STYLE === "classico") return drawBrandClassico(ctx, x, baseY, size, center);
+  if (BRAND_STYLE === "ponto") return drawBrandPonto(ctx, x, baseY, size, center);
+  return drawBrandIcone13(ctx, x, baseY, size, center);
 }
 
-function drawBrandClassico(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+function drawBrandClassico(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean): number {
   const s = Math.round(size * 1.15);
   ctx.font = `700 ${s}px ${BRAND_FONT}`;
   const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
@@ -137,12 +140,14 @@ function drawBrandClassico(ctx: CanvasRenderingContext2D, x: number, baseY: numb
   ctx.textAlign = "left";
   ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", left, baseY);
   ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", left + wRit, baseY);
-  drawPulse(ctx, left, baseY + s * 0.3, w / 20, "#34E3C8", Math.max(3, s * 0.06), s * 0.022);
+  const lw = Math.max(3, s * 0.06);
+  drawPulse(ctx, left, baseY + s * 0.3, w / 20, "#34E3C8", lw, s * 0.022);
+  return baseY + s * 0.3 + 8 * s * 0.022 + lw / 2; // pico de baixo do pulso
 }
 
 // opção 4: "ritmind" branco (Space Grotesk) + ponto teal + pulso teal fininho
 // sublinhando a palavra inteira
-function drawBrandPonto(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+function drawBrandPonto(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean): number {
   const s = Math.round(size * 1.2);
   ctx.font = `700 ${s}px ${BRAND_FONT}`;
   const tw = ctx.measureText("ritmind").width;
@@ -154,10 +159,12 @@ function drawBrandPonto(ctx: CanvasRenderingContext2D, x: number, baseY: number,
   ctx.fillText("ritmind", left, baseY);
   ctx.fillStyle = "#34E3C8";
   ctx.beginPath(); ctx.arc(left + tw + d * 1.3, baseY - d, d, 0, Math.PI * 2); ctx.fill();
-  drawPulse(ctx, left, baseY + s * 0.3, tw / 20, "#34E3C8", Math.max(3, s * 0.06), s * 0.022);
+  const lw = Math.max(3, s * 0.06);
+  drawPulse(ctx, left, baseY + s * 0.3, tw / 20, "#34E3C8", lw, s * 0.022);
+  return baseY + s * 0.3 + 8 * s * 0.022 + lw / 2;
 }
 
-function drawBrandIcone13(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
+function drawBrandIcone13(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean): number {
   const s = Math.round(size * 1.2);
   const wm = tintedWordmark("#34E3C8");
   const wmH = s * 1.02;
@@ -185,6 +192,7 @@ function drawBrandIcone13(ctx: CanvasRenderingContext2D, x: number, baseY: numbe
     ctx.fillStyle = "#34E3C8"; ctx.textAlign = "left";
     ctx.fillText("ritmind", tx, baseY);
   }
+  return Math.max(top + ic, baseY + s * 0.25);
 }
 
 // Sombra CURTA e grudada na letra (sem contorno): o halo largo de antes
