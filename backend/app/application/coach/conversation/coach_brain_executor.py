@@ -266,8 +266,21 @@ class CoachBrainExecutor:
 
         if action.type == "one_off":
 
+            # o cérebro já decidiu O QUE muda ("8 km leve", ou o meio-termo
+            # "6 km" quando o pedido não cabe): isso vai pro motor junto com a
+            # fala — senão o cérebro promete uma coisa e o motor monta outra
+            # (log do Renato 26/09: "ajustando pra 8 km" e saiu 30 min).
+            request = incoming_text
+
+            if action.content_change:
+
+                request = (
+                    f"{incoming_text} — ajuste decidido pelo coach: "
+                    f"{action.content_change}"
+                )
+
             return await CoachBrainExecutor._one_off(
-                profile, runner, incoming_text, context_facts,
+                profile, runner, request, context_facts,
                 day_hint=action.target_day,
             )
 

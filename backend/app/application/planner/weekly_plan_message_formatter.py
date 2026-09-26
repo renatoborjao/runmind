@@ -465,7 +465,10 @@ class WeeklyPlanMessageFormatter:
 
                 detail.append(pace_line)
 
-            if session.purpose:
+            # a prosa da IA muitas vezes já traz a linha "Foco: ..." — não repete
+            if session.purpose and not any(
+                line.strip().lower().startswith("foco") for line in detail
+            ):
 
                 detail.append(f"Foco: {session.purpose}")
 

@@ -218,6 +218,36 @@ def test_one_off_routes_to_flow():
     repo.save.assert_not_called()  # o fluxo do avulso grava por conta própria
 
 
+def test_one_off_carries_brain_change_and_day_to_flow():
+    """Log do Renato (26/09): o cérebro decidiu "6 km regenerativo" (meio-termo
+    pro pedido de mais volume) mas o motor só recebia "N da pra aumentar um
+    pouco?" e montava outra coisa. O ajuste decidido E o dia vão pro fluxo."""
+
+    decision = BrainDecision(
+        say="Dá pra subir um pouco, não pros 8 km.",
+        action=BrainAction(
+            "one_off", "single_session", "Sunday", "treino de domingo",
+            content_change="Aumentar distância para 6 km em ritmo regenerativo",
+        ),
+    )
+
+    build_for = AsyncMock(return_value="Montei 6 km 👇 ...")
+
+    _run(
+        decision,
+        extra_patches=[
+            patch(
+                "app.application.coach.conversation.one_off_workout_flow."
+                "OneOffWorkoutFlow.build_for",
+                new=build_for,
+            ),
+        ],
+    )
+
+    assert "6 km" in build_for.await_args.args[2]
+    assert build_for.await_args.kwargs["day_hint"] == "Sunday"
+
+
 def test_external_athlete_proposal_routes_to_one_off():
     """Bug real do Mauricio (externo): o cérebro emitiu 'adjust' pro sábado, mas
     não editamos plano externo -> _propose devolve None -> ANTES caía na fala
