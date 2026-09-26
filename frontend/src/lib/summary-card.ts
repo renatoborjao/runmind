@@ -31,21 +31,21 @@ export function summaryCells(s: PeriodSummary): [string, string][] {
   ];
 }
 
-// barras por dia (semana: 7 com valor em cima; mês: finas, sem valor)
-function drawDayBars(
+// barras do resumo (semana: por dia; mês: por semana) — km em cima de cada
+// barra com corrida, rótulo embaixo
+function drawBars(
   ctx: CanvasRenderingContext2D, s: PeriodSummary,
   left: number, right: number, top: number, bottom: number,
 ) {
-  const n = s.days.length;
-  const week = s.kind === "week";
-  const gap = week ? 26 : 8;
+  const n = s.bars.length;
+  const gap = s.kind === "week" ? 26 : 40;
   const bw = (right - left - gap * (n - 1)) / n;
-  const max = Math.max(1, ...s.days.map((d) => d.km));
-  const valueRoom = week ? 50 : 0;
-  const maxH = bottom - top - valueRoom;
+  const max = Math.max(1, ...s.bars.map((d) => d.km));
+  const maxH = bottom - top - 50; // espaço do valor em cima
   const stub = 10;
+  const r = Math.min(14, bw / 2);
 
-  s.days.forEach((d, i) => {
+  s.bars.forEach((d, i) => {
     const x = left + i * (bw + gap);
     const h = d.km > 0 ? Math.max(stub * 2, (maxH * d.km) / max) : stub;
     const y = bottom - h;
@@ -53,29 +53,23 @@ function drawDayBars(
     withShadow(ctx, () => {
       if (d.km > 0) {
         ctx.fillStyle = "rgba(0,0,0,0.4)";
-        roundRect(ctx, x - 2, y - 2, bw + 4, h + 4, Math.min(14, bw / 2) + 2); ctx.fill();
+        roundRect(ctx, x - 2, y - 2, bw + 4, h + 4, r + 2); ctx.fill();
         const g = ctx.createLinearGradient(0, bottom, 0, y);
         g.addColorStop(0, TEAL); g.addColorStop(1, TEAL_LIGHT);
         ctx.fillStyle = g;
       } else {
         ctx.fillStyle = d.future ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.28)";
       }
-      roundRect(ctx, x, y, bw, h, Math.min(14, bw / 2)); ctx.fill();
+      roundRect(ctx, x, y, bw, h, r); ctx.fill();
     });
 
     ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center";
-    if (week) {
-      if (d.km > 0) {
-        ctx.font = `800 34px ${CANVAS_FONT}`;
-        outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 16, 4);
-      }
-      ctx.font = `700 34px ${CANVAS_FONT}`;
-      outlinedText(ctx, d.label, x + bw / 2, bottom + 48, 4);
-    } else if ((i + 1) % 7 === 1) {
-      // mês: marca 1, 8, 15, 22, 29 — referência sem poluir
-      ctx.font = `700 28px ${CANVAS_FONT}`;
-      outlinedText(ctx, d.label, x + bw / 2, bottom + 42, 4);
+    if (d.km > 0) {
+      ctx.font = `800 34px ${CANVAS_FONT}`;
+      outlinedText(ctx, fmtKm(d.km), x + bw / 2, y - 16, 4);
     }
+    ctx.font = `700 ${s.kind === "week" ? 34 : 30}px ${CANVAS_FONT}`;
+    outlinedText(ctx, d.label, x + bw / 2, bottom + 48, 4);
   });
   ctx.textAlign = "left";
 }
@@ -125,7 +119,7 @@ export function drawSummaryCard(
     ctx.textAlign = "left";
   });
 
-  drawDayBars(ctx, s, left, right, 620, 900);
+  drawBars(ctx, s, left, right, 620, 900);
 
   const statsEnd = drawStatsSpread(ctx, left, right, 1030, summaryCells(s));
 

@@ -9,25 +9,27 @@ import { fmtKm, fmtPace, periodSummary, type PeriodKind, type PeriodSummary } fr
 import { CARD_H, CARD_W, canvasBlob, copyBlob, fmtDur, paintWhenFontsReady, shareBlob } from "@/lib/share-canvas";
 import { SUMMARY_STYLES, drawSummaryCard } from "@/lib/summary-card";
 
-function DayBars({ s }: { s: PeriodSummary }) {
-  const W = 340, H = 92, padB = 16;
-  const n = s.days.length;
-  const gap = s.kind === "week" ? 10 : 3;
+// semana: km por dia; mês: km por semana (rótulo "7–13")
+function Bars({ s }: { s: PeriodSummary }) {
+  const W = 340, H = 104, padB = 16, padT = 14;
+  const n = s.bars.length;
+  const gap = s.kind === "week" ? 10 : 16;
   const bw = (W - gap * (n - 1)) / n;
-  const max = Math.max(1, ...s.days.map((d) => d.km));
+  const max = Math.max(1, ...s.bars.map((d) => d.km));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Km por dia">
-      {s.days.map((d, i) => {
-        const h = d.km > 0 ? Math.max(4, ((H - padB - 4) * d.km) / max) : 2;
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={s.kind === "week" ? "Km por dia" : "Km por semana"}>
+      {s.bars.map((d, i) => {
+        const h = d.km > 0 ? Math.max(4, ((H - padB - padT) * d.km) / max) : 2;
         const x = i * (bw + gap);
-        const showLabel = s.kind === "week" || i % 7 === 0;
+        const y = H - padB - h;
         return (
           <g key={i}>
-            <rect x={x} y={H - padB - h} width={bw} height={h} rx={Math.min(3, bw / 2)}
-              fill={d.km > 0 ? "var(--accent)" : "var(--line)"} opacity={d.future ? 0.5 : 1} />
-            {showLabel && (
-              <text x={x + bw / 2} y={H - 3} textAnchor="middle" fontSize="8" fontFamily="var(--font-mono)" fill="var(--muted)">{d.label}</text>
+            {d.km > 0 && (
+              <text x={x + bw / 2} y={y - 4} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--ink-soft)">{fmtKm(d.km)}</text>
             )}
+            <rect x={x} y={y} width={bw} height={h} rx={3}
+              fill={d.km > 0 ? "var(--accent)" : "var(--line)"} opacity={d.future ? 0.5 : 1} />
+            <text x={x + bw / 2} y={H - 3} textAnchor="middle" fontSize="8" fontFamily="var(--font-mono)" fill="var(--muted)">{d.label}</text>
           </g>
         );
       })}
@@ -74,7 +76,7 @@ export default function ResumoSection() {
         )}
       </div>
 
-      <DayBars s={s} />
+      <Bars s={s} />
 
       <div className="prog-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", marginTop: 10 }}>
         <div className="stat"><div className="k">Treinos</div><div className="big">{s.runs}</div></div>

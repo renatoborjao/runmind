@@ -18,8 +18,10 @@ export interface PeriodSummary {
   seconds: number;
   paceSec: number | null;  // tempo total / km total
   longestKm: number;
-  // barras por dia do período (semana: 7; mês: 28–31)
-  days: { label: string; km: number; future: boolean }[];
+  // barras do gráfico — semana: 1 por DIA (S T Q…); mês: 1 por SEMANA
+  // (seg–dom recortada no mês, rótulo "7–13"). 30 barras diárias no mês não
+  // diziam nada; por semana mostra como o mês evoluiu.
+  bars: { label: string; km: number; future: boolean }[];
   // variação de km vs o período anterior — no período ATUAL (incompleto)
   // compara com o mesmo trecho do anterior (seg–qua × seg–qua), senão mente.
   deltaPct: number | null;
@@ -86,15 +88,24 @@ export function periodSummary(
   const isCurrent = offset === 0;
 
   let km = 0, seconds = 0, runs = 0, longestKm = 0;
-  const days: PeriodSummary["days"] = [];
+  const bars: PeriodSummary["bars"] = [];
+  let bucket: PeriodSummary["bars"][number] | null = null;
+  let bucketFrom = 0;
   for (let d = start; d <= end; d = addDays(d, 1)) {
     const v = byDay.get(isoOf(d));
     if (v) { km += v.km; seconds += v.s; runs += v.n; longestKm = Math.max(longestKm, v.max); }
-    days.push({
-      label: kind === "week" ? WEEKDAY[(d.getDay() + 6) % 7] : String(d.getDate()),
-      km: v?.km ?? 0,
-      future: d > t,
-    });
+    if (kind === "week") {
+      bars.push({ label: WEEKDAY[(d.getDay() + 6) % 7], km: v?.km ?? 0, future: d > t });
+      continue;
+    }
+    // mês: nova barra a cada segunda (ou no dia 1)
+    if (!bucket || d.getDay() === 1) {
+      bucket = { label: "", km: 0, future: d > t };
+      bucketFrom = d.getDate();
+      bars.push(bucket);
+    }
+    bucket.km += v?.km ?? 0;
+    bucket.label = bucketFrom === d.getDate() ? String(bucketFrom) : `${bucketFrom}–${d.getDate()}`;
   }
 
   // anterior: período cheio; se o atual está em andamento, só o mesmo trecho
@@ -121,7 +132,7 @@ export function periodSummary(
     km, runs, seconds,
     paceSec: km > 0 && seconds > 0 ? seconds / km : null,
     longestKm,
-    days,
+    bars,
     deltaPct,
     vsLabel: kind === "week" ? "vs semana passada" : "vs mês passado",
   };
