@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.application.planner.pace_formatter import PaceFormatter
+
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
@@ -37,23 +39,6 @@ _RUN_HINT = ("run", "corrida", "trail")
 def _is_run(sport: str) -> bool:
 
     return any(h in (sport or "").lower() for h in _RUN_HINT)
-
-
-def _pace(distance_m: float, moving_time_s: int) -> str | None:
-
-    km = distance_m / 1000
-
-    if km <= 0 or not moving_time_s:
-
-        return None
-
-    # segundos por km INTEIROS + divmod: evita o "5:60" (arredondar 59.6s -> 60
-    # sem virar o minuto). round primeiro, depois separa minuto/segundo.
-    total = round(moving_time_s / km)
-
-    m, s = divmod(total, 60)
-
-    return f"{m}:{s:02d}"
 
 
 def _route_preview(points: list[dict] | None, n: int = 24) -> list[list[float]] | None:
@@ -223,7 +208,7 @@ def build_feed(profile: str) -> list[dict]:
                 "distance_km": round(a.distance / 1000, 2),
                 "duration_min": round(a.moving_time / 60),
                 "duration_s": round(a.moving_time),
-                "pace": _pace(a.distance, a.moving_time),
+                "pace": PaceFormatter.for_activity(a.distance, a.moving_time, a.average_speed),
                 "avg_hr": int(a.average_heartrate) if a.average_heartrate else None,
                 "max_hr": int(a.max_heartrate) if a.max_heartrate else None,
                 "elevation_gain": round(a.elevation_gain) if a.elevation_gain else None,

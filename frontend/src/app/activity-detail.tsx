@@ -143,9 +143,8 @@ export function km(v: number): string {
   return v.toFixed(2).replace(".", ",");
 }
 function fmtPaceSec(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+  const t = Math.round(sec); // arredonda o total (nunca "5:60")
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
 // Zonas de FC (Z1..Z5) na régua do atleta — as do relógio Garmin quando há,
