@@ -103,8 +103,9 @@ def test_no_persistence_note_when_not_persisting():
 
 def test_recovery_flag_with_real_worsening_holds_with_hr_cap():
     """Varredura 26/09 (renato2): FC de repouso 59→70 e HRV 60→46 em 13
-    leituras — piora REAL. A diretriz SEGURA (não sobe, qualidade controlada,
-    leve pelo teto de FC) em vez de 'não trave a progressão'."""
+    leituras — piora REAL. A diretriz mostra a evidência e recomenda SEGURAR
+    (não sobe, qualidade controlada, leve pelo teto de FC) em vez de 'não trave
+    a progressão' — mas quem decide é a IA (sem regra fixa, 27/09)."""
 
     from app.application.history.training_patterns import RecoveryDrift
 
@@ -117,7 +118,8 @@ def test_recovery_flag_with_real_worsening_holds_with_hr_cap():
         _reading(BODY_RECOVERY_FLAG), _traj(TRAJ_PERSISTING, 13), drift, 151,
     )
 
-    assert "PIORA REAL" in text and "SEGURE" in text
+    assert "PIORA REAL" in text and "SEGURAR a progressão" in text
+    assert "decida" in text
     assert "59 → 70" in text and "151 bpm" in text
     assert "NÃO trave a progressão" not in text
 
