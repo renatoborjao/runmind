@@ -214,6 +214,12 @@ class Settings(BaseSettings):
     # fallback pro lite segura estouro. Extração fica num lite (tarefa de
     # parsing, não precisa do topo) SEPARADO, pra não roubar cota do chat.
     gemini_chat_model: str = "gemini-3.6-flash"
+
+    # orçamento de raciocínio do CÉREBRO do chat (decidir + responder). Os 3.x
+    # pensam ~1k tokens mesmo pedindo o mínimo; acima disso é raciocínio a
+    # mais por latência. Medido no banco de cenários (ops/coach_lab.py
+    # --braineval) antes de mudar.
+    coach_brain_thinking_budget: int = 0
     gemini_extract_model: str = "gemini-3.5-flash-lite"
     # Cérebro do coach (plano + análise): melhor modelo ESTÁVEL disponível.
     # (O gemini/client.py já cuida da folga de thinking no max_output_tokens
