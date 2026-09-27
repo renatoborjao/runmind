@@ -12,6 +12,7 @@ linha aqui **no mesmo commit** (ou no commit seguinte ao deploy).
 | Tag `coach-v1-com-guardiao` | `b63f05e` — coach com o PlanGuard (regras de código no plano) |
 | Tag `coach-v2-ia-decide` | `ae0a92e` — sem guardião; descarga/segurar viram sinal pra IA decidir |
 | Tag `coach-v3-dossie` | `4fafb65` — um cérebro só (dossiê único), percepção, PRO pra todos, sem revisor de realismo |
+| Tag `coach-v4-entende` | `84967af` — coach entende troca × soma de meta, dias e "refaz a semana"; executa todas as ações da mensagem |
 | Backups de 27/09 | `~/rollback_points/coach-2026-09-27/` — stamps, `orphans/` (módulos removidos) e `data/` (dados antes da correção) |
 | Backups congelados na VM | `~/rollback_points/coach-2026-09-26/<stamp>/` — cópia do que estava no ar ANTES de cada deploy (o `~/deploy_backups` só guarda os 20 últimos e roda; este não roda) |
 | Perfil do renato2 (régua de FC) | `~/rollback_points/coach-2026-09-26/renato2.json.bak-hrzones-20260926` (e o original em `storage/profiles/`) |
@@ -42,6 +43,7 @@ Branch: `fix/avulso-ajuste-sem-loop`. "Stamp" = backup na VM tirado **antes** da
 | 18 | `ae0a92e` | Descarga vira sinal pra IA pesar (não ordem) e para de brigar com "segurar" | history/deload_analyzer, body_directive, conversation_context_builder | 20260927-022004 |
 | 19 | `601f6e7` | Plano no modelo PRO pra TODOS (fim do canário renato2+mauricio) | core/config (default ligado); **VM `.env`** `PLAN_MODEL_PROFILES=` vazio (antigo em `rollback_points/coach-2026-09-26/env.bak-20260927-planpro`) | 20260927-094112 |
 | 20 | `4fafb65` | **Um cérebro só**: AthleteDossier em todas as vozes; percepção (relógio/resposta/conversa); sai o revisor de realismo e o brief antigo; forma = veredito combinado; volume real × tendência explícitos; GPS quebrado não ancora VDOT; prova nova não herda tempo-alvo; /ajuda | **novos** coach/context/athlete_dossier, coach/intelligence/perception_recorder; **removidos** coach/context/athlete_brief, coach/planning/plan_realism_reviewer (em `rollback_points/coach-2026-09-27/orphans/`); + 27 arquivos (ver `git show --stat 4fafb65`) | 20260927-102813 |
+| 21 | `84967af` | **Coach entende o que o atleta muda**: executor roda TODAS as ações da mensagem; ações novas `days` (dias viram dado do perfil) e `replan` (refaz os dias que faltam da semana e entrega; passado/feito preservado); meta com tempo sem prova vira alvo; cérebro distingue troca × principal × soma × degrau e não promete sem ação; executor de metas pra todos | coach/conversation/coach_brain, coach_brain_executor, goal_action_executor; coach/planning/ai_plan_service, plan_context_builder; core/config (goal_brain default ligado); **VM `.env`** `GOAL_BRAIN_PROFILES=` vazio (antigo em `rollback_points/coach-2026-09-27/data/env.bak-goalbrain`) | 20260927-104241 |
 
 ### Dados (não é código)
 
@@ -52,6 +54,7 @@ Branch: `fix/avulso-ajuste-sem-loop`. "Stamp" = backup na VM tirado **antes** da
 | 26/09 → | `hr_histogram` nas atividades do arquivo | nada a fazer: código antigo lê campo a campo e ignora (só descarta o histograma ao regravar a atividade; ao reaplicar o nº 10, a carga usa Banister até o histograma voltar) |
 | 27/09 | `profiles/mauricio.json` `target_time` 00:57:00 → 01:22:30 e `races/mauricio.json` (15 km 20/12) → 01:22:30 | copiar `rollback_points/coach-2026-09-27/data/profiles_mauricio.json` e `races_mauricio.json` de volta |
 | 27/09 | `best_effort_vdot/helio.json` `max_vdot` 52,2 → null (marca vinda de GPS quebrado; dado derivado, se reconstrói) | copiar `rollback_points/coach-2026-09-27/data/best_effort_vdot_helio.json` de volta |
+| 27/09 | `profiles/joaosoares.json`: goal "fazer uma prova de 10 km em pelo menos 55 minutos" → "correr 5 km em 23 minutos", target_time 00:23:00, target_race "5 km", dias ter/sáb → seg/qui/sáb (3x) — o que ele pediu em 05/09 e o coach não aplicou; + 2 linhas na memória | copiar `rollback_points/coach-2026-09-27/data/profiles_joaosoares.json` de volta |
 | 27/09 → | `session_rpe/{perfil}.json` ganha `feel`/`note`/`source` | **ATENÇÃO ao reverter o nº 20**: o código antigo lê com `SessionRpe(**record)` e quebraria com os campos novos — antes, remover as chaves `feel`,`note`,`source` dos registros |
 
 ## Como desfazer
