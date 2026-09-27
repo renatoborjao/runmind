@@ -322,6 +322,169 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
     return findings
 
 
+# ------------------------------------------------------------------ placar
+# "Está melhor do que antes?" respondido por NÚMERO, toda segunda: as últimas
+# semanas FECHADAS (seg–dom) de cada atleta lado a lado. As mudanças grandes do
+# coach entraram em 26-27/09 — a semana de 28/09 é a 1ª "depois".
+PLACAR_WEEKS = 4
+
+
+def _coach_errors(profile: str, start: date, end: date) -> int:
+    """Erros do coach na semana: promessa sem ação, cobrança com atleta
+    doente, mensagem repetida (as mesmas regras dos achados)."""
+
+    from app.infrastructure.persistence.checkin_repository import CheckinRepository
+
+    def within(stamp) -> bool:
+
+        d = _day(stamp)
+
+        return d is not None and start <= d <= end
+
+    errors = 0
+
+    for e in _load(STORAGE / "coach_brain_log" / f"{profile}.json", []):
+
+        types = {a.get("type") for a in (e.get("actions") or [])} - {None}
+
+        if within(e.get("ts")) and PROMISE.search(str(e.get("say") or "")) and not types:
+
+            errors += 1
+
+    outbox = [
+        e for e in _load(STORAGE / "coach_outbox" / f"{profile}.json", [])
+        if within(e.get("timestamp"))
+    ]
+
+    ill_at = [
+        datetime.fromisoformat(c.at) for c in CheckinRepository().load(profile)
+        if getattr(c, "illness", False) or ILL.search(getattr(c, "note", "") or "")
+    ]
+
+    for e in outbox:
+
+        try:
+
+            sent = datetime.fromisoformat(str(e.get("timestamp")))
+
+        except ValueError:
+
+            continue
+
+        text = str(e.get("text") or "")
+
+        sick = any(
+            0 <= (sent - ill).total_seconds() <= 7 * 86400
+            for ill in ill_at
+            if (ill.tzinfo is None) == (sent.tzinfo is None)
+        )
+
+        if sick and NAG.search(text) and not ILL.search(text):
+
+            errors += 1
+
+    texts = Counter(" ".join(str(e.get("text") or "").split())[:200] for e in outbox)
+
+    errors += sum(n - 1 for t, n in texts.items() if t and n > 1)
+
+    return errors
+
+
+def placar(profile: str, today: date, lines: list[str]) -> None:
+    """Tabela das últimas semanas fechadas: erros do coach, aderência ao
+    plano, km, percepção coletada e FC de repouso média (recuperação)."""
+
+    from app.application.history.weekly_buckets import activity_date
+    from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
+    from app.domain.value_objects.sports import is_foot_sport
+    from app.infrastructure.persistence.activity_archive_repository import (
+        ActivityArchiveRepository,
+    )
+    from app.infrastructure.persistence.checkin_repository import CheckinRepository
+    from app.infrastructure.persistence.garmin_health_repository import (
+        GarminHealthRepository,
+    )
+    from app.infrastructure.persistence.session_rpe_repository import (
+        SessionRpeRepository,
+    )
+    from app.infrastructure.persistence.weekly_plan_repository import (
+        WeeklyPlanRepository,
+    )
+
+    repo = WeeklyPlanRepository()
+
+    plans = {p.week_start: p for p in repo.history(profile)}
+
+    current = repo.load(profile)
+
+    if current is not None:
+
+        plans[current.week_start] = current
+
+    runs = [
+        a for a in ActivityArchiveRepository().load_activities(profile)
+        if is_foot_sport(a.sport)
+    ]
+
+    rpes = SessionRpeRepository().load_sessions(profile)
+
+    checkins = CheckinRepository().load(profile)
+
+    health = GarminHealthRepository().load(profile)
+
+    this_monday = today - timedelta(days=today.weekday())
+
+    rows = []
+
+    for back in range(PLACAR_WEEKS, 0, -1):
+
+        start = this_monday - timedelta(days=7 * back)
+
+        end = start + timedelta(days=6)
+
+        week_runs = [a for a in runs if start <= activity_date(a) <= end]
+
+        km = sum(a.distance for a in week_runs) / 1000
+
+        plan = plans.get(start)
+
+        if plan is not None and plan.sessions:
+
+            done = len(WeeklyPlanMatcher.fulfilled_days(plan, week_runs))
+
+            adherence = f"{done}/{len({x.day for x in plan.sessions})}"
+
+        else:
+
+            adherence = "—"
+
+        felt = sum(1 for r in rpes if start <= date.fromisoformat(r.day) <= end)
+
+        felt += sum(1 for c in checkins if start <= date.fromisoformat(c.day) <= end)
+
+        rhr = [
+            h.resting_hr for h in health
+            if h.resting_hr and start <= date.fromisoformat(h.date) <= end
+        ]
+
+        rhr_txt = f"{sum(rhr) / len(rhr):.0f}" if rhr else "—"
+
+        rows.append(
+            f"| {start:%d/%m} | {_coach_errors(profile, start, end)} | "
+            f"{adherence} | {km:.1f} | {felt} | {rhr_txt} |"
+        )
+
+    lines.append("- placar (semanas fechadas, seg–dom):")
+
+    lines.append("")
+
+    lines.append("  | semana | erros do coach | treinos feitos | km | percepção | FC repouso |")
+
+    lines.append("  |---|---|---|---|---|---|")
+
+    lines.extend(f"  {r}" for r in rows)
+
+
 def service_errors(days: int) -> list[str]:
 
     try:
@@ -385,6 +548,8 @@ def main() -> None:
         try:
 
             total += len(audit_profile(profile, since, lines))
+
+            placar(profile, today, lines)
 
         except Exception as e:
 
