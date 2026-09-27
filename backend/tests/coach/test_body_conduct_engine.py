@@ -188,7 +188,25 @@ def test_parse_ease_builds_light_session():
     assert op["session"]["planned_distance_km"] == 8
     assert op["session"]["workout_type"] == "Rodagem leve"
     assert op["session"]["adjusted"] is True
-    assert op["session"]["steps"] == []
+    # rodagem leve DE VERDADE: um passo pro relógio + propósito de recuperação
+    # (antes ia sem passos e herdava o propósito do treino puxado)
+    assert op["session"]["steps"][0]["kind"] == "run"
+    assert op["session"]["steps"][0]["distance_m"] == 8000
+    assert "recuperação" in op["session"]["purpose"]
+    assert op["session"]["planned_duration_minutes"] is None
+
+
+def test_parse_ease_caps_hr_when_ceiling_known():
+
+    d = BodyConductEngine._parse(
+        '{"action": "ease", "ease_km": 8, "message": "Alivio amanhã?"}',
+        _week_plan(), _target(), 154,
+    )
+
+    session = d.operations[0]["session"]
+
+    assert session["steps"][0]["hr_max"] == 154
+    assert "154 bpm" in session["purpose"]
 
 
 def test_parse_ease_ignores_km_not_lighter_than_original():

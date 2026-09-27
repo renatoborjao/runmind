@@ -18,12 +18,14 @@ from datetime import date
 
 from google.genai import types
 
+from app.application.coach.writer.coach_persona import COACH_VOICE
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label, weekday_name
 from app.domain.entities.body_reading import BodyReading
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_plan import TrainingPlan
+from app.domain.entities.workout_step import RUN, WorkoutStep
 from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
@@ -56,7 +58,8 @@ _DEMANDING_CUES = (
 # progressiva/forte/em ritmo SEGUE exigente (o Renato lembrou que existe).
 _DURATION_PHRASES = ("por tempo", "por minutos", "por duracao")
 
-PROMPT_TEMPLATE = """Você é o TREINADOR de corrida do Ritmind, cuidando do \
+PROMPT_TEMPLATE = """{voice}
+Você é o TREINADOR de corrida do Ritmind, cuidando do \
 atleta {runner_name}. AMANHÃ ele tem um treino EXIGENTE e o corpo dele, HOJE \
 (véspera), está pedindo recuperação. Você decide a conduta pelos dados — mas \
 como falta um dia, um descanso hoje pode restaurá-lo; então você PROPÕE e ele \
@@ -86,7 +89,7 @@ leve.
 "target_day" (inglês), que NÃO pode ter treino planejado.
 - "keep": manter (o corpo aguenta / a meta pede) — sem mudança.
 
-A "message" é uma PROPOSTA curta de WhatsApp (sem markdown): diz o que você viu \
+A "message" é uma PROPOSTA curta de WhatsApp (sem markdown, português com acentuação correta): diz o que você viu \
 no corpo, propõe a mudança pro treino de amanhã e POR QUÊ (recuperação/\
 evolução), e — por ser véspera — reconhece que se ele descansar hoje e amanhã \
 acordar inteiro, pode manter. TERMINA deixando claro que basta ele confirmar \
@@ -102,7 +105,8 @@ Responda APENAS JSON:
 # Variante DIA-DO-TREINO: a proposta sai na manhã do próprio treino (gatilho do
 # despertar), com o dado FRESCO da noite. Sem a lógica de "véspera/descanso pode
 # restaurar" — aqui o dado é de agora e a decisão é pra hoje.
-PROMPT_TEMPLATE_TODAY = """Você é o TREINADOR de corrida do Ritmind, cuidando do \
+PROMPT_TEMPLATE_TODAY = """{voice}
+Você é o TREINADOR de corrida do Ritmind, cuidando do \
 atleta {runner_name}. HOJE ele tem um treino EXIGENTE e o corpo dele, NESTA \
 MANHÃ (dado fresco do sono/recuperação da noite), está pedindo recuperação. \
 Você decide a conduta pelos dados — mas quem sente se ele acordou inteiro é ele; \
@@ -132,7 +136,7 @@ rodagem leve.
 "target_day" (inglês), que NÃO pode ter treino planejado.
 - "keep": manter (o corpo aguenta / a meta pede) — sem mudança.
 
-A "message" é uma PROPOSTA curta de WhatsApp (sem markdown): diz o que você viu \
+A "message" é uma PROPOSTA curta de WhatsApp (sem markdown, português com acentuação correta): diz o que você viu \
 no corpo dele HOJE, propõe a mudança pro treino de hoje e POR QUÊ (recuperação/\
 evolução). TERMINA deixando claro que basta ele confirmar que você ajusta (ou \
 dizer que está pronto que você mantém). Tom de treinador que cuida. No "keep", a \
@@ -262,6 +266,7 @@ class BodyConductEngine:
             target=session.workout_type,
             target_day=weekday_label(session.day),
             dossier=BodyConductEngine._dossier(runner, plan, today),
+            voice=COACH_VOICE,
         )
 
         return await generate_json(
@@ -272,8 +277,35 @@ class BodyConductEngine:
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
-            parse=lambda raw: BodyConductEngine._parse(raw, plan, session),
+            parse=lambda raw: BodyConductEngine._parse(
+                raw, plan, session, BodyConductEngine._ceiling(runner),
+            ),
         )
+
+    @staticmethod
+    def _ceiling(runner: RunnerProfile) -> int | None:
+        """Teto aeróbico do atleta (régua única de FC) pro passo da rodagem
+        leve que substitui o treino puxado. Best-effort."""
+
+        try:
+
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+            from app.infrastructure.persistence.activity_archive_repository import (
+                ActivityArchiveRepository,
+            )
+
+            return TrainingPatterns._ceiling_for(
+                runner.id,
+                ActivityArchiveRepository().load_activities(runner.id),
+            )
+
+        except Exception as e:
+
+            print(f"Teto aeróbico p/ bom dia falhou: {e}")
+
+            return None
 
     @staticmethod
     def _dossier(runner: RunnerProfile, plan: TrainingPlan, today: date) -> str:
@@ -357,6 +389,7 @@ class BodyConductEngine:
         raw: str,
         plan: TrainingPlan,
         session: PlannedSession,
+        ceiling: int | None = None,
     ) -> BodyConductDecision | None:
 
         try:
@@ -388,7 +421,7 @@ class BodyConductEngine:
             return BodyConductDecision(
                 action="ease",
                 operations=BodyConductEngine._ease_ops(
-                    session, data.get("ease_km")
+                    session, data.get("ease_km"), ceiling,
                 ),
                 message=message,
             )
@@ -415,7 +448,9 @@ class BodyConductEngine:
         return None
 
     @staticmethod
-    def _ease_ops(session: PlannedSession, ease_km) -> list[dict]:
+    def _ease_ops(
+        session: PlannedSession, ease_km, ceiling: int | None = None,
+    ) -> list[dict]:
         """Alivia a sessão: vira uma rodagem leve, mais curta, sem estrutura
         puxada. Distância da IA validada; sem número válido cai em ~60%."""
 
@@ -442,11 +477,30 @@ class BodyConductEngine:
 
         eased["planned_distance_km"] = km
 
+        eased["planned_duration_minutes"] = None
+
+        eased["estimated_distance_km"] = None
+
         eased["target_pace_min"] = None
 
         eased["target_pace_max"] = None
 
-        eased["steps"] = []
+        recovery = (
+            "Rodagem leve de recuperação no lugar do treino puxado — o corpo "
+            "pediu trégua. Conversável, sem apertar"
+            + (f", FC até ~{ceiling} bpm" if ceiling else "")
+            + "."
+        )
+
+        eased["objective"] = recovery
+
+        eased["purpose"] = recovery
+
+        eased["steps"] = (
+            [asdict(WorkoutStep(kind=RUN, distance_m=km * 1000, hr_max=ceiling))]
+            if km
+            else []
+        )
 
         eased["structure"] = ""
 

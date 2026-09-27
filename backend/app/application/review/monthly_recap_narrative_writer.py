@@ -39,6 +39,7 @@ do elogio verdadeiro.
 - Português do Brasil, direto, humano. Sem emojis, sem títulos, sem markdown.
 - {max_sentences} frases curtas no MÁXIMO.
 
+Escreva em português do Brasil com acentuação correta (é, ã, ç...).
 Responda APENAS com JSON:
 {{"reading": ["frase 1", "frase 2"]}}
 """

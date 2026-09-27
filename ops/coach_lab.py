@@ -25,6 +25,7 @@ Cenários por atleta:
 """
 
 import argparse
+from datetime import timedelta
 import asyncio
 import importlib.abc
 import importlib.machinery
@@ -43,7 +44,10 @@ CHAT_SCENARIOS = (
     "monta um treino pra amanhã",
 )
 
-ALL = ("dossier", "chat", "analysis", "conduct", "missed", "review", "plan")
+ALL = (
+    "dossier", "chat", "analysis", "conduct", "missed", "review", "plan",
+    "recap", "race", "reengage",
+)
 
 
 class _Overlay(importlib.abc.MetaPathFinder):
@@ -227,11 +231,34 @@ async def _conduct(profile, runner):
 
     _s(f"BOM DIA / VÉSPERA (corpo {reading.body_state})")
 
-    if reading.body_state not in ("STRAINED", "RECOVERY_FLAG") or session is None:
+    if reading.body_state not in ("STRAINED", "RECOVERY_FLAG"):
 
-        print("(não dispara: corpo sem alerta ou sem treino puxado à frente)")
+        print("(não dispara: corpo sem alerta)")
 
         return
+
+    if session is None:
+
+        # semana vigente sem treino puxado à frente: usa o plano da PRÓXIMA
+        # semana (gerado em memória, sem gravar) e a véspera do 1º puxado dela
+        plan = await _next_week_plan(profile, runner)
+
+        session = next(
+            (s for s in plan.sessions if BodyConductEngine.is_demanding(s)),
+            None,
+        )
+
+        if session is None:
+
+            print("(sem treino puxado na próxima semana)")
+
+            return
+
+        from datetime import timedelta
+
+        today = plan.session_date(session) - timedelta(days=1)
+
+        print(f"(simulando a véspera de {session.day} {session.workout_type})")
 
     decision = await BodyConductEngine.decide(
         runner, plan, reading, session, today, runner.goal, when="eve",
@@ -314,6 +341,155 @@ async def _missed(profile, runner):
     print(f"mensagem: {judgment.message}")
 
     print(f"proposta: {judgment.operations}")
+
+
+async def _next_week_plan(profile, runner):
+    """Plano da próxima semana em memória (mesmo caminho do domingo, sem
+    gravar)."""
+
+    from app.application.assessment.training_assessment_builder import (
+        TrainingAssessmentBuilder,
+    )
+    from app.application.coach.planning.ai_plan_service import AIPlanService
+    from app.application.history.metrics_resolver import MetricsResolver
+    from app.application.planner.weekly_plan_service import WeeklyPlanService
+    from app.application.use_cases.build_training_goal import BuildTrainingGoal
+    from app.application.use_cases.load_training_history import (
+        LoadTrainingHistory,
+    )
+    from app.infrastructure.persistence.weekly_plan_repository import (
+        WeeklyPlanRepository,
+    )
+
+    history = await LoadTrainingHistory.execute(profile=profile)
+
+    metrics = MetricsResolver.resolve(runner, history)
+
+    goal = BuildTrainingGoal.execute(runner)
+
+    week = WeeklyPlanService.upcoming_week_start()
+
+    context = AIPlanService._build_context(
+        profile, runner, metrics, goal, history, WeeklyPlanRepository(), week,
+        TrainingAssessmentBuilder.build(runner, history).run_walk,
+    )
+
+    return await AIPlanService._generate_ai(
+        profile, runner.name, goal.name, week, context,
+    )
+
+
+async def _recap(profile, runner):
+    """Recap do MÊS PASSADO (o que sai no dia 1º)."""
+
+    from datetime import date
+
+    from app.application.review.monthly_recap_builder import MonthlyRecapBuilder
+    from app.application.review.monthly_recap_narrative_writer import (
+        MonthlyRecapNarrativeWriter,
+    )
+    from app.application.review.monthly_recap_notifier import HISTORY_LIMIT
+    from app.application.use_cases.load_training_history import (
+        LoadTrainingHistory,
+    )
+    from app.core.clock import today_local
+
+    today = today_local()
+
+    month_start = (date(today.year, today.month, 1) - timedelta(days=1)).replace(day=1)
+
+    history = await LoadTrainingHistory.execute(profile=profile, limit=HISTORY_LIMIT)
+
+    recap = MonthlyRecapBuilder.build(runner, history, month_start)
+
+    _s(f"RECAP MENSAL ({month_start:%m/%Y})")
+
+    if recap is None:
+
+        print("(sem dados no mês)")
+
+        return
+
+    for line in await MonthlyRecapNarrativeWriter.write(
+        runner.name, recap, profile=profile,
+    ) or ["(IA falhou)"]:
+
+        print(f"• {line}")
+
+
+async def _race(profile, runner):
+    """Narrativa do debrief da prova mais recente (só o narrador — o debrief
+    real aposenta a prova no perfil, aqui nada é gravado)."""
+
+    from datetime import date
+
+    from app.application.coach.writer.race_narrative_writer import (
+        RaceNarrativeWriter,
+    )
+    from app.application.history.race_detector import RaceDetector
+    from app.application.orchestrators.coach_analysis_builder import (
+        CoachAnalysisBuilder,
+    )
+    from app.domain.entities.training_goal import TrainingGoal
+    from app.infrastructure.persistence.activity_archive_repository import (
+        ActivityArchiveRepository,
+    )
+    from app.infrastructure.persistence.race_repository import RaceRepository
+
+    races = [
+        a for a in ActivityArchiveRepository().load_activities(profile)
+        if RaceDetector._is_race(a)
+    ]
+
+    _s("DEBRIEF DE PROVA (narrador)")
+
+    if not races:
+
+        print("(nenhuma prova no histórico)")
+
+        return
+
+    race = max(races, key=lambda a: a.start_date)
+
+    registered = next(
+        (
+            r for r in RaceRepository().load(profile)
+            if r.get("date") == race.start_date.date().isoformat()
+        ),
+        {},
+    )
+
+    goal = TrainingGoal(
+        name=runner.goal,
+        distance_km=round(race.distance / 1000),
+        target_time=registered.get("target_time"),
+        race_date=date.fromisoformat(race.start_date.date().isoformat()),
+    )
+
+    enriched = (await CoachAnalysisBuilder.build(profile, activity=race))["enriched"]
+
+    print(f"prova: {race.name} {race.start_date:%d/%m} {race.distance / 1000:.1f} km, alvo {goal.target_time}")
+
+    print(await RaceNarrativeWriter.write(profile, runner, enriched, goal))
+
+
+async def _reengage(profile, runner):
+    """Mensagem de reaproximação (atleta sumido há ~12 dias, simulado)."""
+
+    from app.application.coach.memory.runner_memory_service import (
+        RunnerMemoryService,
+    )
+    from app.application.review.reengagement_writer import ReengagementWriter
+
+    facts = ReengagementWriter.facts(
+        runner.name, 12, "rodagem de 6 km há 12 dias", "vinha 3x/semana",
+        runner.goal, RunnerMemoryService.motivation_anchor(profile) or None,
+        profile,
+    )
+
+    _s("REENGAJAMENTO (simulado: 12 dias sumido)")
+
+    print(await ReengagementWriter.write(profile, facts))
 
 
 async def _review(profile, runner):
@@ -691,6 +867,9 @@ async def main() -> None:
             ("missed", lambda: _missed(profile, runner)),
             ("review", lambda: _review(profile, runner)),
             ("plan", lambda: _plan(profile, runner)),
+            ("recap", lambda: _recap(profile, runner)),
+            ("race", lambda: _race(profile, runner)),
+            ("reengage", lambda: _reengage(profile, runner)),
         )
 
         for name, run in steps:
