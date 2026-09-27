@@ -57,6 +57,7 @@ Branch: `fix/avulso-ajuste-sem-loop`. "Stamp" = backup na VM tirado **antes** da
 | 27/09 | `best_effort_vdot/helio.json` `max_vdot` 52,2 → null (marca vinda de GPS quebrado; dado derivado, se reconstrói) | copiar `rollback_points/coach-2026-09-27/data/best_effort_vdot_helio.json` de volta |
 | 27/09 | `profiles/joaosoares.json`: goal "fazer uma prova de 10 km em pelo menos 55 minutos" → "correr 5 km em 23 minutos", target_time 00:23:00, target_race "5 km", dias ter/sáb → seg/qui/sáb (3x) — o que ele pediu em 05/09 e o coach não aplicou; + 2 linhas na memória | copiar `rollback_points/coach-2026-09-27/data/profiles_joaosoares.json` de volta |
 | 27/09 | `memory/renato2.json`: arquivada a nota de 31/07 "longão aos domingos"; nova: longão sempre no fim de semana (sáb OU dom, varia) e semana com tempo curto — pedido do Renato | copiar `rollback_points/coach-2026-09-27/data/memory_renato2.json` de volta |
+| 27/09 | renato2: norte vira a MEIA da 31ª Maratona Internacional de São Paulo (04/04/2027, sub-2h, 01:59:59) no lugar da Nike SP de 25/07/2027 (removida da lista de provas; 2 memórias arquivadas + estratégia nova); 15k de 20/12 segue âncora | copiar `rollback_points/coach-2026-09-27/data/{profiles,races,memory}_renato2_meia.json` de volta |
 | 27/09 → | `session_rpe/{perfil}.json` ganha `feel`/`note`/`source` | **ATENÇÃO ao reverter o nº 20**: o código antigo lê com `SessionRpe(**record)` e quebraria com os campos novos — antes, remover as chaves `feel`,`note`,`source` dos registros |
 
 ## Como desfazer
