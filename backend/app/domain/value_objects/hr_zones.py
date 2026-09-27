@@ -133,6 +133,35 @@ class HrZones:
 
         return [round(c / len(samples) * minutes, 2) for c in counts]
 
+    def minutes_from_histogram(self, histogram: dict | None) -> list[float] | None:
+        """Minutos em cada zona [Z1..Z5] a partir do HISTOGRAMA bruto de FC
+        (minutos por bpm) — o mesmo treino lido com ESTA régua. É o que deixa a
+        carga usar UMA régua pra janela inteira: os minutos-por-zona gravados
+        na ingestão ficam presos à régua daquele dia (bug da régua mista,
+        26/09). None sem histograma."""
+
+        if not histogram:
+
+            return None
+
+        totals = [0.0] * 5
+
+        for bpm, minutes in histogram.items():
+
+            try:
+
+                zone = self.zone_of(float(bpm))
+
+            except (TypeError, ValueError):
+
+                continue
+
+            if zone is not None:
+
+                totals[zone - 1] += float(minutes or 0)
+
+        return [round(t, 2) for t in totals]
+
     def describe(self) -> str:
         """Faixas legíveis pro prompt da IA: 'Z1 130-142 · Z2 143-155 ...'."""
 

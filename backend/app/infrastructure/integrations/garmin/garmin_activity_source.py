@@ -10,6 +10,7 @@ fallbacks). Confirmar com uma atividade real via garmin_dump.py."""
 import statistics
 from datetime import datetime, timezone
 
+from app.application.history.hr_zone_calculator import HrZoneCalculator
 from app.domain.entities.activity import Activity
 from app.domain.entities.interval_analysis import IntervalAnalysis
 from app.infrastructure.integrations.garmin.garmin_client import (
@@ -227,6 +228,14 @@ class GarminActivitySource:
         except Exception as e:
 
             print(f"Garmin: zonas de FC indisponíveis p/ {activity_id}: {e}")
+
+        # histograma BRUTO de FC — a CARGA recalcula as zonas dele com a régua
+        # atual pra janela inteira (os minutos-por-zona acima ficam presos à
+        # régua de hoje). Ver [[project_carga_regua_mista]].
+        activity.hr_histogram = HrZoneCalculator.histogram(
+            (raw.get("_streams") or {}).get("heartrate") or [],
+            activity.moving_time,
+        )
 
         return activity
 

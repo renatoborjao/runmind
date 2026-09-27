@@ -122,6 +122,10 @@ class ActivityArchiveRepository:
 
             primary.hr_zone_minutes = secondary.hr_zone_minutes
 
+        if primary.hr_histogram is None and secondary.hr_histogram:
+
+            primary.hr_histogram = secondary.hr_histogram
+
         # nome de EXIBIÇÃO: fica com o mais limpo (o do nosso plano, "Ritmind · …"),
         # não o do Garmin que vem com prefixo de cidade e CORTADO. Só o rótulo muda;
         # stats/zonas seguem da cópia primária.
@@ -179,9 +183,20 @@ class ActivityArchiveRepository:
 
         for activity in activities:
 
-            records[activity.id] = ActivityArchiveRepository._to_record(
-                activity,
-            )
+            record = ActivityArchiveRepository._to_record(activity)
+
+            # regravar a MESMA atividade vinda de uma fonte sem stream (lista
+            # do Strava) não pode apagar o que só a ingestão rica calculou —
+            # histograma de FC (carga) e zonas (gráfico)
+            previous = records.get(activity.id) or {}
+
+            for key in ("hr_histogram", "hr_zone_minutes"):
+
+                if key not in record and previous.get(key):
+
+                    record[key] = previous[key]
+
+            records[activity.id] = record
 
         ordered = sorted(
             records.values(),
@@ -303,6 +318,7 @@ class ActivityArchiveRepository:
             suffer_score=None,
             raw={},
             hr_zone_minutes=record.get("hr_zone_minutes"),
+            hr_histogram=record.get("hr_histogram"),
             air_temp_c=record.get("air_temp_c"),
         )
 
@@ -342,6 +358,11 @@ class ActivityArchiveRepository:
         if activity.hr_zone_minutes is not None:
 
             record["hr_zone_minutes"] = activity.hr_zone_minutes
+
+        # histograma bruto de FC (a carga recalcula as zonas com a régua atual)
+        if activity.hr_histogram:
+
+            record["hr_histogram"] = activity.hr_histogram
 
         # temperatura do treino (Strava) — pra normalização de calor do EF; só
         # quando o device gravou, pra não poluir registro antigo com null

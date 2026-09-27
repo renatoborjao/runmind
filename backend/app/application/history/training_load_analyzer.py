@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from app.application.history.hr_zone_calculator import HrZoneCalculator
 from app.core.clock import today_local
 from app.domain.entities.training_history import TrainingHistory
+from app.domain.value_objects.hr_zones import HrZones
 from app.domain.entities.training_load import (
     ACWR_CAUTION_MAX,
     ACWR_DETRAINING,
@@ -71,6 +72,7 @@ class TrainingLoadAnalyzer:
         max_hr: int | None = None,
         sex: str | None = None,
         recent_race_date: date | None = None,
+        zones: HrZones | None = None,
     ) -> TrainingLoad:
         """Carga aguda vs crônica + ACWR. Com `resting_hr` E `max_hr`, cada
         sessão é ponderada por INTENSIDADE (TRIMP de Banister quando o `sex` é
@@ -85,10 +87,10 @@ class TrainingLoadAnalyzer:
 
         ref = reference_date or today_local()
 
-        # carga por dia — Edwards (por zonas) quando toda a janela tem zonas,
-        # senão intensidade por FC média, senão duração
+        # carga por dia — Edwards (histograma relido com UMA régua) quando toda
+        # a janela tem histograma, senão intensidade por FC média, senão duração
         per_day = TrainingLoadAnalyzer._load_per_day(
-            history, resting_hr, max_hr, sex, ref
+            history, resting_hr, max_hr, sex, ref, zones
         )
 
         acute = TrainingLoadAnalyzer._window_sum(per_day, ref, _ACUTE_DAYS)
@@ -157,16 +159,24 @@ class TrainingLoadAnalyzer:
         max_hr: int | None,
         sex: str | None,
         ref: date,
+        zones: HrZones | None = None,
     ) -> dict[date, float]:
         """Carga somada por dia, em 3 tiers (do mais pro menos preciso):
-        (1) EDWARDS por zonas — só quando TODA a janela de 28d tem zonas de FC
-        (senão misturaria unidades no ACWR, que é razão); (2) intensidade por
-        FC média (Banister/%FCR) com FC repouso+máx; (3) duração pura."""
+        (1) EDWARDS pelo histograma de FC relido com UMA régua (a atual) — só
+        quando TODA a janela de 28d tem histograma; (2) intensidade por FC
+        média (Banister/%FCR) com FC repouso+máx; (3) duração pura.
 
-        # tier 1: Edwards, quando toda a janela relevante tem distribuição de
-        # zonas (as zonas só existem daqui pra frente, então liga sozinho
-        # quando os ~28 dias já acumularam via Garmin)
-        edwards = TrainingLoadAnalyzer._edwards_per_day(history, ref)
+        NUNCA os minutos-por-zona gravados: cada um ficou preso à régua do dia
+        da ingestão (fórmula de idade, reserva, relógio) e a mesma corrida
+        pesava até 35% menos depois de uma troca de régua — ACWR falso de
+        "destreino", e viés pra baixo justo quando a FC de repouso sobe (a
+        régua sobe junto). Ver [[project_carga_regua_mista]]."""
+
+        # tier 1: Edwards pelo histograma, liga sozinho quando os ~28 dias já
+        # acumularam histograma (ingestão nova do Garmin/Strava com stream)
+        ruler = zones or TrainingLoadAnalyzer._ruler(resting_hr, max_hr)
+
+        edwards = TrainingLoadAnalyzer._edwards_per_day(history, ref, ruler)
 
         if edwards is not None:
 
@@ -225,14 +235,34 @@ class TrainingLoadAnalyzer:
         return per_day
 
     @staticmethod
+    def _ruler(resting_hr: int | None, max_hr: int | None) -> HrZones | None:
+        """Régua única pra reler os histogramas quando o chamador não passou a
+        do atleta: reserva de FC com o repouso/máx ATUAIS; só a máx → %FCmáx."""
+
+        if max_hr and resting_hr and max_hr > resting_hr:
+
+            return HrZones.from_hrr(int(max_hr), int(resting_hr))
+
+        if max_hr:
+
+            return HrZones.from_max(int(max_hr))
+
+        return None
+
+    @staticmethod
     def _edwards_per_day(
         history: TrainingHistory,
         ref: date,
+        ruler: HrZones | None,
     ) -> dict[date, float] | None:
         """Carga de Edwards por dia — SÓ quando toda atividade dos últimos 28d
-        tem zonas (unidade consistente no ACWR). None senão (cai nos outros
-        tiers). Atividade fora da janela sem zonas não conta (não afeta o
-        ACWR/semanas, que olham só os 28d)."""
+        tem HISTOGRAMA de FC, relido com a MESMA régua (a atual): mesma corrida,
+        mesma carga, não importa quando entrou. None senão (cai nos outros
+        tiers, também de régua única)."""
+
+        if ruler is None:
+
+            return None
 
         counting = [
             a for a in history.activities if (a.moving_time or 0) > 0
@@ -243,9 +273,9 @@ class TrainingLoadAnalyzer:
             if ref - timedelta(days=_CHRONIC_DAYS - 1) <= a.start_date.date() <= ref
         ]
 
-        # sem janela, ou alguma atividade da janela sem zonas: ainda não dá
+        # sem janela, ou alguma atividade da janela sem histograma: ainda não dá
         if not window or any(
-            getattr(a, "hr_zone_minutes", None) is None for a in window
+            not getattr(a, "hr_histogram", None) for a in window
         ):
 
             return None
@@ -255,7 +285,9 @@ class TrainingLoadAnalyzer:
         for activity in counting:
 
             load = HrZoneCalculator.edwards_load(
-                getattr(activity, "hr_zone_minutes", None)
+                ruler.minutes_from_histogram(
+                    getattr(activity, "hr_histogram", None)
+                )
             )
 
             if load is not None:

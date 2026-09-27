@@ -5,6 +5,7 @@ from app.application.history.training_load_analyzer import (
     TrainingLoadAnalyzer,
 )
 from app.domain.entities.training_history import TrainingHistory
+from app.domain.value_objects.hr_zones import HrZones
 from app.domain.entities.training_load import (
     LOAD_DETRAINING,
     LOAD_HIGH,
@@ -15,9 +16,10 @@ from app.domain.entities.training_load import (
 REF = date(2026, 7, 22)
 
 
-def _act(days_ago: int, minutes: int, zones=None):
+def _act(days_ago: int, minutes: int, zones=None, bpm=None):
     """Atividade mínima: só o que o analisador usa (start_date + moving_time).
-    `zones` = minutos por zona [Z1..Z5] pro caminho Edwards."""
+    `bpm` = treino inteiro nessa FC (vira HISTOGRAMA, o que a carga de Edwards
+    usa); `zones` = minutos-por-zona GRAVADOS (a carga NÃO deve usar)."""
 
     day = REF - timedelta(days=days_ago)
 
@@ -25,14 +27,21 @@ def _act(days_ago: int, minutes: int, zones=None):
         start_date=datetime(day.year, day.month, day.day, 10, 0),
         moving_time=minutes * 60,
         hr_zone_minutes=zones,
+        hr_histogram={str(bpm): float(minutes)} if bpm else None,
+        average_heartrate=None,
     )
 
 
-def _analyze(activities):
+# régua do renato2 (relógio, reserva de FC): Z1 128 · Z2 140 · Z3 152 · Z4 164 · Z5 176
+RULER = HrZones(floors=(128, 140, 152, 164, 176), method="garmin:HR_RESERVE")
+
+
+def _analyze(activities, zones=None):
 
     return TrainingLoadAnalyzer.analyze(
         TrainingHistory(activities=activities),
         reference_date=REF,
+        zones=zones,
     )
 
 
@@ -216,13 +225,11 @@ def test_empty_history_is_insufficient():
 # ------------------- carga de Edwards (por zonas) -------------------
 
 
-def test_edwards_used_when_whole_window_has_zones():
-    """Toda atividade dos 28d tem zonas -> carga = Edwards (Σ min×peso).
-    60 min em Z3 (×3) = 180 de carga por dia."""
+def test_edwards_used_when_whole_window_has_histogram():
+    """Toda atividade dos 28d tem histograma -> carga = Edwards (Σ min×peso)
+    com as zonas relidas pela régua ATUAL. 60 min a 155 bpm = Z3 (×3) = 180."""
 
-    z3 = [0, 0, 60, 0, 0]
-
-    load = _analyze([_act(d, 60, zones=z3) for d in range(28)])
+    load = _analyze([_act(d, 60, bpm=155) for d in range(28)], RULER)
 
     assert load.acute_load == 1260.0     # 7 dias × 180
     assert load.chronic_load == 1260.0
@@ -231,30 +238,57 @@ def test_edwards_used_when_whole_window_has_zones():
 
 
 def test_edwards_weights_hard_sessions_more():
-    """Mesma duração/FC média não distinguiria; Edwards sim: uma semana em Z5
-    pesa muito mais que a base em Z2 -> ACWR alto."""
+    """Mesma duração não distinguiria; Edwards sim: uma semana em Z5 pesa
+    muito mais que a base em Z2 -> ACWR alto."""
 
-    base = [_act(d, 60, zones=[0, 60, 0, 0, 0]) for d in range(8, 28)]  # Z2
-    peak = [_act(d, 60, zones=[0, 0, 0, 0, 60]) for d in range(7)]       # Z5
+    base = [_act(d, 60, bpm=145) for d in range(8, 28)]   # Z2
+    peak = [_act(d, 60, bpm=180) for d in range(7)]       # Z5
 
-    load = _analyze(base + peak)
+    load = _analyze(base + peak, RULER)
 
     assert load.acwr > 1.5
     assert load.status == LOAD_HIGH
 
 
-def test_falls_back_when_window_missing_zones():
-    """Uma atividade da janela SEM zonas -> não usa Edwards (não mistura
+def test_falls_back_when_window_missing_histogram():
+    """Uma atividade da janela SEM histograma -> não usa Edwards (não mistura
     unidade); cai no método por duração (aqui, sem FC = duração pura)."""
 
-    acts = [_act(d, 60, zones=[0, 0, 60, 0, 0]) for d in range(7)]
-    # buraco de zona na janela dos 28d, mas fora da janela aguda (7d)
-    acts.append(_act(20, 60, zones=None))
+    acts = [_act(d, 60, bpm=155) for d in range(7)]
+    # buraco na janela dos 28d, mas fora da janela aguda (7d)
+    acts.append(_act(20, 60))
 
-    load = _analyze(acts)
+    load = _analyze(acts, RULER)
 
     # duração pura: 7 dias × 60 min na aguda -> 420 (não os valores de Edwards)
     assert load.acute_load == 420.0
+
+
+def test_stored_zone_minutes_never_drive_load():
+    """BUG da régua mista (renato2, 26/09): o mesmo esforço gravado com
+    réguas diferentes (fórmula de idade → Z4; relógio → Z2) pesava até 35%
+    menos depois da troca e o ACWR virava 'destreino' falso. A carga ignora
+    os minutos-por-zona gravados e relê o histograma com UMA régua."""
+
+    old_ruler = [_act(d, 60, zones=[0, 0, 0, 60, 0], bpm=150) for d in range(7, 28)]
+    new_ruler = [_act(d, 60, zones=[0, 60, 0, 0, 0], bpm=150) for d in range(7)]
+
+    load = _analyze(old_ruler + new_ruler, RULER)
+
+    # mesma FC todo dia -> carga constante -> ACWR 1.0 (antes: 2/4 = 0.5)
+    assert load.acwr == 1.0
+    assert load.status == LOAD_OPTIMAL
+
+
+def test_zone_minutes_without_histogram_fall_to_duration_not_edwards():
+    """Atividades antigas (só minutos-por-zona gravados, sem histograma) não
+    viram Edwards — a unidade seria da régua do dia da ingestão."""
+
+    acts = [_act(d, 60, zones=[0, 0, 0, 0, 60]) for d in range(28)]
+
+    load = _analyze(acts, RULER)
+
+    assert load.acute_load == 420.0  # duração pura, não 7 × 300
 
 
 # --- pós-prova: o taper não pode inflar o ACWR (bug do Renato) ---

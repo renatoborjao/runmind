@@ -105,6 +105,7 @@ class BodyReadingBuilder:
             max_hr=max_hr,
             sex=getattr(runner, "sex", None),
             recent_race_date=recent_race_date,
+            zones=zones,
         )
 
         recovery = RecoveryTrendAnalyzer.analyze(

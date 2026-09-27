@@ -52,6 +52,12 @@ class Activity:
     # cai no método por FC média. Ver [[HrZoneCalculator]].
     hr_zone_minutes: list[float] | None = None
 
+    # histograma BRUTO de FC (minutos por bpm) — independe de régua. A CARGA
+    # usa ISTO (zonas recalculadas com a régua atual pra janela inteira), não
+    # os minutos-por-zona acima, que ficam presos à régua do dia da ingestão.
+    # Ver [[project_carga_regua_mista]].
+    hr_histogram: dict[str, float] | None = None
+
     # temperatura média do treino em °C (Strava `average_temp`, gravada pelo
     # dispositivo). Alimenta a normalização de calor da eficiência aeróbica —
     # calor infla a FC pro mesmo ritmo. None quando o device não gravou.

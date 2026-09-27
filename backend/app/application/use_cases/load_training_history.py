@@ -186,13 +186,26 @@ class LoadTrainingHistory:
         atleta ([[HrZoneResolver]]). Alimenta gráfico, mensagem e carga.
         Best-effort: nunca derruba a análise."""
 
-        if activity.hr_zone_minutes is not None:
-
-            return
-
         heartrate = ((activity.raw or {}).get("_streams") or {}).get("heartrate")
 
         if not heartrate:
+
+            return
+
+        # histograma BRUTO de FC (independe de régua) — é o que a CARGA usa,
+        # recalculando as zonas com a régua atual. Ver
+        # [[project_carga_regua_mista]].
+        if activity.hr_histogram is None:
+
+            from app.application.history.hr_zone_calculator import (
+                HrZoneCalculator,
+            )
+
+            activity.hr_histogram = HrZoneCalculator.histogram(
+                heartrate, activity.moving_time
+            )
+
+        if activity.hr_zone_minutes is not None:
 
             return
 
