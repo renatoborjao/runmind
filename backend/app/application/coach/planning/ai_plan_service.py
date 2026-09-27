@@ -110,6 +110,21 @@ class AIPlanService:
                     profile, runner.name, goal.name, week_start, context,
                 )
 
+                # GUARDA de qualidade (orçamento de sessões fortes pela
+                # frequência + nenhum bloco mais rápido que a capacidade
+                # atual): violou → a IA corrige UMA vez com a lista exata
+                # (texto e passos coerentes). Auditoria 26/09.
+                plan = await AIPlanService._guarded(
+                    profile, runner.name, goal.name, week_start, context,
+                    plan, metrics,
+                    real_weekly_km=AIPlanService._real_weekly_km(
+                        runner, history,
+                    ),
+                    allow_reduction=AIPlanService._reduction_allowed(
+                        profile, goal, week_start,
+                    ),
+                )
+
             # A periodização é decisão do COACH (ele vê a prova/distância no
             # retrato e marca a fase coerente com o plano que montou). Só caímos
             # no PhaseEngine determinístico se ele NÃO marcou (phase="IA") — aí é
@@ -145,6 +160,94 @@ class AIPlanService:
                 profile, runner, assessment, metrics, goal,
                 history, reference_date,
             )
+
+    @staticmethod
+    def _real_weekly_km(runner, history) -> float | None:
+        """O que o atleta de fato corre por semana (o mesmo 'Volume real' do
+        retrato do plano). Best-effort."""
+
+        try:
+
+            from app.application.history.runner_baseline_builder import (
+                RunnerBaselineBuilder,
+            )
+
+            return RunnerBaselineBuilder.build(history, runner).weekly_km
+
+        except Exception as e:
+
+            print(f"Volume real p/ guarda falhou: {e}")
+
+            return None
+
+    @staticmethod
+    def _reduction_allowed(profile, goal, week_start) -> bool:
+        """Motivo REAL pra cortar volume: corpo sobrecarregado (descarga) ou
+        polimento (prova nos próximos ~10 dias)."""
+
+        if goal is not None and goal.race_date and (
+            0 <= (goal.race_date - week_start).days <= 10
+        ):
+
+            return True
+
+        try:
+
+            from app.domain.entities.body_reading import BODY_STRAINED
+
+            reading, _ = BodyReadingService.read(profile, persist=False)
+
+            return reading.body_state == BODY_STRAINED
+
+        except Exception as e:
+
+            print(f"Estado do corpo p/ guarda falhou p/ '{profile}': {e}")
+
+            return False
+
+    @staticmethod
+    async def _guarded(
+        profile, runner_name, objective, week_start, context, plan, metrics,
+        real_weekly_km=None, allow_reduction=False,
+    ) -> TrainingPlan:
+        """Confere o plano com o PlanGuard; se violou, pede UMA correção à IA e
+        fica com a versão de menos violações. Falha na correção nunca derruba
+        o plano (segue o primeiro)."""
+
+        from app.application.coach.planning.plan_guard import PlanGuard
+
+        def check(candidate):
+
+            return PlanGuard.violations(
+                candidate, metrics, real_weekly_km, allow_reduction,
+            )
+
+        issues = check(plan)
+
+        if not issues:
+
+            return plan
+
+        print(f"[plan_guard] '{profile}': {len(issues)} violação(ões): {issues}")
+
+        try:
+
+            fixed = await AIPlanService._generate_ai(
+                profile, runner_name, objective, week_start,
+                context + PlanGuard.correction_block(issues),
+            )
+
+        except Exception as e:
+
+            print(f"[plan_guard] correção falhou p/ '{profile}': {e}")
+
+            return plan
+
+        remaining = check(fixed)
+
+        print(f"[plan_guard] '{profile}': após correção {len(remaining)}")
+
+        return fixed if len(remaining) < len(issues) else plan
 
     @staticmethod
     async def _generate_ai(
@@ -338,10 +441,17 @@ class AIPlanService:
             WeeklyEvolutionDigest,
         )
 
+        # + os PADRÕES (plano × executado por semana, leve saindo forte, furos,
+        # sessão-chave cortada, RPE, recuperação vs base): o plano responde ao
+        # que o atleta FAZ — encontra quem corre mais que o plano onde ele
+        # está, conversa com quem fura, segura quem estoura. Auditoria 26/09.
+        from app.application.history.training_patterns import TrainingPatterns
+
         extra = "\n".join(
             block for block in (
                 WeeklyEvolutionDigest.for_profile(profile),
                 StimulusLedger.for_profile(profile),
+                TrainingPatterns.for_profile(profile),
             ) if block
         )
 

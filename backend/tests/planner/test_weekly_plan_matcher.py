@@ -316,3 +316,25 @@ def test_effective_distance_km_prefers_planned_then_estimate():
 
     s.planned_distance_km = 8.0
     assert s.effective_distance_km == 8.0   # distância planejada tem prioridade
+
+
+def test_longer_long_run_on_another_day_still_credits_the_long():
+    """Longão de 8,5 km planejado no domingo, 13,6 km corridos no sábado:
+    fora da tolerância por distância, mas é o LONGÃO (maior que o combinado)
+    — não um treino extra com o longão 'não feito' (caso Fernanda)."""
+
+    plan = _plan([_session("Tuesday", 4.0), _session("Sunday", 8.5, "LONG_RUN")])
+
+    saturday = _run(5, 13.6, 2)
+
+    assert WeeklyPlanMatcher.match(plan, [saturday], saturday).day == "Sunday"
+
+
+def test_shorter_off_day_run_does_not_become_the_long():
+    """Só corrida AO MENOS tão longa quanto o longão vira o longão."""
+
+    plan = _plan([_session("Tuesday", 4.0), _session("Sunday", 14.0, "LONG_RUN")])
+
+    wednesday = _run(2, 9.0, 3)
+
+    assert WeeklyPlanMatcher.match(plan, [wednesday], wednesday) is None

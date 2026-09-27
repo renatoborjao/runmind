@@ -141,11 +141,18 @@ class AdherenceAnalyzer:
         None quando não há sessão de corrida VENCIDA pra cobrar (semana só de
         descanso, plano vazio, ou semana ainda em curso)."""
 
+        # piso: o plano só cobra sessões que existiam quando o dia chegou. Um
+        # plano gerado no meio da semana (atleta que entrou na quinta) não pode
+        # cobrar a segunda que já tinha passado — ela nunca foi prescrita a ele.
+        # Sem generated_at (legado) não há piso: comportamento antigo intacto.
+        floor = plan.generated_on()
+
         running = [
             session
             for session in plan.sessions
             if session.kind in _RUNNING_KINDS
             and plan.session_date(session) <= today
+            and (floor is None or plan.session_date(session) >= floor)
         ]
 
         if not running:
@@ -166,12 +173,29 @@ class AdherenceAnalyzer:
             planned=len(running),
             done=len(running) - len(missed),
             missed_days=[session.day for session in missed],
+            # por FAMÍLIA de estímulo, não pelo nome exato: "Longão",
+            # "Longão Progressivo" e "Longão Misto" são o MESMO treino pro
+            # padrão de furo — separados, "Longão (2 de 2)" dizia que a Fernanda
+            # fura longão enquanto ela fazia os outros longões (e o plano
+            # tirava o longão dela). Auditoria 26/09.
             missed_types=[
-                session.workout_type
+                AdherenceAnalyzer._family(session.workout_type)
                 for session in missed
                 if session.workout_type
             ],
         )
+
+    @staticmethod
+    def _family(workout_type: str | None) -> str | None:
+        """Família de estímulo do treino (a mesma do balanço de estímulos)."""
+
+        if not workout_type:
+
+            return None
+
+        from app.application.history.stimulus_ledger import StimulusLedger
+
+        return StimulusLedger.classify(workout_type)
 
     @staticmethod
     def _trend(series: list[WeekAdherence]) -> str:
@@ -231,16 +255,23 @@ class AdherenceAnalyzer:
 
         for plan in plans:
 
+            floor = plan.generated_on()
+
             for session in plan.sessions:
 
                 if (
                     session.kind not in _RUNNING_KINDS
                     or plan.session_date(session) > today
+                    or (floor is not None and plan.session_date(session) < floor)
                 ):
 
                     continue
 
-                label = session.day if by_day else session.workout_type
+                label = (
+                    session.day
+                    if by_day
+                    else AdherenceAnalyzer._family(session.workout_type)
+                )
 
                 if label:
 

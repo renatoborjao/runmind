@@ -170,6 +170,8 @@ class TrainingPatterns:
 
             lines += TrainingPatterns._intent_lines(past, ceiling)
 
+        lines += TrainingPatterns._volume_lines(plans, activities, today, weeks)
+
         lines += TrainingPatterns._rpe_lines(sessions, rpes)
 
         drift = TrainingPatterns.recovery_drift(snapshots)
@@ -291,24 +293,19 @@ class TrainingPatterns:
         today: date,
         weeks: int,
     ) -> list[tuple[date, PlannedSession, str, Activity | None]]:
-        """(dia, sessão, família, corrida do dia ou None) na janela, ordenado.
-        A corrida do dia é a mais longa (o treino, não um trote solto)."""
+        """(dia, sessão, família, corrida que a cumpriu ou None) na janela,
+        ordenado. O casamento é o do app inteiro ([[WeeklyPlanMatcher]]: dia,
+        depois distância, longão maior conta) — casar só pelo dia contava
+        "furou o longão" de quem só trocou o dia (Fernanda)."""
+
+        from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 
         start = today - timedelta(weeks=weeks)
 
-        by_day: dict[date, Activity] = {}
-
-        for act in activities:
-
-            if not is_run_sport(act.sport) or (act.distance or 0) < _MIN_DISTANCE_M:
-
-                continue
-
-            day = TrainingPatterns._local_day(act.start_date)
-
-            if day not in by_day or act.distance > by_day[day].distance:
-
-                by_day[day] = act
+        runs = [
+            a for a in activities
+            if is_run_sport(a.sport) and (a.distance or 0) >= _MIN_DISTANCE_M
+        ]
 
         weeks_plans = {p.week_start: p for p in plans}
 
@@ -316,7 +313,7 @@ class TrainingPatterns:
 
         for plan in weeks_plans.values():
 
-            for session in plan.sessions:
+            for session, act in WeeklyPlanMatcher.pairs(plan, runs):
 
                 if getattr(session, "kind", "run") not in ("run", "walk", "run_walk"):
 
@@ -324,7 +321,9 @@ class TrainingPatterns:
 
                 day = plan.session_date(session)
 
-                if not (start <= day <= today):
+                # fora da janela; e sessão futura só entra se JÁ foi cumprida
+                # (ex.: o longão de domingo feito no sábado)
+                if day < start or (day > today and act is None):
 
                     continue
 
@@ -332,7 +331,7 @@ class TrainingPatterns:
                     day,
                     session,
                     StimulusLedger.classify(session.workout_type),
-                    by_day.get(day),
+                    act,
                 ))
 
         return sorted(out, key=lambda s: s[0])
@@ -436,6 +435,71 @@ class TrainingPatterns:
             )
 
         return lines
+
+    @staticmethod
+    def _volume_lines(plans, activities, today: date, weeks: int) -> list[str]:
+        """Semana FECHADA com o executado longe do plano (±20%): treino extra
+        e estouro viram carga não planejada (maurício: 28 → 43 km) — e semana
+        muito abaixo é sinal de rotina/fadiga. Só semanas fechadas."""
+
+        current = today - timedelta(days=today.weekday())
+
+        start = current - timedelta(weeks=weeks)
+
+        by_week = {p.week_start: p for p in plans}
+
+        run_km: dict[date, float] = {}
+
+        for act in activities:
+
+            if not is_run_sport(act.sport) or (act.distance or 0) < _MIN_DISTANCE_M:
+
+                continue
+
+            day = TrainingPatterns._local_day(act.start_date)
+
+            week = day - timedelta(days=day.weekday())
+
+            run_km[week] = run_km.get(week, 0.0) + act.distance / 1000
+
+        deviations = []
+
+        for week in sorted(by_week):
+
+            if not (start <= week < current):
+
+                continue
+
+            plan = by_week[week]
+
+            planned = plan.weekly_volume or sum(
+                s.planned_distance_km or 0 for s in plan.sessions
+            )
+
+            if not planned or planned <= 0:
+
+                continue
+
+            done = run_km.get(week, 0.0)
+
+            ratio = done / planned
+
+            if abs(ratio - 1) >= 0.20:
+
+                deviations.append(
+                    f"{week:%d/%m} plano ~{planned:.0f} → fez {done:.0f} km "
+                    f"({(ratio - 1) * 100:+.0f}%)"
+                )
+
+        if not deviations:
+
+            return []
+
+        return [
+            "- Volume da semana × plano: " + ", ".join(deviations)
+            + " (acima = carga NÃO planejada que o corpo paga; abaixo = rotina "
+            "ou cansaço travando)."
+        ]
 
     @staticmethod
     def _volume_ratio(session: PlannedSession, act: Activity) -> float | None:

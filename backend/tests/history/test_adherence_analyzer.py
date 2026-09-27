@@ -173,10 +173,11 @@ def test_dia_que_mais_escapa_vira_padrao():
 
     assert report.missed_day.opportunities == 4
 
-    # o tipo daquele dia acompanha (é o mesmo treino que escapa)
+    # o tipo daquele dia acompanha (é o mesmo treino que escapa) — agora pela
+    # FAMÍLIA de estímulo ("Intervalado" → VO2 / velocidade)
     assert report.missed_type is not None
 
-    assert report.missed_type.label == "Intervalado"
+    assert report.missed_type.label == "VO2 / velocidade"
 
 
 def test_furo_isolado_nao_vira_padrao():
@@ -436,3 +437,48 @@ def test_semana_inteira_no_futuro_nao_entra_na_serie():
     )
 
     assert report.weeks == []
+
+
+def test_plan_generated_midweek_does_not_charge_days_before_it():
+    """Piso de 19/09 (estava só na VM, sem teste): plano gerado na QUINTA não
+    cobra a terça que já tinha passado — ela nunca foi prescrita ao atleta."""
+
+    plan = _plan(LAST_WEEK, _standard_week())
+
+    plan.generated_at = datetime(
+        LAST_WEEK.year, LAST_WEEK.month, LAST_WEEK.day + 3, 12, 0,
+    ).isoformat()  # quinta
+
+    activities = [
+        _run(LAST_WEEK, "Thursday", 5.0, 1),
+        _run(LAST_WEEK, "Saturday", 10.0, 2),
+    ]
+
+    report = _analyze([plan], activities)
+
+    # só quinta e sábado contam (a terça antes do plano não existe pra ele)
+    assert report.weeks[0].planned == 2
+    assert report.weeks[0].done == 2
+
+
+def test_missed_type_groups_long_runs_by_family():
+    """'Longão' e 'Longão Progressivo' são o mesmo estímulo pro padrão de
+    furo — agrupados na família 'longão'."""
+
+    week = [_session("Tuesday", 6.0), _session("Saturday", 10.0, "Longão")]
+    week_prog = [
+        _session("Tuesday", 6.0), _session("Saturday", 10.0, "Longão Progressivo"),
+    ]
+
+    plans = _plans_of(week, week_prog, week, week_prog)
+
+    # fez só as terças: os 4 longões (2 nomes diferentes) ficaram pra trás
+    activities = [
+        _run(_week_start(w), "Tuesday", 6.0, w + 1) for w in range(4)
+    ]
+
+    report = _analyze(plans, activities)
+
+    assert report.missed_type.label == "longão"
+    assert report.missed_type.count == 4
+    assert report.missed_type.opportunities == 4

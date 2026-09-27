@@ -168,6 +168,17 @@ class WeeklyPlanMatcher:
                 remaining,
             )
 
+            # O LONGÃO feito MAIOR que o planejado (e em outro dia) continua
+            # sendo o longão — só que acima do combinado. Sem isto a corrida
+            # virava "extra" e o longão "não feito" (Fernanda: 8,5 km
+            # planejados no domingo, 13,6 km corridos no sábado), e o coach
+            # contava "furou longão 4x" de quem faz longão toda semana.
+            if chosen is None:
+
+                chosen = WeeklyPlanMatcher._longer_long_run(
+                    activity, remaining, plan.sessions,
+                )
+
             assignments[activity.id] = chosen
 
             if chosen is not None:
@@ -175,6 +186,57 @@ class WeeklyPlanMatcher:
                 remaining.remove(chosen)
 
         return assignments
+
+    @staticmethod
+    def pairs(
+        plan: TrainingPlan,
+        activities: list[Activity],
+    ) -> list[tuple[PlannedSession, Activity | None]]:
+        """Cada sessão do plano com a corrida que a cumpriu (ou None) — mesma
+        régua de casamento do resto do app (dia, depois distância)."""
+
+        if not plan.sessions:
+
+            return []
+
+        assignments = WeeklyPlanMatcher._assign_week(plan, activities)
+
+        by_id = {activity.id: activity for activity in activities}
+
+        done = {
+            id(session): by_id.get(activity_id)
+            for activity_id, session in assignments.items()
+            if session is not None
+        }
+
+        return [(session, done.get(id(session))) for session in plan.sessions]
+
+    @staticmethod
+    def _longer_long_run(
+        activity: Activity,
+        remaining: list[PlannedSession],
+        all_sessions: list[PlannedSession],
+    ) -> PlannedSession | None:
+        """O longão da semana (a sessão planejada mais longa), se ainda não foi
+        cumprido e a corrida foi AO MENOS tão longa quanto ele."""
+
+        with_km = [s for s in all_sessions if (s.planned_distance_km or 0) > 0]
+
+        if not with_km:
+
+            return None
+
+        longest = max(with_km, key=lambda s: s.planned_distance_km)
+
+        if longest not in remaining:
+
+            return None
+
+        if activity.distance / 1000 < longest.planned_distance_km:
+
+            return None
+
+        return longest
 
     @staticmethod
     def _closest_within_tolerance(

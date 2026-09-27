@@ -125,13 +125,14 @@ class StimulusLedger:
         """Por família: quantas sessões foram FEITAS, quantas furadas, e a
         última feita — na janela de `weeks` semanas até hoje."""
 
+        from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
+
         start = today - timedelta(weeks=weeks)
 
-        run_days = {
-            StimulusLedger._local_day(a.start_date)
-            for a in activities
+        runs = [
+            a for a in activities
             if is_run_sport(a.sport) and (a.distance or 0) >= _MIN_DISTANCE_M
-        }
+        ]
 
         # uma versão por semana (a mais recente gravada vence)
         by_week = {p.week_start: p for p in plans}
@@ -140,7 +141,9 @@ class StimulusLedger:
 
         for plan in by_week.values():
 
-            for session in plan.sessions:
+            # casamento do app inteiro (dia, depois distância, longão maior
+            # conta) — casar só pelo dia contava furo de quem trocou o dia
+            for session, act in WeeklyPlanMatcher.pairs(plan, runs):
 
                 if getattr(session, "kind", "run") not in ("run", "walk", "run_walk"):
 
@@ -148,7 +151,7 @@ class StimulusLedger:
 
                 day = plan.session_date(session)
 
-                if day < start or day > today:
+                if day < start or (day > today and act is None):
 
                     continue
 
@@ -156,13 +159,15 @@ class StimulusLedger:
 
                 stat = stats.setdefault(family, FamilyStat(family, 0, 0, None))
 
-                if day in run_days:
+                if act is not None:
 
                     stat.done += 1
 
-                    if stat.last_done is None or day > stat.last_done:
+                    done_day = StimulusLedger._local_day(act.start_date)
 
-                        stat.last_done = day
+                    if stat.last_done is None or done_day > stat.last_done:
+
+                        stat.last_done = done_day
 
                 elif day < today:
 

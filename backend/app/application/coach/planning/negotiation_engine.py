@@ -56,7 +56,8 @@ Decida:
      exige. Se o pedido conflita com o objetivo, faça um MEIO-TERMO e explique
      o trade-off (nunca só obedeça, nunca só recuse).
    - Mantenha os MESMOS dias/frequência do atleta (não adicione nem remova dias
-     sem ele pedir). Ancore os paces na meta.
+     sem ele pedir). Ancore os paces na CAPACIDADE ATUAL dele (a meta dá a
+     direção; nenhum bloco longo mais rápido que o limiar de hoje).
    - ESCOPO: se a mensagem apontar UMA sessão ("só o treino de sábado", "o de
      amanhã", "só o longão"), mude SÓ ela — as OUTRAS ficam EXATAMENTE iguais.
      Só ajuste o conjunto se ele falar da semana/geral.

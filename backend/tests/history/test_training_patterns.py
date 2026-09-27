@@ -102,3 +102,43 @@ def test_aerobic_ceiling_by_heart_rate_reserve():
     # renato2: máx 188, repouso 66 → 66 + 0.7 × 122 = 151
     assert TrainingPatterns.aerobic_ceiling(188, 66) == 151
     assert TrainingPatterns.aerobic_ceiling(188, None) is None
+
+
+def test_week_volume_far_above_plan_is_a_pattern():
+    """Maurício real: semana planejada em ~28 km, executou 43 (+53%)."""
+
+    prev = TrainingPlan(
+        athlete_name="M", objective="15k", phase="BUILD", weekly_volume=28,
+        running_days=["Tuesday"], week_start=date(2026, 9, 14),
+        sessions=[PlannedSession("Tuesday", "Rodagem", "", 8.0, None, None, None)],
+    )
+
+    runs = [
+        _run(date(2026, 9, 14) + timedelta(days=d), km, 60, 140, i)
+        for i, (d, km) in enumerate([(1, 12.0), (3, 11.0), (5, 20.0)], start=1)
+    ]
+
+    text = TrainingPatterns.render([prev], runs, [], [], TODAY)
+
+    assert "Volume da semana × plano: 14/09 plano ~28 → fez 43 km (+54%)" in text
+
+
+def test_long_run_done_longer_on_another_day_is_not_a_miss():
+    """Fernanda real: longão de 8,5 km planejado no DOMINGO, correu 13,6 km no
+    SÁBADO. Antes: 'furou o longão' + corrida extra. Agora é o longão feito —
+    maior que o combinado (o que a análise cobra), não um furo."""
+
+    plan = _plan([
+        ("Tuesday", "Rodagem Leve", 4.0, None),
+        ("Sunday", "Longão Progressivo", 8.5, None),
+    ])
+
+    runs = [
+        _run(WEEK + timedelta(days=1), 4.0, 25, 135, 1),    # terça
+        _run(WEEK + timedelta(days=5), 13.6, 85, 140, 2),   # sábado (26/09)
+    ]
+
+    text = TrainingPatterns.render([plan], runs, [], [], TODAY, ceiling=146)
+
+    assert "Aderência: fez 2 de 2" in text
+    assert "furou" not in text

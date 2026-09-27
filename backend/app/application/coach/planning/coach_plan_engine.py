@@ -112,7 +112,18 @@ REGRAS:
   prazer de correr. Se NÃO houver alvo de performance (só saúde/evolução
   geral), priorize regularidade e progressão gentil, sem puxar ritmo agressivo.
 - {time_rule}
-- Cada corrida com um PROPÓSITO distinto e faixa de pace ancorada na META dele.
+- Cada corrida com um PROPÓSITO distinto. PACE ANCORADO NA CAPACIDADE ATUAL
+  (os paces reais do retrato: fácil / limiar / VO2), não na meta: a META dá a
+  DIREÇÃO, o degrau de hoje sai do que ele sustenta. Nenhum bloco sustentado
+  (≥1,6 km ou ≥8 min) mais rápido que o LIMIAR atual; nenhum tiro de 400 m+
+  mais rápido que o VO2 atual (só acelerações curtas passam disso). Ritmo de
+  prova mais rápido que isso ainda não é treino — é o próximo degrau.
+- ORÇAMENTO DE SESSÕES FORTES pela frequência: quem corre até 3x/semana tem no
+  máximo UMA sessão forte na semana (e um longão com blocos/progressão CONTA
+  como a forte); 4x ou mais, no máximo DUAS. O resto é LEVE DE VERDADE — pela
+  FC, abaixo do teto aeróbico dele (escreva hr_max nos passos dos leves quando
+  souber o teto). Semana com forte demais + leve saindo forte vira fadiga
+  crônica, não evolução.
 - VARIE O ESTÍMULO — isto é EXPERTISE de treinador, não enfeite. Um bom plano
   NÃO repete os mesmos 3 tipos toda semana; você tem um LEQUE e GIRA entre eles
   conforme a fase e a meta, sempre mantendo a sobrecarga progressiva:
