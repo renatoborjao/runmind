@@ -25,6 +25,7 @@ Cenários por atleta:
 """
 
 import argparse
+import re
 from datetime import timedelta
 import asyncio
 import importlib.abc
@@ -631,11 +632,17 @@ async def _plan(profile, runner):
             print("\n".join(_fmt_step(step, "      ")))
 
 
-# AVALIAÇÃO DO CÉREBRO: frases reais/difíceis com o GABARITO do que o coach deve
-# DECIDIR (tipos de ação, relação da meta, dia-alvo, percepção). Mede acerto e
-# latência — pra decidir mudança de modelo/raciocínio com número, não palpite.
+# AVALIAÇÃO DO CÉREBRO: o CATÁLOGO do que atleta real fala, com o GABARITO do
+# que o coach deve DECIDIR (tipos de ação, relação da meta, dias, dia-alvo,
+# escopo, cartão, percepção) + a FALA (sem promessa vazia, com acento). Os erros
+# de 27/09 (pular a semana, relógio, "quando chega o plano") eram situações
+# fora do gabarito — o catálogo cobre as categorias todas e roda antes de todo
+# deploy do coach: `bash ops/coach_lab.sh <saida> --braineval 0 --repeats 1`.
 # (perfil, mensagem, tipos esperados (conjuntos aceitos), extra)
+NONE = [set()]
+
 BRAIN_EVAL = [
+    # ---- META / PROVA
     ("leonardo", "O objetivo agora é correr 10 km em 55 minutos. Tenho "
      "disponibilidade de terça, quinta e domingo",
      [{"goal", "days"}, {"goal", "days", "replan"}],
@@ -647,30 +654,105 @@ BRAIN_EVAL = [
      [{"goal"}], {"relationship": ("primary",)}),
     ("renato2", "esquece a 15k, não vou mais correr ela, meu foco agora é só "
      "a meia", [{"goal"}], {"relationship": ("replace",)}),
+    ("joaosoares", "vou correr uma prova de 5 km dia 25/10 pra testar, quero "
+     "fazer em 24 minutos", [{"goal"}],
+     {"relationship": ("stepping_stone", "additional")}),
+    ("fernanda", "esquece perder peso, agora meu objetivo é correr 10 km em "
+     "50 minutos", [{"goal"}], {"relationship": ("replace", "primary")}),
+    # ---- DIAS
+    ("joaosoares", "a partir de agora só consigo correr terça e sábado",
+     [{"days"}, {"days", "replan"}], {"days": ["Tuesday", "Saturday"]}),
+    ("helio", "agora consigo correr 4x: segunda, quarta, sexta e sábado",
+     [{"days"}, {"days", "replan"}],
+     {"days": ["Monday", "Wednesday", "Friday", "Saturday"]}),
+    # ---- MUDAR A SEMANA
     ("fernanda", "troca o treino de terça pra quarta e o de sexta pra sábado",
      [{"move"}], {"count": 2}),
     ("mauricio", "o treino de terça pode ser mais leve? tô cansado",
      [{"adjust"}, {"simplify"}], {"target_day": "Tuesday"}),
-    ("renato2", "o longão de sábado é 12 km né?", [set()], {}),
-    ("leonardo", "tá chovendo, como faço o treino de sexta na esteira?",
-     [set()], {}),
-    ("helio", "a partir da próxima semana quero treinos de no máximo 45 "
-     "minutos durante a semana", [{"routine"}], {}),
-    ("fernanda", "monta um treino pra quarta", [{"one_off"}],
-     {"target_day": "Wednesday"}),
+    ("renato2", "passa o longão de sábado pra domingo", [{"move"}],
+     {"target_day": "Sunday"}),
+    ("renato2", "passa o treino de quinta pra sexta e deixa ele mais curto, "
+     "uns 30 minutos", [{"move"}],
+     {"target_day": "Friday", "content_change": True}),
     ("mauricio", "tô gripado, refaz minha semana só com treino leve até "
      "sexta", [{"replan"}, {"adjust"}, {"simplify"}], {}),
-    ("joaosoares", "hoje o treino foi pesado, perna morta no fim", [set()],
+    ("fernanda", "refaz minha semana, mudou tudo aqui na minha rotina",
+     [{"replan"}], {}),
+    # ---- PULAR (aplica na hora)
+    ("helio", "amanhã não vou conseguir treinar, tenho plantão", [{"skip"}],
+     {"target_day": "Monday", "scope": "single_session"}),
+    ("joaosoares", "estou resfriado, não vou conseguir treinar essa semana",
+     [{"skip"}], {"scope": "week"}),
+    ("leonardo", "vou viajar a trabalho a semana toda, não vou conseguir "
+     "treinar", [{"skip"}], {"scope": "week"}),
+    # ---- AVULSO
+    ("fernanda", "monta um treino pra quarta", [{"one_off"}],
+     {"target_day": "Wednesday"}),
+    ("leonardo", "quero um treino pra quarta, vou ter tempo livre",
+     [{"one_off"}], {"target_day": "Wednesday"}),
+    # ---- ROTINA / PREFERÊNCIA DURÁVEL
+    ("helio", "a partir da próxima semana quero treinos de no máximo 45 "
+     "minutos durante a semana", [{"routine"}], {}),
+    ("renato2", "de agora em diante quero o longão sempre sem pace, só por "
+     "sensação", [{"routine"}, {"preference"}], {}),
+    ("joaosoares", "não gosto de fartlek, prefiro tiro na pista",
+     [{"preference"}, {"routine"}], {}),
+    # ---- RELÓGIO (manda na hora, nunca "vou tentar")
+    ("renato2", "manda os treinos da semana pro relógio", [{"watch"}], {}),
+    ("mauricio", "não chegou no Garmin, tenta de novo", [{"watch"}], {}),
+    # ---- TÊNIS / TREINADOR
+    ("fernanda", "comprei um tênis novo, um Adidas Adizero SL", [{"shoe"}], {}),
+    ("mauricio", "quantos km tem meu Corre Turbo?", [{"shoe"}], {}),
+    ("leonardo", "contratei uma assessoria, vou seguir o plano do meu "
+     "treinador agora", [{"coach_switch"}], {}),
+    # ---- PERGUNTA COM DADO EXATO (cartão)
+    ("renato2", "qual o meu próximo treino?", NONE,
+     {"card": ("next_training",)}),
+    ("fernanda", "me manda meu plano da semana", NONE,
+     {"card": ("weekly_plan",)}),
+    ("mauricio", "quais são meus paces?", NONE, {"card": ("paces",)}),
+    ("joaosoares", "como tá meu corpo hoje?", NONE, {"card": ("body",)}),
+    ("renato2", "vou conseguir fazer a meia abaixo de 2h?", NONE,
+     {"card": ("race",)}),
+    ("leonardo", "como eu tô evoluindo?", NONE,
+     {"card": ("fitness", "portrait")}),
+    # ---- PERGUNTA SEM MUDANÇA (responde, não mexe)
+    ("renato2", "o longão de sábado é 12 km né?", NONE, {}),
+    ("mauricio", "meu longão é no sábado, certo?", NONE, {}),
+    ("leonardo", "tá chovendo, como faço o treino de sexta na esteira?", NONE,
+     {"card": (None,)}),
+    ("helio", "quando chega meu plano novo?", NONE, {}),
+    ("fernanda", "o que é bom comer antes do longão?", NONE, {}),
+    ("mauricio", "posso fazer musculação no mesmo dia do treino?", NONE, {}),
+    # ---- RELATO / PERCEPÇÃO / VIDA
+    ("joaosoares", "o treino de sábado foi pesado, perna morta no fim", NONE,
      {"perception": True}),
+    ("renato2", "o longão de sábado foi ok, uns 7 de 10 de esforço", NONE,
+     {"perception": True}),
+    ("mauricio", "tô sentindo uma dorzinha no joelho direito",
+     [set(), {"adjust"}, {"simplify"}], {}),
+    ("helio", "tô meio desanimado essa semana", NONE, {}),
+    ("renato2", "tive uma recaída no vape, mas já parei faz 2 dias", NONE, {}),
+    ("renato2", "acho que aguento mais, quero aumentar o volume essa semana",
+     [set(), {"adjust"}], {}),
+    # ---- CONVERSA
+    ("helio", "valeu, coach!", NONE, {}),
+    ("fernanda", "bom dia!", NONE, {}),
 ]
 
 
 def _grade(decision, expected_sets, extra) -> list[str]:
-    """Lista de erros (vazia = acertou)."""
+    """Lista de erros (vazia = acertou): a DECISÃO (ações, meta, dias, dia,
+    escopo, cartão, percepção) e a FALA (sem promessa vazia, com acento)."""
 
     if decision is None:
 
         return ["cérebro falhou"]
+
+    from app.infrastructure.integrations.gemini.client import (
+        unaccented_portuguese,
+    )
 
     actions = decision.all_actions
 
@@ -706,6 +788,22 @@ def _grade(decision, expected_sets, extra) -> list[str]:
 
             errors.append(f"dia-alvo {target} ≠ {extra['target_day']}")
 
+    if "scope" in extra:
+
+        scope = next((a.scope for a in actions), None)
+
+        if scope != extra["scope"]:
+
+            errors.append(f"escopo {scope} ≠ {extra['scope']}")
+
+    if extra.get("content_change") and not any(a.content_change for a in actions):
+
+        errors.append("mudança de conteúdo não capturada")
+
+    if "card" in extra and decision.answer_card not in extra["card"]:
+
+        errors.append(f"cartão {decision.answer_card} ≠ {extra['card']}")
+
     if "count" in extra and len(actions) != extra["count"]:
 
         errors.append(f"{len(actions)} ações ≠ {extra['count']}")
@@ -714,7 +812,27 @@ def _grade(decision, expected_sets, extra) -> list[str]:
 
         errors.append("percepção não registrada")
 
+    say = decision.say or ""
+
+    if PROMISE_SAY.search(say) and not types:
+
+        errors.append(f"promete sem ação: \"{say[:80]}\"")
+
+    if unaccented_portuguese(say):
+
+        errors.append("fala sem acento")
+
     return errors
+
+
+# a mesma régua da auditoria semanal (ops/coach_audit.py)
+PROMISE_SAY = re.compile(
+    r"(estou preparando|tô preparando|em instantes|já te envio|vou te mandar|"
+    r"vou te enviar|vou montar e te|estou montando|em breve te envio|"
+    r"vou tentar|vou (sincronizar|cancelar|pausar|pular|tirar|remover|"
+    r"atualizar|refazer|mandar|enviar))",
+    re.I,
+)
 
 
 async def _brain_eval(budgets: list[int], repeats: int) -> None:
