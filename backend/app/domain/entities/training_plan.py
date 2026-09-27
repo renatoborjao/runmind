@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from app.domain.entities.planned_session import PlannedSession
 
@@ -54,6 +54,37 @@ class TrainingPlan:
     # Objetivo/foco da semana narrado pela IA-treinadora (ex.: "ganhar
     # velocidade rumo ao sub-50 sem inflar volume").
     weekly_objective: str = ""
+
+    # Quando este plano foi gerado pela primeira vez (ISO datetime). É o marco
+    # de "a partir de quando as sessões existiram pro atleta": um plano montado
+    # no meio da semana (atleta que entrou na quinta) NÃO pode cobrar a segunda
+    # que já passou — ela nunca foi prescrita a ele. Sem isso, todo atleta novo
+    # levava furo-fantasma nos dias anteriores à entrada. None = legado (sem
+    # marco; a aderência não aplica piso). Ver AdherenceAnalyzer.
+    generated_at: str | None = None
+
+    def generated_on(self) -> date | None:
+        """Data (calendário) em que o plano foi gerado, ou None se legado.
+        Aceita datetime ISO completo ou data pura; devolve None se não parsear
+        (defensivo — nunca inventa um piso a partir de lixo)."""
+
+        if not self.generated_at:
+
+            return None
+
+        try:
+
+            return datetime.fromisoformat(self.generated_at).date()
+
+        except ValueError:
+
+            try:
+
+                return date.fromisoformat(self.generated_at[:10])
+
+            except ValueError:
+
+                return None
 
     def session_date(
         self,

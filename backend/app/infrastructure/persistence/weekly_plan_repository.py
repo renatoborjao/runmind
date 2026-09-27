@@ -1,6 +1,6 @@
 import json
 from dataclasses import asdict
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from app.domain.entities.planned_session import PlannedSession
@@ -50,6 +50,14 @@ class WeeklyPlanRepository:
         profile: str,
         plan: TrainingPlan,
     ) -> None:
+
+        # carimba o marco de geração na 1ª vez que o plano é salvo — é o que
+        # permite à aderência não cobrar dias anteriores à existência do plano
+        # (atleta que entra no meio da semana). Ajuste/regeração preserva o
+        # marco original da semana (ver _append_history).
+        if plan.generated_at is None:
+
+            plan.generated_at = datetime.now(UTC).isoformat()
 
         data = self._to_dict(plan)
 
@@ -114,6 +122,27 @@ class WeeklyPlanRepository:
 
                 entries = json.load(f)
 
+        # ajuste/regeração da MESMA semana preserva o marco de geração da 1ª
+        # vez: "quando o plano dessa semana passou a existir" não muda porque
+        # o coach mexeu numa quarta — senão o piso da aderência andaria pra
+        # frente e passaria a descartar sessões já vencidas da semana.
+        previous = next(
+            (
+                entry
+                for entry in entries
+                if entry["week_start"] == data["week_start"]
+            ),
+            None,
+        )
+
+        if previous and previous.get("generated_at"):
+
+            earliest = previous["generated_at"]
+
+            if not data.get("generated_at") or data["generated_at"] > earliest:
+
+                data = {**data, "generated_at": earliest}
+
         entries = [
             entry
             for entry in entries
@@ -167,6 +196,7 @@ class WeeklyPlanRepository:
             "is_deload": plan.is_deload,
             "reviewed": plan.reviewed,
             "weekly_objective": plan.weekly_objective,
+            "generated_at": plan.generated_at,
             "sessions": [
                 asdict(session)
                 for session in plan.sessions
@@ -210,4 +240,5 @@ class WeeklyPlanRepository:
             is_deload=data.get("is_deload", False),
             reviewed=data.get("reviewed", False),
             weekly_objective=data.get("weekly_objective", ""),
+            generated_at=data.get("generated_at"),
         )
