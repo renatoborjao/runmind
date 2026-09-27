@@ -17,3 +17,10 @@ class SessionRpe:
     rpe: int                 # 0-10
     srpe: float              # duração_min × rpe
     at: str                  # datetime ISO da captura
+    # sensação/nota nas palavras dele ("perna pesada", "voei") e DE ONDE veio a
+    # percepção: "relógio" (autoavaliação do Garmin), "resposta" (à pergunta
+    # pós-treino) ou "conversa" (lida pelo coach num papo qualquer). Opcionais:
+    # registros antigos seguem carregando.
+    feel: str | None = None
+    note: str | None = None
+    source: str = "resposta"

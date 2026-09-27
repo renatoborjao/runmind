@@ -1,7 +1,8 @@
+from datetime import date, timedelta
+
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.weekdays import weekday_label
 from app.domain.entities.adherence_report import AdherenceReport
-from app.domain.entities.runner_baseline import RunnerBaseline
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_goal import TrainingGoal
@@ -11,61 +12,41 @@ _RUNNING_KINDS = {"run", "walk", "run_walk"}
 
 
 class PlanContextBuilder:
-    """Monta o retrato REAL do atleta que a IA-treinadora lê para gerar o
-    plano da semana: meta, dias que ele corre, volume/paces reais,
-    execução das últimas semanas, plano anterior e limitações. Só fatos —
-    nada inventado."""
+    """A parte do contexto que é SÓ da tarefa de montar a semana: qual semana,
+    os dias dele (e a regra de agendar neles), o iniciante run/walk, o plano da
+    semana passada + o que ele executou dela e os tipos recentes (pra variar).
+    Todo o resto — meta, capacidade, evolução, corpo, percepção, padrões,
+    memória — vem do DOSSIÊ do atleta, a mesma base de todas as vozes do coach
+    ([[AthleteDossier]]). Só fatos — nada inventado."""
 
     @staticmethod
     def build(
         runner: RunnerProfile,
         goal: TrainingGoal,
-        metrics: RunnerMetrics,
-        baseline: RunnerBaseline,
-        recent_adherence: list[float],
-        last_plan: TrainingPlan | None,
-        memory: str,
-        weeks_to_race: int | None,
+        week_start: date,
         days_to_race: int | None = None,
-        executed: str = "",
         run_walk: bool = False,
-        adherence_report: AdherenceReport | None = None,
-        learnings: str = "",
-        body_directive: str = "",
-        fitness_directive: str = "",
+        last_plan: TrainingPlan | None = None,
         recent_plans: list[TrainingPlan] | None = None,
-        subjective: str = "",
-        reality_directive: str = "",
+        executed: str = "",
+        dossier: str = "",
     ) -> str:
 
-        lines = [f"Atleta: {runner.name}"]
+        week_end = week_start + timedelta(days=6)
 
-        lines.append(
-            PlanContextBuilder._goal_line(goal, weeks_to_race, days_to_race)
+        target = (
+            f"SEMANA A MONTAR: {week_start.strftime('%d/%m')} a "
+            f"{week_end.strftime('%d/%m/%Y')}."
         )
 
-        # DOSSIÊ da prova real (percurso com subida -> treino de subida; largada
-        # cedo/calor -> ajuste) quando a prova está no horizonte do bloco.
-        # Só lê o cache (pesquisa é job de fundo). Best-effort.
-        if weeks_to_race is not None and weeks_to_race <= 16:
+        if days_to_race is not None and goal is not None and goal.race_date:
 
-            try:
+            target += (
+                f" A prova-âncora ({goal.race_label}) fica a {days_to_race} "
+                "dias do início dela."
+            )
 
-                from app.application.races.race_intel_service import (
-                    RaceIntelService,
-                )
-
-                dossier = RaceIntelService.render_context(
-                    RaceIntelService.for_runner(runner)
-                )
-
-                if dossier:
-
-                    lines.append(dossier)
-
-            except Exception as e:
-
-                print(f"Falha ao ler dossiê da prova no plano: {e}")
+        lines = [target]
 
         # iniciante que começa correndo-caminhando: os dados do onboarding
         # (peso/altura/capacidade) guiam a IA a montar caminhada + run/walk
@@ -86,40 +67,9 @@ class PlanContextBuilder:
             "padrão de furo, nunca por conta própria)."
         )
 
-        # REALIDADE × PLANO: o que ele FAZ de verdade (frequência/volume reais)
-        # pode divergir do registrado — o coach dimensiona o VOLUME à verdade
-        # (a frequência é conversa). Computado no AIPlanService (tem o histórico)
-        # e passado pronto. Ver [[TrainingRealityAnalyzer]].
-        if reality_directive:
-
-            lines.append(reality_directive)
-
         # a preferência de DIA do longão não é campo rígido: vive na memória
-        # evolutiva (injetada abaixo em "Memória do atleta") como qualquer
-        # outra preferência dinâmica. Ver [[project_longao_dinamico]].
-
-        lines.append(
-            f"Volume real: ~{baseline.weekly_km:.1f} km/sem "
-            f"(última {baseline.last_week_km:.1f}, "
-            f"melhor {baseline.max_week_km:.1f}), tendência {baseline.trend}."
-        )
-
-        lines.append(
-            f"Rodagem típica ~{baseline.typical_run_km:.1f} km; "
-            f"maior treino ~{baseline.longest_km:.1f} km."
-        )
-
-        lines.append(PlanContextBuilder._paces_line(metrics))
-
-        lines.append(
-            PlanContextBuilder._adherence_line(recent_adherence)
-        )
-
-        # o QUE ele vive furando (dia/tipo) — dá à IA a chance de
-        # reposicionar em vez de represcrever o treino que nunca acontece
-        lines.append(
-            PlanContextBuilder._missed_pattern_line(adherence_report)
-        )
+        # evolutiva (no dossiê) como qualquer outra preferência dinâmica. Ver
+        # [[project_longao_dinamico]].
 
         if last_plan is not None and last_plan.sessions:
 
@@ -140,46 +90,13 @@ class PlanContextBuilder:
 
             lines.append(executed)
 
-        if runner.injuries:
+        if dossier:
 
-            lines.append(
-                "Lesões/limitações: " + ", ".join(runner.injuries) + "."
-            )
+            lines.append("")
 
-        if memory:
+            lines.append(dossier)
 
-            # o render já abre com "Memória do corredor (...)"; não prefixa outro
-            # cabeçalho ("Memória do atleta:") em cima — era duplicação
-            lines.append(memory)
-
-        # o que o coach APRENDEU observando o comportamento/resultado dele ao
-        # longo das semanas (distinto da memória acima, que é o que ele DIZ).
-        # Só entra quando a flag de injeção está ligada (o chamador decide).
-        if learnings:
-
-            lines.append(learnings)
-
-        # o CORPO agora (carga à luz da recuperação): quando pede freio, entra
-        # como diretriz pra a IA decidir a dose — o coach decide, não o atleta.
-        if body_directive:
-
-            lines.append(body_directive)
-
-        # a FORMA ao longo das semanas (o atleta está evoluindo?): sobe ->
-        # progride; estagnou -> já traz o estímulo que fura o platô; caiu ->
-        # alivia. É o loop fechado — o plano se adapta à evolução, não pergunta.
-        if fitness_directive:
-
-            lines.append(fitness_directive)
-
-        # o SUBJETIVO recente (RPE dos treinos + check-ins de sensação): o que
-        # ELE SENTIU, fresco — direto no plano, não só via aprendizado semanal.
-        # LEI [[feedback_base_historico_sempre]]: o plano lê TUDO do atleta.
-        if subjective:
-
-            lines.append(subjective)
-
-        return "\n".join(line for line in lines if line)
+        return "\n".join(line for line in lines if line is not None)
 
     @staticmethod
     def _beginner_line(runner: RunnerProfile) -> str:

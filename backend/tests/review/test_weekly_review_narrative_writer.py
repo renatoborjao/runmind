@@ -28,31 +28,36 @@ def _review(goal: dict) -> dict:
     }
 
 
-def test_facts_include_long_term_brief_when_profile_given():
-    """A leitura da semana fala com quem o atleta é: quando há profile, injeta o
-    brief de longo prazo (memória/aprendizados/evolução). LEI base-histórico."""
+def test_facts_include_the_dossier_when_profile_given():
+    """A leitura da semana fala com quem o atleta é: com profile, entra o
+    DOSSIÊ (a mesma base do plano, da análise e do chat). LEI base-histórico."""
 
     with patch(
-        "app.application.coach.context.athlete_brief."
-        "AthleteLongTermBrief.render",
-        return_value="QUEM É O ATLETA NO LONGO PRAZO:\nMemória: prefere rua",
+        "app.application.coach.context.athlete_dossier.AthleteDossier.render",
+        return_value="DOSSIÊ DO ATLETA | Memória: prefere rua",
     ):
 
         facts = WeeklyReviewNarrativeWriter._facts(
             "Renato", _review({"name": "saúde"}), profile="renato",
         )
 
-    assert "QUEM É O ATLETA NO LONGO PRAZO" in facts
+    assert "DOSSIÊ DO ATLETA" in facts
     assert "prefere rua" in facts
 
 
-def test_facts_omit_brief_without_profile():
-    """Sem profile (compatibilidade), nenhum brief é puxado — comportamento
-    de antes."""
+def test_facts_omit_dossier_without_profile():
+    """Sem profile (compatibilidade), nenhum dossiê é puxado."""
 
-    facts = WeeklyReviewNarrativeWriter._facts("Renato", _review({"name": "saúde"}))
+    with patch(
+        "app.application.coach.context.athlete_dossier.AthleteDossier.render",
+    ) as dossier:
 
-    assert "QUEM É O ATLETA NO LONGO PRAZO" not in facts
+        facts = WeeklyReviewNarrativeWriter._facts(
+            "Renato", _review({"name": "saúde"}),
+        )
+
+    dossier.assert_not_called()
+    assert "DOSSIÊ" not in facts
 
 
 def test_facts_frame_a_race_goal():

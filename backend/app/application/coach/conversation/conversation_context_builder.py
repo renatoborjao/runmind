@@ -3,17 +3,11 @@ from datetime import timedelta
 from app.application.assessment.training_assessment_builder import (
     TrainingAssessmentBuilder,
 )
-from app.application.coach.memory.runner_memory_service import (
-    RunnerMemoryService,
-)
 from app.application.history.metrics_resolver import (
     MetricsResolver,
 )
 from app.application.planner.weekly_plan_matcher import (
     WeeklyPlanMatcher,
-)
-from app.application.planner.weekly_plan_message_formatter import (
-    WeeklyPlanMessageFormatter,
 )
 from app.application.planner.weekly_plan_service import (
     WeeklyPlanService,
@@ -31,12 +25,6 @@ from app.core.clock import today_local
 from app.core.weekdays import weekday_label, weekday_name
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
-)
-from app.infrastructure.persistence.coach_outbox_repository import (
-    CoachOutboxRepository,
-)
-from app.infrastructure.persistence.conversation_repository import (
-    ConversationRepository,
 )
 
 
@@ -105,11 +93,6 @@ class ConversationContextBuilder:
             "NÃO são 'hoje'. Para 'hoje/amanhã/ontem/esta semana' use SÓ as três "
             "linhas acima; JAMAIS deduza o dia atual a partir das datas do "
             "plano.\n"
-            f"Corredor: {runner.name}\n"
-            f"Meta: {runner.goal}\n"
-            f"Volume semanal atual: {assessment.current_weekly_volume:.1f} km "
-            f"(meta recomendada: {assessment.recommended_weekly_volume:.1f} km)\n"
-            f"Consistência: {assessment.consistency:.0f}%\n"
             f"Último treino: {ConversationContextBuilder._last_activity_summary(history)}\n"
             f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan, history)}\n"
         )
@@ -126,58 +109,30 @@ class ConversationContextBuilder:
 
             facts = f"{facts}{today_status}\n"
 
-        race_line = ConversationContextBuilder._race_summary(goal)
-
-        if race_line:
-
-            facts = f"{facts}{race_line}\n"
-
-            # DOSSIÊ da prova real (percurso, subidas, largada, clima), se já
-            # pesquisado — só LÊ o cache, nunca pesquisa aqui (latência/custo).
-            try:
-
-                from app.application.races.race_intel_service import (
-                    RaceIntelService,
-                )
-
-                dossier = RaceIntelService.render_context(
-                    RaceIntelService.for_runner(runner)
-                )
-
-                if dossier:
-
-                    facts = f"{facts}{dossier}\n"
-
-            except Exception as e:
-
-                print(f"Falha ao ler dossiê da prova de '{profile}': {e}")
-
-        week_plan = ConversationContextBuilder._week_plan_summary(
-            plan,
-            history,
+        # pergunta de esforço em aberto: uma resposta em PALAVRAS ("foi
+        # tranquilo") é a resposta a ela — o cérebro grava como percepção
+        from app.application.coach.intelligence.perception_recorder import (
+            PerceptionRecorder,
         )
 
-        if week_plan:
+        pending_rpe = PerceptionRecorder.pending_line(profile)
 
-            facts = f"{facts}\n{week_plan}\n"
+        if pending_rpe:
 
-        # o que o COACH mandou por conta própria (análise, briefing, plano) —
-        # não está no histórico de chat, mas o atleta comenta sobre isso
-        recent_coach = ConversationContextBuilder._recent_coach_messages(
-            profile,
+            facts = f"{facts}{pending_rpe}\n"
+
+        # o DOSSIÊ: o quadro INTEIRO do atleta, da MESMA fonte que o plano, a
+        # análise e as mensagens do dia leem — um coach, um cérebro. Antes o
+        # chat montava o próprio recorte e divergia do plano (varredura 26/09).
+        from app.application.coach.context.athlete_dossier import AthleteDossier
+
+        dossier = AthleteDossier.render(
+            profile, runner=runner, history=history, plan=plan, today=today,
         )
 
-        if recent_coach:
+        if dossier:
 
-            facts = f"{facts}\n{recent_coach}\n"
-
-        lifetime = ConversationContextBuilder._lifetime_summary(
-            profile,
-        )
-
-        if lifetime:
-
-            facts = f"{facts}{lifetime}\n"
+            facts = f"{facts}\n{dossier}\n"
 
         # quebra MENSAL do histórico — só quando o atleta pergunta sobre um
         # período ("quantos km em maio?", "corri mais mês passado?"). Fora
@@ -192,67 +147,6 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{history_digest}\n"
 
-        # O QUADRO COMPLETO do atleta (evolução + corpo + sono + o que o coach
-        # aprendeu): o coach de CONVERSA tem que raciocinar como TREINADOR — com
-        # a trajetória inteira na cabeça —, não responder olhando só o dia. Best-
-        # effort: cada peça que falhar simplesmente não entra. Ver item "coach
-        # considera plano/evolução/dia-a-dia".
-        state = ConversationContextBuilder._athlete_state(profile)
-
-        if state:
-
-            facts = f"{facts}\n{state}\n"
-
-        # a CURVA semana a semana (volume, longão, custo cardíaco, corpo/sono):
-        # sempre presente — toda decisão de treino (avulso, ajuste, "dá pra
-        # aumentar?") pesa a trajetória, não só o retrato do dia. Pedido do
-        # Renato (26/09): quanto mais base, mais assertivo.
-        evolution = ConversationContextBuilder._weekly_evolution(profile)
-
-        if evolution:
-
-            facts = f"{facts}\n{evolution}\n"
-
-        # o que ele recebeu de cada ESTÍMULO × o que a meta pede: é o que deixa
-        # o coach OFERECER o treino certo ("5 sem sem limiar, rumo aos 10k...")
-        from app.application.history.stimulus_ledger import StimulusLedger
-
-        stimulus = StimulusLedger.for_profile(profile)
-
-        if stimulus:
-
-            facts = f"{facts}\n{stimulus}\n"
-
-        # o que SE REPETE (com dado) + o que o coach já cobrou: é o que deixa a
-        # conversa ser de treinador (franco quando o pedido esbarra num padrão)
-        # sem virar sermão repetido. Varredura 26/09.
-        from app.application.history.training_patterns import TrainingPatterns
-        from app.infrastructure.persistence.coach_attention_log import (
-            CoachAttentionLog,
-        )
-
-        patterns = TrainingPatterns.for_profile(profile)
-
-        if patterns:
-
-            facts = f"{facts}\n{patterns}\n"
-
-        already = CoachAttentionLog.render(profile, today_local())
-
-        if already:
-
-            facts = f"{facts}\n{already}\n"
-
-        # a DIRETRIZ que o PLANO está seguindo (corpo/carga/risco): o chat e o
-        # avulso precisam bater com ela. Sem isto o chat sugeriu "segurar em 32
-        # km" enquanto o plano segurava no volume da semana passada (~30) —
-        # duas vozes do mesmo coach (varredura 26/09).
-        plan_directive = ConversationContextBuilder._plan_directive(profile)
-
-        if plan_directive:
-
-            facts = f"{facts}\n{plan_directive}\n"
-
         # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
         # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
         # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir
@@ -265,31 +159,6 @@ class ConversationContextBuilder:
         if armario:
 
             facts = f"{facts}\n{armario}\n"
-
-        memory = RunnerMemoryService.render(profile)
-
-        if memory:
-
-            facts = f"{facts}\n{memory}\n"
-
-        # a ÂNCORA EMOCIONAL (por que ele corre) — seção própria, pra o coach
-        # CONHECER o atleta e puxar o porquê dele nos momentos que importam.
-        anchor = RunnerMemoryService.motivation_anchor(profile)
-
-        if anchor:
-
-            facts = f"{facts}\n{anchor}\n"
-
-        summary = ConversationRepository().load_summary(
-            profile,
-        )["summary"]
-
-        if summary:
-
-            facts = (
-                f"{facts}\nResumo de conversas anteriores: "
-                f"{summary}\n"
-            )
 
         return facts
 
@@ -340,224 +209,6 @@ class ConversationContextBuilder:
             lines.append(f"- {label} {day.strftime('%d/%m')}{mark}")
 
         return "\n".join(lines) + "\n"
-
-    # estado do corpo (veredito) traduzido pro coach de conversa
-    _BODY_STATE_PT = {
-        "STRAINED": "sobrecarregado (carga alta + recuperação caindo)",
-        "RECOVERY_FLAG": "recuperação em queda",
-        "ABSORBING": "absorvendo bem a carga (rampa saudável)",
-        "BALANCED": "equilibrado (carga ótima + recuperado)",
-        "FRESH": "descansado, com folga pra puxar",
-        "BUILDING": "ainda montando base de dados do corpo",
-    }
-
-    _LIMITER_PT = {
-        "sono": "sono",
-        "fc_repouso": "FC de repouso subindo",
-        "stress": "stress alto",
-    }
-
-    @staticmethod
-    def _athlete_state(profile: str) -> str:
-        """O quadro completo pro coach de conversa: evolução (forma), corpo/
-        recuperação, sono e o que o coach APRENDEU observando o atleta. Tudo
-        determinístico e já pronto — aqui só rende compacto. Best-effort."""
-
-        lines: list[str] = []
-
-        try:
-
-            from app.application.coach.intelligence.fitness_reading_service import (
-                FitnessReadingService,
-            )
-            from app.application.coach.writer.fitness_evolution_writer import (
-                FitnessEvolutionWriter,
-            )
-
-            evo_line = FitnessEvolutionWriter.line(
-                FitnessReadingService.read_evolution(profile)
-            )
-
-            if evo_line:
-
-                lines.append(f"- Evolução da forma: {evo_line}")
-
-        except Exception as e:
-
-            print(f"Estado (evolução) falhou p/ '{profile}': {e}")
-
-        # estado SUBJETIVO recente que o atleta RELATOU (doença/dor/energia/
-        # sono) — o coach precisa saber disso ao conversar, não só ao gerar o
-        # plano (antes só ia pro plano). Doença aparece em destaque.
-        try:
-
-            from app.application.coach.intelligence.checkin_service import (
-                CheckinService,
-            )
-
-            checkin_line = CheckinService.render_recent(profile)
-
-            if checkin_line:
-
-                lines.append(f"- {checkin_line}")
-
-        except Exception as e:
-
-            print(f"Estado (check-in) falhou p/ '{profile}': {e}")
-
-        try:
-
-            from app.application.coach.intelligence.body_reading_service import (
-                BodyReadingService,
-            )
-
-            reading, _ = BodyReadingService.read(profile, persist=False)
-
-            state = ConversationContextBuilder._BODY_STATE_PT.get(
-                reading.body_state
-            )
-
-            if state:
-
-                # o sono tem LINHA PRÓPRIA abaixo (mais detalhada); não repete
-                # aqui como "ponto de atenção" — evita dizer sono 2x no quadro
-                limiter = (
-                    ConversationContextBuilder._LIMITER_PT.get(reading.limiter)
-                    if reading.limiter and reading.limiter != "sono"
-                    else None
-                )
-
-                extra = f"; ponto de atenção: {limiter}" if limiter else ""
-
-                lines.append(f"- Corpo/recuperação: {state}{extra}")
-
-            # risco de lesão precoce (reusa a leitura do corpo + histórico)
-            from app.application.history.injury_risk_analyzer import (
-                InjuryRiskAnalyzer,
-                injury_risk_chat_line,
-            )
-            from app.infrastructure.persistence.form_fatigue_store import (
-                FormFatigueStore,
-            )
-
-            runner = LoadRunnerProfile.execute(profile)
-
-            risk = InjuryRiskAnalyzer.assess(
-                reading.load,
-                reading.recovery,
-                getattr(runner, "injuries", None),
-                form_fading=FormFatigueStore().is_fading(profile),
-            )
-
-            risk_line = injury_risk_chat_line(risk)
-
-            if risk_line:
-
-                lines.append(risk_line)
-
-            # FORÇA/MOBILIDADE PREVENTIVA (prehab): se o atleta relatou dor, dá
-            # exercícios da área; senão, se o risco está elevado, prehab geral.
-            # É o "o que fazer" que faltava — não só "segure a carga".
-            prehab = ConversationContextBuilder._prehab_line(profile, risk)
-
-            if prehab:
-
-                lines.append(prehab)
-
-            # DESCARGA proativa: se a semana é de recuperação planejada, o coach
-            # precisa saber (e saber explicar) por que o plano está mais leve.
-            from app.application.history.deload_analyzer import (
-                DeloadAnalyzer,
-                deload_chat_line,
-            )
-            from app.application.use_cases.build_training_goal import (
-                BuildTrainingGoal,
-            )
-
-            goal = BuildTrainingGoal.execute(runner)
-
-            today = today_local()
-
-            weeks_to_race = (
-                (goal.race_date - today).days // 7
-                if goal.race_date and goal.race_date > today
-                else None
-            )
-
-            # atleta de treinador externo: o plano é do treinador dele — não
-            # anunciamos "descarga" sobre um plano que não montamos
-            if not getattr(runner, "external_coach", False):
-
-                deload_line = deload_chat_line(
-                    DeloadAnalyzer.assess(
-                        reading.load.weekly_loads,
-                        reading.recovery,
-                        weeks_to_race=weeks_to_race,
-                        acwr=getattr(reading.load, "acwr", None),
-                    )
-                )
-
-                if deload_line:
-
-                    lines.append(deload_line)
-
-        except Exception as e:
-
-            print(f"Estado (corpo) falhou p/ '{profile}': {e}")
-
-        try:
-
-            from app.application.coach.intelligence.sleep_reading_service import (
-                SleepReadingService,
-            )
-
-            sr = SleepReadingService.read(profile)
-
-            if sr.has_data and sr.avg_hours is not None:
-
-                trend = {"rising": "melhorando", "falling": "caindo"}.get(
-                    sr.direction, "estável"
-                )
-
-                debt = " (abaixo do que o corpo pede)" if sr.debt else ""
-
-                lines.append(
-                    f"- Sono: ~{sr.avg_hours:.1f}h/noite, {trend}{debt}"
-                )
-
-        except Exception as e:
-
-            print(f"Estado (sono) falhou p/ '{profile}': {e}")
-
-        try:
-
-            from app.core.config import get_settings
-
-            if get_settings().coach_learning_inject_enabled:
-
-                from app.application.coach.memory.coach_learning_service import (
-                    CoachLearningService,
-                )
-
-                learnings = CoachLearningService.render(profile)
-
-                if learnings:
-
-                    lines.append(learnings)
-
-        except Exception as e:
-
-            print(f"Estado (aprendizados) falhou p/ '{profile}': {e}")
-
-        if not lines:
-
-            return ""
-
-        return (
-            "QUADRO ATUAL DO ATLETA (você é o TREINADOR dele — considere SEMPRE "
-            "a trajetória inteira ao analisar, propor e responder, nunca só o "
-            "dia de hoje):\n" + "\n".join(lines)
-        )
 
     # rótulo amigável de cada função no grounding do chat
     _SHOE_CATEGORY_PT = {
@@ -631,139 +282,6 @@ class ConversationContextBuilder:
             return ""
 
     @staticmethod
-    def _prehab_line(profile: str, risk) -> str:
-        """Prehab pro quadro do coach: dor relatada -> exercícios da área;
-        senão, risco elevado -> prehab geral; senão nada. Best-effort."""
-
-        try:
-
-            from app.application.coach.intelligence.prehab_advisor import (
-                PrehabAdvisor,
-            )
-            from app.core.clock import today_local
-            from app.infrastructure.persistence.checkin_repository import (
-                CheckinRepository,
-            )
-
-            checkin = CheckinRepository().latest_recent(
-                profile, today_local().isoformat()
-            )
-
-            sore = checkin is not None and (checkin.soreness or 0) >= 2
-
-            if sore:
-
-                note = checkin.note or ""
-
-                return PrehabAdvisor.directive_for_pain(note)
-
-            if getattr(risk, "elevated", False):
-
-                return PrehabAdvisor.directive_general()
-
-        except Exception as e:
-
-            print(f"Prehab falhou p/ '{profile}': {e}")
-
-        return ""
-
-    @staticmethod
-    def _race_summary(
-        goal,
-        reference_date=None,
-    ) -> str:
-        """Prova alvo, quando existir e for futura — atleta sem prova
-        não tem essa linha (nada é inventado)."""
-
-        if goal.race_date is None:
-
-            return ""
-
-        today = reference_date or today_local()
-
-        if goal.race_date <= today:
-
-            return ""
-
-        weeks = (goal.race_date - today).days // 7
-
-        target = (
-            f", alvo {goal.target_time}" if goal.target_time else ""
-        )
-
-        # a META de fundo já aparece no cabeçalho ("Meta: ..."); aqui é a PROVA
-        # concreta (distância + data), NÃO a meta. Rotular a data como "da meta"
-        # fundia a prova de 10k com o objetivo de 21km (bug do Renato).
-        return (
-            f"Próxima prova: {goal.race_label} em "
-            f"{goal.race_date.strftime('%d/%m/%Y')} "
-            f"(daqui a {weeks} semanas{target})\n"
-        )
-
-    @staticmethod
-    def _lifetime_summary(
-        profile: str,
-    ) -> str:
-        """Agregados do arquivo permanente — o coach responde sobre o
-        histórico de vida, além da janela recente do Strava."""
-
-        stats = ActivityArchiveRepository().stats(profile)
-
-        if stats is None:
-
-            return ""
-
-        first = stats["first_date"]
-
-        first_label = f"{first[5:7]}/{first[:4]}"  # mm/aaaa
-
-        return (
-            f"Histórico geral registrado: {stats['total_runs']} "
-            f"treinos, {stats['total_km']:.0f} km desde "
-            f"{first_label}; maior treino: "
-            f"{stats['longest_km']:.1f} km\n"
-        )
-
-    @staticmethod
-    def _plan_directive(profile: str) -> str:
-        """A mesma diretriz de corpo que o gerador do plano recebe, pro chat
-        não prometer outra coisa. Best-effort: falha vira ""."""
-
-        try:
-
-            from app.application.coach.planning.ai_plan_service import (
-                AIPlanService,
-            )
-
-            directive = AIPlanService._body_directive(profile)
-
-        except Exception as e:
-
-            print(f"Diretriz do plano p/ chat falhou p/ '{profile}': {e}")
-
-            return ""
-
-        if not directive:
-
-            return ""
-
-        return (
-            "DIRETRIZ QUE O PLANO ESTÁ SEGUINDO AGORA (é a SUA decisão de "
-            "treinador — no chat, qualquer sugestão de volume/intensidade/"
-            "treino avulso tem que BATER com isto; não prometa outra coisa):\n"
-            f"{directive}"
-        )
-
-    @staticmethod
-    def _weekly_evolution(profile: str) -> str:
-
-        from app.application.history.weekly_evolution_digest import (
-            WeeklyEvolutionDigest,
-        )
-
-        return WeeklyEvolutionDigest.for_profile(profile)
-
-    @staticmethod
     def _history_digest(
         profile: str,
         incoming_text: str,
@@ -796,77 +314,6 @@ class ConversationContextBuilder:
             print(f"Digest mensal falhou p/ '{profile}': {e}")
 
             return ""
-
-    @staticmethod
-    def _week_plan_summary(
-        plan,
-        history,
-    ) -> str:
-        """Plano completo da semana — permite ao coach responder
-        "qual meu treino de sábado?" sem inventar. Marca feito x não feito
-        validando o histórico real (não assume que passou = feito)."""
-
-        if not plan.sessions:
-
-            return ""
-
-        done_days = WeeklyPlanMatcher.fulfilled_days(
-            plan,
-            history.activities,
-        )
-
-        # km REAL corrido em cada sessão feita (todos os tipos) — o "✅ feito"
-        # mostra "45 min → 6,2 km".
-        WeeklyPlanMatcher.hydrate_executed(plan, history.activities)
-
-        today = today_local()
-
-        # plano de uma semana já encerrada (ex.: treinador externo que ainda
-        # não mandou o desta semana). Deixa explícito, pra o coach NÃO recitar
-        # como se fosse a semana atual. O que decide é a SEMANA ter acabado —
-        # não as sessões estarem no passado: quem treina seg/qua/qui tem, na
-        # sexta, um plano vigente com todas as sessões atrás, e ouvir "ainda
-        # não há plano desta semana" seria mentira.
-        is_stale = plan.week_start + timedelta(days=6) < today
-
-        if is_stale:
-
-            header = (
-                f"Plano da semana de {plan.week_start.strftime('%d/%m')} "
-                "(JÁ ENCERRADA — ainda não há plano desta semana; as datas "
-                "abaixo são passadas):"
-            )
-
-        else:
-
-            header = "Plano da semana completo:"
-
-        lines = [header]
-
-        lines.extend(
-            WeeklyPlanMessageFormatter.session_lines(
-                plan,
-                today,
-                done_days=done_days,
-            )
-        )
-
-        if plan.source == "externo":
-
-            note = (
-                "(plano montado pelo treinador do corredor — o "
-                "Ritmind só acompanha"
-            )
-
-            note += (
-                "; aguardando o print do plano desta semana)"
-                if is_stale
-                else ")"
-            )
-
-            lines.append(note)
-
-        return "\n".join(lines)
 
     @staticmethod
     def _last_activity_summary(
@@ -944,42 +391,6 @@ class ConversationContextBuilder:
             f"Treino de HOJE ({session.workout_type}): ainda NÃO registrado "
             "(o atleta pode não ter feito ainda, ou não sincronizou)."
         )
-
-    @staticmethod
-    def _recent_coach_messages(
-        profile: str,
-        limit: int = 2,
-        max_chars: int = 700,
-    ) -> str:
-        """As últimas mensagens AUTOMÁTICAS que o coach enviou (análise,
-        briefing, plano) — não entram no histórico de chat, mas o atleta
-        comenta sobre elas. Compactadas numa linha e truncadas pra não inflar
-        o contexto."""
-
-        entries = CoachOutboxRepository().recent(profile, limit)
-
-        if not entries:
-
-            return ""
-
-        lines = [
-            "MENSAGENS QUE VOCÊ (coach) JÁ ENVIOU ao atleta recentemente "
-            "(análise/briefing/plano — NÃO estão no histórico de chat acima, "
-            "mas o atleta pode comentar sobre elas; reconheça o que já disse "
-            "em vez de repetir tudo):"
-        ]
-
-        for entry in entries:
-
-            text = " ".join(str(entry.get("text", "")).split())
-
-            if len(text) > max_chars:
-
-                text = text[:max_chars] + "…"
-
-            lines.append(f"- {text}")
-
-        return "\n".join(lines)
 
     @staticmethod
     def _next_session_summary(

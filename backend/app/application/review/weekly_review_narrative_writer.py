@@ -225,34 +225,17 @@ class WeeklyReviewNarrativeWriter:
 
         lines.append(f"Consistência recente: {review.get('consistency', 0):.0f}%")
 
-        # quem é o atleta no longo prazo (memória + aprendizados + evolução) —
-        # a leitura da semana fala com quem ELE é, não genérico. LEI
-        # [[feedback_base_historico_sempre]]. Best-effort (vazio se sem lastro).
+        # o DOSSIÊ do atleta — a MESMA base do plano, da análise e do chat
+        # (evolução, corpo, percepção, padrões, plano, memória, o que já foi
+        # cobrado/dito): a leitura da semana fala com quem ELE é e não
+        # contradiz o que o coach decidiu. LEI [[feedback_base_historico_sempre]].
         if profile:
 
-            from app.application.coach.context.athlete_brief import (
-                AthleteLongTermBrief,
+            from app.application.coach.context.athlete_dossier import (
+                AthleteDossier,
             )
 
-            brief = AthleteLongTermBrief.render(profile)
-
-            if brief:
-
-                lines.append(brief)
-
-            # o que SE REPETE (com dado) + o que já foi cobrado — a semana é o
-            # momento de olhar o padrão, não o treino isolado
-            from app.application.history.training_patterns import (
-                TrainingPatterns,
-            )
-            from app.core.clock import today_local
-            from app.infrastructure.persistence.coach_attention_log import (
-                CoachAttentionLog,
-            )
-
-            lines.append(TrainingPatterns.for_profile(profile))
-
-            lines.append(CoachAttentionLog.render(profile, today_local()))
+            lines.append(AthleteDossier.render(profile))
 
         return "\n".join(line for line in lines if line)
 

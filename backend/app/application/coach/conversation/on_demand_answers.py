@@ -161,7 +161,7 @@ class OnDemandAnswers:
             )
 
             text = await BodyReadingWriter.write(
-                reading, runner.name, trajectory=note
+                reading, runner.name, trajectory=note, profile=profile,
             )
 
             # se o corpo pede freio e AMANHÃ tem treino exigente, o coach já

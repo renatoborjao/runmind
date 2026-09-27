@@ -88,10 +88,11 @@ class BodyReadingWriter:
         reading: BodyReading,
         runner_name: str,
         trajectory: BodyTrajectory | None = None,
+        profile: str | None = None,
     ) -> str:
 
         narrative, _ = await BodyReadingWriter.narrate(
-            reading, runner_name, trajectory
+            reading, runner_name, trajectory, profile=profile,
         )
 
         # painel factual dos números de recuperação — o veredito narra, o
@@ -105,6 +106,7 @@ class BodyReadingWriter:
         reading: BodyReading,
         runner_name: str,
         trajectory: BodyTrajectory | None = None,
+        profile: str | None = None,
     ) -> tuple[str, bool]:
         """Só a narrativa (sem painel de números) — usada pelo chat (via
         `write`) e pelas telas do app. Retorna (texto, veio_da_ia) pra quem
@@ -112,7 +114,9 @@ class BodyReadingWriter:
         de novo na próxima leitura, [[feedback_ia_json_blindada]])."""
 
         prompt = _SYSTEM_PROMPT.format(
-            facts=BodyReadingWriter._facts(reading, runner_name, trajectory)
+            facts=BodyReadingWriter._facts(
+                reading, runner_name, trajectory, profile=profile,
+            )
         )
 
         try:
@@ -149,6 +153,7 @@ class BodyReadingWriter:
         reading: BodyReading,
         runner_name: str,
         trajectory: BodyTrajectory | None = None,
+        profile: str | None = None,
     ) -> str:
 
         load = reading.load
@@ -219,6 +224,20 @@ class BodyReadingWriter:
         if trajectory is not None and trajectory.has_note:
 
             lines.append(f"Trajetória: {trajectory.athlete_note}")
+
+        # o DOSSIÊ do atleta — a MESMA base do plano, da análise e do chat
+        # (evolução, percepção, padrões, plano, o que o coach já disse)
+        if profile:
+
+            from app.application.coach.context.athlete_dossier import (
+                AthleteDossier,
+            )
+
+            dossier = AthleteDossier.render(profile)
+
+            if dossier:
+
+                lines.append(dossier)
 
         return "\n".join(lines)
 

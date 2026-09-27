@@ -113,6 +113,16 @@ class CoachBrainExecutor:
 
             return None
 
+        # a PERCEPÇÃO que ele contou (como se sentiu num treino) vira dado — em
+        # paralelo a qualquer resposta/ação. Best-effort. Ver PerceptionRecorder.
+        if decision.perception:
+
+            from app.application.coach.intelligence.perception_recorder import (
+                PerceptionRecorder,
+            )
+
+            PerceptionRecorder.from_chat(profile, decision.perception)
+
         # 1) resposta a uma proposta PENDENTE
         if pending is not None and decision.on_pending:
 

@@ -183,3 +183,36 @@ def test_walks_do_not_anchor_the_model():
     model = PaceModelBuilder.build(_history(_run(5, 8.5, sport="Walk")), None)
 
     assert model.source == SOURCE_ROOKIE
+
+
+def test_gps_broken_run_does_not_anchor_capacity():
+    """Hélio 27/09: UMA corrida com pico de 100,9 km/h (salto de GPS) saiu
+    '7,6 km a 4:49' — ele roda 6:15-6:50 — e virava VDOT 41 (limiar 4:07).
+    Pico sobre-humano = GPS quebrado: não ancora."""
+
+    glitch = _run(7.6, 4.8)
+
+    glitch.max_speed = 100.9 / 3.6
+
+    history = _history(glitch, _run(7, 6.3), _run(10, 6.4), _run(6, 6.5))
+
+    model = PaceModelBuilder.build(history)
+
+    assert model.vdot < 32
+    assert _pace_str(model.threshold) > "5:30"
+
+
+def test_gps_broken_flags_only_superhuman_peaks():
+
+    from app.application.history.pace_model_builder import gps_broken
+
+    sprint = _run(5, 4.0)
+
+    sprint.max_speed = 26 / 3.6  # tiro forte de gente
+
+    glitch = _run(5, 4.0)
+
+    glitch.max_speed = 60 / 3.6
+
+    assert gps_broken(sprint) is False
+    assert gps_broken(glitch) is True

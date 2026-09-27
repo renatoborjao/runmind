@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from google.genai import types
 
 from app.application.coach.context.coach_context import CoachContext
+from app.application.coach.intelligence.perception_recorder import (
+    WATCH_FEEL_WORDS,
+)
 from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.application.coach.writer.labels import (
     intensity_label,
@@ -14,16 +17,16 @@ from app.application.coach.writer.labels import (
 from app.application.external_plan.treino_online_legend import (
     legend_for_prompt,
 )
+from app.application.history.hr_zone_history import HrZoneHistory
 from app.application.planner.pace_formatter import PaceFormatter
+from app.core.clock import today_local
 from app.core.config import get_settings
 from app.domain.entities.workout_structure import WorkoutStructure
+from app.domain.value_objects.hr_zones import zone_share_label
 from app.infrastructure.integrations.gemini.client import (
     generate_json,
     repair_json,
 )
-from app.application.history.hr_zone_history import HrZoneHistory
-from app.core.clock import today_local
-from app.domain.value_objects.hr_zones import zone_share_label
 
 # Pro pensa (thinking) e isso conta no orçamento de saída + é cobrado como
 # output. Teto de thinking EXPLÍCITO + max_output com folga pra caber
@@ -90,7 +93,7 @@ PROMPT_TEMPLATE = """{voice}
 AGORA: o treino deste atleta ACABOU de sair. Escreva a sua leitura dele, por \
 mensagem (WhatsApp) — honesta e ESPECÍFICA deste treino.
 
-FATOS DO TREINO (use SÓ isto, não invente número nenhum):
+FATOS DO TREINO + DOSSIÊ DO ATLETA (use SÓ isto, não invente número nenhum):
 {facts}
 
 O QUE LER NOS FATOS:
@@ -102,8 +105,8 @@ mérito. Cortar/não completar a sessão-chave pesa.
 - FC × PACE: FC subindo com o pace parado (deriva, desacoplamento) = fadiga, \
 calor ou base curta. Em tiros, FC de recuperação quase igual à de pico \
 (diferença menor que ~10 bpm) = pausa curta/rápida demais ou corpo cansado.
-- PERCEPÇÃO: RPE/sensação do atleta batendo ou não com a FC/pace — divergência \
-é informação, comente.
+- PERCEPÇÃO: RPE/sensação do atleta (deste treino e os relatos recentes do \
+dossiê) batendo ou não com a FC/pace — divergência é informação, comente.
 - PADRÕES RECENTES: se o de hoje REPETE um padrão ruim, é aí que se cobra; se \
 hoje QUEBROU um padrão ruim, reconheça de verdade (é evolução).
 - Comente o que ESTES dados mostram — estrutura/splits (tiros, se manteve o \
@@ -148,15 +151,18 @@ RECENTES: sono curto há semanas, recuperação piorando), ela deixou de ser \
 apesar de um contexto ruim, reconheça o treino — sem transformar o sinal ruim \
 do corpo em qualidade. NUNCA invente causa que não esteja nos fatos; se o \
 desempenho foi normal/bom, não force desculpa.
-- DORES/LESÕES: se houver "DORES/LESÕES", leve SEMPRE em conta — NUNCA cobre \
+- DORES/LESÕES: se o dossiê trouxer lesão/limitação declarada ou dor/doença nos \
+relatos, leve SEMPRE em conta — NUNCA cobre \
 desempenho, ritmo ou volume ignorando uma dor ou lesão declarada. Reconheça, \
 priorize recuperação e, se for dor, oriente cautela (e procurar profissional se \
 persistir). Jamais mande "forçar" ou "compensar" em cima de dor.
-- LONGO PRAZO (quem é o atleta): se houver "QUEM É O ATLETA NO LONGO PRAZO", \
-use pra PERSONALIZAR — conecte este treino à trajetória/evolução dele, respeite \
+- DOSSIÊ (quem é o atleta, evolução, corpo, padrões, plano, o que você já \
+disse): use pra PERSONALIZAR — conecte este treino à trajetória/evolução dele, respeite \
 o que ele já te contou (memória) e o que você aprendeu que funciona ou não pra \
 ele. Você não é um robô olhando só hoje: é o treinador que acompanha esse \
-atleta há tempo. Nunca contrarie esses fatos nem invente além deles. Memória \
+atleta há tempo. Nunca contrarie esses fatos nem invente além deles, e NÃO \
+contradiga o que você mesmo já decidiu/disse (plano da semana, bom dia) — se o \
+treino de hoje muda a leitura, diga o que mudou. Memória \
 de "recuperação rápida"/"recupera acelerado" é sobre a DOSE do plano — não \
 apaga sinal de FC/sono na execução e nunca vira elogio.
 - Fale com "você", português do Brasil.
@@ -347,8 +353,6 @@ class AIAnalysisWriter:
 
         lines = [f"Atleta: {first_name(runner.name) or runner.name}"]
 
-        lines += AIAnalysisWriter._goal_facts(runner)
-
         if context.planned is not None:
 
             planned = context.planned
@@ -502,48 +506,19 @@ class AIAnalysisWriter:
 
             lines.append(day_context)
 
-        # DORES/LESÕES: limitações declaradas + check-in de dor recente. A
-        # análise JAMAIS pode comentar um treino ignorando que o atleta está
-        # lesionado ou relatou dor — é o que separa coach de robô. LEI:
-        # [[feedback_base_historico_sempre]].
-        pain_facts = AIAnalysisWriter._pain_facts(runner.id, runner.injuries)
+        # o DOSSIÊ do atleta — meta/prova, capacidade, evolução, corpo,
+        # PERCEPÇÃO, padrões, plano da semana, memória, o que já cobrou e o que
+        # o coach já disse (bom dia, plano): a MESMA base do plano e do chat.
+        # Sem isto a análise olhava o treino + um recorte e "esquecia" quem o
+        # atleta é — ou contradizia o que o plano/bom dia decidiu. LEI:
+        # [[feedback_base_historico_sempre]]. Best-effort (vazio se falhar).
+        from app.application.coach.context.athlete_dossier import AthleteDossier
 
-        if pain_facts:
+        dossier = AthleteDossier.render(runner.id, runner=runner)
 
-            lines.append(pain_facts)
+        if dossier:
 
-        # QUEM É O ATLETA NO LONGO PRAZO: memória evolutiva + aprendizados do
-        # coach + trajetória da forma. Sem isto a análise olha só o treino de
-        # hoje + passado recente e "esquece" quem o atleta é — vira robô. LEI:
-        # [[feedback_base_historico_sempre]]. Mesmas fontes do plano/chat.
-        memory_facts = AIAnalysisWriter._athlete_memory_facts(runner.id)
-
-        if memory_facts:
-
-            lines.append(memory_facts)
-
-        # PADRÕES RECENTES (o que SE REPETE: leve saindo forte, estourar o
-        # combinado, cortar sessão-chave, furos, RPE, sono e recuperação vs a
-        # base dele) — é o que autoriza o coach a cobrar com fundamento, ou
-        # reconhecer quando o atleta quebrou um padrão ruim. Best-effort.
-        from app.application.history.training_patterns import TrainingPatterns
-
-        patterns = TrainingPatterns.for_profile(runner.id)
-
-        if patterns:
-
-            lines.append(patterns)
-
-        # o que o coach JÁ cobrou há pouco — pra não virar sermão repetido
-        from app.infrastructure.persistence.coach_attention_log import (
-            CoachAttentionLog,
-        )
-
-        already = CoachAttentionLog.render(runner.id, today_local())
-
-        if already:
-
-            lines.append(already)
+            lines.append(dossier)
 
         # o próximo treino do plano — pra o "próximo passo" dizer o que fazer
         # DIFERENTE nele, não uma frase genérica de recuperação
@@ -554,51 +529,6 @@ class AIAnalysisWriter:
             lines.append(next_line)
 
         return "\n".join(lines)
-
-    @staticmethod
-    def _goal_facts(runner) -> list[str]:
-        """A META que ancora: a prova (nome/distância/data/tempo-alvo) quando
-        há, + o objetivo de fundo. Antes ia só o texto de fundo ("correr 21
-        km...") e a análise falava da "meia maratona" com a prova de 15 km a 12
-        semanas."""
-
-        lines = []
-
-        try:
-
-            from app.application.use_cases.build_training_goal import (
-                BuildTrainingGoal,
-            )
-
-            goal = BuildTrainingGoal.execute(runner)
-
-            if goal.race_date:
-
-                weeks = (goal.race_date - today_local()).days // 7
-
-                race = getattr(runner, "target_race", None) or (
-                    f"prova de {goal.distance_km:g} km"
-                )
-
-                target = (
-                    f", meta de tempo {goal.target_time}"
-                    if goal.target_time else ""
-                )
-
-                lines.append(
-                    f"Prova-alvo: {race} em {goal.race_date:%d/%m/%Y} "
-                    f"(faltam ~{max(weeks, 0)} semanas){target}"
-                )
-
-        except Exception as e:
-
-            print(f"Meta p/ análise falhou p/ '{runner.id}': {e}")
-
-        if runner.goal:
-
-            lines.append(f"Objetivo de fundo: {runner.goal}")
-
-        return lines
 
     @staticmethod
     def _intent_facts(context: CoachContext) -> str | None:
@@ -789,79 +719,9 @@ class AIAnalysisWriter:
 
         return text
 
-    @staticmethod
-    def _pain_facts(profile: str, injuries: list[str]) -> str:
-        """Dores/lesões do atleta: limitações declaradas (perfil) + check-in de
-        dor recente. A análise tem que considerar SEMPRE — nunca cobrar
-        desempenho/volume em cima de dor ou lesão. Best-effort — nunca derruba."""
-
-        lines: list[str] = []
-
-        if injuries:
-
-            lines.append(
-                "Lesões/limitações declaradas: " + ", ".join(injuries)
-            )
-
-        try:
-
-            from app.core.clock import today_local
-            from app.infrastructure.persistence.checkin_repository import (
-                CheckinRepository,
-            )
-
-            checkin = CheckinRepository().latest_recent(
-                profile, today_local().isoformat()
-            )
-
-            if checkin is not None and (checkin.soreness or 0) >= 2:
-
-                note = (checkin.note or "").strip()
-
-                detail = f": {note}" if note else ""
-
-                lines.append(
-                    f"Dor/desconforto relatado recentemente "
-                    f"(nível {checkin.soreness}){detail}"
-                )
-
-        except Exception as e:
-
-            print(f"Dores p/ análise falharam p/ '{profile}': {e}")
-
-        if not lines:
-
-            return ""
-
-        return (
-            "DORES/LESÕES (considere SEMPRE — NUNCA cobre desempenho/volume "
-            "ignorando dor ou lesão):\n" + "\n".join(lines)
-        )
-
-    @staticmethod
-    def _athlete_memory_facts(profile: str) -> str:
-        """Contexto de LONGO PRAZO do atleta pra a análise: evolução da forma,
-        memória evolutiva (preferências/histórico que ele contou) e o que o
-        coach APRENDEU sobre ele. Fonte única no AthleteLongTermBrief (mesmo
-        bloco usado no chat e nas mensagens proativas)."""
-
-        from app.application.coach.context.athlete_brief import (
-            AthleteLongTermBrief,
-        )
-
-        return AthleteLongTermBrief.render(
-            profile,
-            header=(
-                "QUEM É O ATLETA NO LONGO PRAZO (você o acompanha há tempo — "
-                "considere ao analisar, não olhe só o treino de hoje):"
-            ),
-        )
-
-    # sensação do atleta (directWorkoutFeel do Garmin, 0-100 em passos de 25)
-    _FEEL_WORDS = {
-        0: "muito cansado", 25: "cansado", 50: "normal",
-        75: "bem", 100: "forte",
-    }
+    # sensação do atleta (directWorkoutFeel do Garmin, 0-100 em passos de 25) —
+    # a mesma tabela que grava a percepção do relógio (PerceptionRecorder)
+    _FEEL_WORDS = WATCH_FEEL_WORDS
 
     @staticmethod
     def aerobic_block_ceiling(context: CoachContext) -> int | None:

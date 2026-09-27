@@ -30,9 +30,12 @@ _BARE = re.compile(r"^\s*(\d{1,2})\s*$")
 
 class RpeFlow:
 
+    # pergunta de treinador, não formulário: aceita número OU palavras (as
+    # palavras o cérebro do chat lê e grava — ver PerceptionRecorder)
     ASK_LINE = (
-        "💬 De 0 a 10, quão puxado foi esse treino? "
-        "(só o número — eu uso pra calibrar sua carga)"
+        "💬 E pra você, quanto custou esse, de 0 a 10? Pode ser em palavras "
+        "também (\"tranquilo\", \"puxado\", \"morri no fim\") — é o que me faz "
+        "acertar a dose da próxima."
     )
 
     @staticmethod

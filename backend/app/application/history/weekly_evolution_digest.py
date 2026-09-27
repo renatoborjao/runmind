@@ -363,7 +363,8 @@ class WeeklyEvolutionDigest:
             return sum(s.km for s in group) / len(group)
 
         return (
-            f"Tendência de volume (4 semanas fechadas × 4 anteriores): "
+            f"Tendência de volume (média das 4 semanas fechadas × as 4 "
+            f"anteriores, semana sem corrida conta zero): "
             f"{avg_km(before):.0f} → {avg_km(recent):.0f} km/sem."
         )
 

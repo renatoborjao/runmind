@@ -7,6 +7,7 @@ por rodada (rate limit). Best-effort. Ver [[project_modelo_pace_vdot]]."""
 
 from app.application.history.best_effort_vdot import BestEffortVdot
 from app.application.history.form_fatigue_analyzer import FormFatigueAnalyzer
+from app.application.history.pace_model_builder import gps_broken
 from app.domain.value_objects.sports import is_run_sport
 from app.infrastructure.integrations.strava.client import StravaClient
 from app.infrastructure.persistence.best_effort_vdot_store import (
@@ -58,9 +59,18 @@ class BestEffortRefresh:
 
             if activity.id not in vdot_seen:
 
-                did = await BestEffortRefresh._do_vdot(
-                    client, vdot_store, profile, activity.id
-                ) or did
+                if gps_broken(activity):
+
+                    # GPS quebrado: marca como visto sem subir a marca-d'água
+                    vdot_store.update(profile, activity.id, None)
+
+                    did = True
+
+                else:
+
+                    did = await BestEffortRefresh._do_vdot(
+                        client, vdot_store, profile, activity.id
+                    ) or did
 
             if activity.id not in fade_seen:
 

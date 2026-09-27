@@ -106,6 +106,7 @@ class MonthlyRecapNotifier:
         narrative = await MonthlyRecapNarrativeWriter.write(
             runner.name,
             recap,
+            profile=profile,
         )
 
         message = MonthlyRecapMessageFormatter.format(

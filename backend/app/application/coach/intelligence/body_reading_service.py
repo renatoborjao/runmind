@@ -118,7 +118,7 @@ class BodyReadingService:
             return today_snapshot.narrative
 
         narrative, from_ai = await BodyReadingWriter.narrate(
-            reading, runner_name, trajectory
+            reading, runner_name, trajectory, profile=profile,
         )
 
         if from_ai:

@@ -50,11 +50,12 @@ class MonthlyRecapNarrativeWriter:
     async def write(
         runner_name: str,
         recap: dict,
+        profile: str | None = None,
     ) -> list[str] | None:
 
         try:
 
-            facts = MonthlyRecapNarrativeWriter._facts(runner_name, recap)
+            facts = MonthlyRecapNarrativeWriter._facts(runner_name, recap, profile)
 
             settings = get_settings()
 
@@ -102,7 +103,7 @@ class MonthlyRecapNarrativeWriter:
         return lines or None
 
     @staticmethod
-    def _facts(runner_name: str, recap: dict) -> str:
+    def _facts(runner_name: str, recap: dict, profile: str | None = None) -> str:
 
         lines = [
             f"Atleta: {runner_name}",
@@ -130,5 +131,19 @@ class MonthlyRecapNarrativeWriter:
             lines.append(
                 f"Previsão de prova no ritmo atual: {predicted['formatted']}."
             )
+
+        # o DOSSIÊ: o mês lido à luz de quem ele é e do que o coach vem
+        # decidindo — mesma base de todas as vozes
+        if profile:
+
+            from app.application.coach.context.athlete_dossier import (
+                AthleteDossier,
+            )
+
+            dossier = AthleteDossier.render(profile)
+
+            if dossier:
+
+                lines.append(dossier)
 
         return "\n".join(lines)

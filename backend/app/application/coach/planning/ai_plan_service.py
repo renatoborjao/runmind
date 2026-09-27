@@ -1,33 +1,11 @@
-from datetime import date, timedelta
+from datetime import date
 
-from app.application.coach.conversation.rpe_flow import RpeFlow
-from app.application.coach.intelligence.body_reading_service import (
-    BodyReadingService,
-)
-from app.application.coach.intelligence.checkin_service import CheckinService
-from app.application.coach.intelligence.fitness_reading_service import (
-    FitnessReadingService,
-)
-from app.application.coach.memory.coach_learning_service import (
-    CoachLearningService,
-)
-from app.application.coach.memory.runner_memory_service import (
-    RunnerMemoryService,
-)
-from app.application.coach.planning.body_directive import body_plan_directive
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
 from app.application.coach.planning.executed_week_summary import (
     ExecutedWeekSummary,
 )
-from app.application.coach.planning.fitness_directive import (
-    fitness_plan_directive,
-)
 from app.application.coach.planning.plan_context_builder import (
     PlanContextBuilder,
-)
-from app.application.history.adherence_analyzer import AdherenceAnalyzer
-from app.application.history.runner_baseline_builder import (
-    RunnerBaselineBuilder,
 )
 from app.application.planner.engines.phase_engine import PhaseEngine
 from app.application.planner.weekly_plan_service import WeeklyPlanService
@@ -124,13 +102,6 @@ class AIPlanService:
 
             repository.save(profile, plan)
 
-            # REVISÃO pós-geração: rede de segurança por cima do plano gerado —
-            # marca sessão irreal pra este atleta e, com a projeção do Garmin
-            # como âncora de capacidade, pega ritmo de prova acima do que ela
-            # sustenta (nota/ajuste, nunca reescreve o pace). Best-effort: falha
-            # da IA revisora nunca segura a entrega do plano.
-            plan = await AIPlanService._review_plan(profile, runner, plan, goal)
-
             return plan
 
         except Exception as e:
@@ -159,7 +130,6 @@ class AIPlanService:
         FALLBACK pro Flash antes de deixar o determinístico assumir — não deixa
         a qualidade despencar por uma falha do PRO. Ver [[project_consumo_tokens]]."""
 
-        from app.core.config import get_settings
 
         settings = get_settings()
 
@@ -218,38 +188,9 @@ class AIPlanService:
             week_start,
         )
 
-        baseline = RunnerBaselineBuilder.build(history, runner)
-
-        recent_adherence = WeeklyPlanService._recent_adherence(
-            profile,
-            repository,
-            history,
-            week_start,
-        )
-
-        # padrão de furo das últimas semanas — a janela vai até a semana
-        # ANTERIOR à que estamos gerando (a nova ainda não aconteceu)
-        adherence_report = AdherenceAnalyzer.analyze(
-            repository.history(profile),
-            history,
-            until_week=week_start - timedelta(days=7),
-        )
-
-        memory = RunnerMemoryService.render(profile)
-
-        # aprendizados do coach (o que ele FEZ) — só injeta com a flag ligada.
-        # Desligada (padrão), passa "" e o prompt fica idêntico ao de hoje.
-        learnings = (
-            CoachLearningService.render(profile)
-            if get_settings().coach_learning_inject_enabled
-            else ""
-        )
-
-        weeks_to_race = AIPlanService._weeks_to_race(goal, week_start)
-
-        # dias EXATOS até a prova — perto dela, "1 vs 2 semanas" (piso de //7)
-        # muda a decisão de taper (13 dias de um 10k virava "1 semana" e o coach
-        # afiava cedo demais). O coach decide a periodização; damos o número certo.
+        # dias EXATOS até a prova a partir da semana-alvo — perto dela, "1 vs 2
+        # semanas" (piso de //7) muda a decisão de taper. O coach decide a
+        # periodização; damos o número certo.
         days_to_race = (
             (goal.race_date - week_start).days
             if goal.race_date and goal.race_date > week_start
@@ -261,249 +202,28 @@ class AIPlanService:
             history.activities,
         )
 
-        # PROVA recente: o taper (antes) + a prova já foram o recuo — a análise
-        # de carga não pode ler a reconstrução pós-prova como sobrecarga nova e
-        # mandar descarregar. Detectada PRIMEIRO do que o coach já sabia (debrief
-        # da prova-alvo), com o Strava só como rede. Sem marcação manual.
-        weeks_since_race = AIPlanService._weeks_since_race(
-            profile, history, week_start
+        # o DOSSIÊ: meta, capacidade, evolução, corpo, percepção, padrões,
+        # estímulos, plano vigente e o que o coach já sabe/disse — a MESMA base
+        # do chat, da análise e das mensagens do dia (um coach, um cérebro).
+        # Antes o plano montava o próprio recorte com 8 diretrizes separadas e
+        # divergia do resto (varredura 26/09).
+        from app.application.coach.context.athlete_dossier import AthleteDossier
+
+        dossier = AthleteDossier.render(
+            profile, runner=runner, history=history,
         )
 
-        # o corpo AGORA (carga à luz da recuperação): se pede freio, vira
-        # diretriz de dose pra IA decidir a semana. Best-effort — falhar aqui
-        # nunca deixa o atleta sem plano.
-        body_directive = AIPlanService._body_directive(
-            profile, weeks_to_race, weeks_since_race
-        )
-
-        # a FORMA (o atleta está evoluindo?): eficiência aeróbica subindo ->
-        # progride; estagnada -> já traz o estímulo que fura o platô; caindo ->
-        # alivia. O plano é dinâmico, a IA já propõe — não pergunta ao atleta.
-        fitness_directive = AIPlanService._fitness_directive(profile)
-
-        # AUTO-CALIBRAÇÃO: se o atleta vem sistematicamente mais devagar (ou mais
-        # rápido) que o pace prescrito nos tiros, ajusta o alvo ao que ele
-        # SUSTENTA — com evidência real. Anexa à diretriz de forma (mesmo eixo:
-        # como prescrever o ritmo). Best-effort.
-        calibration = AIPlanService._calibration_directive(profile)
-
-        if calibration:
-
-            fitness_directive = (
-                f"{fitness_directive}\n{calibration}"
-                if fitness_directive
-                else calibration
-            )
-
-        # PROJEÇÃO DE PROVA (Garmin): capacidade/realismo da meta como MAIS UM
-        # insumo (não decreto) — anexa ao mesmo eixo de forma/ritmo. Best-effort.
-        projection = AIPlanService._race_projection_directive(profile, goal)
-
-        if projection:
-
-            fitness_directive = (
-                f"{fitness_directive}\n{projection}"
-                if fitness_directive
-                else projection
-            )
-
-        # HIERARQUIA DE PROVAS: alvo de fundo mais longo que a prova próxima ->
-        # foca no fundo, trata a próxima como checkpoint (não encerra o ciclo
-        # nela). MAIS UM insumo, não decreto. Best-effort.
-        hierarchy = AIPlanService._race_hierarchy_directive(runner, goal)
-
-        if hierarchy:
-
-            fitness_directive = (
-                f"{fitness_directive}\n{hierarchy}"
-                if fitness_directive
-                else hierarchy
-            )
-
-        # SUBJETIVO recente (RPE + check-ins): o que ELE SENTIU, fresco, direto
-        # no plano — não só via aprendizado semanal. Ver [[feedback_base_historico_sempre]].
-        subjective = AIPlanService._subjective(profile)
-
-        # REALIDADE × PLANO: ele treina de verdade a frequência/volume que o
-        # coach prescreve? Só afirma ROTINA (maioria das semanas), nunca um pico
-        # isolado; o coach dimensiona o VOLUME à verdade (a frequência é conversa
-        # à parte). Best-effort. Ver [[TrainingRealityAnalyzer]].
-        reality_directive = AIPlanService._reality_directive(runner, history)
-
-        # a CURVA semana a semana + o BALANÇO DE ESTÍMULOS × META: o plano
-        # escolhe o estímulo pela lacuna rumo ao objetivo (faz 5 sem sem
-        # limiar? nunca fez ritmo de prova?), não no escuro. Best-effort.
-        from app.application.history.stimulus_ledger import StimulusLedger
-        from app.application.history.weekly_evolution_digest import (
-            WeeklyEvolutionDigest,
-        )
-
-        # + os PADRÕES (plano × executado por semana, leve saindo forte, furos,
-        # sessão-chave cortada, RPE, recuperação vs base): o plano responde ao
-        # que o atleta FAZ — encontra quem corre mais que o plano onde ele
-        # está, conversa com quem fura, segura quem estoura. Auditoria 26/09.
-        from app.application.history.training_patterns import TrainingPatterns
-
-        extra = "\n".join(
-            block for block in (
-                WeeklyEvolutionDigest.for_profile(profile),
-                StimulusLedger.for_profile(profile),
-                TrainingPatterns.for_profile(profile),
-            ) if block
-        )
-
-        context = PlanContextBuilder.build(
+        return PlanContextBuilder.build(
             runner=runner,
             goal=goal,
-            metrics=metrics,
-            baseline=baseline,
-            recent_adherence=recent_adherence,
+            week_start=week_start,
+            days_to_race=days_to_race,
+            run_walk=run_walk,
             last_plan=last_week_plan,
             recent_plans=recent_plans,
             executed=executed,
-            memory=memory,
-            weeks_to_race=weeks_to_race,
-            days_to_race=days_to_race,
-            run_walk=run_walk,
-            adherence_report=adherence_report,
-            learnings=learnings,
-            body_directive=body_directive,
-            fitness_directive=fitness_directive,
-            subjective=subjective,
-            reality_directive=reality_directive,
+            dossier=dossier,
         )
-
-        return f"{context}\n{extra}" if extra else context
-
-    @staticmethod
-    def _reality_directive(runner, history) -> str:
-        """Diretriz de REALIDADE × PLANO: frequência/volume reais (do histórico)
-        vs os dias registrados. Best-effort — falhar aqui nunca derruba o plano."""
-
-        try:
-
-            from app.application.history.training_reality_analyzer import (
-                TrainingRealityAnalyzer,
-                training_reality_directive,
-            )
-
-            verdict = TrainingRealityAnalyzer.assess(
-                len(runner.preferred_running_days), history.activities
-            )
-
-            return training_reality_directive(verdict)
-
-        except Exception as e:
-
-            print(f"Diretriz de realidade falhou p/ '{runner.id}': {e}")
-
-            return ""
-
-    @staticmethod
-    def _subjective(profile: str) -> str:
-        """O SUBJETIVO recente (últimos ~14 dias): RPE dos treinos + check-ins
-        (energia/sono/nota) — o que ELE SENTIU. Fresco, direto no plano (não só
-        via aprendizado semanal). Best-effort: falhar aqui nunca derruba o plano."""
-
-        try:
-
-            from datetime import date as _date
-            from datetime import timedelta
-
-            from app.core.clock import today_local
-            from app.core.weekdays import weekday_label, weekday_name
-            from app.infrastructure.persistence.checkin_repository import (
-                CheckinRepository,
-            )
-            from app.infrastructure.persistence.session_rpe_repository import (
-                SessionRpeRepository,
-            )
-
-            cutoff = today_local() - timedelta(days=14)
-
-            def _lbl(day: str) -> str:
-                return weekday_label(weekday_name(_date.fromisoformat(day)))
-
-            lines: list[str] = []
-
-            for s in sorted(
-                SessionRpeRepository().load_sessions(profile), key=lambda x: x.day
-            ):
-
-                if _date.fromisoformat(s.day) >= cutoff:
-
-                    lines.append(f"- {_lbl(s.day)}: esforço percebido RPE {s.rpe}/10")
-
-            for c in sorted(
-                CheckinRepository().load(profile), key=lambda x: x.day
-            ):
-
-                if not getattr(c, "has_data", False):
-
-                    continue
-
-                if _date.fromisoformat(c.day) < cutoff:
-
-                    continue
-
-                bits = []
-
-                if c.energy is not None:
-
-                    bits.append(f"energia {c.energy}/5")
-
-                if c.sleep_quality is not None:
-
-                    bits.append(f"sono {c.sleep_quality}/5")
-
-                if getattr(c, "note", None):
-
-                    bits.append(f'"{c.note}"')
-
-                if bits:
-
-                    lines.append(f"- {_lbl(c.day)}: {', '.join(bits)}")
-
-            if not lines:
-
-                return ""
-
-            return (
-                "COMO ELE VEM SE SENTINDO (subjetivo recente — o esforço "
-                "PERCEBIDO e a sensação dele; pese JUNTO do corpo/carga: RPE "
-                "alto pro que a carga diz = está sentindo mais, cuidado; RPE "
-                "baixo ou boa energia = sobra pra dosar mais):\n" + "\n".join(lines)
-            )
-
-        except Exception as e:
-
-            print(f"Subjetivo do plano falhou p/ '{profile}': {e}")
-
-            return ""
-
-    @staticmethod
-    def _sleep_performance_directive(profile: str) -> str:
-        """O veredito de SONO × EXECUÇÃO (economia após noites curtas vs
-        normais). Reusa o carregamento da forma (atividades + saúde + FC). Vazio
-        sem lastro. Best-effort."""
-
-        from app.application.coach.intelligence.fitness_reading_service import (
-            FitnessReadingService,
-        )
-        from app.application.history.sleep_performance_analyzer import (
-            SleepPerformanceAnalyzer,
-            sleep_performance_directive,
-        )
-
-        activities, series, resting_hr, max_hr = FitnessReadingService._load(
-            profile
-        )
-
-        reading = SleepPerformanceAnalyzer.assess(
-            activities, series, resting_hr, max_hr
-        )
-
-        return sleep_performance_directive(reading)
 
     @staticmethod
     def _weeks_since_race(profile, history, week_start: date) -> int | None:
@@ -533,270 +253,6 @@ class AIPlanService:
             print(f"Detecção de prova recente falhou: {e}")
 
             return None
-
-    @staticmethod
-    def _body_directive(
-        profile: str,
-        weeks_to_race: int | None = None,
-        weeks_since_race: int | None = None,
-    ) -> str:
-        """Sinais de ESTADO pra a dose: o objetivo (carga à luz da recuperação,
-        do Garmin) + o subjetivo (o que o atleta RELATOU sentir). Os dois
-        contam — o relógio não sente o que o atleta sente. Best-effort."""
-
-        parts = []
-
-        body_reading = None
-
-        drift = None
-
-        try:
-
-            reading, trajectory = BodyReadingService.read(
-                profile, persist=False
-            )
-
-            body_reading = reading
-
-            # piora OBJETIVA vs a base do próprio atleta (FC de repouso/HRV) +
-            # o teto aeróbico dele: com isso a diretriz SEGURA de verdade em vez
-            # de "confirme se é baseline" (varredura 26/09)
-            from app.application.history.training_patterns import (
-                TrainingPatterns,
-            )
-            from app.infrastructure.persistence.activity_archive_repository import (
-                ActivityArchiveRepository,
-            )
-
-            drift = TrainingPatterns.drift_for_profile(profile)
-
-            ceiling = TrainingPatterns._ceiling_for(
-                profile, ActivityArchiveRepository().load_activities(profile),
-            )
-
-            parts.append(
-                body_plan_directive(reading, trajectory, drift, ceiling)
-            )
-
-        except Exception as e:
-
-            print(f"Diretriz de corpo falhou p/ '{profile}': {e}")
-
-        # SONO × EXECUÇÃO: o sono curto DESTE atleta está prejudicando a entrega
-        # dele, ou ele rende igual? Veredito do dado real (economia após noites
-        # curtas vs normais) — a "sabedoria" de cada caso é um caso, pra o coach
-        # não frear pelo sono quando ele sustenta. Best-effort.
-        # EXCEÇÃO: com PIORA REAL da recuperação (FC de repouso/HRV vs a base),
-        # "não trave a dose por causa do sono" contradiz o SEGURE acima — a
-        # fisiologia piorando vale mais que "a execução ainda não caiu" (a
-        # execução é a ÚLTIMA a cair). Varredura 26/09: o plano recebia as duas.
-        holding = drift is not None and drift.worsening
-
-        try:
-
-            if not holding:
-
-                parts.append(
-                    AIPlanService._sleep_performance_directive(profile)
-                )
-
-        except Exception as e:
-
-            print(f"Diretriz de sono×execução falhou p/ '{profile}': {e}")
-
-        # RISCO DE LESÃO precoce: spike de carga (ACWR) + rampa de volume +
-        # recuperação caindo + histórico → o coach constrói uma semana mais
-        # segura (prevenção), antes de virar lesão. Best-effort.
-        try:
-
-            if body_reading is not None:
-
-                from app.application.history.injury_risk_analyzer import (
-                    InjuryRiskAnalyzer,
-                    injury_risk_directive,
-                )
-                from app.infrastructure.persistence.form_fatigue_store import (
-                    FormFatigueStore,
-                )
-                from app.infrastructure.persistence.runner_profile_repository import (
-                    RunnerProfileRepository,
-                )
-
-                runner = RunnerProfileRepository().load(profile)
-
-                risk = InjuryRiskAnalyzer.assess(
-                    body_reading.load,
-                    body_reading.recovery,
-                    getattr(runner, "injuries", None),
-                    form_fading=FormFatigueStore().is_fading(profile),
-                )
-
-                parts.append(injury_risk_directive(risk))
-
-        except Exception as e:
-
-            print(f"Diretriz de risco de lesão falhou p/ '{profile}': {e}")
-
-        # DESCARGA proativa (recuperação PLANEJADA): depois de ~3 semanas de
-        # carga sem recuo, a próxima é leve de propósito — o corpo consolida a
-        # forma. Complementa o risco de lesão (reativo) com prevenção. Reusa a
-        # série de carga semanal já lida acima. Best-effort.
-        try:
-
-            if body_reading is not None:
-
-                from app.application.history.deload_analyzer import (
-                    DeloadAnalyzer,
-                    deload_directive,
-                )
-
-                decision = DeloadAnalyzer.assess(
-                    body_reading.load.weekly_loads,
-                    body_reading.recovery,
-                    weeks_to_race=weeks_to_race,
-                    acwr=getattr(body_reading.load, "acwr", None),
-                    weeks_since_race=weeks_since_race,
-                )
-
-                parts.append(deload_directive(decision))
-
-        except Exception as e:
-
-            print(f"Diretriz de descarga falhou p/ '{profile}': {e}")
-
-        try:
-
-            parts.append(CheckinService.render_recent(profile))
-
-        except Exception as e:
-
-            print(f"Estado relatado falhou p/ '{profile}': {e}")
-
-        try:
-
-            parts.append(RpeFlow.recent_note(profile))
-
-        except Exception as e:
-
-            print(f"Nota de sRPE falhou p/ '{profile}': {e}")
-
-        return "\n".join(p for p in parts if p)
-
-    @staticmethod
-    def _fitness_directive(profile: str) -> str:
-        """Diretriz de FORMA pra dose: a eficiência aeróbica (velocidade/FC)
-        ao longo das semanas vira instrução pra IA progredir/furar platô/
-        aliviar — o plano se adapta à evolução do atleta sem perguntar.
-        Best-effort — falhar aqui nunca deixa o atleta sem plano."""
-
-        try:
-
-            evolution = FitnessReadingService.read_evolution(profile)
-
-            return fitness_plan_directive(evolution)
-
-        except Exception as e:
-
-            print(f"Diretriz de forma falhou p/ '{profile}': {e}")
-
-            return ""
-
-    @staticmethod
-    async def _review_plan(profile, runner, plan, goal):
-        """Revisão de realismo pós-geração (PlanRealismReviewer) com a projeção
-        de prova do Garmin como âncora de capacidade. Best-effort: qualquer
-        falha devolve o plano intacto (o atleta nunca fica sem plano)."""
-
-        try:
-
-            from app.application.coach.planning.plan_realism_reviewer import (
-                PlanRealismReviewer,
-            )
-            from app.infrastructure.persistence.race_prediction_repository import (
-                RacePredictionRepository,
-            )
-
-            prediction = RacePredictionRepository().load(profile)
-
-            return await PlanRealismReviewer.ensure_reviewed(
-                profile, runner, plan, goal=goal, prediction=prediction,
-            )
-
-        except Exception as e:  # noqa: BLE001
-
-            print(f"Revisão de plano falhou p/ '{profile}': {e}")
-
-            return plan
-
-    @staticmethod
-    def _race_projection_directive(profile: str, goal) -> str:
-        """Projeção de prova do Garmin (5K/10K/meia/maratona) vs a meta: leitura
-        de capacidade/realismo pra o coach pesar — MAIS UM insumo, não decreto.
-        Best-effort — falhar aqui nunca deixa o atleta sem plano."""
-
-        try:
-
-            from app.application.coach.planning.race_projection_directive import (
-                race_projection_directive,
-            )
-            from app.infrastructure.persistence.race_prediction_repository import (
-                RacePredictionRepository,
-            )
-
-            prediction = RacePredictionRepository().load(profile)
-
-            return race_projection_directive(prediction, goal)
-
-        except Exception as e:
-
-            print(f"Diretriz de projeção falhou p/ '{profile}': {e}")
-
-            return ""
-
-    @staticmethod
-    def _race_hierarchy_directive(runner, goal) -> str:
-        """Foco no alvo de fundo quando ele é mais longo que a próxima prova (a
-        próxima vira checkpoint). Best-effort — nunca deixa o atleta sem plano."""
-
-        try:
-
-            from app.application.coach.planning.race_hierarchy_directive import (
-                race_hierarchy_directive,
-            )
-
-            return race_hierarchy_directive(goal, getattr(runner, "goal", None))
-
-        except Exception as e:
-
-            print(f"Diretriz de hierarquia falhou p/ '{runner}': {e}")
-
-            return ""
-
-    @staticmethod
-    def _calibration_directive(profile: str) -> str:
-        """Auto-calibração do pace: viés sistemático (prescrito × sustentado nos
-        tiros) vira instrução pra ajustar o alvo de qualidade ao real. Best-
-        effort — falhar aqui nunca deixa o atleta sem plano."""
-
-        try:
-
-            from app.application.history.pace_calibration_analyzer import (
-                PaceCalibrationAnalyzer,
-                calibration_directive,
-            )
-            from app.infrastructure.persistence.pace_calibration_store import (
-                PaceCalibrationStore,
-            )
-
-            deltas = PaceCalibrationStore().deltas(profile)
-
-            return calibration_directive(PaceCalibrationAnalyzer.assess(deltas))
-
-        except Exception as e:
-
-            print(f"Diretriz de calibração falhou p/ '{profile}': {e}")
-
-            return ""
 
     @staticmethod
     def _previous_week_plan(repository, profile, week_start):

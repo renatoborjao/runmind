@@ -62,8 +62,11 @@ class FitnessEvolutionWriter:
 
     @staticmethod
     def line(evo: FitnessEvolution) -> str | None:
-        """Uma linha compacta pro recap mensal. Delega ao EF (o sinal
-        sempre-presente e tangível)."""
+        """Uma linha compacta (recap, panorama semanal, dossiê do coach) com o
+        MESMO veredito combinado da mensagem completa (EF + VO₂máx + FC de
+        repouso) — antes a linha lia só o EF e dizia "estável" enquanto o
+        veredito combinado dizia "subiu" (Maurício, 27/09): duas verdades. O EF
+        entra como a evidência tangível, quando tem tamanho."""
 
         # dado velho: sem corrida recente, a linha de forma seria enganosa —
         # cala (o recap simplesmente omite a linha de evolução).
@@ -71,15 +74,41 @@ class FitnessEvolutionWriter:
 
             return None
 
-        if evo.ef is None:
+        if not evo.has_data:
 
-            return None
+            if evo.ef is None:
 
-        from app.application.coach.writer.aerobic_efficiency_writer import (
-            AerobicEfficiencyWriter,
+                return None
+
+            from app.application.coach.writer.aerobic_efficiency_writer import (
+                AerobicEfficiencyWriter,
+            )
+
+            return AerobicEfficiencyWriter.line(evo.ef)
+
+        if evo.direction == EVO_IMPROVING:
+
+            verdict = "📈 Forma em alta"
+
+        elif evo.direction == EVO_DECLINING:
+
+            verdict = "📉 Forma recuando"
+
+        else:
+
+            verdict = "➡️ Forma estável"
+
+        mixed = " (sinais mistos)" if evo.confidence == EVO_MIXED else ""
+
+        tangible = (
+            FitnessEvolutionWriter._ef_tangible(evo.ef)
+            if evo.ef is not None
+            else None
         )
 
-        return AerobicEfficiencyWriter.line(evo.ef)
+        return f"{verdict}{mixed}" + (
+            f" — economia aeróbica: {tangible}" if tangible else ""
+        )
 
     @staticmethod
     def tangible(evo: FitnessEvolution) -> str | None:

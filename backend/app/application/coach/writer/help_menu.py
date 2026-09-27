@@ -40,6 +40,15 @@ class HelpMenu:
                 '• "Quantos km corri em maio?" ou "como foi meu treino em '
                 'junho?" — seu histórico mês a mês',
                 "",
+                "🧠 Como você sentiu o treino",
+                '• Me conta do seu jeito — "foi tranquilo", "perna pesada no '
+                'fim", "morri no longão" — que eu anoto e uso pra acertar a '
+                "dose da semana.",
+                "• Tem Garmin? Liga a Autoavaliação no relógio (Corrida → "
+                "Configurações → Autoavaliação): no fim da corrida ele pergunta "
+                "esforço e sensação, e eu leio sozinho — nem precisa me "
+                "responder.",
+                "",
                 "📱 Nosso app",
                 '• "Quero o app" ou "/app" — te mando um link de acesso na hora '
                 "(sem senha) pra abrir o Ritmind no celular: seus treinos, "
@@ -86,6 +95,9 @@ class HelpMenu:
     # dicas rotativas: uma por semana, cobrindo os pedidos mais úteis. A ordem
     # importa pouco (rotaciona), mas as mais valiosas vêm primeiro.
     _TIPS = [
+        "💡 Você sabia? Tem Garmin? Liga a Autoavaliação no relógio (Corrida → "
+        "Configurações → Autoavaliação) — no fim da corrida ele pergunta como "
+        "foi e eu leio sozinho pra dosar teus treinos.",
         '💡 Você sabia? É só me perguntar "como estou?" que eu te mando um '
         "retrato completo — corpo e forma juntos.",
         '💡 Você sabia? Pergunte "estou evoluindo?" quando quiser ver se sua '

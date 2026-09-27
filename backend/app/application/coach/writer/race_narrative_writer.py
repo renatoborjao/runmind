@@ -162,6 +162,20 @@ class RaceNarrativeWriter:
 
             lines.append(f"PORQUÊ DELE: {why}")
 
+        # o DOSSIÊ do atleta — a MESMA base do plano, da análise e do chat
+        # (evolução, percepção, padrões, plano, o que o coach já disse)
+        if profile:
+
+            from app.application.coach.context.athlete_dossier import (
+                AthleteDossier,
+            )
+
+            dossier = AthleteDossier.render(profile)
+
+            if dossier:
+
+                lines.append(dossier)
+
         return "\n".join(lines)
 
     @staticmethod

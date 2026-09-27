@@ -78,10 +78,8 @@ def _current_week_start() -> date:
 async def _build_with_mocks(
     history_activities,
     sessions,
-    memory="",
-    summary="",
-    lifetime_stats=None,
-    coach_outbox=None,
+    dossier="DOSSIÊ-DO-ATLETA",
+    pending_rpe="",
 ):
 
     with (
@@ -90,13 +88,16 @@ async def _build_with_mocks(
         patch(f"{MODULE}.TrainingAssessmentBuilder") as mock_assessment_builder,
         patch(f"{MODULE}.MetricsResolver") as mock_metrics_resolver,
         patch(f"{MODULE}.WeeklyPlanService") as mock_plan_service,
-        patch(f"{MODULE}.RunnerMemoryService") as mock_memory_service,
-        patch(f"{MODULE}.ConversationRepository") as mock_conv_repo,
-        patch(f"{MODULE}.ActivityArchiveRepository") as mock_archive,
-        patch(f"{MODULE}.CoachOutboxRepository") as mock_outbox,
+        patch(
+            "app.application.coach.context.athlete_dossier.AthleteDossier.render",
+            return_value=dossier,
+        ) as mock_dossier,
+        patch(
+            "app.application.coach.intelligence.perception_recorder."
+            "PerceptionRecorder.pending_line",
+            return_value=pending_rpe,
+        ),
     ):
-
-        mock_outbox.return_value.recent.return_value = coach_outbox or []
 
         mock_load_runner.execute.return_value = make_runner()
 
@@ -113,19 +114,16 @@ async def _build_with_mocks(
             week_start=_current_week_start(),
         )
 
-        mock_memory_service.render.return_value = memory
+        text = await ConversationContextBuilder.build("renato")
 
-        mock_conv_repo.return_value.load_summary.return_value = {
-            "summary": summary,
-            "covered_until": "",
-        }
+        _build_with_mocks.dossier_call = mock_dossier.call_args
 
-        mock_archive.return_value.stats.return_value = lifetime_stats
-
-        return await ConversationContextBuilder.build("renato")
+        return text
 
 
-def test_build_includes_runner_facts_and_last_activity():
+def test_build_includes_last_activity_and_the_dossier():
+    """O chat monta SÓ o que é dele (datas, último/próximo treino, status de
+    hoje) e o resto vem do DOSSIÊ — a mesma base do plano e da análise."""
 
     activity = make_activity(distance=10500.0, name="Rodagem")
 
@@ -136,11 +134,50 @@ def test_build_includes_runner_facts_and_last_activity():
         )
     )
 
-    assert "Renato" in text
-    assert "30.0 km" in text
-    assert "32.4 km" in text
-    assert "82%" in text
     assert "Rodagem, 10.5 km" in text
+    assert "DOSSIÊ-DO-ATLETA" in text
+
+
+def test_dossier_gets_the_same_runner_history_and_plan_objects():
+    """Mesmo objeto = mesma verdade: o dossiê não recarrega por outro caminho
+    o plano/histórico que o chat já tem."""
+
+    activity = make_activity(distance=8000.0)
+
+    asyncio.run(_build_with_mocks(history_activities=[activity], sessions=[]))
+
+    kwargs = _build_with_mocks.dossier_call.kwargs
+
+    assert kwargs["history"].activities == [activity]
+    assert kwargs["plan"] is not None
+    assert kwargs["runner"] is not None
+
+
+def test_pending_rpe_question_reaches_the_brain():
+    """Pergunta de esforço em aberto: uma resposta em PALAVRAS é a resposta a
+    ela — o cérebro precisa saber pra gravar a percepção."""
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+            pending_rpe="PERGUNTA EM ABERTO: esforço do treino de 26/09",
+        )
+    )
+
+    assert "PERGUNTA EM ABERTO" in text
+
+
+def test_build_handles_no_recent_activity():
+
+    text = asyncio.run(
+        _build_with_mocks(
+            history_activities=[],
+            sessions=[],
+        )
+    )
+
+    assert "nenhum treino recente encontrado" in text
 
 
 def test_build_anchors_today_date():
@@ -198,160 +235,6 @@ def test_week_calendar_present_in_facts():
 
     assert "CALENDÁRIO" in text
     assert "NUNCA proponha um dia que JÁ PASSOU" in text
-
-
-def test_build_includes_full_week_plan_when_sessions_exist():
-
-    session = PlannedSession(
-        day="Thursday",
-        workout_type="Intervalado",
-        objective="Velocidade",
-        planned_distance_km=8.0,
-        planned_duration_minutes=45,
-        target_pace_min="4:21",
-        target_pace_max="4:21",
-    )
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[session],
-        )
-    )
-
-    assert "Plano da semana completo:" in text
-    assert "quinta-feira" in text
-    assert "8.0 km" in text
-
-
-def test_build_omits_week_plan_without_sessions():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-        )
-    )
-
-    assert "Plano da semana completo" not in text
-
-
-def test_build_includes_recent_coach_messages():
-    """As mensagens automáticas que o coach enviou (análise/briefing) entram no
-    contexto — o atleta comenta sobre elas mas elas não estão no chat."""
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-            coach_outbox=[
-                {"text": "Parabéns pelo treino! Intervalado 5x600m no alvo.",
-                 "timestamp": "2026-07-14T10:00:00+00:00"},
-            ],
-        )
-    )
-
-    assert "MENSAGENS QUE VOCÊ (coach) JÁ ENVIOU" in text
-    assert "Intervalado 5x600m no alvo" in text
-
-
-def test_build_omits_coach_messages_when_none():
-
-    text = asyncio.run(
-        _build_with_mocks(history_activities=[], sessions=[]),
-    )
-
-    assert "MENSAGENS QUE VOCÊ" not in text
-
-
-def test_build_includes_conversation_summary_when_present():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-            summary="Discutiram estratégia de pace para a prova de outubro.",
-        )
-    )
-
-    assert (
-        "Resumo de conversas anteriores: Discutiram estratégia" in text
-    )
-
-
-def test_build_includes_lifetime_stats_when_archive_has_data():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-            lifetime_stats={
-                "total_runs": 123,
-                "total_km": 861.4,
-                "first_date": "2025-03-14",
-                "longest_km": 21.1,
-            },
-        )
-    )
-
-    assert "Histórico geral registrado: 123 treinos" in text
-    assert "861 km desde 03/2025" in text
-    assert "maior treino: 21.1 km" in text
-
-
-def test_build_omits_summary_and_lifetime_when_empty():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-        )
-    )
-
-    assert "Resumo de conversas anteriores" not in text
-    assert "Histórico geral" not in text
-
-
-def test_build_includes_memory_section_when_present():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-            memory=(
-                "Memória do corredor (fatos anotados de conversas anteriores):\n"
-                "- [lesao] Dor no joelho direito (01/07)"
-            ),
-        )
-    )
-
-    assert "Memória do corredor" in text
-    assert "[lesao] Dor no joelho direito" in text
-
-
-def test_build_has_no_memory_section_when_empty():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-            memory="",
-        )
-    )
-
-    assert "Memória do corredor" not in text
-
-
-def test_build_handles_no_recent_activity():
-
-    text = asyncio.run(
-        _build_with_mocks(
-            history_activities=[],
-            sessions=[],
-        )
-    )
-
-    assert "nenhum treino recente encontrado" in text
 
 
 def test_today_status_marks_concluded_when_fulfilled():
@@ -615,33 +498,6 @@ def test_next_session_summary_no_past_fallback():
     assert "22/07" not in summary  # não recita a data passada
 
 
-def test_week_plan_summary_flags_ended_week_for_stale_plan():
-    """Plano de semana já encerrada (ex.: externo não renovado): marca as
-    datas como passadas, pra o coach não recitar como semana atual."""
-
-    session = PlannedSession(
-        day="Tuesday", workout_type="Caminhada com corrida",
-        objective="HIIT 2x2k", planned_distance_km=5.0,
-        planned_duration_minutes=None,
-        target_pace_min=None, target_pace_max=None,
-    )
-
-    stale_plan = TrainingPlan(
-        athlete_name="Mauricio", objective="21k", phase="EXTERNO",
-        weekly_volume=5.0, running_days=["Tuesday"],
-        week_start=date(2020, 1, 6),  # semana bem no passado
-        sessions=[session], source="externo",
-    )
-
-    text = ConversationContextBuilder._week_plan_summary(
-        stale_plan,
-        TrainingHistory(activities=[]),
-    )
-
-    assert "JÁ ENCERRADA" in text
-    assert "aguardando o print do plano desta semana" in text
-
-
 def test_build_handles_no_planned_sessions():
 
     text = asyncio.run(
@@ -652,161 +508,6 @@ def test_build_handles_no_planned_sessions():
     )
 
     assert "nenhum treino planejado ainda" in text
-
-
-def test_race_summary_includes_countdown_and_target():
-
-    from app.domain.entities.training_goal import TrainingGoal
-
-    goal = TrainingGoal(
-        name="10 km Sub 50",
-        distance_km=10.0,
-        target_time="00:50:00",
-        race_date=date(2026, 8, 15),
-    )
-
-    line = ConversationContextBuilder._race_summary(
-        goal,
-        reference_date=date(2026, 7, 3),
-    )
-
-    # a meta de fundo já aparece no cabeçalho; esta linha é a PROVA concreta
-    # (distância + data), não a meta — nunca conflar prova com objetivo de fundo
-    assert "Próxima prova: 10 km em 15/08/2026" in line
-    assert "10 km Sub 50" not in line
-    assert "daqui a 6 semanas" in line
-    assert "alvo 00:50:00" in line
-
-
-def test_race_summary_empty_without_race_or_past_race():
-
-    from app.domain.entities.training_goal import TrainingGoal
-
-    no_race = TrainingGoal(
-        name="Saúde", distance_km=10.0,
-        target_time=None, race_date=None,
-    )
-
-    past_race = TrainingGoal(
-        name="10k", distance_km=10.0,
-        target_time=None, race_date=date(2026, 6, 1),
-    )
-
-    assert ConversationContextBuilder._race_summary(
-        no_race, reference_date=date(2026, 7, 3),
-    ) == ""
-
-    assert ConversationContextBuilder._race_summary(
-        past_race, reference_date=date(2026, 7, 3),
-    ) == ""
-
-
-def test_week_plan_summary_keeps_current_week_when_all_sessions_are_past():
-    """Sexta-feira, atleta que treina seg/qua/qui: o plano da semana está
-    VIGENTE mesmo com todas as sessões atrás. O critério é a SEMANA ter
-    acabado — dizer "ainda não há plano desta semana" numa semana corrente
-    faria o coach negar um plano que existe."""
-
-    def _session(day):
-
-        return PlannedSession(
-            day=day, workout_type="Rodagem", objective="Base",
-            planned_distance_km=6.0, planned_duration_minutes=None,
-            target_pace_min=None, target_pace_max=None,
-        )
-
-    plan = _plan(
-        [_session("Monday"), _session("Wednesday"), _session("Thursday")],
-        week_start=date(2026, 7, 20),
-    )
-
-    with patch(f"{MODULE}.today_local", return_value=date(2026, 7, 24)):
-
-        text = ConversationContextBuilder._week_plan_summary(
-            plan,
-            TrainingHistory(activities=[]),
-        )
-
-    assert "JÁ ENCERRADA" not in text
-    assert "Plano da semana completo:" in text
-
-
-def test_athlete_state_gives_the_coach_the_full_picture():
-    """O coach de conversa recebe evolução + corpo + sono como quadro completo —
-    raciocina como treinador (trajetória inteira), não só o dia."""
-
-    with (
-        patch(
-            "app.application.coach.intelligence.fitness_reading_service."
-            "FitnessReadingService"
-        ),
-        patch(
-            "app.application.coach.writer.fitness_evolution_writer."
-            "FitnessEvolutionWriter"
-        ) as fw,
-        patch(
-            "app.application.coach.intelligence.body_reading_service."
-            "BodyReadingService"
-        ) as body,
-        patch(
-            "app.application.coach.intelligence.sleep_reading_service."
-            "SleepReadingService"
-        ) as sleep,
-        patch("app.core.config.get_settings") as settings,
-    ):
-
-        fw.line.return_value = "🔥 forma vem subindo"
-
-        reading = MagicMock(body_state="ABSORBING", limiter="sono")
-        body.read.return_value = (reading, None)
-
-        sleep.read.return_value = MagicMock(
-            has_data=True, avg_hours=5.5, direction="falling", debt=True,
-        )
-
-        settings.return_value.coach_learning_inject_enabled = False
-
-        out = ConversationContextBuilder._athlete_state("renato")
-
-    assert "QUADRO ATUAL DO ATLETA" in out
-    assert "forma vem subindo" in out
-    assert "Corpo/recuperação" in out
-    # o sono NÃO se repete como "ponto de atenção" no corpo — tem linha própria
-    assert "ponto de atenção: sono" not in out
-    assert "5.5h" in out and "caindo" in out
-
-
-def test_athlete_state_is_best_effort_when_everything_fails():
-    """Se as leituras falharem, o bloco simplesmente não entra (nunca quebra
-    a conversa)."""
-
-    with (
-        patch(
-            "app.application.coach.intelligence.fitness_reading_service."
-            "FitnessReadingService",
-            side_effect=Exception("boom"),
-        ),
-        patch(
-            "app.application.coach.intelligence.body_reading_service."
-            "BodyReadingService",
-            side_effect=Exception("boom"),
-        ),
-        patch(
-            "app.application.coach.intelligence.sleep_reading_service."
-            "SleepReadingService",
-            side_effect=Exception("boom"),
-        ),
-        patch(
-            "app.application.coach.intelligence.checkin_service."
-            "CheckinService.render_recent",
-            side_effect=Exception("boom"),
-        ),
-        patch("app.core.config.get_settings", side_effect=Exception("boom")),
-    ):
-
-        out = ConversationContextBuilder._athlete_state("renato")
-
-    assert out == ""
 
 
 # ---- grounding do armário de tênis (mata o "Corre 4") ---------------------

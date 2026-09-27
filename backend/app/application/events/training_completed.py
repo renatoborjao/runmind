@@ -320,6 +320,16 @@ class TrainingCompletedEvent:
 
             return message
 
+        # o atleta já marcou a autoavaliação no RELÓGIO (esforço + sensação) —
+        # grava em TODO treino (leve incluso) e não pergunta de novo
+        from app.application.coach.intelligence.perception_recorder import (
+            PerceptionRecorder,
+        )
+
+        if PerceptionRecorder.from_watch(profile, activity):
+
+            return message
+
         if not TrainingCompletedEvent._is_demanding(result):
 
             return message

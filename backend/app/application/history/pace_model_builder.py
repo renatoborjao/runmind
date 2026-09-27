@@ -64,6 +64,22 @@ _MIN_RECENT_RUNS = 4
 # default conservador de estreante (nunca correu / não informou)
 _ROOKIE_PACE = 8.0
 
+# GPS QUEBRADO: pico de velocidade acima disto (30 km/h = 2:00/km) não é gente
+# correndo — é salto de GPS (ou veículo), e o salto infla a distância e o pace
+# médio. Hélio 27/09: UMA corrida com pico de 100,9 km/h saiu "7,6 km a 4:49"
+# (ele roda 6:15-6:50) e virou VDOT 41 → limiar 4:07 no contexto do coach.
+# Corrida assim não ancora capacidade.
+_MAX_HUMAN_SPEED_MS = 30 / 3.6
+
+
+
+def gps_broken(activity) -> bool:
+    """Pico de velocidade sobre-humano = GPS quebrado (o salto infla distância
+    e pace médio). Corrida assim não ancora capacidade — nem aqui nem na
+    marca-d'água dos melhores esforços."""
+
+    return (getattr(activity, "max_speed", 0) or 0) > _MAX_HUMAN_SPEED_MS
+
 
 class PaceModelBuilder:
 
@@ -197,7 +213,8 @@ class PaceModelBuilder:
     @staticmethod
     def _best_vdot(history: TrainingHistory) -> float | None:
         """O MAIOR VDOT entre as corridas reais — o melhor esforço que o atleta
-        já demonstrou. É a âncora de capacidade (grounded no que ele fez)."""
+        já demonstrou. É a âncora de capacidade (grounded no que ele fez).
+        Corrida com GPS quebrado (pico sobre-humano) fica de fora."""
 
         best = None
 
@@ -208,6 +225,10 @@ class PaceModelBuilder:
                 continue
 
             if a.distance / 1000 < _ANCHOR_MIN_KM:
+
+                continue
+
+            if gps_broken(a):
 
                 continue
 

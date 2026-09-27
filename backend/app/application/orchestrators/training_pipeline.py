@@ -310,7 +310,13 @@ class TrainingPipeline:
 
             efforts = BestEffortExtractor.efforts(distance, time)
 
-            vdot = BestEffortVdot.from_efforts(efforts)
+            from app.application.history.pace_model_builder import gps_broken
+
+            # GPS quebrado (pico sobre-humano) não sobe a marca-d'água
+            vdot = (
+                None if gps_broken(activity)
+                else BestEffortVdot.from_efforts(efforts)
+            )
 
             if vdot is not None:
 

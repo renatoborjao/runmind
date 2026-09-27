@@ -72,6 +72,11 @@ PLANO DESTA SEMANA (dias de corrida):
 
 O treino exigente de AMANHÃ é: {target} ({target_day}).
 
+DOSSIÊ DO ATLETA (a MESMA base do plano, da análise e do chat — pese o quadro \
+inteiro: a evolução, a PERCEPÇÃO dele, os padrões e o que você já disse/decidiu; \
+não contradiga o plano sem dizer o porquê):
+{dossier}
+
 Decida a melhor conduta pra ESSE treino, pesando a meta e que recuperar agora \
 é o que SUSTENTA a evolução (não corte por cortar, mas não empilhe carga num \
 corpo que não assimila):
@@ -112,6 +117,11 @@ PLANO DESTA SEMANA (dias de corrida):
 {sessions}
 
 O treino exigente de HOJE é: {target} ({target_day}).
+
+DOSSIÊ DO ATLETA (a MESMA base do plano, da análise e do chat — pese o quadro \
+inteiro: a evolução, a PERCEPÇÃO dele, os padrões e o que você já disse/decidiu; \
+não contradiga o plano sem dizer o porquê):
+{dossier}
 
 Decida a melhor conduta pra ESSE treino de hoje, pesando a meta e que recuperar \
 agora é o que SUSTENTA a evolução (não corte por cortar, mas não empilhe carga \
@@ -251,6 +261,7 @@ class BodyConductEngine:
             sessions=BodyConductEngine._render_sessions(plan),
             target=session.workout_type,
             target_day=weekday_label(session.day),
+            dossier=BodyConductEngine._dossier(runner, plan, today),
         )
 
         return await generate_json(
@@ -263,6 +274,15 @@ class BodyConductEngine:
             ),
             parse=lambda raw: BodyConductEngine._parse(raw, plan, session),
         )
+
+    @staticmethod
+    def _dossier(runner: RunnerProfile, plan: TrainingPlan, today: date) -> str:
+
+        from app.application.coach.context.athlete_dossier import AthleteDossier
+
+        return AthleteDossier.render(
+            runner.id, runner=runner, plan=plan, today=today,
+        ) or "(sem dossiê disponível)"
 
     # ------------------------------------------------------------------
 

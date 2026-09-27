@@ -1,34 +1,25 @@
 from app.application.coach.planning.plan_context_builder import (
     PlanContextBuilder,
 )
-from app.domain.entities.runner_baseline import RunnerBaseline
-from app.domain.entities.runner_metrics import RunnerMetrics
+from datetime import date
+
 from app.domain.entities.training_goal import TrainingGoal
 from tests.coach.factories import make_runner
 
+WEEK = date(2026, 9, 28)
 
-def _context(runner) -> str:
+
+def _context(runner, goal=None, days_to_race=None, dossier="") -> str:
 
     return PlanContextBuilder.build(
         runner=runner,
-        goal=TrainingGoal(
+        goal=goal or TrainingGoal(
             name="10k", distance_km=10.0, target_time=None,
             race_date=None, priority="A",
         ),
-        metrics=RunnerMetrics(
-            easy_pace_min=6.0, easy_pace_max=6.5, threshold_pace=5.0,
-            vo2_pace=4.5, average_hr=150, max_long_run=12.0,
-            weekly_volume=28.0,
-        ),
-        baseline=RunnerBaseline(
-            has_history=True, weekly_km=28.0, last_week_km=26.0,
-            max_week_km=32.0, runs_per_week=3, typical_run_km=8.0,
-            longest_km=12.0, trend="estável",
-        ),
-        recent_adherence=[],
-        last_plan=None,
-        memory="",
-        weeks_to_race=None,
+        week_start=WEEK,
+        days_to_race=days_to_race,
+        dossier=dossier,
     )
 
 
@@ -64,53 +55,25 @@ def test_days_line_anchors_specific_days_and_count():
     assert "longão no domingo" in context
 
 
-def _context_with_report(report) -> str:
-
-    return PlanContextBuilder.build(
-        runner=make_runner(
-            preferred_running_days=["Tuesday", "Thursday", "Saturday"],
-        ),
-        goal=TrainingGoal(
-            name="10k", distance_km=10.0, target_time=None,
-            race_date=None, priority="A",
-        ),
-        metrics=RunnerMetrics(
-            easy_pace_min=6.0, easy_pace_max=6.5, threshold_pace=5.0,
-            vo2_pace=4.5, average_hr=150, max_long_run=12.0,
-            weekly_volume=28.0,
-        ),
-        baseline=RunnerBaseline(
-            has_history=True, weekly_km=28.0, last_week_km=26.0,
-            max_week_km=32.0, runs_per_week=3, typical_run_km=8.0,
-            longest_km=12.0, trend="estável",
-        ),
-        recent_adherence=[0.66, 0.33],
-        last_plan=None,
-        memory="",
-        weeks_to_race=None,
-        adherence_report=report,
-    )
-
-
-def test_missed_pattern_reaches_the_ai_with_a_nudge_to_reposition():
+def test_missed_pattern_line_nudges_to_reposition():
     """O que ele vive furando não é bronca — é insumo pra a IA MOVER o
-    treino em vez de prescrever de novo igual."""
+    treino em vez de prescrever de novo igual (a linha vive no dossiê)."""
 
     from app.domain.entities.adherence_report import (
         AdherenceReport,
         MissedPattern,
     )
 
-    context = _context_with_report(
+    line = PlanContextBuilder._missed_pattern_line(
         AdherenceReport(
             missed_day=MissedPattern("Thursday", 3, 4),
             missed_type=MissedPattern("Intervalado", 3, 4),
         )
     )
 
-    assert "quinta-feira (3 de 4 vezes que foi prescrita)" in context
-    assert "treino de Intervalado (3 de 4)" in context
-    assert "Não é preguiça" in context
+    assert "quinta-feira (3 de 4 vezes que foi prescrita)" in line
+    assert "treino de Intervalado (3 de 4)" in line
+    assert "Não é preguiça" in line
 
 
 def test_no_pattern_adds_no_line():
@@ -118,9 +81,32 @@ def test_no_pattern_adds_no_line():
 
     from app.domain.entities.adherence_report import AdherenceReport
 
-    assert "deixa pra trás" not in _context_with_report(AdherenceReport())
+    assert PlanContextBuilder._missed_pattern_line(AdherenceReport()) == ""
 
-    assert "deixa pra trás" not in _context_with_report(None)
+    assert PlanContextBuilder._missed_pattern_line(None) == ""
+
+
+def test_week_to_build_and_race_distance_open_the_context():
+
+    goal = TrainingGoal(
+        name="15k", distance_km=15.0, target_time=None,
+        race_date=date(2026, 12, 20),
+    )
+
+    context = _context(make_runner(), goal=goal, days_to_race=83)
+
+    assert context.startswith("SEMANA A MONTAR: 28/09 a 04/10/2026.")
+    assert "fica a 83 dias do início dela" in context
+
+
+def test_dossier_closes_the_context():
+    """O quadro inteiro (meta, capacidade, corpo, percepção, padrões...) vem
+    do DOSSIÊ — a mesma base das outras vozes — depois do que é da tarefa."""
+
+    context = _context(make_runner(), dossier="DOSSIÊ-DO-ATLETA")
+
+    assert context.rstrip().endswith("DOSSIÊ-DO-ATLETA")
+    assert context.index("Dias de corrida dele") < context.index("DOSSIÊ")
 
 
 def test_goal_line_counts_days_not_floored_weeks():

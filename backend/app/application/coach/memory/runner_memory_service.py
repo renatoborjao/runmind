@@ -211,6 +211,35 @@ class RunnerMemoryService:
         return "\n".join(lines)
 
     @staticmethod
+    def _is_new_race(profile: str, race: dict) -> bool:
+        """A prova citada é OUTRA que a âncora atual do perfil (data ou nome
+        diferentes)? Sem perfil legível, trata como nova (não herda tempo)."""
+
+        try:
+
+            current = RunnerProfileRepository().load(profile)
+
+        except Exception:
+
+            return True
+
+        if current is None:
+
+            return True
+
+        same_date = str(getattr(current, "race_date", "") or "")[:10] == str(
+            race.get("date") or ""
+        )[:10]
+
+        name = race.get("name")
+
+        same_name = not name or " ".join(
+            str(getattr(current, "target_race", "") or "").lower().split()
+        ) == " ".join(str(name).lower().split())
+
+        return not (same_date and same_name)
+
+    @staticmethod
     def _sync_race(
         profile: str,
         race: dict | None,
@@ -241,6 +270,13 @@ class RunnerMemoryService:
             if race.get("target_time"):
 
                 updates["target_time"] = race["target_time"]
+
+            elif RunnerMemoryService._is_new_race(profile, race):
+
+                # prova NOVA sem tempo-alvo: limpa o tempo da prova anterior.
+                # Maurício 27/09: a 15k (pace 5:30) herdou os 57:00 da 10k — o
+                # plano mandava "ritmo-alvo ~3:48/km" nos 15 km.
+                updates["target_time"] = None
 
         RunnerProfileRepository().update_fields(
             profile,

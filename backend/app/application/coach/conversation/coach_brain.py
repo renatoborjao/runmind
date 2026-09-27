@@ -102,7 +102,9 @@ resolvida pelo calendário | null>, "target_time": <SÓ em goal: tempo-alvo \
 "h:mm:ss"/"mm:ss", ou null se ele só quer completar/sem cronômetro>,
                      "relationship": <SÓ em goal: primary|stepping_stone|\
 additional|replace | null>}}, ...],
-  "on_pending": null | <apply|reject|refine>}}
+  "on_pending": null | <apply|reject|refine>,
+  "perception": null | {{"day": "<aaaa-mm-dd do treino de que ele fala>", \
+"rpe": <0-10 | null>, "feel": "<as palavras dele, curto> | null"}}}}
 
 COMO ESCOLHER:
 - ANTES DE TUDO — afirmar, corrigir ou perguntar NÃO é pedir mudança. Se o \
@@ -218,6 +220,15 @@ CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, 
 preencha TAMBÉM "actions" com a versão corrigida (escopo certo).
 - Senão, é conversa/relato/dúvida: responda no "say", com o que você sabe do \
 atleta. Só isso.
+- PERCEPÇÃO (independe do resto — pode vir junto com qualquer resposta): se a \
+mensagem conta como ELE SE SENTIU num treino recente (esforço, cansaço, "voei", \
+"perna pesada", "tava puxado", "morri no fim", "foi tranquilo", nota 0-10), \
+preencha "perception": "day" = o dia DAQUELE treino pelo CALENDÁRIO/último \
+treino do quadro; "rpe" = o número se ele disse, senão o que a fala indica \
+(tranquilo/fácil≈3, moderado/ok≈5, puxado/pesado≈7, muito pesado/morri≈9); \
+"feel" = as palavras dele, curtas. É a percepção dele que calibra a dose — não \
+deixe passar. Se não fala de como se sentiu num treino, "perception"=null. Não \
+transforme isso em interrogatório: não pergunte só pra preencher.
 - TREINADOR QUE OFERECE: você enxerga o BALANÇO DE ESTÍMULOS × META no quadro \
 (o que ele recebeu de cada família, a intensidade real por zona de FC e as \
 LACUNAS rumo ao objetivo/fase). Quando o assunto abrir espaço — ele pergunta \
@@ -290,6 +301,10 @@ class BrainDecision:
     actions: list[BrainAction] = field(default_factory=list)
 
     on_pending: str | None = None
+
+    # como ELE se sentiu num treino recente, lido da fala dele ({day, rpe,
+    # feel}) — o executor grava como percepção (fonte "conversa")
+    perception: dict | None = None
 
     @property
     def all_actions(self) -> list[BrainAction]:
@@ -407,6 +422,8 @@ class CoachBrain:
 
         actions = CoachBrain._parse_actions(data)
 
+        perception = CoachBrain._parse_perception(data.get("perception"))
+
         # precisa de ALGO acionável: uma fala, um cartão, uma ação ou um
         # veredito de pendência — senão não dá pra responder (cai no fallback)
         if not (say or card or actions or on_pending):
@@ -418,7 +435,29 @@ class CoachBrain:
             answer_card=card,
             actions=actions,
             on_pending=on_pending,
+            perception=perception,
         )
+
+    @staticmethod
+    def _parse_perception(raw) -> dict | None:
+        """{day, rpe, feel} com o mínimo pra gravar (dia + número OU palavras);
+        qualquer outra coisa vira None."""
+
+        if not isinstance(raw, dict):
+
+            return None
+
+        day = str(raw.get("day") or "").strip()[:10]
+
+        rpe = raw.get("rpe")
+
+        feel = str(raw.get("feel") or "").strip() or None
+
+        if len(day) != 10 or (rpe is None and not feel):
+
+            return None
+
+        return {"day": day, "rpe": rpe, "feel": feel}
 
     @staticmethod
     def _parse_actions(data: dict) -> list[BrainAction]:

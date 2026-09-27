@@ -9,7 +9,6 @@ Ancorado no histórico ([[feedback_base_historico_sempre]]), nunca genérico."""
 
 from google.genai import types
 
-from app.application.coach.context.athlete_brief import AthleteLongTermBrief
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import generate_text
 
@@ -99,11 +98,15 @@ class ReengagementWriter:
 
             lines.append(f"O porquê dele de correr: {motivation}")
 
-        brief = AthleteLongTermBrief.render(profile)
+        # o DOSSIÊ: reaproximar falando com quem ELE é (a mesma base de todas
+        # as vozes do coach), nunca genérico
+        from app.application.coach.context.athlete_dossier import AthleteDossier
 
-        if brief:
+        dossier = AthleteDossier.render(profile)
 
-            lines.append(brief)
+        if dossier:
+
+            lines.append(dossier)
 
         return "\n".join(lines)
 

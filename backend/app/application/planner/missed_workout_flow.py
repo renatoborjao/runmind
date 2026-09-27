@@ -3,15 +3,10 @@ from datetime import date, timedelta
 from app.application.coach.planning.missed_workout_judge import (
     MissedWorkoutJudge,
 )
-from app.application.history.metrics_resolver import MetricsResolver
-from app.application.history.runner_baseline_builder import (
-    RunnerBaselineBuilder,
-)
 from app.application.planner.current_plan_provider import CurrentPlanProvider
 from app.application.planner.missed_workout_detector import (
     MissedWorkoutDetector,
 )
-from app.application.planner.pace_formatter import PaceFormatter
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
@@ -89,8 +84,7 @@ class MissedWorkoutFlow:
             missed=missed,
             done=done,
             total=len(running),
-            portrait=MissedWorkoutFlow._portrait(runner, history),
-            patterns=MissedWorkoutFlow._patterns(profile),
+            portrait=MissedWorkoutFlow._portrait(runner, history, plan),
         )
 
         if judgment is None:
@@ -117,46 +111,19 @@ class MissedWorkoutFlow:
         return runner, judgment.message
 
     @staticmethod
-    def _patterns(profile: str) -> str:
-        """O que SE REPETE (aderência, furos por tipo, corpo) — furo isolado
-        não é padrão, mas 5 de 7 é: aí o coach conversa sobre a rotina."""
-
-        from app.application.history.training_patterns import TrainingPatterns
-
-        return TrainingPatterns.for_profile(profile)
-
-    @staticmethod
     def _portrait(
         runner: RunnerProfile,
         history: TrainingHistory,
+        plan=None,
     ) -> str:
-        """Retrato compacto do atleta pra IA decidir com base real — volume,
-        tendência e paces. Sem histórico utilizável, volta vazio (o juiz
-        lida)."""
+        """O DOSSIÊ do atleta (volume, paces, evolução, corpo, percepção,
+        padrões — inclusive o de furo —, plano, memória e o que o coach já
+        disse) pra IA decidir o furo com a MESMA base das outras vozes. Furo
+        isolado não é padrão, mas 5 de 7 é: aí o coach conversa sobre a rotina.
+        Vazio se falhar (o juiz lida)."""
 
-        try:
+        from app.application.coach.context.athlete_dossier import AthleteDossier
 
-            baseline = RunnerBaselineBuilder.build(history, runner)
-
-            metrics = MetricsResolver.resolve(runner, history)
-
-            return (
-                "Volume ~%.0f km/sem (última %.0f, melhor %.0f), tendência %s. "
-                "Rodagem típica ~%.0f km; maior treino ~%.0f km. "
-                "Paces (min/km): fácil %s-%s, limiar %s, VO2 %s."
-                % (
-                    baseline.weekly_km, baseline.last_week_km,
-                    baseline.max_week_km, baseline.trend,
-                    baseline.typical_run_km, baseline.longest_km,
-                    PaceFormatter.format(metrics.easy_pace_min),
-                    PaceFormatter.format(metrics.easy_pace_max),
-                    PaceFormatter.format(metrics.threshold_pace),
-                    PaceFormatter.format(metrics.vo2_pace),
-                )
-            )
-
-        except Exception as e:
-
-            print(f"Retrato do furou-ontem falhou para '{runner.name}': {e}")
-
-            return ""
+        return AthleteDossier.render(
+            runner.id, runner=runner, history=history, plan=plan,
+        )

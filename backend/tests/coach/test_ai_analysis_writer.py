@@ -39,105 +39,32 @@ def _structure(**overrides) -> WorkoutStructure:
     return WorkoutStructure(**defaults)
 
 
-def test_athlete_memory_facts_bring_long_term_context():
-    """A análise NÃO pode olhar só o treino de hoje: puxa evolução da forma +
-    memória evolutiva + aprendizados do coach (LEI base-histórico)."""
-
-    with (
-        patch(
-            "app.application.coach.intelligence.fitness_reading_service."
-            "FitnessReadingService.read_evolution",
-            return_value=MagicMock(),
-        ),
-        patch(
-            "app.application.coach.writer.fitness_evolution_writer."
-            "FitnessEvolutionWriter.line",
-            return_value="forma subindo há 3 semanas",
-        ),
-        patch(
-            "app.application.coach.memory.runner_memory_service."
-            "RunnerMemoryService.render",
-            return_value="Memória: prefere treinar de manhã",
-        ),
-        patch("app.core.config.get_settings") as gs,
-        patch(
-            "app.application.coach.memory.coach_learning_service."
-            "CoachLearningService.render",
-            return_value="Aprendi: responde bem a tiros curtos",
-        ),
-    ):
-
-        gs.return_value.coach_learning_inject_enabled = True
-
-        out = AIAnalysisWriter._athlete_memory_facts("renato")
-
-    assert "QUEM É O ATLETA NO LONGO PRAZO" in out
-    assert "forma subindo há 3 semanas" in out
-    assert "prefere treinar de manhã" in out
-    assert "tiros curtos" in out
-
-
-def test_athlete_memory_facts_best_effort_never_raises():
-    """Uma fonte que explode não pode derrubar a análise — best-effort."""
+def test_facts_carry_the_athlete_dossier():
+    """A análise NÃO olha só o treino de hoje: recebe o DOSSIÊ (meta, evolução,
+    corpo, percepção, padrões, plano, memória, o que já foi cobrado/dito) — a
+    mesma base do plano e do chat (LEI base-histórico)."""
 
     with patch(
-        "app.application.coach.memory.runner_memory_service."
-        "RunnerMemoryService.render",
-        side_effect=Exception("boom"),
-    ):
+        "app.application.coach.context.athlete_dossier.AthleteDossier.render",
+        return_value="DOSSIÊ-DO-ATLETA",
+    ) as dossier:
 
-        out = AIAnalysisWriter._athlete_memory_facts("perfil_inexistente_xyz")
+        facts = AIAnalysisWriter._facts(make_context())
 
-    assert isinstance(out, str)  # não levanta; no máximo volta vazio
+    assert "DOSSIÊ-DO-ATLETA" in facts
+    assert dossier.call_args.kwargs["runner"] is not None
 
 
-def test_pain_facts_bring_injuries_and_recent_soreness():
-    """A análise tem que ver dores/lesões: limitações declaradas + check-in de
-    dor recente — nunca cobra treino ignorando dor (LEI base-histórico)."""
-
-    checkin = MagicMock(soreness=3, note="dor no joelho direito")
+def test_facts_survive_an_empty_dossier():
 
     with patch(
-        "app.infrastructure.persistence.checkin_repository."
-        "CheckinRepository.latest_recent",
-        return_value=checkin,
+        "app.application.coach.context.athlete_dossier.AthleteDossier.render",
+        return_value="",
     ):
 
-        out = AIAnalysisWriter._pain_facts(
-            "renato", ["tendinite no joelho"]
-        )
+        facts = AIAnalysisWriter._facts(make_context())
 
-    assert "DORES/LESÕES" in out
-    assert "tendinite no joelho" in out
-    assert "joelho direito" in out
-    assert "nível 3" in out
-
-
-def test_pain_facts_empty_when_no_injury_and_no_soreness():
-
-    with patch(
-        "app.infrastructure.persistence.checkin_repository."
-        "CheckinRepository.latest_recent",
-        return_value=None,
-    ):
-
-        out = AIAnalysisWriter._pain_facts("renato", [])
-
-    assert out == ""
-
-
-def test_pain_facts_best_effort_never_raises():
-
-    with patch(
-        "app.infrastructure.persistence.checkin_repository."
-        "CheckinRepository.latest_recent",
-        side_effect=Exception("boom"),
-    ):
-
-        # lesão declarada ainda entra; o check-in que explodiu não derruba
-        out = AIAnalysisWriter._pain_facts("renato", ["dor lombar"])
-
-    assert "dor lombar" in out
+    assert facts.startswith("Atleta:")
 
 
 def _write(context=None, **patch_kwargs):

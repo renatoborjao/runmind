@@ -107,52 +107,60 @@ def test_run_walk_also_goes_through_ai():
     assert plan.source == "runmind"
 
 
-def test_generated_plan_goes_through_realism_review_with_projection():
-    """Após gerar, o plano passa pela revisão de realismo — com a projeção do
-    Garmin carregada como âncora de capacidade."""
+def test_generated_plan_is_not_second_guessed_by_another_ai():
+    """27/09: sem guardião — o plano do PRO (com o dossiê inteiro) não passa
+    por uma 2ª IA com menos contexto podando distância. A IA que sabe tudo
+    decide ([[feedback_ia_decide_sem_regras]])."""
 
-    from app.domain.entities.race_prediction import RacePrediction
+    import importlib.util
 
-    reviewed = _plan()
-
-    ensure = AsyncMock(return_value=reviewed)
-
-    prediction = RacePrediction(time_10k_sec=2830)
+    assert importlib.util.find_spec(
+        "app.application.coach.planning.plan_realism_reviewer"
+    ) is None
 
     with (
         patch(f"{MODULE}.WeeklyPlanRepository") as repo_cls,
         patch(f"{MODULE}.CoachPlanEngine") as coach,
         patch(f"{MODULE}.WeeklyPlanService") as wps,
         patch.object(AIPlanService, "_build_context", return_value="ctx"),
-        patch(
-            "app.application.coach.planning.plan_realism_reviewer."
-            "PlanRealismReviewer.ensure_reviewed",
-            new=ensure,
-        ),
-        patch(
-            "app.infrastructure.persistence.race_prediction_repository."
-            "RacePredictionRepository"
-        ) as pred_repo,
     ):
 
         repo_cls.return_value.load.return_value = None
         wps.active_week_start.return_value = WEEK
-        coach.generate = AsyncMock(return_value=_plan())
-        pred_repo.return_value.load.return_value = prediction
+        generated = _plan()
+        coach.generate = AsyncMock(return_value=generated)
 
-        goal = MagicMock(race_date=None)
-
-        asyncio.run(
+        plan = asyncio.run(
             AIPlanService.ensure_plan(
                 "renato", make_runner(), _assessment(),
-                MagicMock(), goal, TrainingHistory([]), WEEK,
+                MagicMock(), MagicMock(race_date=None), TrainingHistory([]), WEEK,
             )
         )
 
-    ensure.assert_awaited_once()
-    # a projeção carregada foi passada ao revisor
-    assert ensure.await_args.kwargs["prediction"] is prediction
-    assert ensure.await_args.kwargs["goal"] is goal
+    assert plan is generated
+    coach.generate.assert_awaited_once()
+
+
+def test_build_context_puts_the_dossier_under_the_week_task():
+    """O plano lê a MESMA base das outras vozes (o dossiê), por baixo do que é
+    só da tarefa (semana-alvo, dias, plano passado)."""
+
+    repo = MagicMock()
+    repo.history.return_value = []
+
+    goal = MagicMock(race_date=None)
+
+    with patch(
+        "app.application.coach.context.athlete_dossier.AthleteDossier.render",
+        return_value="DOSSIÊ-DO-ATLETA",
+    ):
+
+        ctx = AIPlanService._build_context(
+            "renato", make_runner(), MagicMock(), goal, TrainingHistory([]),
+            repo, WEEK, False,
+        )
+
+    assert ctx.index("SEMANA A MONTAR") < ctx.index("DOSSIÊ-DO-ATLETA")
 
 
 def test_external_coach_skips_ai_and_uses_deterministic():
@@ -299,65 +307,3 @@ def test_fill_time_based_km_estimates_and_counts_all_types():
     assert longao.estimated_distance_km is None          # já tem km planejado
     # volume conta os 3 (8 + ~6.9 + 12), não só o longão de 12
     assert plan.weekly_volume > 25
-
-
-# --- subjetivo recente injetado no contexto do plano (a LEI: plano lê TUDO) ---
-
-from types import SimpleNamespace  # noqa: E402
-
-
-def test_subjective_pulls_recent_rpe_and_checkins():
-    """O plano lê o SUBJETIVO fresco (RPE + check-ins dos últimos ~14 dias) —
-    direto, não só via aprendizado semanal. Antigo > 14 dias fica de fora."""
-
-    rpe = [
-        SimpleNamespace(day="2026-07-02", rpe=8),   # dentro (ref 2026-07-06)
-        SimpleNamespace(day="2026-06-01", rpe=5),   # fora da janela
-    ]
-    checkins = [
-        SimpleNamespace(day="2026-07-04", has_data=True, energy=2,
-                        sleep_quality=1, note="acordei detonado"),
-        SimpleNamespace(day="2026-06-01", has_data=True, energy=5,
-                        sleep_quality=5, note="ótimo"),  # fora
-    ]
-
-    with (
-        patch("app.core.clock.today_local", return_value=date(2026, 7, 6)),
-        patch(
-            "app.infrastructure.persistence.session_rpe_repository."
-            "SessionRpeRepository"
-        ) as rpe_repo,
-        patch(
-            "app.infrastructure.persistence.checkin_repository.CheckinRepository"
-        ) as chk_repo,
-    ):
-        rpe_repo.return_value.load_sessions.return_value = rpe
-        chk_repo.return_value.load.return_value = checkins
-
-        out = AIPlanService._subjective("mauricio")
-
-    assert "COMO ELE VEM SE SENTINDO" in out
-    assert "RPE 8/10" in out
-    assert "energia 2/5" in out
-    assert "acordei detonado" in out
-    # fora da janela não entra
-    assert "RPE 5/10" not in out
-    assert "ótimo" not in out
-
-
-def test_subjective_empty_when_no_recent_data():
-
-    with (
-        patch("app.core.clock.today_local", return_value=date(2026, 7, 6)),
-        patch(
-            "app.infrastructure.persistence.session_rpe_repository."
-            "SessionRpeRepository"
-        ) as rpe_repo,
-        patch(
-            "app.infrastructure.persistence.checkin_repository.CheckinRepository"
-        ) as chk_repo,
-    ):
-        rpe_repo.return_value.load_sessions.return_value = []
-        chk_repo.return_value.load.return_value = []
-
-        assert AIPlanService._subjective("mauricio") == ""

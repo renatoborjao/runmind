@@ -213,3 +213,39 @@ def _pending_part(msg: str) -> str:
             return line
 
     return ""
+
+
+def test_line_follows_the_combined_verdict_not_ef_alone():
+    """Maurício 27/09: o EF sozinho dizia 'estável' e o veredito combinado (EF +
+    VO₂máx + FC de repouso) dizia 'subiu' — duas verdades no mesmo contexto. A
+    linha curta agora é o veredito combinado; o EF entra como evidência."""
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING, ef=_ef(EFF_STABLE), vo2max=_vo2(),
+    )
+
+    line = FitnessEvolutionWriter.line(evo)
+
+    assert line.startswith("📈 Forma em alta")
+    assert "estável" not in line
+
+
+def test_line_adds_ef_evidence_when_it_has_size():
+
+    evo = FitnessEvolution(
+        direction=EVO_STABLE, ef=_ef(EFF_IMPROVING, pace_gain_sec=8),
+    )
+
+    line = FitnessEvolutionWriter.line(evo)
+
+    assert line.startswith("➡️ Forma estável")
+    assert "economia aeróbica: na mesma FC (~150 bpm), ~8 s/km mais rápido" in line
+
+
+def test_line_is_silent_when_stale():
+
+    evo = FitnessEvolution(
+        direction=EVO_IMPROVING, ef=_ef(EFF_IMPROVING), days_since_last_run=30,
+    )
+
+    assert FitnessEvolutionWriter.line(evo) is None
