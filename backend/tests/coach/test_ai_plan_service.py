@@ -89,7 +89,10 @@ def test_falls_back_to_deterministic_on_ai_failure():
 
     plan, coach, repo, wps = _run(ai_error=RuntimeError("gemini caiu"))
 
-    coach.generate.assert_awaited_once()
+    # PRO (padrão pra todos) cai → tenta o Flash → cai → determinístico
+    assert coach.generate.await_count == 2
+    assert coach.generate.await_args_list[0].kwargs.get("model")
+    assert "model" not in coach.generate.await_args_list[1].kwargs
     wps.get_or_generate.assert_called_once()   # fallback
     assert plan.source == "deterministico"
 

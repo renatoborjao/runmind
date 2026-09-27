@@ -381,12 +381,13 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
-    # MODELO PRO só na geração do PLANO da semana (a tarefa de raciocínio mais
+    # MODELO PRO na geração do PLANO da semana de TODOS (a tarefa de raciocínio mais
     # pesada, roda 1×/semana/atleta — então mesmo um modelo caro sai barato). O
     # resto (chat/briefing/análise/memória) segue no Flash, rápido e barato onde
     # é frequente. Canário; fallback Pro→Flash→determinístico se o Pro cair/
-    # rate-limit. Validado offline (A/B nos dados reais). Ver [[project_consumo_tokens]].
-    plan_model_enabled: bool = False
+    # rate-limit. Validado offline (A/B nos dados reais); lista vazia = todos
+    # (27/09: canário renato2+mauricio encerrado). Ver [[project_consumo_tokens]].
+    plan_model_enabled: bool = True
 
     plan_model_profiles: str = ""
 
