@@ -95,6 +95,7 @@ class ConversationContextBuilder:
             "plano.\n"
             f"Último treino: {ConversationContextBuilder._last_activity_summary(history)}\n"
             f"Próximo treino planejado: {ConversationContextBuilder._next_session_summary(plan, history)}\n"
+            + ConversationContextBuilder._next_plan_line(runner, plan, today)
         )
 
         # Status do treino de HOJE: sem isto o coach não sabe que a sessão de
@@ -161,6 +162,53 @@ class ConversationContextBuilder:
             facts = f"{facts}\n{armario}\n"
 
         return facts
+
+    @staticmethod
+    def _next_plan_line(runner, plan, today) -> str:
+        """QUANDO chega o plano da semana que vem — fato do sistema. Sem isto o
+        coach inventou "amanhã cedinho o plano entra na tela" num domingo às
+        19h (sai às 20h) e ainda disse o que o plano "já entrega" antes de ele
+        existir (Renato 27/09). Treinador externo: o plano vem dele."""
+
+        if getattr(runner, "external_coach", False):
+
+            return ""
+
+        from app.application.planner.weekly_plan_notifier import PLAN_HOUR
+        from app.core.clock import now_local
+
+        next_monday = today + timedelta(days=7 - today.weekday())
+
+        when = next_monday.strftime("%d/%m")
+
+        if plan is not None and plan.week_start >= next_monday:
+
+            return (
+                f"PLANO DA SEMANA QUE VEM ({when}): já montado e enviado — é o "
+                "que está no quadro.\n"
+            )
+
+        if today.weekday() == 6:
+
+            if now_local().hour < PLAN_HOUR:
+
+                return (
+                    f"PLANO DA SEMANA QUE VEM ({when}): sai HOJE às {PLAN_HOUR}h, "
+                    "automático, e AINDA NÃO FOI MONTADO — não diga o que ele vai "
+                    "ter nem que chega amanhã.\n"
+                )
+
+            return (
+                f"PLANO DA SEMANA QUE VEM ({when}): sendo montado agora, chega "
+                "hoje à noite.\n"
+            )
+
+        sunday = next_monday - timedelta(days=1)
+
+        return (
+            f"PLANO DA SEMANA QUE VEM ({when}): sai domingo "
+            f"({sunday.strftime('%d/%m')}) às {PLAN_HOUR}h, automático.\n"
+        )
 
     @staticmethod
     def _week_calendar(today) -> str:
