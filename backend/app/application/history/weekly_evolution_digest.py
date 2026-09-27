@@ -1,14 +1,24 @@
 """Evolução SEMANA A SEMANA do atleta — a base pro coach decidir pela
-TRAJETÓRIA, não só pelo retrato de hoje. O retrato (build_portrait) dá médias
-e o máximo; o corpo dá o agora. Faltava a curva: como o volume subiu/caiu, se
-o longão cresceu, se o custo cardíaco (batimentos por km) está caindo — que é
-evolução aeróbica de verdade — e como o corpo/sono andou em cada semana. Com
-isso o coach responde "dá pra 8 km amanhã?" olhando como ele absorveu semanas
-parecidas. Puro/determinístico. Ver [[feedback_base_historico_sempre]]."""
+TRAJETÓRIA, não só pelo retrato de hoje: como o volume subiu/caiu, se o longão
+cresceu, como a ECONOMIA aeróbica andou e como o corpo/sono estava em cada
+semana. Com isso o coach responde "dá pra 8 km amanhã?" olhando como o atleta
+absorveu semanas parecidas.
 
+A economia é a MESMA medida da leitura "Forma"/"estou evoluindo?" (o
+[[AerobicEfficiencyAnalyzer]]: velocidade ÷ FC nas corridas aeróbicas
+comparáveis, ajustada por calor e relevo, sem provas) — aqui só aberta semana a
+semana. Antes esta tabela usava "batimentos por km" bruto de todas as corridas
+(confundido por intensidade e calor) e dizia "menos eficiente" enquanto a
+Forma dizia "8 s/km mais rápido na mesma FC": o coach podia defender as duas.
+Uma verdade só. Puro/determinístico. Ver [[feedback_base_historico_sempre]]."""
+
+import statistics
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from app.application.history.aerobic_efficiency_analyzer import (
+    AerobicEfficiencyAnalyzer,
+)
 from app.core.clock import active_timezone, today_local
 from app.domain.entities.activity import Activity
 from app.domain.entities.body_reading_snapshot import BodyReadingSnapshot
@@ -36,9 +46,9 @@ class WeekStat:
     runs: int
     km: float
     longest_km: float
-    pace_sec: int | None        # pace médio (tempo total / km total)
-    avg_hr: int | None          # FC média ponderada pelo tempo
-    beats_per_km: int | None    # custo cardíaco: menor = mais eficiente
+    pace_sec: int | None          # pace médio bruto (tempo total / km total)
+    avg_hr: int | None            # FC média ponderada pelo tempo
+    aerobic_pace_sec: int | None  # economia: pace na FC de referência (ajustado)
     body: BodyReadingSnapshot | None  # última leitura do corpo da semana
 
 
@@ -46,22 +56,40 @@ class WeeklyEvolutionDigest:
 
     @staticmethod
     def for_profile(profile: str) -> str:
-        """Render do atleta a partir do arquivo (deduplicado) + leituras do
-        corpo. Best-effort: falha vira "" (nunca derruba quem chama)."""
+        """Render do atleta com a MESMA matéria-prima da leitura "Forma"
+        (arquivo, FC de repouso/máx, sem provas) + leituras do corpo.
+        Best-effort: falha vira "" (nunca derruba quem chama)."""
 
         try:
 
-            from app.infrastructure.persistence.activity_archive_repository import (
-                ActivityArchiveRepository,
+            from app.application.coach.intelligence.fitness_reading_service import (
+                FitnessReadingService,
+            )
+            from app.application.coach.writer.fitness_evolution_writer import (
+                FitnessEvolutionWriter,
             )
             from app.infrastructure.persistence.body_reading_history_repository import (
                 BodyReadingHistoryRepository,
             )
 
+            activities, _series, resting_hr, max_hr = FitnessReadingService._load(
+                profile
+            )
+
+            evolution = FitnessEvolutionWriter.line(
+                FitnessReadingService.read_evolution(profile)
+            )
+
             return WeeklyEvolutionDigest.render(
-                ActivityArchiveRepository().load_activities(profile),
+                activities,
                 BodyReadingHistoryRepository().load(profile),
                 today_local(),
+                resting_hr=resting_hr,
+                max_hr=max_hr,
+                ef_activities=FitnessReadingService._without_races(
+                    profile, activities
+                ),
+                evolution_line=evolution or "",
             )
 
         except Exception as e:
@@ -76,9 +104,12 @@ class WeeklyEvolutionDigest:
         snapshots: list[BodyReadingSnapshot],
         today: date,
         weeks: int = DEFAULT_WEEKS,
-    ) -> list[WeekStat]:
-        """Uma linha por semana (seg–dom), da mais ANTIGA pra atual, incluindo
-        semanas sem corrida (buraco também é informação)."""
+        resting_hr: int | None = None,
+        max_hr: int | None = None,
+        ef_activities: list[Activity] | None = None,
+    ) -> tuple[list[WeekStat], int | None]:
+        """(uma linha por semana seg–dom, da mais ANTIGA pra atual — incluindo
+        semanas sem corrida —, FC de referência da economia)."""
 
         current = today - timedelta(days=today.weekday())
 
@@ -92,9 +123,7 @@ class WeeklyEvolutionDigest:
 
                 continue
 
-            day = WeeklyEvolutionDigest._local_day(act.start_date)
-
-            week = day - timedelta(days=day.weekday())
+            week = WeeklyEvolutionDigest._week_of(act.start_date)
 
             if week in buckets:
 
@@ -110,10 +139,36 @@ class WeeklyEvolutionDigest:
 
                 body_by_week[week] = snap
 
-        return [
-            WeeklyEvolutionDigest._week_stat(s, buckets[s], body_by_week.get(s))
+        # economia: as MESMAS corridas comparáveis da leitura "Forma"
+        comparable = AerobicEfficiencyAnalyzer._comparable_runs(
+            ef_activities if ef_activities is not None else activities,
+            starts[0],
+            today,
+            resting_hr,
+            max_hr,
+        )
+
+        ref_hr = (
+            round(statistics.median(r["hr"] for r in comparable))
+            if comparable else None
+        )
+
+        ef_by_week: dict[date, list[float]] = {}
+
+        for run in comparable:
+
+            week = run["day"] - timedelta(days=run["day"].weekday())
+
+            ef_by_week.setdefault(week, []).append(run["ef"])
+
+        stats = [
+            WeeklyEvolutionDigest._week_stat(
+                s, buckets[s], body_by_week.get(s), ef_by_week.get(s), ref_hr,
+            )
             for s in starts
         ]
+
+        return stats, ref_hr
 
     @staticmethod
     def render(
@@ -121,21 +176,33 @@ class WeeklyEvolutionDigest:
         snapshots: list[BodyReadingSnapshot],
         today: date,
         weeks: int = DEFAULT_WEEKS,
+        resting_hr: int | None = None,
+        max_hr: int | None = None,
+        ef_activities: list[Activity] | None = None,
+        evolution_line: str = "",
     ) -> str:
-        """Tabela compacta + leitura da tendência. Vazio sem corrida no
-        período (nada é inventado)."""
+        """Tabela compacta + tendência. Vazio sem corrida no período."""
 
-        stats = WeeklyEvolutionDigest.build(activities, snapshots, today, weeks)
+        stats, ref_hr = WeeklyEvolutionDigest.build(
+            activities, snapshots, today, weeks, resting_hr, max_hr,
+            ef_activities,
+        )
 
         if not any(s.runs for s in stats):
 
             return ""
 
+        economy = (
+            f"economia = pace nas corridas aeróbicas levado à FC de referência "
+            f"~{ref_hr} bpm, ajustado por calor/relevo (MENOR = mais em forma) — "
+            "é a mesma medida da leitura 'Forma'"
+            if ref_hr else "sem corridas aeróbicas comparáveis pra medir economia"
+        )
+
         lines = [
-            f"EVOLUÇÃO SEMANA A SEMANA (últimas {weeks}, seg–dom; bpm/km = "
-            "custo cardíaco, MENOR = mais eficiente — sobe em semana com mais "
-            "treino forte/calor; decida pela TRAJETÓRIA e por como ele "
-            "absorveu semanas parecidas, não só pelo dia):"
+            f"EVOLUÇÃO SEMANA A SEMANA (últimas {weeks}, seg–dom; {economy}; "
+            "decida pela TRAJETÓRIA e por como ele absorveu semanas parecidas, "
+            "não só pelo dia):"
         ]
 
         current = today - timedelta(days=today.weekday())
@@ -168,9 +235,11 @@ class WeeklyEvolutionDigest:
 
                     parts.append(f"FC {s.avg_hr}")
 
-                if s.beats_per_km:
+                if s.aerobic_pace_sec:
 
-                    parts.append(f"{s.beats_per_km} bpm/km")
+                    parts.append(
+                        f"economia {WeeklyEvolutionDigest._pace(s.aerobic_pace_sec)}"
+                    )
 
                 line = f"- {label}: " + ", ".join(parts)
 
@@ -182,7 +251,13 @@ class WeeklyEvolutionDigest:
 
             lines.append(line)
 
-        trend = WeeklyEvolutionDigest._trend(stats, current)
+        trend = WeeklyEvolutionDigest._volume_trend(stats, current)
+
+        if evolution_line:
+
+            trend = (
+                f"{trend} " if trend else ""
+            ) + f"Forma (a leitura oficial, 8 semanas): {evolution_line}"
 
         if trend:
 
@@ -193,35 +268,41 @@ class WeeklyEvolutionDigest:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _local_day(moment: datetime) -> date:
+    def _week_of(moment: datetime) -> date:
 
-        if moment.tzinfo is None:
+        day = (
+            moment.date()
+            if moment.tzinfo is None
+            else moment.astimezone(active_timezone()).date()
+        )
 
-            return moment.date()
-
-        return moment.astimezone(active_timezone()).date()
+        return day - timedelta(days=day.weekday())
 
     @staticmethod
     def _week_stat(
         start: date,
         acts: list[Activity],
         body: BodyReadingSnapshot | None,
+        efs: list[float] | None,
+        ref_hr: int | None,
     ) -> WeekStat:
 
         total_m = sum(a.distance or 0 for a in acts)
 
         total_s = sum(a.moving_time or 0 for a in acts)
 
-        with_hr = [
-            a for a in acts
-            if a.average_heartrate and a.moving_time and a.distance
-        ]
+        with_hr = [a for a in acts if a.average_heartrate and a.moving_time]
 
         hr_time = sum(a.moving_time for a in with_hr)
 
-        hr_km = sum(a.distance for a in with_hr) / 1000
+        aerobic_pace = None
 
-        beats = sum(a.average_heartrate * a.moving_time / 60 for a in with_hr)
+        if efs and ref_hr:
+
+            # EF (m/s por batimento) × FC de referência = velocidade → pace
+            speed = statistics.median(efs) * ref_hr
+
+            aerobic_pace = round(1000 / speed) if speed > 0 else None
 
         return WeekStat(
             start=start,
@@ -232,8 +313,11 @@ class WeeklyEvolutionDigest:
                 round(total_s / (total_m / 1000))
                 if total_m > 0 and total_s > 0 else None
             ),
-            avg_hr=round(beats / (hr_time / 60)) if hr_time else None,
-            beats_per_km=round(beats / hr_km) if hr_km > 0 else None,
+            avg_hr=(
+                round(sum(a.average_heartrate * a.moving_time for a in with_hr) / hr_time)
+                if hr_time else None
+            ),
+            aerobic_pace_sec=aerobic_pace,
             body=body,
         )
 
@@ -261,9 +345,10 @@ class WeeklyEvolutionDigest:
         return ", ".join(parts)
 
     @staticmethod
-    def _trend(stats: list[WeekStat], current: date) -> str:
-        """Últimas 4 semanas FECHADAS × as 4 anteriores: volume e custo
-        cardíaco. A semana em andamento fica fora (parcial distorce)."""
+    def _volume_trend(stats: list[WeekStat], current: date) -> str:
+        """Volume: últimas 4 semanas FECHADAS × as 4 anteriores (a semana em
+        andamento fica fora — parcial distorce). A economia NÃO entra aqui:
+        a tendência oficial dela é a da leitura 'Forma' (regressão)."""
 
         closed = [s for s in stats if s.start != current]
 
@@ -277,27 +362,10 @@ class WeeklyEvolutionDigest:
 
             return sum(s.km for s in group) / len(group)
 
-        def avg_bpk(group):
-
-            values = [s.beats_per_km for s in group if s.beats_per_km]
-
-            return sum(values) / len(values) if values else None
-
-        text = (
-            f"Tendência (4 semanas fechadas × 4 anteriores): volume "
-            f"{avg_km(before):.0f} → {avg_km(recent):.0f} km/sem"
+        return (
+            f"Tendência de volume (4 semanas fechadas × 4 anteriores): "
+            f"{avg_km(before):.0f} → {avg_km(recent):.0f} km/sem."
         )
-
-        b_before, b_recent = avg_bpk(before), avg_bpk(recent)
-
-        if b_before and b_recent:
-
-            text += (
-                f"; custo cardíaco {b_before:.0f} → {b_recent:.0f} bpm/km "
-                f"({'mais eficiente' if b_recent < b_before else 'menos eficiente'})"
-            )
-
-        return text + "."
 
     @staticmethod
     def _pace(sec_per_km: int) -> str:
