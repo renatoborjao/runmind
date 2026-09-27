@@ -243,6 +243,16 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{already}\n"
 
+        # a DIRETRIZ que o PLANO está seguindo (corpo/carga/risco): o chat e o
+        # avulso precisam bater com ela. Sem isto o chat sugeriu "segurar em 32
+        # km" enquanto o plano segurava no volume da semana passada (~30) —
+        # duas vozes do mesmo coach (varredura 26/09).
+        plan_directive = ConversationContextBuilder._plan_directive(profile)
+
+        if plan_directive:
+
+            facts = f"{facts}\n{plan_directive}\n"
+
         # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
         # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
         # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir
@@ -711,6 +721,36 @@ class ConversationContextBuilder:
             f"treinos, {stats['total_km']:.0f} km desde "
             f"{first_label}; maior treino: "
             f"{stats['longest_km']:.1f} km\n"
+        )
+
+    @staticmethod
+    def _plan_directive(profile: str) -> str:
+        """A mesma diretriz de corpo que o gerador do plano recebe, pro chat
+        não prometer outra coisa. Best-effort: falha vira ""."""
+
+        try:
+
+            from app.application.coach.planning.ai_plan_service import (
+                AIPlanService,
+            )
+
+            directive = AIPlanService._body_directive(profile)
+
+        except Exception as e:
+
+            print(f"Diretriz do plano p/ chat falhou p/ '{profile}': {e}")
+
+            return ""
+
+        if not directive:
+
+            return ""
+
+        return (
+            "DIRETRIZ QUE O PLANO ESTÁ SEGUINDO AGORA (é a SUA decisão de "
+            "treinador — no chat, qualquer sugestão de volume/intensidade/"
+            "treino avulso tem que BATER com isto; não prometa outra coisa):\n"
+            f"{directive}"
         )
 
     @staticmethod
