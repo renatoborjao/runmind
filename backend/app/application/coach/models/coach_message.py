@@ -36,6 +36,11 @@ class CoachMessage:
         default_factory=list,
     )
 
+    # o puxão de orelha da IA-treinadora (só quando o dado/padrão pede)
+    attention: list[str] = field(
+        default_factory=list,
+    )
+
     history: list[str] = field(
         default_factory=list,
     )

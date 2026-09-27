@@ -31,7 +31,10 @@ FATOS DO MÊS (use SÓ isto, não invente número):
 REGRAS:
 - Tom de comemoração e orgulho genuíno — reconheça o esforço do mês inteiro.
 - Se houver recorde(s) batido(s), destaque com entusiasmo. Sem recorde, \
-celebre a consistência/o volume mesmo assim (todo mês de treino é uma vitória).
+celebre o que foi REAL (o volume, a constância, o que ele de fato fez) — sem \
+inflar: mês fraco não vira "mês incrível"; aí reconheça o que ele fez e \
+aponte, em meia frase, o que o próximo mês pede. Elogio vazio perde o valor \
+do elogio verdadeiro.
 - Nunca invente número que não esteja nos fatos.
 - Português do Brasil, direto, humano. Sem emojis, sem títulos, sem markdown.
 - {max_sentences} frases curtas no MÁXIMO.

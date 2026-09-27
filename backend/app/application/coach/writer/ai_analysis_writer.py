@@ -1,9 +1,11 @@
 import json
 import re
+from dataclasses import dataclass
 
 from google.genai import types
 
 from app.application.coach.context.coach_context import CoachContext
+from app.application.coach.writer.coach_voice import COACH_VOICE, first_name
 from app.application.coach.writer.labels import (
     intensity_label,
     plan_workout_label,
@@ -33,20 +35,38 @@ MAX_OUTPUT_TOKENS = 2000
 # Quantas bullets a IA pode devolver na seção de análise.
 MAX_BULLETS = 4
 
-# Saída ESTRUTURADA: o modelo é obrigado a emitir {"analysis": [str...]} —
-# elimina a quebra de JSON (e o retry PAGO). É de graça (config na mesma
-# chamada). Só o corte por token ainda pode quebrar — daí o max_output com
-# folga.
+# Saída ESTRUTURADA: o modelo é obrigado a emitir o objeto abaixo — elimina a
+# quebra de JSON (e o retry PAGO). É de graça (config na mesma chamada). Só o
+# corte por token ainda pode quebrar — daí o max_output com folga.
+#   headline  — a abertura com o veredito VERDADEIRO (substitui o "Parabéns"
+#               automático que abria até treino que não saiu)
+#   analysis  — a leitura do treino
+#   attention — o puxão de orelha, só quando o dado/padrão pede (senão null)
+#   next_step — o que fazer no próximo treino, concreto (substitui as frases
+#               prontas de recuperação/histórico)
 ANALYSIS_SCHEMA = types.Schema(
     type=types.Type.OBJECT,
     properties={
+        "headline": types.Schema(type=types.Type.STRING),
         "analysis": types.Schema(
             type=types.Type.ARRAY,
             items=types.Schema(type=types.Type.STRING),
         ),
+        "attention": types.Schema(type=types.Type.STRING, nullable=True),
+        "next_step": types.Schema(type=types.Type.STRING),
     },
-    required=["analysis"],
+    required=["headline", "analysis", "next_step"],
 )
+
+
+@dataclass(slots=True)
+class AIAnalysis:
+    """A leitura do treino pela IA-treinadora (ver ANALYSIS_SCHEMA)."""
+
+    headline: str | None
+    analysis: list[str]
+    attention: str | None
+    next_step: str | None
 
 # Fatos SEM veredito: "apagou/quebrou" é conclusão, não dado — quando o
 # rótulo já vinha com julgamento, a IA amplificava (+4% virava "você
@@ -66,21 +86,31 @@ TREND_LABELS = {
 # um bloco de treino de verdade
 _MIN_LAP_M = 30
 
-PROMPT_TEMPLATE = """Você é um treinador de corrida experiente comentando o treino \
-que ACABOU de sair de um atleta específico, por mensagem (WhatsApp). Escreva a \
-seção de ANÁLISE: leitura honesta e ESPECÍFICA deste treino.
+PROMPT_TEMPLATE = """{voice}
+AGORA: o treino deste atleta ACABOU de sair. Escreva a sua leitura dele, por \
+mensagem (WhatsApp) — honesta e ESPECÍFICA deste treino.
 
 FATOS DO TREINO (use SÓ isto, não invente número nenhum):
 {facts}
 
-REGRAS:
-- Comente o que ESTES dados mostram — principalmente a estrutura/splits (se \
-houve tiros, se manteve o ritmo, se acelerou ou apagou no fim). Nada de frase \
-genérica que serviria pra qualquer treino.
+O QUE LER NOS FATOS:
+- INTENÇÃO × EXECUÇÃO: compare o que o treino PEDIA (tipo, pace, blocos, \
+intenção) com o que saiu. Leve/regenerativo/longão-base com FC acima do teto \
+aeróbico dele ou com muito tempo em Z3+ NÃO foi leve, mesmo com o pace no alvo \
+— diga isso, não chame de "controle". Passar do combinado num dia leve não é \
+mérito. Cortar/não completar a sessão-chave pesa.
+- FC × PACE: FC subindo com o pace parado (deriva, desacoplamento) = fadiga, \
+calor ou base curta. Em tiros, FC de recuperação quase igual à de pico \
+(diferença menor que ~10 bpm) = pausa curta/rápida demais ou corpo cansado.
+- PERCEPÇÃO: RPE/sensação do atleta batendo ou não com a FC/pace — divergência \
+é informação, comente.
+- PADRÕES RECENTES: se o de hoje REPETE um padrão ruim, é aí que se cobra; se \
+hoje QUEBROU um padrão ruim, reconheça de verdade (é evolução).
+- Comente o que ESTES dados mostram — estrutura/splits (tiros, se manteve o \
+ritmo, se acelerou ou caiu no fim). Nada de frase genérica que serviria pra \
+qualquer treino.
 - NÃO contradiga os fatos. Se o treino foi um intervalado, trate como \
 intervalado (não chame de leve).
-- Se o executado bateu com o planejado, reconheça; se fugiu, aponte com \
-naturalidade, sem bronca.
 - Se houver "Execução por bloco", COMPARE os blocos executados com a \
 estrutura PRESCRITA (use a legenda pra decodificar as siglas). O atleta pode \
 ter CUMPRIDO a estrutura (ex.: alternou 3' corrida / 2' caminhada) mesmo que \
@@ -92,10 +122,11 @@ prescrito (ex.: aquecimento que o relógio não registrou por ter reiniciado) �
 ALINHE por bom senso e NÃO acuse o atleta de ter pulado um bloco que só não \
 foi gravado.
 - Se a "Execução por bloco" vier marcada "(comparação EXATA, já calculada)", \
-os vereditos "[dentro do alvo]"/"[fora do alvo]" e "Não completou" JÁ FORAM \
-CALCULADOS por código — use-os como estão, NÃO recalcule nem questione a \
-conta. Bloco sem veredito (sem "[...]") não tinha alvo definido (ex.: \
-aquecimento livre) — não é erro nem acerto, é neutro.
+os vereditos "[pace dentro/fora do alvo]", "[FC ...]" e "Não completou" JÁ \
+FORAM CALCULADOS por código — use-os como estão, NÃO recalcule nem questione a \
+conta. Pace no alvo com "[FC ACIMA do teto aeróbico]" = o pace saiu certo mas \
+NÃO foi leve (diga isso; não chame de "controle"). Bloco sem veredito (sem \
+"[...]") não tinha alvo definido (ex.: aquecimento livre) — neutro.
 - AMBIENTE: descubra onde o treino foi SÓ pela linha "Ambiente" dos fatos — \
 NUNCA deduza da prescrição nem de preferências (a prescrição pode SUGERIR \
 esteira como opção sem que o atleta a tenha usado). Se "Ambiente: ESTEIRA", a \
@@ -108,14 +139,15 @@ chame de esteira nem justifique diferença de distância com "esteira".
 aguentou" se os fatos disserem "queda ACENTUADA de ritmo". Segunda metade \
 "um pouco mais lenta" é variação normal de treino (subida, calor, semáforo) \
 — trate como normal, sem tom de falha.
-- POST-MORTEM (por que foi assim): se houver "CONTEXTO DO DIA" e o atleta \
-ficou ABAIXO do esperado (paces fora do alvo, FC alta pro ritmo, não completou), \
-CONECTE o resultado à causa provável desse contexto (sono curto, corpo em \
-atenção, carga acumulada, calor) e reenquadre com honestidade: NÃO é forma \
-perdida, é a condição do dia — e aponte o ajuste (priorizar sono/recuperação). \
-Se ele foi BEM apesar de um contexto ruim, RECONHEÇA a resiliência. NUNCA \
-invente causa que não esteja nos fatos; se o desempenho foi normal/bom, não \
-force desculpa nenhuma.
+- POST-MORTEM (por que foi assim): se ele ficou ABAIXO do esperado (paces \
+fora do alvo, FC alta pro ritmo, não completou), CONECTE à causa provável que \
+está nos fatos (sono curto, corpo em alerta, carga, calor). Um dia ruim \
+isolado não é forma perdida — mas se a MESMA causa se repete (PADRÕES \
+RECENTES: sono curto há semanas, recuperação piorando), ela deixou de ser \
+"condição do dia": é o problema a resolver, e você diz isso. Se ele foi bem \
+apesar de um contexto ruim, reconheça o treino — sem transformar o sinal ruim \
+do corpo em qualidade. NUNCA invente causa que não esteja nos fatos; se o \
+desempenho foi normal/bom, não force desculpa.
 - DORES/LESÕES: se houver "DORES/LESÕES", leve SEMPRE em conta — NUNCA cobre \
 desempenho, ritmo ou volume ignorando uma dor ou lesão declarada. Reconheça, \
 priorize recuperação e, se for dor, oriente cautela (e procurar profissional se \
@@ -124,13 +156,27 @@ persistir). Jamais mande "forçar" ou "compensar" em cima de dor.
 use pra PERSONALIZAR — conecte este treino à trajetória/evolução dele, respeite \
 o que ele já te contou (memória) e o que você aprendeu que funciona ou não pra \
 ele. Você não é um robô olhando só hoje: é o treinador que acompanha esse \
-atleta há tempo. Nunca contrarie esses fatos nem invente além deles.
-- Tom de treinador de verdade: direto, humano, encorajador e útil. Fale com \
-"você". Português do Brasil.
-- 2 a {max_bullets} frases curtas, cada uma um ponto. Sem emojis, sem títulos.
+atleta há tempo. Nunca contrarie esses fatos nem invente além deles. Memória \
+de "recuperação rápida"/"recupera acelerado" é sobre a DOSE do plano — não \
+apaga sinal de FC/sono na execução e nunca vira elogio.
+- Fale com "você", português do Brasil.
 
-Responda APENAS com JSON:
-{{"analysis": ["frase 1", "frase 2"]}}
+RESPONDA APENAS JSON com:
+- "headline": UMA frase curta (até ~12 palavras) que ABRE a mensagem, com o \
+primeiro nome dele e o veredito VERDADEIRO do treino. Treino bom de fato: pode \
+celebrar. Abaixo do esperado: diga com respeito, sem drama. Nada de "Parabéns" \
+automático. No máximo 1 emoji, no fim.
+- "analysis": 2 a {max_bullets} frases curtas, cada uma um ponto específico \
+destes dados. Sem emojis, sem títulos.
+- "attention": null OU 1-2 frases — o PUXÃO DE ORELHA, só quando um padrão \
+(PADRÕES RECENTES) ou uma escolha de hoje atrapalha o objetivo dele: nomeie o \
+comportamento, cite o dado, diga o custo pro objetivo e o que fazer. Sem nada \
+sério, null (não invente cobrança só pra ter).
+- "next_step": 1 frase CONCRETA pro próximo treino/dias, ligada ao que \
+aconteceu hoje — se houver "Próximo treino do plano" nos fatos, diga o que \
+fazer DIFERENTE nele (teto de FC, ritmo, dose, sono). Nada genérico tipo \
+"descanse bem" ou "se houver fadiga, pegue leve".
+{{"headline": "...", "analysis": ["..."], "attention": null, "next_step": "..."}}
 """
 
 
@@ -143,7 +189,7 @@ class AIAnalysisWriter:
     @staticmethod
     async def write(
         context: CoachContext,
-    ) -> list[str] | None:
+    ) -> AIAnalysis | None:
 
         try:
 
@@ -158,6 +204,7 @@ class AIAnalysisWriter:
             return await generate_json(
                 model=settings.gemini_coach_model,
                 contents=PROMPT_TEMPLATE.format(
+                    voice=COACH_VOICE,
                     facts=facts,
                     max_bullets=MAX_BULLETS,
                 ),
@@ -182,9 +229,11 @@ class AIAnalysisWriter:
     @staticmethod
     def _parse(
         raw: str,
-    ) -> list[str] | None:
+    ) -> AIAnalysis | None:
         """Repara + valida a resposta. Devolve None em QUALQUER problema
-        (JSON torto, estrutura errada, vazio) pra o generate_json re-gerar."""
+        (JSON torto, estrutura errada, análise vazia) pra o generate_json
+        re-gerar. Abertura/atenção/próximo passo são opcionais: faltando, a
+        mensagem usa o neutro (nunca quebra por eles)."""
 
         try:
 
@@ -194,7 +243,11 @@ class AIAnalysisWriter:
 
             return None
 
-        bullets = data.get("analysis") if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+
+            return None
+
+        bullets = data.get("analysis")
 
         if not isinstance(bullets, list):
 
@@ -206,7 +259,32 @@ class AIAnalysisWriter:
             if str(item).strip()
         ]
 
-        return lines[:MAX_BULLETS] if lines else None
+        if not lines:
+
+            return None
+
+        return AIAnalysis(
+            headline=AIAnalysisWriter._text(data.get("headline")),
+            analysis=lines[:MAX_BULLETS],
+            attention=AIAnalysisWriter._text(data.get("attention")),
+            next_step=AIAnalysisWriter._text(data.get("next_step")),
+        )
+
+    @staticmethod
+    def _text(value) -> str | None:
+        """Campo de texto opcional: vazio/"null"/não-string vira None."""
+
+        if not isinstance(value, str):
+
+            return None
+
+        text = value.strip()
+
+        if not text or text.lower() in ("null", "none", "-"):
+
+            return None
+
+        return text
 
     @staticmethod
     def _planned_target(planned) -> str:
@@ -267,10 +345,9 @@ class AIAnalysisWriter:
 
         activity = executed.activity
 
-        lines = [
-            f"Atleta: {runner.name}",
-            f"Meta: {runner.goal}",
-        ]
+        lines = [f"Atleta: {first_name(runner.name) or runner.name}"]
+
+        lines += AIAnalysisWriter._goal_facts(runner)
 
         if context.planned is not None:
 
@@ -324,7 +401,8 @@ class AIAnalysisWriter:
 
                 lines.append(
                     AIAnalysisWriter._block_comparison_fact(
-                        context.block_comparison
+                        context.block_comparison,
+                        AIAnalysisWriter.aerobic_block_ceiling(context),
                     )
                 )
 
@@ -377,6 +455,12 @@ class AIAnalysisWriter:
         if zone_facts:
 
             lines.append(zone_facts)
+
+        intent = AIAnalysisWriter._intent_facts(context)
+
+        if intent:
+
+            lines.append(intent)
 
         if activity.average_heartrate:
 
@@ -438,7 +522,217 @@ class AIAnalysisWriter:
 
             lines.append(memory_facts)
 
+        # PADRÕES RECENTES (o que SE REPETE: leve saindo forte, estourar o
+        # combinado, cortar sessão-chave, furos, RPE, sono e recuperação vs a
+        # base dele) — é o que autoriza o coach a cobrar com fundamento, ou
+        # reconhecer quando o atleta quebrou um padrão ruim. Best-effort.
+        from app.application.history.training_patterns import TrainingPatterns
+
+        patterns = TrainingPatterns.for_profile(runner.id)
+
+        if patterns:
+
+            lines.append(patterns)
+
+        # o que o coach JÁ cobrou há pouco — pra não virar sermão repetido
+        from app.infrastructure.persistence.coach_attention_log import (
+            CoachAttentionLog,
+        )
+
+        already = CoachAttentionLog.render(runner.id, today_local())
+
+        if already:
+
+            lines.append(already)
+
+        # o próximo treino do plano — pra o "próximo passo" dizer o que fazer
+        # DIFERENTE nele, não uma frase genérica de recuperação
+        next_line = AIAnalysisWriter._next_session_fact(context)
+
+        if next_line:
+
+            lines.append(next_line)
+
         return "\n".join(lines)
+
+    @staticmethod
+    def _goal_facts(runner) -> list[str]:
+        """A META que ancora: a prova (nome/distância/data/tempo-alvo) quando
+        há, + o objetivo de fundo. Antes ia só o texto de fundo ("correr 21
+        km...") e a análise falava da "meia maratona" com a prova de 15 km a 12
+        semanas."""
+
+        lines = []
+
+        try:
+
+            from app.application.use_cases.build_training_goal import (
+                BuildTrainingGoal,
+            )
+
+            goal = BuildTrainingGoal.execute(runner)
+
+            if goal.race_date:
+
+                weeks = (goal.race_date - today_local()).days // 7
+
+                race = getattr(runner, "target_race", None) or (
+                    f"prova de {goal.distance_km:g} km"
+                )
+
+                target = (
+                    f", meta de tempo {goal.target_time}"
+                    if goal.target_time else ""
+                )
+
+                lines.append(
+                    f"Prova-alvo: {race} em {goal.race_date:%d/%m/%Y} "
+                    f"(faltam ~{max(weeks, 0)} semanas){target}"
+                )
+
+        except Exception as e:
+
+            print(f"Meta p/ análise falhou p/ '{runner.id}': {e}")
+
+        if runner.goal:
+
+            lines.append(f"Objetivo de fundo: {runner.goal}")
+
+        return lines
+
+    @staticmethod
+    def _intent_facts(context: CoachContext) -> str | None:
+        """O que o treino PEDIA em termos de esforço + o teto aeróbico dele,
+        pra a IA julgar se o leve foi leve (pela FC, não só pelo pace)."""
+
+        from app.application.history.stimulus_ledger import (
+            EASY,
+            LONG,
+            StimulusLedger,
+        )
+        from app.application.history.training_patterns import TrainingPatterns
+
+        planned = context.planned
+
+        if planned is None:
+
+            return None
+
+        family = StimulusLedger.classify(planned.workout_type)
+
+        zones = getattr(context.executed, "hr_zones", None)
+
+        ceiling = (
+            TrainingPatterns.aerobic_ceiling(zones.max_hr, zones.resting_hr)
+            if zones is not None else None
+        )
+
+        norm = StimulusLedger._normalize(planned.workout_type)
+
+        long_quality = family == LONG and any(
+            c in norm for c in ("progress", "misto", "bloco", "final", "ritmo")
+        )
+
+        if family == EASY:
+
+            intent = "LEVE/aeróbico — a FC deveria ficar abaixo do teto aeróbico"
+
+        elif family == LONG and not long_quality:
+
+            intent = (
+                "LONGÃO-BASE — a maior parte deveria ficar abaixo do teto "
+                "aeróbico (um pouco de deriva no fim é normal)"
+            )
+
+        elif family == LONG:
+
+            intent = (
+                "LONGÃO COM QUALIDADE — a parte leve abaixo do teto aeróbico, "
+                "a parte forte no alvo prescrito"
+            )
+
+        else:
+
+            intent = f"QUALIDADE ({family}) — os blocos fortes no alvo prescrito"
+
+        text = f"Intenção do treino: {intent}"
+
+        if ceiling:
+
+            text += f" (teto aeróbico dele ~{ceiling} bpm, 70% da reserva de FC)"
+
+        # desacoplamento só vale em esforço CONSTANTE (leve/longão-base): num
+        # progressivo o pace sobe de propósito e o número vira ruído — foi o
+        # que fez a IA chamar de "redonda" uma parte leve com FC em 149-165
+        decoupling = AIAnalysisWriter._decoupling(context.executed.structure)
+
+        if decoupling is not None and (
+            family == EASY or (family == LONG and not long_quality)
+        ):
+
+            text += (
+                f". Desacoplamento FC×pace (1ª × 2ª metade): {decoupling:+.1f}% "
+                "(até ~5% é normal; acima disso = deriva de fadiga/calor)"
+            )
+
+        return text + "."
+
+    @staticmethod
+    def _decoupling(structure: WorkoutStructure | None) -> float | None:
+        """Pa:FC (Friel): quanto a eficiência (velocidade/FC) caiu da 1ª pra 2ª
+        metade, em %. Só com 4+ km de splits com FC."""
+
+        if structure is None or not structure.km_splits or not structure.km_hr:
+
+            return None
+
+        pairs = [
+            (pace, hr)
+            for pace, hr in zip(structure.km_splits, structure.km_hr)
+            if pace and hr
+        ]
+
+        if len(pairs) < 4:
+
+            return None
+
+        half = len(pairs) // 2
+
+        def efficiency(items):
+
+            return sum(1 / (pace * hr) for pace, hr in items) / len(items)
+
+        first, second = efficiency(pairs[:half]), efficiency(pairs[half:])
+
+        return (first - second) / first * 100 if first else None
+
+    @staticmethod
+    def _next_session_fact(context: CoachContext) -> str | None:
+
+        nxt = getattr(context, "next_planned", None)
+
+        if nxt is None:
+
+            return None
+
+        when = getattr(context, "next_planned_date", None)
+
+        day = f" ({when:%d/%m})" if when else ""
+
+        size = (
+            f" {nxt.planned_distance_km:.1f} km" if nxt.planned_distance_km
+            else (
+                f" {nxt.planned_duration_minutes} min"
+                if nxt.planned_duration_minutes else ""
+            )
+        )
+
+        from app.core.weekdays import weekday_label
+
+        return (
+            f"Próximo treino do plano: {weekday_label(nxt.day)}{day} — "
+            f"{nxt.workout_type}{size}"
+        )
 
     @staticmethod
     def _hr_zone_facts(executed, runner=None) -> str | None:
@@ -570,9 +864,55 @@ class AIAnalysisWriter:
     }
 
     @staticmethod
-    def _block_comparison_fact(comparison) -> str:
+    def aerobic_block_ceiling(context: CoachContext) -> int | None:
+        """Teto aeróbico pra julgar os blocos CONTÍNUOS pela FC — só quando a
+        sessão é leve ou longão (num treino de ritmo o bloco contínuo é forte
+        de propósito). None = não julga FC de bloco."""
+
+        from app.application.history.stimulus_ledger import (
+            EASY,
+            LONG,
+            StimulusLedger,
+        )
+        from app.application.history.training_patterns import TrainingPatterns
+
+        planned = context.planned
+
+        zones = getattr(context.executed, "hr_zones", None)
+
+        if planned is None or zones is None:
+
+            return None
+
+        if StimulusLedger.classify(planned.workout_type) not in (EASY, LONG):
+
+            return None
+
+        return TrainingPatterns.aerobic_ceiling(zones.max_hr, zones.resting_hr)
+
+    @staticmethod
+    def block_hr_verdict(block, aerobic_ceiling: int | None) -> str | None:
+        """Veredito de FC do bloco contínuo (calculado por código): o ✅ de
+        pace não diz se foi LEVE — 6:21 no alvo com FC 156 (teto 151) não foi.
+        None quando não se aplica."""
+
+        hr = getattr(block, "executed_hr", None)
+
+        if not aerobic_ceiling or not hr or block.kind != "run":
+
+            return None
+
+        if hr > aerobic_ceiling + 2:
+
+            return "above"
+
+        return "ok" if hr <= aerobic_ceiling else None
+
+    @staticmethod
+    def _block_comparison_fact(comparison, aerobic_ceiling: int | None = None) -> str:
         """Comparação EXATA bloco-a-bloco (PlannedExecutionMatcher) — cada
-        bloco já traz o veredito calculado por código; a IA só narra."""
+        bloco já traz o veredito calculado por código; a IA só narra. Nos
+        blocos contínuos de leve/longão vem TAMBÉM o veredito de FC."""
 
         parts = []
 
@@ -592,6 +932,12 @@ class AIAnalysisWriter:
 
                 seg += f" ({PaceFormatter.format(block.executed_pace)}/km)"
 
+            # FC do BLOCO: sem isto a "parte leve" do longão era julgada só
+            # pelo pace ("cravou 6:21") com a FC em 149-165 (Renato, 26/09)
+            if getattr(block, "executed_hr", None):
+
+                seg += f" FC {block.executed_hr}"
+
             if block.pace_min and block.pace_max:
 
                 seg += f" — alvo {block.pace_min}-{block.pace_max}/km"
@@ -608,11 +954,24 @@ class AIAnalysisWriter:
 
             if block.within_target is True:
 
-                seg += " [dentro do alvo]"
+                seg += " [pace dentro do alvo]"
 
             elif block.within_target is False:
 
-                seg += " [fora do alvo]"
+                seg += " [pace fora do alvo]"
+
+            hr_verdict = AIAnalysisWriter.block_hr_verdict(block, aerobic_ceiling)
+
+            if hr_verdict == "above":
+
+                seg += (
+                    f" [FC ACIMA do teto aeróbico ({block.executed_hr} > "
+                    f"{aerobic_ceiling}) — NÃO foi leve pela FC]"
+                )
+
+            elif hr_verdict == "ok":
+
+                seg += " [FC no aeróbico — leve de verdade]"
 
             parts.append(seg)
 

@@ -54,6 +54,7 @@ class RaceTimePredictor:
 
         return {
             "formatted": RaceTimeFormatter.format(predicted_seconds),
+            "seconds": predicted_seconds,
             "delta_seconds": delta_seconds,
             "delta_formatted": (
                 RaceTimeFormatter.format(abs(delta_seconds))

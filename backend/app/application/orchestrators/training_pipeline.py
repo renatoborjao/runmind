@@ -114,9 +114,30 @@ class TrainingPipeline:
 
         if ai_analysis:
 
-            coach_message.positives = ai_analysis
+            coach_message.positives = ai_analysis.analysis
 
             coach_message.improvements = []
+
+            # a abertura é o VEREDITO da IA (não o "Parabéns" automático)
+            if ai_analysis.headline:
+
+                coach_message.greeting = ai_analysis.headline
+
+            coach_message.attention = (
+                [ai_analysis.attention] if ai_analysis.attention else []
+            )
+
+            # a leitura da IA SUBSTITUI as frases prontas de histórico/
+            # recuperação/fechamento — genéricas ("Excelente consistência",
+            # "carga significativa, mas dentro do esperado") e, às vezes,
+            # contraditórias com a carga real (diziam "carga bastante elevada"
+            # com o ACWR em destreino). Varredura 26/09. O fallback (IA fora)
+            # segue com elas.
+            coach_message.history = []
+
+            coach_message.recovery = []
+
+            coach_message.closing = ai_analysis.next_step or ""
 
         # --------------------------------------------------
         # Ajuste do plano (determinístico, com base na análise acima)
@@ -177,6 +198,12 @@ class TrainingPipeline:
             "coach_summary": coach_summary,
 
             "message": message,
+
+            # o puxão de orelha desta análise (se houve) — o evento registra
+            # depois de ENVIAR, pra o coach não repetir a mesma cobrança
+            "attention": (
+                ai_analysis.attention if ai_analysis else None
+            ),
 
         }
 

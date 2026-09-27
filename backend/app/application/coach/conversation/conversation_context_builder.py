@@ -223,6 +223,26 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{stimulus}\n"
 
+        # o que SE REPETE (com dado) + o que o coach já cobrou: é o que deixa a
+        # conversa ser de treinador (franco quando o pedido esbarra num padrão)
+        # sem virar sermão repetido. Varredura 26/09.
+        from app.application.history.training_patterns import TrainingPatterns
+        from app.infrastructure.persistence.coach_attention_log import (
+            CoachAttentionLog,
+        )
+
+        patterns = TrainingPatterns.for_profile(profile)
+
+        if patterns:
+
+            facts = f"{facts}\n{patterns}\n"
+
+        already = CoachAttentionLog.render(profile, today_local())
+
+        if already:
+
+            facts = f"{facts}\n{already}\n"
+
         # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
         # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
         # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir

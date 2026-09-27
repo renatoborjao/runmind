@@ -493,11 +493,13 @@ def test_greeting_uses_runner_name():
 
     context = make_context()
 
-    summary = CoachSummary(runner_name="Renato")
+    summary = CoachSummary(runner_name="Renato Borges")
 
     message = CoachWriter.write(context, summary)
 
-    assert message.greeting == "Parabéns pelo treino, Renato! 👊"
+    # abertura neutra (fallback sem IA) e pelo PRIMEIRO nome — o "Parabéns"
+    # automático abria até treino que não saiu (varredura 26/09)
+    assert message.greeting == "Bora ver teu treino, Renato 👇"
 
 
 def test_hr_line_shows_time_in_each_zone():
@@ -538,3 +540,10 @@ def test_hr_line_without_zone_ruler_has_no_zone_label():
 
     assert "FC média: 150 · máx 170 bpm" in joined
     assert "bpm (" not in joined
+
+
+def test_duration_target_reads_as_minutes_not_pace():
+    """'(alvo 10:00)' no aquecimento se lia como pace de 10:00/km."""
+
+    assert CoachWriter._minutes(600) == "10 min"
+    assert CoachWriter._minutes(90) == "1:30 min"

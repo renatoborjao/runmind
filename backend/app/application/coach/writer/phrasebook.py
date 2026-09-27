@@ -15,7 +15,9 @@ from app.application.coach.signals.codes import (
 # espalhado em coach/coach_engine.py, intelligence/*.py e analyzer/*.py.
 # Nenhuma frase nova foi inventada nesta migracao.
 
-GREETING_TEMPLATE = "Parabéns pelo treino, {name}! 👊"
+# abertura NEUTRA do fallback (IA fora do ar): o "Parabéns" automático abria
+# até treino que não saiu. Com a IA, a abertura é o veredito dela (headline).
+GREETING_TEMPLATE = "Bora ver teu treino, {name} 👇"
 
 DISTANCE_TEMPLATES = {
     DistanceStatus.OK.value: (

@@ -56,6 +56,7 @@ class StatePortraitWriter:
         reading: BodyReading,
         evolution: FitnessEvolution,
         runner_name: str,
+        worsening: bool | None = None,
     ) -> str | None:
         """Retrato unificado. None quando NENHUM eixo tem leitura (o chamador
         decide o fallback / não envia)."""
@@ -68,9 +69,17 @@ class StatePortraitWriter:
 
             return None
 
-        state, conduct = StatePortraitSynthesizer.synthesize(reading, evolution)
+        state, conduct = StatePortraitSynthesizer.synthesize(
+            reading, evolution, worsening,
+        )
 
-        lines = [f"📷 Como você está, {runner_name}", "", state]
+        from app.application.coach.writer.coach_voice import first_name
+
+        lines = [
+            f"📷 Como você está, {first_name(runner_name) or runner_name}",
+            "",
+            state,
+        ]
 
         corpo = StatePortraitWriter._corpo_section(reading)
 

@@ -151,11 +151,43 @@ def _write(context=None, **patch_kwargs):
 
 def test_returns_bullets_from_ai():
 
-    lines = _write(
+    result = _write(
         return_value='{"analysis": ["Belo intervalado.", "Segurou os tiros."]}',
     )
 
-    assert lines == ["Belo intervalado.", "Segurou os tiros."]
+    assert result.analysis == ["Belo intervalado.", "Segurou os tiros."]
+    # campos opcionais ausentes não quebram — a mensagem usa o neutro
+    assert result.headline is None and result.attention is None
+
+
+def test_returns_headline_attention_and_next_step():
+    """Varredura 26/09: a IA devolve a ABERTURA (veredito, sem 'Parabéns'
+    automático), o puxão de orelha quando cabe e o próximo passo concreto."""
+
+    result = _write(
+        return_value=(
+            '{"headline": "Renato, longão feito — mas o corpo mandou recado.",'
+            ' "analysis": ["A parte leve saiu em Z3."],'
+            ' "attention": "Terceiro leve seguido acima do teto aeróbico.",'
+            ' "next_step": "Terça: rodagem com teto de 151 bpm."}'
+        ),
+    )
+
+    assert result.headline.startswith("Renato, longão feito")
+    assert "teto aeróbico" in result.attention
+    assert "151 bpm" in result.next_step
+
+
+def test_null_attention_becomes_none():
+
+    result = _write(
+        return_value=(
+            '{"headline": "Fartlek no alvo, Renato 👊", "analysis": ["ok"],'
+            ' "attention": null, "next_step": "Quinta leve pela FC."}'
+        ),
+    )
+
+    assert result.attention is None
 
 
 def test_returns_none_when_ai_fails():
@@ -174,11 +206,11 @@ def test_returns_none_on_empty_analysis():
 
 def test_caps_at_max_bullets():
 
-    lines = _write(
+    result = _write(
         return_value='{"analysis": ["a", "b", "c", "d", "e", "f"]}',
     )
 
-    assert len(lines) == 4
+    assert len(result.analysis) == 4
 
 
 def test_facts_feed_splits_and_interval_to_prompt():
@@ -312,7 +344,7 @@ def test_facts_use_exact_block_comparison_when_present():
 
     assert "comparação EXATA, já calculada" in facts
     assert "Tiro 1" in facts
-    assert "[dentro do alvo]" in facts
+    assert "[pace dentro do alvo]" in facts
     assert "Não completou: Recuperação 1" in facts
     # não cai no texto cru de voltas (999m não devia aparecer)
     assert "999m" not in facts
@@ -374,7 +406,7 @@ def test_mild_fade_fact_has_no_verdict():
     prompt = mock.await_args.kwargs["contents"]
 
     # o FATO é neutro ("variação normal"), não um veredito de quebra
-    facts = prompt.split("REGRAS:")[0]
+    facts = prompt.split("FATOS DO TREINO")[1].split("O QUE LER NOS FATOS:")[0]
 
     assert "variação normal" in facts
     assert "apagou" not in facts
@@ -512,3 +544,26 @@ def test_garmin_facts_omit_absent_fields():
     assert "potência" not in facts
     assert "body battery" not in facts
     assert "dinâmica" not in facts
+
+
+def test_block_fact_flags_easy_block_above_aerobic_ceiling():
+    """Longão do Renato 26/09: 10 km a 6:21 (pace no alvo) com FC 156 e teto
+    151 — o bloco sai marcado 'NÃO foi leve pela FC', não só '[dentro do
+    alvo]' (que a IA lia como 'excelente controle')."""
+
+    block = MagicMock(
+        kind="run", label="Corrida contínua", executed_distance_m=10000,
+        executed_duration_sec=3808, executed_pace=6.35, executed_hr=156,
+        pace_min="6:20", pace_max="6:45", planned_distance_m=None,
+        planned_duration_sec=None, within_target=True,
+    )
+
+    comparison = MagicMock(blocks=[block], missing=[])
+
+    fact = AIAnalysisWriter._block_comparison_fact(comparison, 151)
+
+    assert "[pace dentro do alvo]" in fact
+    assert "FC ACIMA do teto aeróbico (156 > 151)" in fact
+
+    # sem teto (sessão de ritmo): não julga FC do bloco
+    assert "teto" not in AIAnalysisWriter._block_comparison_fact(comparison, None)

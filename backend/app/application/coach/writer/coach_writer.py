@@ -65,7 +65,10 @@ class CoachWriter:
                 context.runner.external_coach,
             ),
             interval_lines=CoachWriter._interval_lines(context.executed),
-            block_lines=CoachWriter._block_lines(context.block_comparison),
+            block_lines=CoachWriter._block_lines(
+                context.block_comparison,
+                CoachWriter._aerobic_ceiling(context),
+            ),
             splits_lines=CoachWriter._splits_lines(context.executed),
             positives=CoachWriter._render_all(summary.positives),
             improvements=CoachWriter._render_all(summary.improvements),
@@ -82,7 +85,9 @@ class CoachWriter:
         name: str,
     ) -> str:
 
-        return GREETING_TEMPLATE.format(name=name)
+        from app.application.coach.writer.coach_voice import first_name
+
+        return GREETING_TEMPLATE.format(name=first_name(name) or name)
 
     @staticmethod
     def _planned_lines(
@@ -281,6 +286,7 @@ class CoachWriter:
     @staticmethod
     def _block_lines(
         comparison,
+        aerobic_ceiling: int | None = None,
     ) -> list[str]:
         """Execução por bloco: comparação EXATA prescrito×executado
         (PlannedExecutionMatcher) — ✅/⚠️ já calculados por código. Aparece
@@ -323,6 +329,13 @@ class CoachWriter:
 
                 seg += CoachWriter._duration(block.executed_duration_sec)
 
+            # a FC do bloco — no contínuo de leve/longão, com o veredito de FC
+            # (o ✅ é do PACE: 6:21 no alvo com FC 156 acima do teto não foi
+            # leve, e a ficha precisa mostrar isso — varredura 26/09)
+            if getattr(block, "executed_hr", None):
+
+                seg += f" · FC {block.executed_hr}"
+
             if block.pace_min and block.pace_max:
 
                 seg += f" (alvo {block.pace_min}-{block.pace_max}/km)"
@@ -333,10 +346,20 @@ class CoachWriter:
 
             elif block.planned_duration_sec:
 
+                # duração em MINUTOS ("alvo 10 min"), não "10:00" — que se lia
+                # como pace de 10:00/km
                 seg += (
                     f" (alvo "
-                    f"{CoachWriter._duration(block.planned_duration_sec)})"
+                    f"{CoachWriter._minutes(block.planned_duration_sec)})"
                 )
+
+            from app.application.coach.writer.ai_analysis_writer import (
+                AIAnalysisWriter,
+            )
+
+            if AIAnalysisWriter.block_hr_verdict(block, aerobic_ceiling) == "above":
+
+                seg += f" ⚠️ FC acima do teto aeróbico ({aerobic_ceiling})"
 
             lines.append(seg)
 
@@ -377,6 +400,31 @@ class CoachWriter:
             lines.append(line)
 
         return lines
+
+    @staticmethod
+    def _aerobic_ceiling(context: CoachContext) -> int | None:
+
+        from app.application.coach.writer.ai_analysis_writer import (
+            AIAnalysisWriter,
+        )
+
+        try:
+
+            return AIAnalysisWriter.aerobic_block_ceiling(context)
+
+        except Exception as e:
+
+            print(f"Teto aeróbico da ficha falhou: {e}")
+
+            return None
+
+    @staticmethod
+    def _minutes(seconds) -> str:
+        """Duração-alvo em minutos ("10 min", "1:30 min")."""
+
+        minutes, secs = divmod(int(seconds), 60)
+
+        return f"{minutes} min" if not secs else f"{minutes}:{secs:02d} min"
 
     @staticmethod
     def _duration(

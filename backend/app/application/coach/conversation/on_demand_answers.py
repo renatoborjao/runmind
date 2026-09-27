@@ -221,7 +221,16 @@ class OnDemandAnswers:
             # partir do contexto.
             reading, evolution = StatePortraitService.read(profile)
 
-            return StatePortraitWriter.write(reading, evolution, runner.name)
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+
+            drift = TrainingPatterns.drift_for_profile(profile)
+
+            return StatePortraitWriter.write(
+                reading, evolution, runner.name,
+                worsening=drift.worsening if drift else None,
+            )
 
         if intent == ChatIntent.RACE_STRATEGY:
 

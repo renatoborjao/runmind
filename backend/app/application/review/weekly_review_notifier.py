@@ -331,8 +331,15 @@ class WeeklyReviewNotifier:
 
             reading, evolution = StatePortraitService.read(profile)
 
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+
+            drift = TrainingPatterns.drift_for_profile(profile)
+
             message = StatePortraitWriter.write(
-                reading, evolution, runner.name
+                reading, evolution, runner.name,
+                worsening=drift.worsening if drift else None,
             )
 
             if message is None:

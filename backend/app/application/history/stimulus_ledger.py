@@ -171,21 +171,44 @@ class StimulusLedger:
         return stats
 
     @staticmethod
-    def zone_split(activities: list[Activity], today: date) -> ZoneSplit | None:
-        """Distribuição REAL do tempo nas zonas de FC (Garmin) nos últimos 28
-        dias. None sem corrida com zonas."""
+    def zone_split(
+        activities: list[Activity],
+        today: date,
+        max_hr: int | None = None,
+        resting_hr: int | None = None,
+    ) -> ZoneSplit | None:
+        """Distribuição do TEMPO de corrida (últimos 28 dias) por faixa de
+        esforço, pela FC média de cada corrida na reserva de FC DO atleta:
+        leve < 70%, zona cinzenta 70-80%, forte >= 80%. Mesma régua pra todo
+        o histórico — os minutos-por-zona gravados misturam réguas (fórmula de
+        idade antes de 25/09, relógio depois) e distorciam a leitura. None sem
+        FC máx/repouso (melhor calar que ler errado)."""
+
+        if not max_hr or not resting_hr or max_hr <= resting_hr:
+
+            return None
+
+        reserve = max_hr - resting_hr
+
+        easy_top = resting_hr + 0.70 * reserve
+
+        hard_floor = resting_hr + 0.80 * reserve
 
         start = today - timedelta(days=_ZONE_WINDOW_DAYS)
 
-        totals = [0.0] * 5
+        easy = moderate = hard = 0.0
 
         runs = 0
 
         for a in activities:
 
-            zones = getattr(a, "hr_zone_minutes", None)
+            hr = a.average_heartrate
 
-            if not zones or not is_run_sport(a.sport):
+            if not hr or not is_run_sport(a.sport) or not a.moving_time:
+
+                continue
+
+            if (a.distance or 0) < _MIN_DISTANCE_M:
 
                 continue
 
@@ -195,20 +218,30 @@ class StimulusLedger:
 
             runs += 1
 
-            for i, minutes in enumerate(list(zones)[:5]):
+            minutes = a.moving_time / 60
 
-                totals[i] += float(minutes or 0)
+            if hr < easy_top:
 
-        total = sum(totals)
+                easy += minutes
+
+            elif hr < hard_floor:
+
+                moderate += minutes
+
+            else:
+
+                hard += minutes
+
+        total = easy + moderate + hard
 
         if not runs or total <= 0:
 
             return None
 
         return ZoneSplit(
-            easy_pct=round((totals[0] + totals[1]) / total * 100),
-            moderate_pct=round(totals[2] / total * 100),
-            hard_pct=round((totals[3] + totals[4]) / total * 100),
+            easy_pct=round(easy / total * 100),
+            moderate_pct=round(moderate / total * 100),
+            hard_pct=round(hard / total * 100),
             runs=runs,
         )
 
@@ -218,6 +251,8 @@ class StimulusLedger:
         activities: list[Activity],
         goal: TrainingGoal | None,
         today: date,
+        max_hr: int | None = None,
+        resting_hr: int | None = None,
     ) -> str:
         """Bloco pro coach: estímulos recebidos, intensidade real e LACUNAS
         rumo à meta/fase. Vazio sem plano nenhum na janela."""
@@ -252,7 +287,7 @@ class StimulusLedger:
 
             lines.append(f"- {family}: fez {stat.done}{missed}{last}")
 
-        zones = StimulusLedger.zone_split(activities, today)
+        zones = StimulusLedger.zone_split(activities, today, max_hr, resting_hr)
 
         if zones:
 
@@ -261,24 +296,20 @@ class StimulusLedger:
             if zones.moderate_pct >= 30:
 
                 note = (
-                    " — MUITA zona 3 (a 'zona cinzenta': cansa sem dar o "
-                    "estímulo nem do leve nem do forte; leve mais leve, forte "
-                    "mais forte)"
+                    " — MUITA zona cinzenta (cansa sem dar o estímulo nem do "
+                    "leve nem do forte; leve mais leve, forte mais forte)"
                 )
 
-            elif zones.easy_pct < 70:
+            elif zones.easy_pct < 65:
 
                 note = " — pouco tempo leve pra absorver a carga"
 
-            # as zonas são as do RELÓGIO do atleta: se estiverem mal calibradas
-            # (padrão %FCmáx), a leitura distorce — o coach pondera, não decreta
             lines.append(
-                f"- Intensidade real (zonas de FC do relógio, {zones.runs} "
-                f"corridas em 4 sem): {zones.easy_pct}% leve (Z1-2), "
-                f"{zones.moderate_pct}% moderado (Z3), {zones.hard_pct}% forte "
-                f"(Z4-5){note}. Sinal forte, mas depende das zonas do relógio "
-                "estarem calibradas — cruze com o pace/sensação antes de "
-                "afirmar."
+                f"- Intensidade real (FC média de cada corrida na reserva de "
+                f"FC dele, {zones.runs} corridas em 4 sem): {zones.easy_pct}% "
+                f"do tempo leve (<70%), {zones.moderate_pct}% zona cinzenta "
+                f"(70-80%), {zones.hard_pct}% forte (>=80%){note}. É pela FC "
+                "MÉDIA: tiro com pausa aparece mais leve do que foi."
             )
 
         gaps = StimulusLedger._gaps(stats, goal, today)
@@ -325,19 +356,38 @@ class StimulusLedger:
 
                 plans.append(current)
 
+            runner = LoadRunnerProfile.execute(profile)
+
             try:
 
-                goal = BuildTrainingGoal.execute(LoadRunnerProfile.execute(profile))
+                goal = BuildTrainingGoal.execute(runner)
 
             except Exception:
 
                 goal = None
 
+            activities = ActivityArchiveRepository().load_activities(profile)
+
+            max_hr = resting_hr = None
+
+            try:
+
+                from app.application.history.hr_zone_resolver import (
+                    HrZoneResolver,
+                )
+
+                zones = HrZoneResolver.for_profile(profile, runner, activities)
+
+                if zones is not None:
+
+                    max_hr, resting_hr = zones.max_hr, zones.resting_hr
+
+            except Exception as e:
+
+                print(f"Zonas p/ balanço falharam p/ '{profile}': {e}")
+
             return StimulusLedger.render(
-                plans,
-                ActivityArchiveRepository().load_activities(profile),
-                goal,
-                today_local(),
+                plans, activities, goal, today_local(), max_hr, resting_hr,
             )
 
         except Exception as e:

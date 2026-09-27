@@ -1,6 +1,6 @@
 APP_NAME = "🏃 Ritmind"
 
-TRAINING_COMPLETED = "Parabéns pelo treino, {name}! 👊"
+TRAINING_COMPLETED = "Bora ver teu treino, {name} 👇"
 
 PLANNED_TITLE = "📅 Planejado"
 
@@ -13,6 +13,8 @@ BLOCKS_TITLE = "🧩 Execução por bloco"
 SPLITS_TITLE = "⏱️ Parciais por km"
 
 ANALYSIS_TITLE = "📊 Análise"
+
+ATTENTION_TITLE = "⚠️ Ponto de atenção"
 
 HISTORY_TITLE = "📈 Histórico"
 

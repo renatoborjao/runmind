@@ -121,3 +121,23 @@ def test_nothing_to_read_gives_building_message():
     )
 
     assert "juntando" in state.lower() or "histórico" in state.lower()
+
+
+def test_yellow_at_baseline_does_not_promise_to_hold():
+    """O retrato prometia 'o plano segura a intensidade' enquanto o plano
+    progredia. No alerta ESTÁVEL (o normal dele) o plano progride — e o
+    retrato diz isso; com piora real, as condutas de segurar valem."""
+
+    from app.domain.entities.body_reading import BODY_RECOVERY_FLAG
+
+    _, conduct = StatePortraitSynthesizer.synthesize(
+        _reading(BODY_RECOVERY_FLAG), _evo(), worsening=False,
+    )
+
+    assert "segue progredindo" in conduct
+
+    _, conduct = StatePortraitSynthesizer.synthesize(
+        _reading(BODY_RECOVERY_FLAG), _evo(), worsening=True,
+    )
+
+    assert "segura a intensidade" in conduct

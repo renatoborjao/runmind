@@ -15,6 +15,12 @@ from app.domain.entities.training_history import TrainingHistory
 # folga (s) pra considerar que já "bateu" a meta — dentro disso é empate técnico
 _ON_TARGET_SLACK = 20
 
+# quanto dá pra ganhar por semana num ciclo (fração do tempo previsto): até
+# ~0,5%/sem é realista pra amador treinando bem; até ~0,8% é ambicioso; acima
+# disso a meta está além do prazo — o coach fala com franqueza
+_REALISTIC_PER_WEEK = 0.005
+_AMBITIOUS_PER_WEEK = 0.008
+
 
 class GoalProjectionWriter:
 
@@ -49,7 +55,7 @@ class GoalProjectionWriter:
             f"No teu nível atual, teu tempo seria ~*{pred['formatted']}*.",
         ]
 
-        gap = GoalProjectionWriter._gap_line(goal, pred)
+        gap = GoalProjectionWriter._gap_line(goal, pred, weeks_to_race)
 
         if gap:
 
@@ -62,8 +68,14 @@ class GoalProjectionWriter:
         return "\n".join(lines)
 
     @staticmethod
-    def _gap_line(goal: TrainingGoal, pred: dict) -> str | None:
-        """A leitura vs o tempo-alvo: já bateu, está perto, ou o que falta."""
+    def _gap_line(
+        goal: TrainingGoal,
+        pred: dict,
+        weeks_to_race: int | None = None,
+    ) -> str | None:
+        """A leitura vs o tempo-alvo: já bateu, está perto, ou o que falta — e
+        HONESTA sobre o tamanho do salto. Antes era sempre "Dá pra chegar"
+        (8 min em 13 semanas = ~10%, bem acima do que se ganha num ciclo)."""
 
         delta = pred.get("delta_seconds")
 
@@ -85,8 +97,45 @@ class GoalProjectionWriter:
 
         per_km = delta / goal.distance_km
 
+        base = (
+            f"Tua meta é {target} — faltam ~*{falta}* (uns {per_km:.0f} s/km "
+            "mais rápido)."
+        )
+
+        predicted = pred.get("seconds")
+
+        if not predicted or not weeks_to_race or weeks_to_race <= 0:
+
+            return (
+                f"{base} É o que os treinos vêm construindo — consistência nas "
+                "sessões-chave e recuperação em dia fazem a diferença. 💪"
+            )
+
+        needed = delta / predicted
+
+        per_week = needed / weeks_to_race
+
+        if per_week <= _REALISTIC_PER_WEEK:
+
+            return (
+                f"{base} No prazo que temos, é um salto realista — é manter a "
+                "consistência que você chega. 💪"
+            )
+
+        if per_week <= _AMBITIOUS_PER_WEEK:
+
+            return (
+                f"{base} É ambiciosa, mas possível: pede as sessões-chave "
+                "feitas E a recuperação em dia (sono) — sem isso não vem. 💪"
+            )
+
+        realistic = predicted * (1 - _REALISTIC_PER_WEEK * weeks_to_race)
+
         return (
-            f"Tua meta é {target} — faltam ~*{falta}* (uns "
-            f"{per_km:.0f} s/km mais rápido). Dá pra chegar; é isso que os "
-            "treinos vêm construindo. 💪"
+            f"{base} Sendo franco: em {weeks_to_race} semanas isso é ~"
+            f"{needed * 100:.0f}% mais rápido — bem acima do que se ganha num "
+            "ciclo. Um alvo realista hoje seria ~*"
+            f"{RaceTimeFormatter.format(realistic)}*. Dá pra manter a meta como "
+            "desafio — só vale saber o tamanho do salto. Se quiser ajustar, é "
+            "só me falar."
         )

@@ -61,12 +61,16 @@ def _plan(week_start, sessions):
     )
 
 
-def _run(day: date, zones=None, act_id=1):
+def _run(day: date, hr=140, act_id=1):
     return make_activity(
         id=act_id,
         start_date=datetime(day.year, day.month, day.day, 9, tzinfo=timezone.utc),
-        distance=8000.0, hr_zone_minutes=zones,
+        distance=8000.0, moving_time=3000, average_heartrate=hr,
     )
+
+
+# régua do Renato real: máx 188, repouso 66 → leve < 151, forte >= 164
+MAX_HR, REST_HR = 188, 66
 
 
 def test_done_missed_last_and_gaps_toward_goal():
@@ -81,11 +85,11 @@ def test_done_missed_last_and_gaps_toward_goal():
     ]
 
     runs = [
-        _run(w1 + timedelta(days=1), [5, 20, 10, 10, 5], 1),   # VO2 feito
-        _run(w1 + timedelta(days=5), [10, 60, 20, 5, 0], 2),   # longão feito
-        _run(w2 + timedelta(days=1), [5, 20, 15, 10, 0], 3),   # fartlek feito
+        _run(w1 + timedelta(days=1), 160, 1),   # VO2 feito
+        _run(w1 + timedelta(days=5), 145, 2),   # longão feito
+        _run(w2 + timedelta(days=1), 158, 3),   # fartlek feito
         # sexta (tempo run) FUROU
-        _run(w2 + timedelta(days=5), [10, 50, 20, 5, 0], 4),   # longão feito
+        _run(w2 + timedelta(days=5), 148, 4),   # longão feito
     ]
 
     stats = StimulusLedger.families(plans, runs, TODAY)
@@ -99,7 +103,7 @@ def test_done_missed_last_and_gaps_toward_goal():
         race_date=TODAY + timedelta(weeks=8),
     )
 
-    text = StimulusLedger.render(plans, runs, goal, TODAY)
+    text = StimulusLedger.render(plans, runs, goal, TODAY, MAX_HR, REST_HR)
 
     assert "limiar: fez 0, furou 1" in text
     assert "ESPECÍFICA" in text
@@ -111,17 +115,34 @@ def test_done_missed_last_and_gaps_toward_goal():
     assert "Intensidade real" in text
 
 
-def test_grey_zone_is_flagged():
+def test_grey_zone_is_flagged_by_heart_rate_reserve():
+    """Leve (144) conta como leve; 155 é zona cinzenta (70-80% da reserva);
+    165 é forte. Mesma régua pra todo o histórico."""
 
-    runs = [_run(TODAY - timedelta(days=2), [5, 30, 40, 20, 5])]
+    runs = [
+        _run(TODAY - timedelta(days=2), 144, 1),
+        _run(TODAY - timedelta(days=4), 155, 2),
+        _run(TODAY - timedelta(days=6), 156, 3),
+        _run(TODAY - timedelta(days=8), 165, 4),
+    ]
 
-    split = StimulusLedger.zone_split(runs, TODAY)
+    split = StimulusLedger.zone_split(runs, TODAY, MAX_HR, REST_HR)
 
-    assert split.moderate_pct == 40
+    assert (split.easy_pct, split.moderate_pct, split.hard_pct) == (25, 50, 25)
 
     plans = [_plan(date(2026, 9, 21), [("Thursday", "Rodagem")])]
 
-    assert "zona cinzenta" in StimulusLedger.render(plans, runs, None, TODAY)
+    text = StimulusLedger.render(plans, runs, None, TODAY, MAX_HR, REST_HR)
+
+    assert "zona cinzenta" in text
+
+
+def test_no_zone_reading_without_resting_hr():
+    """Sem FC de repouso, não lê intensidade — melhor calar que ler errado."""
+
+    runs = [_run(TODAY - timedelta(days=2), 155, 1)]
+
+    assert StimulusLedger.zone_split(runs, TODAY, MAX_HR, None) is None
 
 
 def test_no_plans_renders_nothing():

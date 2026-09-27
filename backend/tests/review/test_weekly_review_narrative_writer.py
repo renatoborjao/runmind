@@ -157,7 +157,16 @@ def test_parse_valid_and_invalid():
 
     assert WeeklyReviewNarrativeWriter._parse(
         '{"reading": ["Semana firme.", "Segue assim!"]}'
-    ) == ["Semana firme.", "Segue assim!"]
+    ) == (["Semana firme.", "Segue assim!"], None)
+
+    # a PRIORIDADE da semana (cobrança) vem separada — o writer registra
+    assert WeeklyReviewNarrativeWriter._parse(
+        '{"reading": ["Volume subiu."], "attention": "Leve acima de 151 bpm."}'
+    ) == (["Volume subiu."], "Leve acima de 151 bpm.")
+
+    assert WeeklyReviewNarrativeWriter._parse(
+        '{"reading": ["ok"], "attention": "null"}'
+    ) == (["ok"], None)
 
     assert WeeklyReviewNarrativeWriter._parse("lixo") is None
     assert WeeklyReviewNarrativeWriter._parse('{"reading": []}') is None

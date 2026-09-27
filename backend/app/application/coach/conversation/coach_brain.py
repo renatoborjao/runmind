@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 from google.genai import types
 
+from app.application.coach.writer.coach_voice import COACH_VOICE, first_name
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.infrastructure.integrations.gemini.client import (
@@ -63,6 +64,14 @@ PROMPT_TEMPLATE = """Você é o COACH de corrida do Ritmind, conversando por \
 WhatsApp com {runner_name}. Você é UM coach só, que CONHECE o atleta — tem o \
 histórico, os treinos, o corpo e as preferências dele no QUADRO abaixo. Toda \
 resposta é SUA, na sua voz de treinador (direta, cordial, sem markdown).
+
+{voice}
+NA CONVERSA: responda o que ele perguntou — mas se o pedido dele esbarra num \
+PADRÃO do quadro (ex.: quer mais volume/intensidade com a recuperação piorando \
+e o sono curto; quer "leve" e vem correndo o leve acima do teto aeróbico), \
+diga com franqueza e o dado, e proponha o caminho certo. Não cobre em conversa \
+que não tem nada a ver, e não repita uma cobrança que já está nas "COBRANÇAS \
+QUE VOCÊ JÁ FEZ".
 
 FORMATO (WhatsApp/Telegram): nada de markdown (**, ##, listas numeradas saem \
 crus). Quando descrever um TREINO com blocos (aquecimento / parte principal / \
@@ -317,7 +326,8 @@ class CoachBrain:
             )
 
         prompt = PROMPT_TEMPLATE.format(
-            runner_name=runner_name,
+            runner_name=first_name(runner_name) or runner_name,
+            voice=COACH_VOICE,
             context_facts=context_facts,
             pending_block=pending_block,
             history_block=CoachBrain._history_block(conversation_history),

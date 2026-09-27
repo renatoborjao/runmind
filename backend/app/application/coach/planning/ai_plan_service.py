@@ -541,6 +541,8 @@ class AIPlanService:
 
         body_reading = None
 
+        drift = None
+
         try:
 
             reading, trajectory = BodyReadingService.read(
@@ -549,7 +551,25 @@ class AIPlanService:
 
             body_reading = reading
 
-            parts.append(body_plan_directive(reading, trajectory))
+            # piora OBJETIVA vs a base do próprio atleta (FC de repouso/HRV) +
+            # o teto aeróbico dele: com isso a diretriz SEGURA de verdade em vez
+            # de "confirme se é baseline" (varredura 26/09)
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+            from app.infrastructure.persistence.activity_archive_repository import (
+                ActivityArchiveRepository,
+            )
+
+            drift = TrainingPatterns.drift_for_profile(profile)
+
+            ceiling = TrainingPatterns._ceiling_for(
+                profile, ActivityArchiveRepository().load_activities(profile),
+            )
+
+            parts.append(
+                body_plan_directive(reading, trajectory, drift, ceiling)
+            )
 
         except Exception as e:
 
@@ -559,9 +579,19 @@ class AIPlanService:
         # dele, ou ele rende igual? Veredito do dado real (economia após noites
         # curtas vs normais) — a "sabedoria" de cada caso é um caso, pra o coach
         # não frear pelo sono quando ele sustenta. Best-effort.
+        # EXCEÇÃO: com PIORA REAL da recuperação (FC de repouso/HRV vs a base),
+        # "não trave a dose por causa do sono" contradiz o SEGURE acima — a
+        # fisiologia piorando vale mais que "a execução ainda não caiu" (a
+        # execução é a ÚLTIMA a cair). Varredura 26/09: o plano recebia as duas.
+        holding = drift is not None and drift.worsening
+
         try:
 
-            parts.append(AIPlanService._sleep_performance_directive(profile))
+            if not holding:
+
+                parts.append(
+                    AIPlanService._sleep_performance_directive(profile)
+                )
 
         except Exception as e:
 

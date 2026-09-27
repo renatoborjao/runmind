@@ -9,6 +9,7 @@ import json
 
 from google.genai import types
 
+from app.application.coach.writer.coach_voice import COACH_VOICE, first_name
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import (
@@ -22,10 +23,10 @@ THINKING_BUDGET = 256
 
 MAX_SENTENCES = 3
 
-PROMPT_TEMPLATE = """Você é um treinador de corrida experiente fechando a \
-SEMANA do atleta por mensagem (WhatsApp). Escreva a "leitura da semana": um \
-resumo curto, humano e ESPECÍFICO do desempenho e da evolução — como um \
-treinador que acompanha ELE.
+PROMPT_TEMPLATE = """{voice}
+AGORA: você está fechando a SEMANA dele por mensagem (WhatsApp). Escreva a \
+"leitura da semana": curta, humana e ESPECÍFICA — o que evoluiu, o que não \
+saiu e a UMA prioridade da próxima semana, como o treinador que acompanha ELE.
 
 FATOS DA SEMANA (use SÓ isto, não invente número):
 {facts}
@@ -45,14 +46,19 @@ aderência ao plano) — nada de frase genérica que serviria pra qualquer seman
 - Se houver "QUEM É O ATLETA NO LONGO PRAZO", personalize com isso — conecte a \
 semana à trajetória/evolução dele e respeite o que ele já contou (memória) e o \
 que você aprendeu que funciona pra ele. Nunca contrarie esses fatos.
-- Seja honesto: reconheça o que foi bem E aponte com leveza o que dá pra \
-melhorar, sempre construtivo. Sem bronca.
-- Tom de treinador de verdade: direto, humano, encorajador. Fale com "você". \
-Português do Brasil. Sem emojis, sem títulos, sem markdown.
-- {max_sentences} frases curtas no MÁXIMO, cada uma um ponto.
+- PADRÕES RECENTES e COBRANÇAS JÁ FEITAS (se vierem nos fatos): a semana é o \
+momento de olhar o PADRÃO — se algo se repete e atrapalha o objetivo (leve \
+saindo forte, estourar o combinado, furar a sessão-chave, sono curto com a \
+recuperação piorando), é aqui que você fala com firmeza. Se já cobrou há \
+pouco, não repita igual: diga se melhorou ou não, com o dado.
+- Fale com "você", português do Brasil. Sem emojis, sem títulos, sem markdown.
+- "reading": {max_sentences} frases curtas no MÁXIMO, cada uma um ponto.
+- "attention": null OU 1 frase — a PRIORIDADE a corrigir na próxima semana, \
+quando houver padrão que pede (nomeia, cita o dado, diz o que fazer). Semana \
+limpa: null (não invente cobrança).
 
 Responda APENAS com JSON:
-{{"reading": ["frase 1", "frase 2"]}}
+{{"reading": ["frase 1", "frase 2"], "attention": null}}
 """
 
 
@@ -73,9 +79,10 @@ class WeeklyReviewNarrativeWriter:
 
             settings = get_settings()
 
-            return await generate_json(
+            result = await generate_json(
                 model=settings.gemini_coach_model,
                 contents=PROMPT_TEMPLATE.format(
+                    voice=COACH_VOICE,
                     facts=facts,
                     max_sentences=MAX_SENTENCES,
                 ),
@@ -89,6 +96,27 @@ class WeeklyReviewNarrativeWriter:
                 parse=WeeklyReviewNarrativeWriter._parse,
             )
 
+            if result is None:
+
+                return None
+
+            reading, attention = result
+
+            if attention and profile:
+
+                # só o notificador de domingo chama isto, logo antes de enviar
+                # — a cobrança da semana fica registrada pra não se repetir
+                from app.core.clock import today_local
+                from app.infrastructure.persistence.coach_attention_log import (
+                    CoachAttentionLog,
+                )
+
+                CoachAttentionLog.record(
+                    profile, today_local(), attention, "weekly",
+                )
+
+            return reading + ([attention] if attention else [])
+
         except Exception as e:
 
             print(f"IA falhou no resumo semanal, fallback: {e}")
@@ -96,7 +124,8 @@ class WeeklyReviewNarrativeWriter:
             return None
 
     @staticmethod
-    def _parse(raw: str) -> list[str] | None:
+    def _parse(raw: str) -> tuple[list[str], str | None] | None:
+        """(leitura, cobrança da semana ou None). None se a leitura não veio."""
 
         try:
 
@@ -114,7 +143,21 @@ class WeeklyReviewNarrativeWriter:
 
         lines = [str(s).strip() for s in sentences if str(s).strip()]
 
-        return lines or None
+        if not lines:
+
+            return None
+
+        attention = data.get("attention")
+
+        attention = (
+            attention.strip()
+            if isinstance(attention, str)
+            and attention.strip()
+            and attention.strip().lower() not in ("null", "none")
+            else None
+        )
+
+        return lines, attention
 
     @staticmethod
     def _facts(runner_name: str, review: dict, profile: str | None = None) -> str:
@@ -129,7 +172,7 @@ class WeeklyReviewNarrativeWriter:
 
         goal = review.get("goal") or {}
 
-        lines = [f"Atleta: {runner_name}"]
+        lines = [f"Atleta: {first_name(runner_name) or runner_name}"]
 
         # a PROVA da semana é o DESTAQUE — vem primeiro pra a IA não ignorar o
         # dia mais importante (era a queixa do Renato)
@@ -196,6 +239,20 @@ class WeeklyReviewNarrativeWriter:
             if brief:
 
                 lines.append(brief)
+
+            # o que SE REPETE (com dado) + o que já foi cobrado — a semana é o
+            # momento de olhar o padrão, não o treino isolado
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+            from app.core.clock import today_local
+            from app.infrastructure.persistence.coach_attention_log import (
+                CoachAttentionLog,
+            )
+
+            lines.append(TrainingPatterns.for_profile(profile))
+
+            lines.append(CoachAttentionLog.render(profile, today_local()))
 
         return "\n".join(line for line in lines if line)
 

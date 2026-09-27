@@ -48,6 +48,11 @@ class WhatsAppFormatter:
         )
 
         blocks += WhatsAppFormatter._section(
+            messages.ATTENTION_TITLE,
+            message.attention,
+        )
+
+        blocks += WhatsAppFormatter._section(
             messages.HISTORY_TITLE,
             message.history,
         )

@@ -99,3 +99,41 @@ def test_no_persistence_note_when_not_persisting():
     )
 
     assert "leituras seguidas" not in directive
+
+
+def test_recovery_flag_with_real_worsening_holds_with_hr_cap():
+    """Varredura 26/09 (renato2): FC de repouso 59→70 e HRV 60→46 em 13
+    leituras — piora REAL. A diretriz SEGURA (não sobe, qualidade controlada,
+    leve pelo teto de FC) em vez de 'não trave a progressão'."""
+
+    from app.application.history.training_patterns import RecoveryDrift
+
+    drift = RecoveryDrift(
+        rhr_now=70, rhr_base=59, hrv_now=46, hrv_base=60, alert_streak=13,
+        sleep_avg=6.3, short_nights=6, nights=14,
+    )
+
+    text = body_plan_directive(
+        _reading(BODY_RECOVERY_FLAG), _traj(TRAJ_PERSISTING, 13), drift, 151,
+    )
+
+    assert "PIORA REAL" in text and "SEGURE" in text
+    assert "59 → 70" in text and "151 bpm" in text
+    assert "NÃO trave a progressão" not in text
+
+
+def test_recovery_flag_stable_baseline_keeps_progression():
+
+    from app.application.history.training_patterns import RecoveryDrift
+
+    drift = RecoveryDrift(
+        rhr_now=56, rhr_base=55, hrv_now=39, hrv_base=40, alert_streak=13,
+        sleep_avg=6.0, short_nights=6, nights=14,
+    )
+
+    text = body_plan_directive(
+        _reading(BODY_RECOVERY_FLAG), _traj(TRAJ_PERSISTING, 13), drift, 151,
+    )
+
+    assert "SEGURE" not in text
+    assert "NÃO trave a progressão" in text

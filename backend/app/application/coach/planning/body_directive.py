@@ -27,6 +27,8 @@ _LIMITER = {
 def body_plan_directive(
     reading: BodyReading,
     trajectory: BodyTrajectory | None = None,
+    drift=None,
+    aerobic_ceiling: int | None = None,
 ) -> str:
     """Diretriz pro prompt do plano. Só fala quando o corpo pede atenção
     (STRAINED = sobrecarga real; RECOVERY_FLAG = recuperação caindo); senão
@@ -67,6 +69,16 @@ def body_plan_directive(
             "sustenta a evolução — não mantenha a carga cega."
         )
 
+    # RECOVERY_FLAG com PIORA OBJETIVA (FC de repouso subindo / HRV caindo vs a
+    # BASE do próprio atleta, em alerta há 3+ leituras): não é o normal dele —
+    # SEGURA. Antes o critério era "confirme nos aprendizados se é baseline"
+    # (vago) e o plano empurrou longão progressivo "pra avançar o teto" com a
+    # FC de repouso do Renato em 59→70 — enquanto o retrato prometia "o plano
+    # segura a intensidade". Segurar ≠ descarregar: mantém o volume, não sobe.
+    if drift is not None and getattr(drift, "worsening", False):
+
+        return _hold_directive(reading, drift, aerobic_ceiling, lim)
+
     # RECOVERY_FLAG: a recuperação deu um sinal, mas a CARGA está tranquila.
     # NÃO é freio automático — o coach pesa contra a CAPACIDADE do atleta. Um
     # limitador CRÔNICO que ele sustenta (ex.: sono curto com corpo equilibrado)
@@ -87,4 +99,45 @@ def body_plan_directive(
         "a carga está tranquila, NÃO trave a progressão por isto — é o normal "
         "dele, não um alerta. Só segure a subida se a recuperação estiver caindo "
         "DE VERDADE agora (agudo). Nunca corte volume à toa."
+    )
+
+
+def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> str:
+    """Recuperação PIORANDO de verdade: segura a progressão com instruções
+    concretas (sem subir, qualidade controlada, leve pela FC)."""
+
+    evidence = []
+
+    if drift.rhr_base and drift.rhr_now:
+
+        evidence.append(
+            f"FC de repouso {drift.rhr_base:.0f} → {drift.rhr_now:.0f} bpm"
+        )
+
+    if drift.hrv_base and drift.hrv_now:
+
+        evidence.append(f"HRV {drift.hrv_base:.0f} → {drift.hrv_now:.0f}")
+
+    if drift.sleep_avg:
+
+        evidence.append(f"sono médio {drift.sleep_avg:.1f}h")
+
+    cap = (
+        f" com TETO de FC ~{aerobic_ceiling} bpm (escreva hr_max nos passos "
+        "dos leves e do longão — o relógio avisa)"
+        if aerobic_ceiling
+        else " pela FC (conversável, sem apertar)"
+    )
+
+    return (
+        "STATUS DO CORPO — PIORA REAL DA RECUPERAÇÃO (não é o normal dele; "
+        f"você é o COACH, a decisão é sua){lim}: em alerta há "
+        f"{drift.alert_streak} leituras seguidas, {', '.join(evidence)} — contra "
+        "a própria base de semanas atrás. Nesta semana SEGURE a progressão: NÃO "
+        "suba volume nem intensidade em relação à semana passada; no máximo UMA "
+        "sessão de qualidade e CONTROLADA (limite de baixo da faixa, 1-2 "
+        "repetições a menos); longão SEM progressão/blocos fortes; leves e "
+        f"longão{cap}. Não é descarga (o volume se mantém): é segurar até o "
+        "sinal virar. Diga isso no purpose/mensagem com franqueza — e que o "
+        "sono é a alavanca dele."
     )

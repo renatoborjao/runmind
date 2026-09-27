@@ -118,6 +118,19 @@ class TrainingCompletedEvent:
                 kind="feedback",
             )
 
+            # a cobrança que SAIU fica registrada — a próxima análise/semana
+            # sabe o que já foi dito (relembra de leve ou reconhece melhora)
+            if result.get("attention"):
+
+                from app.core.clock import today_local
+                from app.infrastructure.persistence.coach_attention_log import (
+                    CoachAttentionLog,
+                )
+
+                CoachAttentionLog.record(
+                    profile, today_local(), result["attention"], "analysis",
+                )
+
             # Detector proativo de aversão (Fatia 2): depois do feedback, se
             # está virando PADRÃO evitar um estímulo de qualidade, ABRE uma
             # conversa — nunca muda o plano. (Numa prova não se aplica.) Falha

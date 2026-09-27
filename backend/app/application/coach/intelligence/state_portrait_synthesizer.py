@@ -46,6 +46,7 @@ class StatePortraitSynthesizer:
     def synthesize(
         reading: BodyReading,
         evolution: FitnessEvolution,
+        worsening: bool | None = None,
     ) -> tuple[str, str]:
         """Devolve (ESTADO, CONDUTA): a frase que cruza os eixos e a que sugere
         o próximo passo. Degrada com elegância — se um eixo não tem leitura, a
@@ -57,7 +58,7 @@ class StatePortraitSynthesizer:
 
         return (
             StatePortraitSynthesizer._state(corpo, forma),
-            StatePortraitSynthesizer._conduct(corpo, forma),
+            StatePortraitSynthesizer._conduct(corpo, forma, worsening),
         )
 
     # ------------------------------------------------------------------
@@ -121,7 +122,15 @@ class StatePortraitSynthesizer:
     # -- CONDUTA (o que isso sugere) -----------------------------------
 
     @staticmethod
-    def _conduct(corpo: str, forma: str) -> str:
+    def _conduct(corpo: str, forma: str, worsening: bool | None = None) -> str:
+
+        # recuperação dando sinal mas NO PADRÃO dele (não piorou vs a própria
+        # base): o plano segue progredindo — o retrato não pode prometer
+        # "segurar" o que o plano não segura (contradição de 20/09). Com piora
+        # real, as condutas de segurar abaixo valem — e o plano segura mesmo.
+        if corpo == _CORPO_YELLOW and worsening is False:
+
+            return _CONDUCT_YELLOW_BASELINE
 
         both = _CONDUCT.get((corpo, forma))
 
@@ -138,6 +147,12 @@ class StatePortraitSynthesizer:
             return _CONDUCT_FORMA_ONLY[forma]
 
         return "Segue no ritmo — em poucas semanas o retrato completo aparece. 👊"
+
+
+_CONDUCT_YELLOW_BASELINE = (
+    "🎯 O sinal de recuperação está no teu padrão de sempre (não piorou) — o "
+    "plano segue progredindo com cuidado; o sono é a tua parte pra ele virar. 👊"
+)
 
 
 # Matriz do ESTADO — a leitura cruzada (o coração do retrato). Corpo × Forma.
