@@ -420,9 +420,22 @@ class StimulusLedger:
 
             phase = "semana da prova (POUPAR): só ativação curta no ritmo"
 
-        goal_name = goal.name if goal and goal.name else f"{distance:g} km"
+        # a PROVA que ancora (distância/data reais) — o goal.name é o objetivo
+        # de fundo ("correr 21 km...") e confundia o rótulo com a prova de 15k
+        if goal and goal.race_date:
 
-        text = f"Meta {goal_name} — fase: {phase}."
+            target = f" em {goal.target_time}" if goal.target_time else ""
+
+            label = (
+                f"prova de {distance:g} km{target} em "
+                f"{goal.race_date:%d/%m/%Y}"
+            )
+
+        else:
+
+            label = goal.name if goal and goal.name else f"{distance:g} km"
+
+        text = f"Meta: {label} — fase: {phase}."
 
         if missing:
 
