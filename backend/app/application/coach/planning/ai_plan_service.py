@@ -123,6 +123,7 @@ class AIPlanService:
                     allow_reduction=AIPlanService._reduction_allowed(
                         profile, goal, week_start,
                     ),
+                    body_green=AIPlanService._body_green(profile),
                 )
 
             # A periodização é decisão do COACH (ele vê a prova/distância no
@@ -181,6 +182,34 @@ class AIPlanService:
             return None
 
     @staticmethod
+    def _body_green(profile) -> bool:
+        """Corpo absorvendo bem (sem alerta nem piora real): o teto de sessões
+        fortes sobe um degrau e a IA decide. Em alerta, vale o teto de proteção."""
+
+        try:
+
+            from app.application.history.training_patterns import TrainingPatterns
+            from app.domain.entities.body_reading import (
+                BODY_ABSORBING,
+                BODY_BALANCED,
+                BODY_FRESH,
+            )
+
+            reading, _ = BodyReadingService.read(profile, persist=False)
+
+            drift = TrainingPatterns.drift_for_profile(profile)
+
+            return reading.body_state in (
+                BODY_FRESH, BODY_BALANCED, BODY_ABSORBING,
+            ) and not (drift is not None and drift.worsening)
+
+        except Exception as e:
+
+            print(f"Corpo p/ guarda falhou p/ '{profile}': {e}")
+
+            return False
+
+    @staticmethod
     def _reduction_allowed(profile, goal, week_start) -> bool:
         """Motivo REAL pra cortar volume: corpo sobrecarregado (descarga) ou
         polimento (prova nos próximos ~10 dias)."""
@@ -208,7 +237,7 @@ class AIPlanService:
     @staticmethod
     async def _guarded(
         profile, runner_name, objective, week_start, context, plan, metrics,
-        real_weekly_km=None, allow_reduction=False,
+        real_weekly_km=None, allow_reduction=False, body_green=False,
     ) -> TrainingPlan:
         """Confere o plano com o PlanGuard; se violou, pede UMA correção à IA e
         fica com a versão de menos violações. Falha na correção nunca derruba
@@ -219,7 +248,7 @@ class AIPlanService:
         def check(candidate):
 
             return PlanGuard.violations(
-                candidate, metrics, real_weekly_km, allow_reduction,
+                candidate, metrics, real_weekly_km, allow_reduction, body_green,
             )
 
         issues = check(plan)

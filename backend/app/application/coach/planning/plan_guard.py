@@ -51,9 +51,16 @@ _RUNNING_KINDS = ("run", "walk", "run_walk")
 class PlanGuard:
 
     @staticmethod
-    def quality_budget(running_sessions: int) -> int:
+    def quality_budget(running_sessions: int, body_green: bool = False) -> int:
+        """Teto de sessões fortes. Com o corpo EM ALERTA (recuperação em queda,
+        sobrecarga) é o teto de proteção: ≤3 corridas → 1, 4+ → 2. Com o corpo
+        VERDE (absorvendo bem) sobe um degrau — aí quem decide se cabem 2 fortes
+        em 3 corridas é a IA, pela meta/fase; a regra fixa só protege quando o
+        corpo pede."""
 
-        return 1 if running_sessions <= 3 else 2
+        base = 1 if running_sessions <= 3 else 2
+
+        return base + 1 if body_green else base
 
     @staticmethod
     def violations(
@@ -61,6 +68,7 @@ class PlanGuard:
         metrics: RunnerMetrics | None,
         real_weekly_km: float | None = None,
         allow_reduction: bool = False,
+        body_green: bool = False,
     ) -> list[str]:
         """Violações objetivas do plano, em frases prontas pra IA corrigir.
         Lista vazia = plano dentro das regras. `real_weekly_km` = o que o
@@ -78,7 +86,7 @@ class PlanGuard:
             s for s in running if PlanGuard._is_quality(s.workout_type)
         ]
 
-        budget = PlanGuard.quality_budget(len(running))
+        budget = PlanGuard.quality_budget(len(running), body_green)
 
         if len(quality) > budget:
 

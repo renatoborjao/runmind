@@ -150,3 +150,16 @@ def test_time_based_sessions_count_toward_volume():
     plan.sessions[0].planned_duration_minutes = 66  # ~10 km a 6:36
 
     assert round(PlanGuard.planned_km(plan.sessions, EASY)) == 10
+
+
+def test_green_body_lets_the_ai_use_two_hard_sessions_in_three_runs():
+    """Teto fixo só protege quando o corpo pede; corpo verde → a IA decide."""
+
+    plan = _plan([
+        _session("Tuesday", "Fartlek"),
+        _session("Friday", "Rodagem Leve"),
+        _session("Saturday", "Longão Progressivo"),
+    ])
+
+    assert PlanGuard.violations(plan, None, body_green=True) == []
+    assert PlanGuard.violations(plan, None, body_green=False) != []
