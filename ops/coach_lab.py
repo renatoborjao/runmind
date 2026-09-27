@@ -455,6 +455,161 @@ async def _plan(profile, runner):
             print("\n".join(_fmt_step(step, "      ")))
 
 
+# AVALIAÇÃO DO CÉREBRO: frases reais/difíceis com o GABARITO do que o coach deve
+# DECIDIR (tipos de ação, relação da meta, dia-alvo, percepção). Mede acerto e
+# latência — pra decidir mudança de modelo/raciocínio com número, não palpite.
+# (perfil, mensagem, tipos esperados (conjuntos aceitos), extra)
+BRAIN_EVAL = [
+    ("leonardo", "O objetivo agora é correr 10 km em 55 minutos. Tenho "
+     "disponibilidade de terça, quinta e domingo",
+     [{"goal", "days"}, {"goal", "days", "replan"}],
+     {"relationship": ("replace", "primary"),
+      "days": ["Tuesday", "Thursday", "Sunday"]}),
+    ("renato2", "também quero correr a São Silvestre em 31/12, sem tempo, só "
+     "pra curtir", [{"goal"}], {"relationship": ("additional",)}),
+    ("renato2", "meu objetivo principal agora é fazer a meia em 1h50",
+     [{"goal"}], {"relationship": ("primary",)}),
+    ("renato2", "esquece a 15k, não vou mais correr ela, meu foco agora é só "
+     "a meia", [{"goal"}], {"relationship": ("replace",)}),
+    ("fernanda", "troca o treino de terça pra quarta e o de sexta pra sábado",
+     [{"move"}], {"count": 2}),
+    ("mauricio", "o treino de terça pode ser mais leve? tô cansado",
+     [{"adjust"}, {"simplify"}], {"target_day": "Tuesday"}),
+    ("renato2", "o longão de sábado é 12 km né?", [set()], {}),
+    ("leonardo", "tá chovendo, como faço o treino de sexta na esteira?",
+     [set()], {}),
+    ("helio", "a partir da próxima semana quero treinos de no máximo 45 "
+     "minutos durante a semana", [{"routine"}], {}),
+    ("fernanda", "monta um treino pra quarta", [{"one_off"}],
+     {"target_day": "Wednesday"}),
+    ("mauricio", "tô gripado, refaz minha semana só com treino leve até "
+     "sexta", [{"replan"}, {"adjust"}, {"simplify"}], {}),
+    ("joaosoares", "hoje o treino foi pesado, perna morta no fim", [set()],
+     {"perception": True}),
+]
+
+
+def _grade(decision, expected_sets, extra) -> list[str]:
+    """Lista de erros (vazia = acertou)."""
+
+    if decision is None:
+
+        return ["cérebro falhou"]
+
+    actions = decision.all_actions
+
+    types = {a.type for a in actions}
+
+    errors = []
+
+    if types not in expected_sets:
+
+        errors.append(f"ações {sorted(types)} ≠ {[sorted(e) for e in expected_sets]}")
+
+    if "relationship" in extra:
+
+        rel = next((a.relationship for a in actions if a.type == "goal"), None)
+
+        if rel not in extra["relationship"]:
+
+            errors.append(f"relação {rel} ≠ {extra['relationship']}")
+
+    if "days" in extra:
+
+        days = next((a.days for a in actions if a.type == "days"), None)
+
+        if days != extra["days"]:
+
+            errors.append(f"dias {days} ≠ {extra['days']}")
+
+    if "target_day" in extra:
+
+        target = next((a.target_day for a in actions), None)
+
+        if target != extra["target_day"]:
+
+            errors.append(f"dia-alvo {target} ≠ {extra['target_day']}")
+
+    if "count" in extra and len(actions) != extra["count"]:
+
+        errors.append(f"{len(actions)} ações ≠ {extra['count']}")
+
+    if extra.get("perception") and not decision.perception:
+
+        errors.append("percepção não registrada")
+
+    return errors
+
+
+async def _brain_eval(budgets: list[int], repeats: int) -> None:
+
+    from app.application.coach.conversation.coach_brain import CoachBrain
+    from app.application.coach.conversation.conversation_context_builder import (
+        ConversationContextBuilder,
+    )
+    from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+    from app.core.config import get_settings
+
+    contexts = {}
+
+    for profile, message, *_ in BRAIN_EVAL:
+
+        contexts[(profile, message)] = await ConversationContextBuilder.build(
+            profile, message,
+        )
+
+    summary = []
+
+    for budget in budgets:
+
+        get_settings().coach_brain_thinking_budget = budget
+
+        _h(f"CÉREBRO com raciocínio {budget}")
+
+        hits, total, seconds = 0, 0, []
+
+        for profile, message, expected_sets, extra in BRAIN_EVAL:
+
+            runner = LoadRunnerProfile.execute(profile)
+
+            for _ in range(repeats):
+
+                started = time.time()
+
+                decision = await CoachBrain.decide(
+                    runner_name=runner.name,
+                    context_facts=contexts[(profile, message)],
+                    incoming_text=message,
+                )
+
+                seconds.append(time.time() - started)
+
+                errors = _grade(decision, expected_sets, extra)
+
+                total += 1
+
+                hits += not errors
+
+                mark = "OK " if not errors else "ERR"
+
+                print(f"{mark} {profile}: \"{message[:60]}\" {'; '.join(errors)}")
+
+        seconds.sort()
+
+        median = seconds[len(seconds) // 2]
+
+        worst = seconds[-1]
+
+        summary.append(
+            f"raciocínio {budget}: {hits}/{total} certos | mediana {median:.1f}s "
+            f"| pior {worst:.1f}s"
+        )
+
+    _h("RESUMO")
+
+    print("\n".join(summary))
+
+
 async def main() -> None:
 
     parser = argparse.ArgumentParser()
@@ -467,6 +622,12 @@ async def main() -> None:
 
     # mensagens próprias pro cenário de chat, separadas por "||"
     parser.add_argument("--messages", default="")
+
+    # avaliação do cérebro com gabarito: orçamentos de raciocínio a comparar
+    # (ex.: "0,4096") e repetições por frase
+    parser.add_argument("--braineval", default="")
+
+    parser.add_argument("--repeats", type=int, default=2)
 
     args = parser.parse_args()
 
@@ -481,6 +642,15 @@ async def main() -> None:
     from app.infrastructure.persistence.runner_profile_repository import (
         RunnerProfileRepository,
     )
+
+    if args.braineval:
+
+        await _brain_eval(
+            [int(b) for b in args.braineval.split(",") if b.strip()],
+            args.repeats,
+        )
+
+        return
 
     profiles = [
         p for p in args.profiles.split(",") if p
