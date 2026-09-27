@@ -8,6 +8,7 @@ from app.application.coach.planning.ai_session_builder import (
 )
 from app.application.coach.planning.workout_menu import (
     PHASE_EMPHASIS,
+    STEPS_RULE,
     TIME_OR_DISTANCE_RULE,
     WORKOUT_MENU,
 )
@@ -66,6 +67,7 @@ intervalado) — não um trote genérico "por garantia".
 estímulo e troque só a FORMA (fartlek na rua no lugar de tiro na pista); só \
 remova de verdade se for dor/restrição física.
 - {time_rule}
+- {steps_rule}
 - Respeite saúde, recuperação e lesões. Dose o volume pelo que ele SUSTENTA hoje.
 
 Responda APENAS JSON (o "session" abaixo é só de FORMATO — escolha o tipo pela \
@@ -131,6 +133,7 @@ class OneOffWorkoutEngine:
             menu=WORKOUT_MENU,
             phase=PHASE_EMPHASIS,
             time_rule=TIME_OR_DISTANCE_RULE,
+            steps_rule=STEPS_RULE,
         )
 
         return await generate_json(

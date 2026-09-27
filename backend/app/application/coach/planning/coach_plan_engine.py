@@ -4,6 +4,7 @@ from datetime import date
 from google.genai import types
 
 from app.application.coach.planning.workout_menu import (
+    STEPS_RULE,
     TIME_OR_DISTANCE_RULE,
     WORKOUT_MENU,
 )
@@ -140,19 +141,8 @@ REGRAS:
   que qualquer corredor entende. Detalhe de verdade: aquecimento (distância +
   pace), a parte principal (séries/distâncias/repetições/pace/recuperação
   EXPLÍCITOS), o desaquecimento e uma dica prática. Um passo por item.
-- "steps" é a MESMA prescrição em formato ESTRUTURADO (pra virar treino
-  guiado no relógio). Use os blocos reais do treino, na ordem:
-    * kind: "warmup" | "run" | "interval" | "recovery" | "rest" | "cooldown"
-      | "repeat"
-    * fim do bloco: "distance_m" OU "distance_km" OU "duration_min" (escolha
-      o que o treino pede; tiro costuma ser distance_m, rodagem distance_km,
-      recuperação pode ser duration_min)
-    * alvo: "pace_min"/"pace_max" (mm:ss por km; min = mais rápido) quando
-      houver ritmo; recuperação/aquecimento podem ir sem alvo
-    * "repeat" agrupa o que se repete: {{"kind":"repeat","reps":6,"steps":[
-      bloco de esforço, bloco de recuperação]}}
-  Monte o treino que fizer sentido pra evolução dele — contínuo, intervalado,
-  tempo, progressivo, fartlek: o formato aceita todos.
+- {steps_rule}
+  Monte o treino que fizer sentido pra evolução dele.
 - Respeite lesões/limitações que aparecerem no retrato.
 - AVERSÕES A TIPO DE TREINO: se o retrato disser que o atleta não gosta de um
   tipo de treino, NÃO ignore — mas também NÃO jogue fora o estímulo que ele
@@ -224,6 +214,7 @@ class CoachPlanEngine:
             context=context,
             menu=WORKOUT_MENU,
             time_rule=TIME_OR_DISTANCE_RULE,
+            steps_rule=STEPS_RULE,
         )
 
         # modelo/thinking podem ser sobrepostos pelo chamador (ex.: modelo PRO

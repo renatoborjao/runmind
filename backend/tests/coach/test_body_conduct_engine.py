@@ -72,6 +72,27 @@ def test_treinos_de_qualidade_seguem_exigentes():
         assert BodyConductEngine.is_demanding(_session("Wednesday", wtype, 8.0))
 
 
+def test_cardapio_completo_classifica_certo():
+    """Cardápio ampliado (26/09): os tipos novos puxados contam como exigentes;
+    os leves novos (strides, moderada, run-walk) e nomes-armadilha
+    ('recovery', 'pós-prova') NÃO."""
+
+    for wtype in (
+        "Subida (tiros em rampa)", "Pirâmide", "Tiros curtos de velocidade",
+        "Blocos no pace de prova", "Simulado 8 km", "Teste de 5k",
+        "Over-under no limiar", "Intervalado de Cruzeiro",
+    ):
+
+        assert BodyConductEngine.is_demanding(_session("Wednesday", wtype, 8.0)), wtype
+
+    for wtype in (
+        "Rodagem com acelerações", "Rodagem moderada", "Corrida-caminhada",
+        "Recovery run", "Regenerativo pós-prova", "Caminhada ativa",
+    ):
+
+        assert not BodyConductEngine.is_demanding(_session("Monday", wtype, 5.0)), wtype
+
+
 # ------------------- next_demanding_session -------------------
 
 

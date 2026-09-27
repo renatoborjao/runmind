@@ -40,6 +40,13 @@ _RUNNING_KINDS = {"run", "walk", "run_walk"}
 _DEMANDING_CUES = (
     "veloc", "tiro", "interval", "limiar", "threshold", "ritmo", "tempo",
     "progress", "fartlek", "vo2", "forte", "long",  # longo/longao/longão
+    # o cardápio completo (workout_menu): subida, pirâmide, sprints, pace de
+    # prova, simulado, teste, over-under — todos exigentes
+    "subida", "rampa", "morro", "hill", "sprint", "piramide", "escada",
+    # ("over"/"prova" soltos pegariam "recOVERy" e "pós-prova" — por isso a
+    # forma composta)
+    "simulado", "de prova", "teste", "contrarrelogio", "over-under",
+    "over under", "alternado", "cruzeiro",
 )
 
 # Frases de DURAÇÃO que colidem com cues fortes: "por tempo"/"por minutos" (em

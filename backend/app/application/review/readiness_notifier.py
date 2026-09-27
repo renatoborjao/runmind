@@ -252,7 +252,25 @@ class ReadinessNotifier:
                 "leve e, se precisar, encurta uns km."
             )
 
-        if any(k in kind for k in ("tiro", "interval", "fartlek", "vo2", "série")):
+        if any(k in kind for k in ("simulado", "prova", "teste", "contrarrel")):
+
+            return (
+                "com o corpo assim o teste não mede tua forma real — se der, "
+                "troca por rodagem e remarca; se for fazer, aquece bem e não "
+                "persegue o pace se a FC já vier alta no início."
+            )
+
+        if any(k in kind for k in ("subida", "rampa", "morro", "hill")):
+
+            return (
+                "sobe por ESFORÇO (não por pace), corta 2–3 repetições se a "
+                "descida não trouxer a FC de volta."
+            )
+
+        if any(k in kind for k in (
+            "tiro", "interval", "fartlek", "vo2", "série", "sprint", "pirâmide",
+            "piramide", "escada",
+        )):
 
             return (
                 "mantém a estrutura, mas segura os trechos fortes no limite de "

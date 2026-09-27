@@ -6,7 +6,11 @@ from google.genai import types
 from app.application.coach.planning.ai_session_builder import (
     build_session_dict,
 )
-from app.application.coach.planning.workout_menu import TIME_OR_DISTANCE_RULE
+from app.application.coach.planning.workout_menu import (
+    STEPS_RULE,
+    TIME_OR_DISTANCE_RULE,
+    WORKOUT_MENU,
+)
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.domain.entities.runner_profile import RunnerProfile
@@ -63,6 +67,10 @@ Decida:
      evoluindo, dá pra puxar. Considere o que já funcionou pra ele (memória) e
      a trajetória — cada ajuste tem que fazer sentido pra ESSE atleta.
    - {time_rule}
+   - TIPOS DE TREINO que você pode prescrever (se ele pedir um tipo — subida,
+     pirâmide, strides, run-walk, blocos no pace de prova... — monte-o):
+{menu}
+   - {steps_rule}
 3) Devolva a SEMANA INTEIRA já ajustada (todas as sessões de corrida dos dias
    dele), mesmo as que não mudaram.
 
@@ -121,6 +129,8 @@ class NegotiationEngine:
             sessions=NegotiationEngine._render_sessions(plan),
             message=incoming_text.replace('"', "'"),
             time_rule=TIME_OR_DISTANCE_RULE,
+            menu=WORKOUT_MENU,
+            steps_rule=STEPS_RULE,
         )
 
         return await generate_json(
