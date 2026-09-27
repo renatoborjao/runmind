@@ -77,6 +77,8 @@ class WebhookService:
         cls,
         subscription_id: int,
     ):
+        """Apaga a inscrição. O Strava exige o id no CAMINHO
+        (/push_subscriptions/{id}) — como query param dava 4xx (e 500 no app)."""
 
         settings = get_settings()
 
@@ -86,15 +88,13 @@ class WebhookService:
 
             response = await client.delete(
 
-                cls.BASE_URL,
+                f"{cls.BASE_URL}/{subscription_id}",
 
                 params={
 
                     "client_id": settings.strava_client_id,
 
                     "client_secret": settings.strava_client_secret,
-
-                    "id": subscription_id,
 
                 },
 
@@ -107,3 +107,32 @@ class WebhookService:
             "deleted": True
 
         }
+
+    @classmethod
+    async def repoint(
+        cls,
+        callback_url: str,
+    ):
+        """Garante UMA inscrição apontando pra `callback_url`. O Strava aceita
+        só uma por app — registrar com uma velha no lugar dá 400 — então apaga
+        as que apontam pra outro lugar e cria a nova. Idempotente: se já está
+        certa, não mexe. (A inscrição ficou no ngrok velho por semanas depois
+        da migração pra Oracle; ver [[project_strava_rename]].)"""
+
+        current = await cls.subscriptions()
+
+        if any(s.get("callback_url") == callback_url for s in current):
+
+            return {"changed": False, "subscriptions": current}
+
+        removed = []
+
+        for sub in current:
+
+            await cls.delete(sub["id"])
+
+            removed.append(sub.get("callback_url"))
+
+        created = await cls.register(callback_url)
+
+        return {"changed": True, "removed": removed, "created": created}

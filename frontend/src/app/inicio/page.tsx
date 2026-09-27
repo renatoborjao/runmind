@@ -6,7 +6,7 @@ import BottomNav from "../bottom-nav";
 import MiniMap from "../mini-map";
 import NotifBell from "../notif-bell";
 import InstallBanner from "../install-banner";
-import EmailCapture from "../email-capture";
+import AccessCapture from "../access-capture";
 import {
   APP_BUILD,
   getBody,
@@ -335,7 +335,7 @@ export default function InicioPage() {
         </div>
 
         <InstallBanner />
-        <EmailCapture />
+        <AccessCapture />
 
         {/* PRONTIDÃO (anel: prontidão do Garmin ou, na falta, bateria ao acordar) */}
         {body && body.ring && (() => {

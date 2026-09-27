@@ -45,19 +45,33 @@ class ConversationRepository:
         profile: str,
         role: str,
         text: str,
+        display_text: str | None = None,
+        attachment: dict | None = None,
     ) -> None:
+        """`text` é o que o coach LÊ (vai pro contexto da IA — p.ex. a descrição
+        da foto). `display_text` é o que o app MOSTRA no balão quando difere
+        (a legenda que o atleta escreveu); `attachment` liga a mídia do turno
+        (ex.: {"type": "image", "id": ...} em ChatMediaStore)."""
 
         turns = self.load(profile)
 
-        turns.append(
-            {
-                "role": role,
-                "text": text,
-                "timestamp": datetime.now(
-                    UTC,
-                ).isoformat(),
-            }
-        )
+        turn = {
+            "role": role,
+            "text": text,
+            "timestamp": datetime.now(
+                UTC,
+            ).isoformat(),
+        }
+
+        if display_text is not None:
+
+            turn["display_text"] = display_text
+
+        if attachment:
+
+            turn["attachment"] = attachment
+
+        turns.append(turn)
 
         turns = turns[-MAX_TURNS_PERSISTED:]
 

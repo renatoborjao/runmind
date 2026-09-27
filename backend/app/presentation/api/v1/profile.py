@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+from app.infrastructure.storage.token_store import TokenStore
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
@@ -40,6 +42,9 @@ def _serialize(r) -> dict:
         "target_race": r.target_race,
         "race_date": r.race_date,
         "target_time": r.target_time,
+        # integrações (o app mostra o status e o botão de conectar)
+        "strava_connected": TokenStore(r.id).load() is not None,
+        "garmin_connected": GarminClient.is_connected(r.id),
     }
 
 

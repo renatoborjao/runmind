@@ -47,13 +47,14 @@ class MagicLinkService:
             ttl_minutes=settings.auth_magic_ttl_minutes,
         )
 
-        link = f"{settings.app_base_url.rstrip('/')}/entrar?token={token}"
+        # e-mail = caminho do "esqueci a senha": o link já abre a senha nova
+        link = f"{settings.app_base_url.rstrip('/')}/entrar?token={token}&reset=1"
 
         runner = RunnerProfileRepository().load(profile)
 
         first_name = (runner.name or "").split(" ")[0] or "corredor"
 
-        subject = "Seu acesso ao Ritmind 🏃"
+        subject = "Acesse o Ritmind e crie uma senha nova 🏃"
 
         body_text = (
             f"Fala, {first_name}!\n\n"

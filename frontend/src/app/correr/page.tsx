@@ -88,13 +88,13 @@ function fmtTime(s: number): string {
 function paceStr(distM: number, elapsedS: number): string {
   const km = distM / 1000;
   if (km < 0.05 || elapsedS < 5) return "--:--";
-  const p = elapsedS / 60 / km;
-  return `${Math.floor(p)}:${String(Math.round((p % 1) * 60)).padStart(2, "0")}`;
+  return fmtPaceSec(elapsedS / km);
 }
 
 function fmtPaceSec(sec: number | null): string {
   if (sec == null || !isFinite(sec)) return "--:--";
-  return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+  const t = Math.round(sec); // arredonda o total (nunca "5:60")
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
 function cue() {

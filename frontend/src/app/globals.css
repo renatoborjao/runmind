@@ -133,6 +133,8 @@ body {
 .btn:active { transform: scale(.99); }
 .btn:disabled { opacity: .5; cursor: default; }
 
+/* botão de conexão do Strava (laranja da marca, pedido pelas diretrizes deles) */
+.btn.btn-strava { background: #FC4C02; color: #fff; text-decoration: none; }
 .notice { border-radius: 12px; padding: 13px 15px; font-size: 13.5px; }
 .notice.ok { background: var(--accent-wash); color: var(--accent-ink); }
 .notice.err { background: color-mix(in srgb, var(--rose) 16%, var(--surface)); color: var(--rose); }
@@ -286,6 +288,7 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .hrz-row { display: grid; grid-template-columns: 108px 1fr auto; align-items: center; gap: 10px; }
 .hrz-tag { font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hrz-tag b { font-family: var(--font-mono), monospace; font-weight: 700; color: var(--ink); margin-right: 4px; }
+.hrz-tag small { display: block; font-family: var(--font-mono), monospace; font-size: 10px; color: var(--muted); margin-top: 1px; }
 .hrz-bar { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .hrz-bar > i { display: block; height: 100%; border-radius: 999px; }
 .hrz-val { font-family: var(--font-mono), monospace; font-weight: 700; font-size: 13px; min-width: 40px; text-align: right; }
@@ -510,6 +513,27 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .composer .send-btn { width: 42px; height: 42px; border-radius: 12px; border: none; background: var(--accent); display: grid; place-items: center; cursor: pointer; flex: none; }
 .composer .send-btn:disabled { opacity: .45; cursor: default; }
 .composer .send-btn svg { width: 18px; height: 18px; }
+/* mídia no chat: anexar foto/PDF, gravar áudio, foto no balão */
+.composer { flex-wrap: wrap; }
+.composer-row { flex-basis: 100%; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.composer-notice { color: var(--rose); padding: 2px 4px; cursor: pointer; }
+.attach-preview { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px; }
+.attach-preview img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; flex: none; }
+.attach-doc { font-size: 26px; width: 44px; text-align: center; flex: none; }
+.attach-name { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-x { border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 6px; }
+.composer .icon-round { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; cursor: pointer; flex: none; }
+.composer .icon-round.ghost { background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+.composer .icon-round:disabled { opacity: .45; cursor: default; }
+.composer .icon-round svg { width: 20px; height: 20px; }
+.rec-bar { flex: 1; height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; font-variant-numeric: tabular-nums; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rose); animation: rec-pulse 1s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: .25; } }
+.msg.has-img { display: flex; flex-direction: column; gap: 6px; padding: 5px; }
+.msg.has-img > span { padding: 2px 8px 5px; }
+.msg-img { display: block; max-width: 100%; max-height: 300px; border-radius: 12px; object-fit: cover; cursor: zoom-in; }
+.img-zoom { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.88); display: grid; place-items: center; padding: 16px; cursor: zoom-out; }
+.img-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; }
 
 /* navegação de mês */
 .month-nav { display: flex; align-items: center; justify-content: space-between; }
@@ -692,11 +716,21 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .email-capture .ec-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
 .email-capture .ec-row .ib-btn { margin: 0; flex: none; }
 .email-capture .ec-err { font-size: 12px; color: var(--rose); }
+/* ✕ e botão do cartão (antes só tinham estilo dentro do .install-banner) */
+.email-capture .ib-x { position: absolute; top: 8px; right: 10px; border: none; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.email-capture > .ec-body > .ib-btn { align-self: flex-start; margin-top: 6px; border: none; cursor: pointer; background: var(--accent); color: #04231d; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: 11px; }
+.email-capture .ib-btn:disabled { opacity: .6; cursor: default; }
+.email-capture .ec-show { flex: none; border: none; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; padding: 0 6px; }
 
 /* login: botão Telegram + divisor */
 .btn-tg { background: #229ED9; color: #fff; display: flex; align-items: center; justify-content: center; gap: 9px; text-decoration: none; }
 .btn-tg:active { transform: scale(.99); }
 .auth-hint { margin: 10px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); text-align: center; }
+/* senha com "mostrar" + botão do Google */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 78px; }
+.pw-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 8px; }
+.gsi-slot { display: flex; justify-content: center; min-height: 44px; margin: 6px 0 2px; }
 .auth-or { display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; color: var(--muted); font-size: 12px; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
@@ -729,6 +763,8 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
    estilo (JS), sem brigar com o back-swipe nativo do navegador/OS */
 .se-preview { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 8px 0; touch-action: pan-y; }
 .se-canvas { width: auto; height: 100%; max-height: 100%; max-width: 100%; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.4); background: #0C0D16; }
+/* card baixo e largo (resumo "Deitado"): largura manda, altura segue a proporção */
+.se-canvas.wide { width: 100%; height: auto; }
 /* xadrez = mostra que o card é transparente (igual ao Strava) */
 .se-canvas.transp {
   background-color: #2a2c36;
@@ -849,3 +885,27 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .confirm-sheet .confirm-watch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--accent-ink); }
 .confirm-sheet .btn-primary, .confirm-sheet .btn-ghost { width: 100%; margin: 0; }
 .confirm-sheet .btn-primary { margin-top: 6px; }
+
+/* páginas legais (privacidade) — texto corrido, legível no celular */
+.legal .legal-head { padding: 18px 4px 4px; }
+.legal .legal-head h1 { font-family: var(--font-display), sans-serif; font-size: 26px; margin: 10px 0 4px; }
+.legal .legal-brand { font-family: var(--font-display), sans-serif; font-size: 18px; color: var(--ink); text-decoration: none; }
+.legal .card h2 { font-family: var(--font-display), sans-serif; font-size: 16px; margin: 0 0 8px; }
+.legal .card p, .legal .card li { font-size: 14px; line-height: 1.6; }
+.legal .card p { margin: 0 0 10px; }
+.legal .card p:last-child { margin-bottom: 0; }
+.legal .card ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+.legal-foot { text-align: center; font-size: 12px; margin-top: 12px; }
+
+
+/* resumo semanal/mensal (Evolução) */
+.rs-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.rs-nav .icon-btn:disabled { opacity: .3; cursor: default; }
+.rs-label { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px; }
+.rs-km { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin-bottom: 8px; }
+.rs-km .big { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 36px; letter-spacing: -.02em; }
+.rs-km small { font-size: 14px; font-weight: 600; color: var(--muted); font-family: var(--font-mono), monospace; }
+.rs-delta { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.rs-delta.up { color: var(--accent); }
+.rs-goal { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); }
+.rs-goal b { color: var(--ink); }

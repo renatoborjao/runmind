@@ -4,6 +4,7 @@ import calendar as _cal
 from datetime import date, timedelta
 
 from app.application.home.home_summary_builder import _DAY_PT, _kind, planned_km
+from app.application.planner.pace_formatter import PaceFormatter
 from app.core.clock import now_local
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
@@ -56,19 +57,6 @@ def _run_date(r: dict) -> date | None:
     return None
 
 
-def _pace_str(distance_m: float, moving_time_s: int) -> str | None:
-
-    km = distance_m / 1000
-
-    if km <= 0 or not moving_time_s:
-
-        return None
-
-    p = (moving_time_s / 60) / km
-
-    return f"{int(p)}:{int(round((p % 1) * 60)):02d}"
-
-
 class CalendarBuilder:
     """Calendário do atleta: treinos EXECUTADOS (arquivo local) por mês + os
     PLANEJADOS futuros (plano da semana) + prova. E o detalhe de um dia com
@@ -95,7 +83,7 @@ class CalendarBuilder:
                     {
                         "date_iso": d.isoformat(),
                         "km": round(a.distance / 1000, 1),
-                        "pace": _pace_str(a.distance, a.moving_time),
+                        "pace": PaceFormatter.for_activity(a.distance, a.moving_time, a.average_speed),
                         "duration_min": round(a.moving_time / 60),
                         "name": a.name,
                         "kind": _kind(a.name),
@@ -204,7 +192,7 @@ class CalendarBuilder:
 
                 executed = {
                     "km": round(a.distance / 1000, 1),
-                    "pace": _pace_str(a.distance, a.moving_time),
+                    "pace": PaceFormatter.for_activity(a.distance, a.moving_time, a.average_speed),
                     "duration_min": round(a.moving_time / 60),
                     "avg_hr": int(a.average_heartrate) if a.average_heartrate else None,
                     "elevation_gain": round(a.elevation_gain) if a.elevation_gain else None,

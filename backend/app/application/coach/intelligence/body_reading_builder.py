@@ -9,6 +9,7 @@ recalcula, igual à comparação bloco-a-bloco). Ver [[project_analise_corpo_gar
 import statistics
 from datetime import date
 
+from app.application.history.hr_zone_resolver import HrZoneResolver
 from app.application.history.recovery_trend_analyzer import (
     RecoveryTrendAnalyzer,
 )
@@ -70,7 +71,6 @@ class BodyReadingBuilder:
         # saúde) + FC máx (idade via Tanaka); sem eles, o analisador cai no v1
         resting_hr = BodyReadingBuilder._resting_hr(series)
 
-        max_hr = BodyReadingBuilder._max_hr(getattr(runner, "age", None))
 
         # o corpo sente TODO o estresse: a carga soma a corrida (arquivo) COM o
         # cross-training do Garmin (musculação/natação/Hyrox). Isso NUNCA entra
@@ -79,6 +79,16 @@ class BodyReadingBuilder:
         activities = (
             ActivityArchiveRepository().load_activities(profile)
             + CrossTrainingRepository().load_activities(profile)
+        )
+
+        # FC máx da régua única de zonas (a do relógio, quando há) — a mesma do
+        # gráfico/mensagem; Tanaka só quando não há régua. Ver [[HrZoneResolver]].
+        zones = HrZoneResolver.resolve(runner, activities, resting_hr)
+
+        max_hr = (
+            zones.max_hr
+            if zones is not None and zones.max_hr
+            else BodyReadingBuilder._max_hr(getattr(runner, "age", None))
         )
 
         # PROVA recente: o taper que a antecede deflaciona a base crônica e o

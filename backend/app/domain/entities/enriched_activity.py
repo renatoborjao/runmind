@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.domain.entities.activity import Activity
 from app.domain.entities.workout_structure import WorkoutStructure
+from app.domain.value_objects.hr_zones import HrZones
 
 
 @dataclass(slots=True)
@@ -31,3 +32,6 @@ class EnrichedActivity:
 
     # estrutura interna (splits/voltas); None quando não há detalhe
     structure: WorkoutStructure | None = None
+
+    # régua de zonas de FC do atleta usada no rótulo (relógio/reserva de FC)
+    hr_zones: HrZones | None = None

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import {
@@ -8,15 +8,23 @@ import {
   getActivityAnalysis,
   getActivityPhoto,
   getFeed,
+  getShareContext,
   getTrack,
   setActivityTitle,
   uploadActivityPhoto,
   type CoachAnalysis,
   type FeedItem,
   type RunSplit,
+  type ShareContext,
   type TrackData,
 } from "@/lib/api";
+import { drawCoachDiz, drawPeito, drawPlanoFeito, planHasTargets, type RunExtras } from "@/lib/run-card-extras";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
+import {
+  CANVAS_FONT, drawCardBackground, canvasBlob, copyBlob, drawBrand,
+  drawStatsSpread, fmtDur, outlinedText, paintWhenFontsReady, roundRect,
+  applySoftShadow, shareBlob, withShadow,
+} from "@/lib/share-canvas";
 
 // Leaflet carregado sob demanda dentro do card compartilhável (mapa REAL de
 // fundo). O detalhe da atividade (mapa herói + stats + splits) vive no
@@ -31,16 +39,35 @@ function Mark() {
   );
 }
 
-// ---- mapa REAL de fundo (estilo Strava): tiles escuros do CARTO (grátis, com
-// CORS -> canvas exportável) + a rota por cima, renderizados num canvas offscreen ----
+// ---- mapa REAL de fundo (estilo Strava): tiles do OpenStreetMap (grátis, com
+// CORS -> canvas exportável) ESCURECIDOS no próprio canvas + a rota por cima,
+// num canvas offscreen. (O CARTO dark passou a exigir API key e devolvia tile
+// com marca d'água "API KEY REQUIRED" — 2026-09-26.) ----
 function _lon2x(lon: number, z: number) { return ((lon + 180) / 360) * 256 * Math.pow(2, z); }
 function _lat2y(lat: number, z: number) {
   const r = (lat * Math.PI) / 180;
   return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 256 * Math.pow(2, z);
 }
 function _tileURL(z: number, x: number, y: number) {
-  const subs = ["a", "b", "c", "d"];
-  return `https://${subs[(x + y) % subs.length]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`;
+  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+}
+// deixa o mapa claro do OSM no tom escuro do app: inverte a luminância e tinge
+// de azul-petróleo (fundo claro vira quase preto; água/parque/rótulos ficam
+// levemente mais claros). Pixel a pixel porque ctx.filter não existe no
+// Safari/iOS mais antigo.
+function _darkenMap(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  try {
+    const img = ctx.getImageData(0, 0, W, H);
+    const px = img.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const lum = 0.3 * px[i] + 0.59 * px[i + 1] + 0.11 * px[i + 2];
+      const v = 255 - lum;
+      px[i] = 14 + v * 0.34;
+      px[i + 1] = 18 + v * 0.42;
+      px[i + 2] = 28 + v * 0.46;
+    }
+    ctx.putImageData(img, 0, 0);
+  } catch { /* canvas "sujo" (tile sem CORS): fica o mapa claro */ }
 }
 function _loadTile(url: string): Promise<HTMLImageElement | null> {
   return new Promise((res) => {
@@ -78,6 +105,7 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
     }
   }
   await Promise.all(jobs);
+  _darkenMap(ctx, W, H);
   ctx.save();
   ctx.shadowColor = "rgba(31,217,184,0.5)"; ctx.shadowBlur = 16;
   ctx.strokeStyle = "#1FD9B8"; ctx.lineWidth = 8; ctx.lineJoin = "round"; ctx.lineCap = "round";
@@ -89,92 +117,15 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
 }
 
 // ---- estilos de card compartilhável (foto OU mapa real de fundo) ----
-interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; }
-
-// cantinho arredondado — sem depender de ctx.roundRect (suporte irregular em
-// PWA/iOS mais antigo); usado só pela trilha/barra do estilo Parciais.
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, h / 2, Math.max(w, 0) / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
+const MONTHS_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${d} ${MONTHS_SHORT[m - 1]} ${y}`;
 }
 
-function drawBg(ctx: CanvasRenderingContext2D, W: number, H: number, photo: HTMLImageElement | null, mapCard: HTMLCanvasElement | null) {
-  if (photo && photo.width) {
-    const s = Math.max(W / photo.width, H / photo.height);
-    const dw = photo.width * s, dh = photo.height * s;
-    ctx.drawImage(photo, (W - dw) / 2, (H - dh) / 2, dw, dh);
-  } else if (mapCard) {
-    ctx.drawImage(mapCard, 0, 0, W, H);
-  } else {
-    ctx.fillStyle = "#0C0D16"; ctx.fillRect(0, 0, W, H);
-  }
-}
-function topScrim(ctx: CanvasRenderingContext2D, W: number) {
-  const g = ctx.createLinearGradient(0, 0, 0, 240);
-  g.addColorStop(0, "rgba(6,7,12,0.72)"); g.addColorStop(1, "rgba(6,7,12,0)");
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 240);
-}
-function bottomScrim(ctx: CanvasRenderingContext2D, W: number, H: number, fromY: number) {
-  const g = ctx.createLinearGradient(0, fromY, 0, H);
-  g.addColorStop(0, "rgba(6,7,12,0)"); g.addColorStop(0.55, "rgba(6,7,12,0.78)"); g.addColorStop(1, "rgba(6,7,12,0.96)");
-  ctx.fillStyle = g; ctx.fillRect(0, fromY, W, H - fromY);
-}
-// família usada no canvas do card de compartilhar: Inter (grotesca neutra e
-// limpa, estilo Strava), via next/font (--font-share). Resolvida do CSS em
-// runtime; fallback pra Archivo/system se não carregar.
-let CANVAS_FONT = "system-ui, sans-serif";   // Inter (stats)
-let BRAND_FONT = "system-ui, sans-serif";    // Space Grotesk (wordmark Ritmind)
-function refreshCanvasFont() {
-  if (typeof window === "undefined") return;
-  const cs = getComputedStyle(document.body);
-  const share = cs.getPropertyValue("--font-share").trim();
-  const disp = cs.getPropertyValue("--font-display").trim();
-  const brand = cs.getPropertyValue("--font-brand").trim();
-  if (share || disp) CANVAS_FONT = `${share || disp}, system-ui, sans-serif`;
-  if (brand || disp) BRAND_FONT = `${brand || disp}, system-ui, sans-serif`;
-}
+interface CardData { it: FeedItem; pts: { lat: number; lon: number }[]; date: string; name: string; kmTxt: string; photo: HTMLImageElement | null; mapCard: HTMLCanvasElement | null; splits: RunSplit[]; extras: RunExtras; }
 
-// wordmark "Ritmind" — "Rit" na cor da marca (teal) + "mind" branco, na fonte
-// descolada (Space Grotesk). `center=true` centraliza em x. Leve aumento +
-// contorno escuro (pedido do Renato: "dar mais vida") — mesma técnica de
-// contraste do resto do card (outlinedText), aplicada às duas cores do wordmark.
-function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean) {
-  const s = Math.round(size * 1.15);
-  ctx.font = `700 ${s}px ${BRAND_FONT}`;
-  ctx.lineJoin = "round";
-  const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
-  const startX = center ? x - (wRit + wMind) / 2 : x;
-  ctx.textAlign = "left";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = Math.max(3, s * 0.1);
-  ctx.strokeText("Rit", startX, baseY); ctx.strokeText("mind", startX + wRit, baseY);
-  ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", startX, baseY);
-  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", startX + wRit, baseY);
-}
-// sombra suave: deixa texto/rota legíveis sobre QUALQUER foto (o card é
-// transparente e vai ser colado por cima da foto do atleta no Instagram).
-function withShadow(ctx: CanvasRenderingContext2D, fn: () => void) {
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
-  fn();
-  ctx.restore();
-}
-// texto com CONTORNO escuro (não só sombra difusa) — a mesma ideia do traçado
-// da rota (drawRouteBox: stroke escuro por baixo, cor por cima), aplicada a
-// texto: segura contraste em QUALQUER foto. Padrão em TODOS os estilos de
-// compartilhar (pedido do Renato: padronizar o tratamento de texto).
-function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, lineW: number) {
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = lineW;
-  ctx.strokeText(text, x, y);
-  ctx.fillText(text, x, y);
-}
-// traçado dentro de uma caixa (fit + início/fim), com brilho — pra fundo transparente
+// traçado dentro de uma caixa (fit + início/fim) — pra fundo transparente
 function drawRouteBox(
   ctx: CanvasRenderingContext2D, pts: { lat: number; lon: number }[],
   bx: number, by: number, bw: number, bh: number, color: string, lw: number,
@@ -190,13 +141,9 @@ function drawRouteBox(
   const px = (p: { lat: number; lon: number }) => ox + (p.lon - minLo) * kx * scale;
   const py = (p: { lat: number; lon: number }) => oy + (maxLa - p.lat) * scale;
   ctx.save();
-  // glow na cor do traçado (vida) + contorno escuro sutil pra legibilidade
+  // traçado sem glow nem contorno, só a sombra curta do texto
+  applySoftShadow(ctx);
   ctx.lineJoin = "round"; ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = lw + 4; ctx.shadowBlur = 0;
-  ctx.beginPath();
-  good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
-  ctx.stroke();
-  ctx.shadowColor = color; ctx.shadowBlur = 10;
   ctx.strokeStyle = color; ctx.lineWidth = lw;
   ctx.beginPath();
   good.forEach((p, i) => { const x = px(p), y = py(p); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
@@ -215,13 +162,6 @@ function footer(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.textAlign = "left";
 }
 
-// tempo tipo Strava: "53min 24s" (ou "1h05" em corrida longa)
-function fmtDur(s: number): string {
-  s = Math.round(s);
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  if (h > 0) return `${h}h${String(m).padStart(2, "0")}`;
-  return ss > 0 ? `${m}min ${ss}s` : `${m}min`;
-}
 // [rótulo, valor com unidade] — Distância / Ritmo / Tempo (+ FC quando tem)
 function shareCells(it: FeedItem): [string, string][] {
   const c: [string, string][] = [
@@ -282,8 +222,10 @@ function styleCentralizado(ctx: CanvasRenderingContext2D, W: number, H: number, 
 function styleRota(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
   const cx = W / 2;
   if (d.pts.length >= 2) drawRouteBox(ctx, d.pts, 110, 250, W - 220, 620, "#1FD9B8", 13);
-  withShadow(ctx, () => drawBrand(ctx, cx, 980, 50, true));
-  drawStatCols(ctx, 0, 1030, shareCells(d.it).slice(0, 3), 72, 58, 40, cx);
+  let brandBottom = 0;
+  withShadow(ctx, () => { brandBottom = drawBrand(ctx, cx, 960, 50, true); });
+  // rótulos (40px) começam ~48px abaixo do pé da marca
+  drawStatCols(ctx, 0, brandBottom + 48 + 30, shareCells(d.it).slice(0, 3), 72, 58, 40, cx);
 }
 
 // CANTINHO — marca + stats no canto inferior esquerdo (template 3).
@@ -294,10 +236,11 @@ function styleCantinho(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
   drawStatCols(ctx, 64, H - 150, shareCells(d.it).slice(0, 3), 64, 60, 40);
 }
 
-// COM MAPA — card completo (não transparente): mapa/foto de fundo + stats.
-function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
-  drawBg(ctx, W, H, d.photo, d.mapCard);
-  topScrim(ctx, W); bottomScrim(ctx, W, H, H - 420);
+// CLÁSSICO — marca + data em cima, dados embaixo, rodapé (ex-"Com mapa": o
+// mapa/foto virou FUNDO do Card, vale pra qualquer modelo).
+function styleClassico(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  // sem mapa/foto de fundo, o traçado ocupa o meio (senão fica um vazio)
+  if (!d.mapCard && !d.photo && d.pts.length >= 2) drawRouteBox(ctx, d.pts, 170, 250, W - 340, H - 620, "#1FD9B8", 12);
   brandDate(ctx, W, d);
   drawStatCols(ctx, 64, H - 200, shareCells(d.it).slice(0, 3), 56, 72, 36);
   footer(ctx, W, H);
@@ -309,10 +252,41 @@ function styleMapa(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardD
 // (halo), igual ao traçado da rota. Também mais estreito/baixo que a v1 —
 // não precisa ocupar o card inteiro pra ser legível.
 function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  centeredBlock(ctx, W, false, () => drawParciais(ctx, W, H, d, false));
+}
+
+// o bloco das parciais (rótulo..pace) centralizado na largura do card — no
+// Card com fundo, encostado à esquerda sobrava um vazio do lado direito
+function parciaisValueX(W: number, withStats: boolean): number {
+  return Math.round(W * (withStats ? 0.72 : 0.62));
+}
+function centeredBlock(ctx: CanvasRenderingContext2D, W: number, withStats: boolean, fn: () => void) {
+  const dx = (W - (90 + parciaisValueX(W, withStats))) / 2;
+  ctx.save(); ctx.translate(dx, 0); fn(); ctx.restore();
+}
+// altura do card das parciais = a do conteúdo (mesma conta do drawParciais)
+function parciaisHeight(d: CardData, withStats: boolean): number {
+  const n = d.splits.filter((s) => s.sec > 0).length;
+  if (!n) return withStats ? 560 : 420;
+  const rowH = withStats ? Math.max(20, Math.min(46, 720 / n)) : Math.max(30, Math.min(46, 900 / n));
+  const listBottom = 244 + n * rowH;
+  return Math.min(1350, Math.round(withStats ? listBottom + 64 + 62 + 70 + 60 : listBottom + 56 + 90));
+}
+
+// COMPLETO — parciais + linha de dados (distância/ritmo/tempo) + UMA marca só.
+// Antes o atleta colava 2 stickers (Parciais + Cantinho) e o "Ritmind" saía
+// duplicado no story (pedido do Renato).
+function styleCompleto(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData) {
+  centeredBlock(ctx, W, true, () => drawParciais(ctx, W, H, d, true));
+}
+
+function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: CardData, withStats: boolean) {
   const splits = d.splits.filter((s) => s.sec > 0);
   const titleY = 200;
-  const labelX = 90, barX = 172, valueX = Math.round(W * 0.62);
+  // com a linha de dados o bloco alarga um pouco (3 números grandes precisam caber)
+  const labelX = 90, barX = 172, valueX = parciaisValueX(W, withStats);
   const blockCenterX = (labelX + valueX) / 2; // marca centraliza no BLOCO, não no card
+  const statsCells = shareCells(d.it).slice(0, 3);
 
   withShadow(ctx, () => {
     ctx.fillStyle = "#FFFFFF"; ctx.font = `800 44px ${CANVAS_FONT}`; ctx.textAlign = "left";
@@ -324,7 +298,8 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
       ctx.fillStyle = "#E7E8F0"; ctx.font = `600 30px ${CANVAS_FONT}`;
       outlinedText(ctx, "Sem parciais nesta corrida", labelX, 250, 5);
     });
-    withShadow(ctx, () => drawBrand(ctx, blockCenterX, 330, 40, true));
+    const afterY = withStats ? drawStatsSpread(ctx, labelX, valueX, 330, statsCells) + 30 : 280;
+    withShadow(ctx, () => drawBrand(ctx, blockCenterX, afterY + 50, 40, true));
     return;
   }
 
@@ -333,7 +308,10 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
   // rowH acompanha esse tamanho; só encolhe de verdade em corrida MUITO
   // longa (meia/maratona), e aí a fonte encolhe junto (proporcional).
   const rowHFull = 46;
-  const rowH = Math.max(30, Math.min(rowHFull, 900 / splits.length));
+  // a linha de dados come ~150px da altura — a lista ganha menos orçamento
+  const rowH = withStats
+    ? Math.max(20, Math.min(rowHFull, 720 / splits.length))
+    : Math.max(30, Math.min(rowHFull, 900 / splits.length));
   const scale = rowH / rowHFull;
   const labelFont = Math.round(34 * scale);
   const paceFont = Math.round(30 * scale);
@@ -376,17 +354,32 @@ function styleParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: C
     ctx.textAlign = "left";
   });
 
+  if (withStats) {
+    // dados logo abaixo das barras, na mesma largura; marca única no pé
+    const statsEnd = drawStatsSpread(ctx, labelX, valueX, listBottom + 64, statsCells);
+    withShadow(ctx, () => drawBrand(ctx, blockCenterX, Math.min(statsEnd + 70, H - 40), 40, true));
+    return;
+  }
+
   // marca colada logo abaixo da última linha, centralizada no BLOCO
   withShadow(ctx, () => drawBrand(ctx, blockCenterX, brandY, 40, true));
 }
 
-interface CardStyle { key: string; label: string; transparent: boolean; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
+// MODELO e FUNDO são escolhas independentes (Transparente | Card) — todo
+// modelo funciona nos dois. `height`: modelo compacto tem canvas justo ao
+// conteúdo (faixa), senão 1350. `needs`: modelo que depende de dado do backend
+// (sessão do plano / frase do coach) só aparece quando esse dado existe.
+interface CardStyle { key: string; label: string; height?: number | ((d: CardData) => number); needs?: "planned" | "quote"; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
 const CARD_STYLES: CardStyle[] = [
-  { key: "centralizado", label: "Central", transparent: true, draw: styleCentralizado },
-  { key: "rota", label: "Rota", transparent: true, draw: styleRota },
-  { key: "cantinho", label: "Cantinho", transparent: true, draw: styleCantinho },
-  { key: "parciais", label: "Parciais", transparent: true, draw: styleParciais },
-  { key: "mapa", label: "Com mapa", transparent: false, draw: styleMapa },
+  { key: "centralizado", label: "Central", draw: styleCentralizado },
+  { key: "rota", label: "Rota", draw: styleRota },
+  { key: "cantinho", label: "Cantinho", height: 400, draw: styleCantinho },
+  { key: "parciais", label: "Parciais", height: (d) => parciaisHeight(d, false), draw: styleParciais },
+  { key: "completo", label: "Parciais + dados", height: (d) => parciaisHeight(d, true), draw: styleCompleto },
+  { key: "plano", label: "Plano × feito", needs: "planned", draw: (c, W, H, d) => drawPlanoFeito(c, W, H, d.it, d.extras) },
+  { key: "coach", label: "Coach diz", needs: "quote", draw: (c, W, H, d) => drawCoachDiz(c, W, H, d.it, d.extras) },
+  { key: "peito", label: "Número de peito", draw: (c, W, H, d) => drawPeito(c, W, H, d.it, d.extras) },
+  { key: "classico", label: "Clássico", draw: styleClassico },
 ];
 
 function AtividadesInner() {
@@ -402,7 +395,18 @@ function AtividadesInner() {
   const [sharing, setSharing] = useState(false);
   const [editor, setEditor] = useState(false);
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null);
-  const [styleIdx, setStyleIdx] = useState(0);
+  const [bg, setBg] = useState<"transparent" | "card">("transparent");
+  // estilo escolhido pela CHAVE (a lista muda quando os extras do backend
+  // chegam — índice apontaria pra outro estilo)
+  const [styleKey, setStyleKey] = useState(CARD_STYLES[0].key);
+  const [shareCtx, setShareCtx] = useState<ShareContext | null>(null);
+  const styles = useMemo(
+    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : shareCtx?.quote)),
+    [shareCtx],
+  );
+  const styleIdx = Math.max(0, styles.findIndex((st) => st.key === styleKey));
+  const style = styles[styleIdx];
+  const setStyleIdx = (i: number) => setStyleKey(styles[Math.max(0, Math.min(styles.length - 1, i))].key);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mapCard, setMapCard] = useState<HTMLCanvasElement | null>(null);
@@ -532,7 +536,11 @@ function AtividadesInner() {
   }
 
   function openEditor() {
-    setPhotoImg(null); setStyleIdx(0); setResultUrl(null); setEditor(true);
+    setPhotoImg(null); setBg("transparent"); setStyleKey(CARD_STYLES[0].key); setResultUrl(null); setEditor(true);
+    // extras do backend (plano da sessão + frase do coach): os estilos que
+    // dependem deles aparecem quando chegam
+    setShareCtx(null);
+    if (sel) getShareContext(sel).then(setShareCtx);
   }
 
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -544,15 +552,22 @@ function AtividadesInner() {
     img.src = URL.createObjectURL(file);
   }
 
-  // monta o mapa REAL de fundo (tiles + rota) só no estilo "Com mapa" e sem foto
+  const transparent = bg === "transparent";
+  const cardH = style.height === undefined ? 1350
+    : typeof style.height === "number" ? style.height
+    : style.height({ splits: track?.splits ?? [] } as CardData);
+
+  // monta o mapa REAL de fundo (tiles + rota) no Card sem foto — no tamanho do
+  // modelo. O modelo "Rota" já desenha o traçado grande: lá o fundo fica escuro
+  // (duas rotas em projeções diferentes não casariam).
   useEffect(() => {
-    if (!editor || CARD_STYLES[styleIdx].transparent || photoImg) { setMapCard(null); return; }
+    if (!editor || transparent || photoImg || style.key === "rota") { setMapCard(null); return; }
     const pts = track?.points ?? [];
     if (pts.length < 2) { setMapCard(null); return; }
     let alive = true;
-    buildMapCard(pts, 1080, 1350).then((c) => { if (alive) setMapCard(c); });
+    buildMapCard(pts, 1080, cardH).then((c) => { if (alive) setMapCard(c); });
     return () => { alive = false; };
-  }, [editor, styleIdx, photoImg, track]);
+  }, [editor, transparent, style.key, cardH, photoImg, track]);
 
   // troca de estilo pelo chip mantém o chip ativo visível na fileira (que
   // agora rola escondida, sem barra) — importante quando o swipe no card
@@ -573,10 +588,7 @@ function AtividadesInner() {
     if (!start) return;
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
-    setStyleIdx((i) => {
-      const next = dx < 0 ? i + 1 : i - 1;
-      return Math.max(0, Math.min(CARD_STYLES.length - 1, next));
-    });
+    setStyleIdx(dx < 0 ? styleIdx + 1 : styleIdx - 1);
   }
 
   // redesenha o preview quando muda estilo/foto/atividade/mapa
@@ -584,13 +596,13 @@ function AtividadesInner() {
     if (!editor || !sel) return;
     const cv = previewRef.current;
     if (!cv) return;
-    refreshCanvasFont();
     const paint = () => {
-      cv.width = 1080; cv.height = 1350;
+      cv.width = 1080; cv.height = cardH;
       const ctx = cv.getContext("2d");
       if (!ctx) return;
       ctx.textBaseline = "alphabetic";
-      ctx.clearRect(0, 0, 1080, 1350);
+      ctx.clearRect(0, 0, 1080, cardH);
+      if (!transparent) drawCardBackground(ctx, 1080, cardH, photoImg, mapCard);
       const d: CardData = {
         it: sel,
         pts: track?.points ?? [],
@@ -600,49 +612,34 @@ function AtividadesInner() {
         photo: photoImg,
         mapCard,
         splits: track?.splits ?? [],
+        extras: {
+          date: shortDate(sel.date_iso),
+          planned: shareCtx?.planned ?? null,
+          quote: shareCtx?.quote ?? null,
+        },
       };
-      CARD_STYLES[styleIdx].draw(ctx, 1080, 1350, d);
+      style.draw(ctx, 1080, cardH, d);
     };
-    paint();
-    // garante a fonte do card (Inter) carregada antes de desenhar — o canvas cai
-    // no fallback se pintar antes. Carrega os pesos usados e repinta.
-    const fam = CANVAS_FONT.split(",")[0].trim();
-    const brand = BRAND_FONT.split(",")[0].trim();
-    if (document.fonts && fam) {
-      Promise.all([
-        document.fonts.load(`800 100px ${fam}`),
-        document.fonts.load(`700 40px ${fam}`),
-        document.fonts.load(`700 48px ${brand}`),  // wordmark Ritmind (Space Grotesk)
-      ]).then(paint).catch(() => {});
-      document.fonts.ready.then(paint).catch(() => {});
-    }
-  }, [editor, styleIdx, photoImg, sel, track, mapCard]);
+    // cleanup cancela a repintura agendada deste modelo ao trocar (senão o
+    // modelo anterior pinta por cima — "fundo preso")
+    return paintWhenFontsReady(paint);
+  }, [editor, style, cardH, transparent, photoImg, sel, track, mapCard, shareCtx]);
 
   // PNG (mantém a transparência) do card atual
-  async function makeBlob(): Promise<Blob | null> {
-    const cv = previewRef.current;
-    if (!cv) return null;
-    return new Promise((res) => cv.toBlob((b) => res(b), "image/png"));
-  }
+  const makeBlob = () => canvasBlob(previewRef.current);
 
   // COPIAR a imagem pro clipboard — pra colar direto no Instagram/story
   async function copyImage() {
     if (!sel) return;
     setSharing(true);
-    try {
-      const blob = await makeBlob();
-      if (!blob) throw new Error("no blob");
-      const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
-      if (navigator.clipboard && CI) {
-        await navigator.clipboard.write([new CI({ "image/png": blob })]);
+    const blob = await makeBlob();
+    if (blob) {
+      if (await copyBlob(blob)) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
       } else {
         setResultUrl(URL.createObjectURL(blob));
       }
-    } catch {
-      const blob = await makeBlob();
-      if (blob) setResultUrl(URL.createObjectURL(blob));
     }
     setSharing(false);
   }
@@ -650,22 +647,11 @@ function AtividadesInner() {
   async function shareCurrent() {
     if (!sel) return;
     setSharing(true);
-    try {
-      const blob = await makeBlob();
-      if (!blob) throw new Error("no blob");
-      const file = new File([blob], "ritmind-corrida.png", { type: "image/png" });
-      const navShare = navigator as Navigator & { canShare?: (d: unknown) => boolean };
-      if (navShare.canShare && navShare.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], text: `${km(sel.distance_km)} km no Ritmind 🏃` });
-          setSharing(false);
-          return;
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") { setSharing(false); return; }
-        }
-      }
-      setResultUrl(URL.createObjectURL(blob));
-    } catch { /* indisponível */ }
+    const blob = await makeBlob();
+    if (blob) {
+      const r = await shareBlob(blob, "ritmind-corrida.png", `${km(sel.distance_km)} km no Ritmind 🏃`);
+      if (r === "unsupported") setResultUrl(URL.createObjectURL(blob));
+    }
     setSharing(false);
   }
 
@@ -734,11 +720,11 @@ function AtividadesInner() {
               </header>
 
               <div className="se-preview" onPointerDown={onPreviewPointerDown} onPointerUp={onPreviewPointerUp}>
-                <canvas ref={previewRef} className={`se-canvas${CARD_STYLES[styleIdx].transparent ? " transp" : ""}`} />
+                <canvas ref={previewRef} className={`se-canvas${transparent ? " transp" : ""}${cardH < 1080 ? " wide" : ""}`} />
               </div>
 
               <div className="se-styles">
-                {CARD_STYLES.map((s, i) => (
+                {styles.map((s, i) => (
                   <button
                     key={s.key}
                     ref={(el) => { chipRefs.current[i] = el; }}
@@ -750,7 +736,12 @@ function AtividadesInner() {
                 ))}
               </div>
 
-              {CARD_STYLES[styleIdx].transparent ? (
+              <div className="seg" style={{ marginBottom: 6 }}>
+                <button className={transparent ? "on" : ""} onClick={() => setBg("transparent")}>Transparente</button>
+                <button className={!transparent ? "on" : ""} onClick={() => setBg("card")}>Card</button>
+              </div>
+
+              {transparent ? (
                 <p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
               ) : (
                 <div className="se-photo">

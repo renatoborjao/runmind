@@ -14,6 +14,11 @@ from __future__ import annotations
 
 import unicodedata
 
+from app.application.auth.password_auth_service import (
+    PasswordAuthService,
+    PasswordError,
+    validate_new_password,
+)
 from app.core.config import get_settings
 from app.infrastructure.integrations.email.email_sender import EmailSender
 from app.infrastructure.persistence.auth_token_repository import (
@@ -38,7 +43,12 @@ class SignupError(Exception):
 class SignupService:
 
     @staticmethod
-    def start(email: str, invite_code: str) -> dict:
+    def start(
+        email: str,
+        invite_code: str,
+        password: str | None = None,
+        name: str | None = None,
+    ) -> dict:
         """Processa o cadastro. Levanta `SignupError` se o CONVITE é inválido.
         Devolve:
           {"status": "created", "profile": slug} — atleta NOVO: perfil-esqueleto
@@ -56,6 +66,17 @@ class SignupService:
         if not email or "@" not in email:
 
             raise SignupError("email inválido")
+
+        # senha fora da regra barra ANTES de gastar o convite
+        if password is not None:
+
+            try:
+
+                validate_new_password(password)
+
+            except PasswordError as e:
+
+                raise SignupError(str(e)) from e
 
         invites = InviteCodeRepository()
 
@@ -78,7 +99,11 @@ class SignupService:
         # novo atleta: cria o esqueleto, consome o convite
         slug = SignupService._unique_slug(email)
 
-        repo.save(slug, SignupService._skeleton(slug, email))
+        repo.save(slug, SignupService._skeleton(slug, email, name))
+
+        if password is not None:
+
+            PasswordAuthService.reset_password(slug, password)
 
         # consome só depois de gravar o esqueleto (se algo falhar antes, o
         # convite não é queimado à toa)
@@ -131,13 +156,13 @@ class SignupService:
         EmailSender.send(email, subject, body_text, body_html)
 
     @staticmethod
-    def _skeleton(slug: str, email: str) -> dict:
+    def _skeleton(slug: str, email: str, name: str | None = None) -> dict:
         """Perfil mínimo válido pra sustentar a sessão entre o cadastro e o fim
         do wizard. Os placeholders (idade/peso/altura 0, objetivo vazio) são
         sobrescritos pelo `AppOnboardingService.complete`. `onboarding_complete`
         False é o que manda o app pro wizard."""
 
-        name = email.split("@")[0][:40] or "corredor"
+        name = (name or "").strip()[:60] or email.split("@")[0][:40] or "corredor"
 
         return {
             "id": slug,

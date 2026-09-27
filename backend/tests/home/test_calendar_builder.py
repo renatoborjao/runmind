@@ -13,7 +13,7 @@ def _act(day, km, secs, name, sport="Run", hr=150):
     return SimpleNamespace(
         start_date=datetime(2026, 9, day, 7, 0, 0),
         distance=km * 1000,
-        moving_time=secs,
+        moving_time=secs, average_speed=None,
         average_heartrate=hr,
         elevation_gain=50,
         sport=sport,

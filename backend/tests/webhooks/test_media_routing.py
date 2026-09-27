@@ -61,11 +61,16 @@ def test_extract_media_returns_none_for_plain_text():
     ) is None
 
 
-def test_media_from_external_coach_athlete_triggers_plan_event():
+def test_media_from_athlete_is_downloaded_and_goes_to_coach_media():
+    """Foto de atleta cadastrado: baixa pela fonte certa e entrega pro
+    CoachMediaMessage (o coach vê a imagem; treinador externo → plano)."""
 
     with (
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
-        patch(f"{MODULE}.ExternalPlanEvent") as mock_event,
+        patch(f"{MODULE}.download_media", new=AsyncMock(
+            return_value=(b"img", "image/jpeg"),
+        )) as mock_download,
+        patch(f"{MODULE}.CoachMediaMessage") as mock_media,
         patch(f"{MODULE}.CoachConversationEvent") as mock_coach,
         patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
@@ -74,7 +79,7 @@ def test_media_from_external_coach_athlete_triggers_plan_event():
         mock_repo.find_by_phone.return_value = "fulano"
         mock_repo.load.return_value = make_runner(external_coach=True)
 
-        mock_event.execute = AsyncMock(return_value="registrado")
+        mock_media.image = AsyncMock(return_value="registrado")
 
         mock_guard_cls.return_value.check_and_mark.return_value = True
 
@@ -87,23 +92,27 @@ def test_media_from_external_coach_athlete_triggers_plan_event():
 
         assert response.json()["queued"] is True
 
-        mock_event.execute.assert_awaited_once_with(
-            profile="fulano",
-            media={
-                "key_id": "MSGID123",
-                "mimetype": "image/jpeg",
-                "caption": "treino da semana",
-            },
+        mock_download.assert_awaited_once()
+
+        mock_media.image.assert_awaited_once_with(
+            "fulano",
+            b"img",
+            "image/jpeg",
+            caption="treino da semana",
+            notify=True,
         )
 
         mock_coach.execute.assert_not_called()
 
 
-def test_media_from_regular_athlete_gets_polite_reply():
+def test_media_download_failure_answers_honestly():
 
     with (
         patch(f"{MODULE}.RunnerProfileRepository") as mock_repo_cls,
-        patch(f"{MODULE}.ExternalPlanEvent") as mock_event,
+        patch(f"{MODULE}.download_media", new=AsyncMock(
+            side_effect=RuntimeError("404"),
+        )),
+        patch(f"{MODULE}.CoachMediaMessage") as mock_media,
         patch(f"{MODULE}.NotificationService") as mock_notification,
         patch(f"{MODULE}.ProcessedInboundGuard") as mock_guard_cls,
     ):
@@ -112,19 +121,15 @@ def test_media_from_regular_athlete_gets_polite_reply():
         mock_repo.find_by_phone.return_value = "renato"
         mock_repo.load.return_value = make_runner(external_coach=False)
 
+        mock_media.image = AsyncMock()
         mock_notification.send = AsyncMock()
 
         mock_guard_cls.return_value.check_and_mark.return_value = True
 
         client = TestClient(app)
 
-        response = client.post(
-            "/api/v1/webhooks/whatsapp",
-            json=_media_payload(),
-        )
+        client.post("/api/v1/webhooks/whatsapp", json=_media_payload())
 
-        assert response.json()["queued"] is True
+        mock_media.image.assert_not_called()
 
-        mock_event.execute.assert_not_called()
-
-        assert "treinador" in mock_notification.send.call_args.args[1]
+        assert "imagem" in mock_notification.send.call_args.args[1]

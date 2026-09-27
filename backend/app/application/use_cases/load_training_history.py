@@ -29,6 +29,8 @@ class LoadTrainingHistory:
 
         if activity is not None:
 
+            LoadTrainingHistory._fill_hr_zones(profile, activity)
+
             LoadTrainingHistory._archive(
                 profile,
                 [activity],
@@ -176,6 +178,48 @@ class LoadTrainingHistory:
             return False
 
         return True
+
+    @staticmethod
+    def _fill_hr_zones(profile: str, activity: Activity) -> None:
+        """Treino que chega SEM distribuição de zonas (Strava — o Garmin já
+        traz a do relógio) ganha a sua pelo stream de FC, na régua única do
+        atleta ([[HrZoneResolver]]). Alimenta gráfico, mensagem e carga.
+        Best-effort: nunca derruba a análise."""
+
+        if activity.hr_zone_minutes is not None:
+
+            return
+
+        heartrate = ((activity.raw or {}).get("_streams") or {}).get("heartrate")
+
+        if not heartrate:
+
+            return
+
+        try:
+
+            from app.application.history.hr_zone_resolver import (
+                HrZoneResolver,
+            )
+            from app.infrastructure.persistence.runner_profile_repository import (
+                RunnerProfileRepository,
+            )
+
+            zones = HrZoneResolver.for_profile(
+                profile,
+                RunnerProfileRepository().load(profile),
+                ActivityArchiveRepository().load_activities(profile) + [activity],
+            )
+
+            if zones is not None:
+
+                activity.hr_zone_minutes = zones.minutes(
+                    heartrate, activity.moving_time
+                )
+
+        except Exception as e:
+
+            print(f"Zonas de FC indisponíveis p/ {activity.id}: {e}")
 
     @staticmethod
     def _archive(

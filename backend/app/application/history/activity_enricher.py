@@ -47,6 +47,15 @@ class ActivityEnricher:
                 metrics,
             )
 
+        elif (
+            zone_from_hr := ActivityEnricher._zone_from_hr(activity, metrics)
+        ) is not None:
+
+            # régua de zonas DO ATLETA (relógio/reserva de FC) — a mesma do
+            # gráfico. Antes o rótulo era relativo à FC média de costume e
+            # contradizia o gráfico. Ver [[HrZoneResolver]].
+            intensity, zone = zone_from_hr
+
         elif hr >= metrics.average_hr + 10:
 
             intensity = "VERY_HIGH"
@@ -76,6 +85,12 @@ class ActivityEnricher:
             intensity = "VERY_LOW"
 
             zone = "Z1"
+
+        if activity.average_heartrate is not None and metrics.hr_zones is None:
+
+            # sem régua de zonas (sem idade/FC máx), a intensidade acima é só
+            # relativa à FC de costume — não é zona de FC, então não rotula
+            zone = ""
 
         # ---------------- Carga ----------------
 
@@ -152,6 +167,8 @@ class ActivityEnricher:
             indoor=indoor,
 
             structure=structure,
+
+            hr_zones=metrics.hr_zones,
         )
 
         classification = TrainingClassifier.classify(
@@ -169,6 +186,32 @@ class ActivityEnricher:
         )
 
         return enriched
+
+    _INTENSITY_BY_ZONE = {
+        1: "VERY_LOW",
+        2: "LOW",
+        3: "MEDIUM",
+        4: "HIGH",
+        5: "VERY_HIGH",
+    }
+
+    @staticmethod
+    def _zone_from_hr(
+        activity: Activity,
+        metrics: RunnerMetrics,
+    ) -> tuple[str, str] | None:
+        """(intensidade, "Zn") da FC MÉDIA na régua do atleta; abaixo do piso
+        de Z1 conta como Z1. None sem régua."""
+
+        zones = metrics.hr_zones
+
+        if zones is None or not activity.average_heartrate:
+
+            return None
+
+        number = zones.zone_of(activity.average_heartrate) or 1
+
+        return ActivityEnricher._INTENSITY_BY_ZONE[number], f"Z{number}"
 
     @staticmethod
     def _intensity_from_pace(

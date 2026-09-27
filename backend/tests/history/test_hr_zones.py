@@ -1,0 +1,341 @@
+from dataclasses import dataclass
+from datetime import date, datetime
+from types import SimpleNamespace
+
+from app.application.history.hr_zone_resolver import HrZoneResolver
+from app.domain.value_objects.hr_zones import (
+    HrZones,
+    dominant_zone,
+    zone_share_label,
+)
+
+
+def test_hrr_matches_garmin_watch_zones():
+    """Reserva de FC 50/60/70/80/90% = padrão do Garmin. Máx 194 / repouso 66
+    (o relógio do Renato) reproduz os pisos que o Garmin devolveu."""
+
+    zones = HrZones.from_hrr(194, 66)
+
+    assert zones.floors == (130, 143, 156, 168, 181)
+
+
+def test_zone_of_uses_floors():
+
+    zones = HrZones(floors=(130, 143, 156, 168, 181), method="garmin")
+
+    assert zones.zone_of(129) is None       # abaixo de Z1
+    assert zones.zone_of(130) == 1
+    assert zones.zone_of(144) == 2
+    assert zones.zone_of(155) == 2
+    assert zones.zone_of(156) == 3
+    assert zones.zone_of(190) == 5
+
+
+def test_minutes_splits_stream_by_fraction():
+    """Metade a 135 (Z1), metade a 150 (Z2), 60 min -> 30 e 30."""
+
+    zones = HrZones(floors=(130, 143, 156, 168, 181), method="garmin")
+
+    minutes = zones.minutes([135] * 100 + [150] * 100, 3600)
+
+    assert minutes == [30.0, 30.0, 0.0, 0.0, 0.0]
+
+
+def test_minutes_ignores_below_z1_and_short_streams():
+
+    zones = HrZones.from_max(180)   # Z1 a partir de 90
+
+    assert sum(zones.minutes([80] * 100 + [170] * 100, 3600)) == 30.0
+    assert zones.minutes([150] * 5, 3600) is None
+    assert zones.minutes([150] * 100, 0) is None
+
+
+def test_from_dict_rejects_garbage():
+
+    assert HrZones.from_dict(None) is None
+    assert HrZones.from_dict({"floors": [1, 2]}) is None
+    assert HrZones.from_dict({"floors": [150, 140, 160, 170, 180]}) is None
+    assert HrZones.from_dict({"floors": [130, 143, 156, 168, 181]}).floors == (
+        130, 143, 156, 168, 181,
+    )
+
+
+def test_share_label_and_dominant_zone():
+    """Distribuição real do treino de 25/09 (Garmin): 11,8 min Z1, 38,5 Z2,
+    0,6 Z3."""
+
+    minutes = [11.78, 38.5, 0.57, 0.0, 0.0]
+
+    assert dominant_zone(minutes) == 2
+    assert zone_share_label(minutes) == "Z2 76% · Z1 23% · Z3 1%"
+    assert zone_share_label([0, 0, 0, 0, 0]) is None
+
+
+def test_describe_ranges():
+
+    zones = HrZones(floors=(130, 143, 156, 168, 181), method="garmin")
+
+    assert zones.describe() == (
+        "Z1 130-142 · Z2 143-155 · Z3 156-167 · Z4 168-180 · Z5 181+"
+    )
+
+
+# ---------------------------------------------------------------- resolver
+
+
+_TODAY = date(2026, 9, 25)
+
+
+@dataclass
+class _Run:
+
+    max_heartrate: float | None
+    sport: str = "Run"
+    start_date: datetime = datetime(2026, 9, 20)
+
+
+def _runner(age=34, hr_zones=None):
+
+    return SimpleNamespace(age=age, hr_zones=hr_zones)
+
+
+def test_resolver_prefers_watch_zones():
+
+    watch = {"floors": [130, 143, 156, 168, 181], "method": "garmin:HR_RESERVE"}
+
+    zones = HrZoneResolver.resolve(_runner(hr_zones=watch), [_Run(170)], 50, _TODAY)
+
+    assert zones.floors == (130, 143, 156, 168, 181)
+
+
+def test_resolver_hrr_with_observed_max_above_tanaka():
+    """Tanaka(34)=184; observada 190 manda (é piso real do teto)."""
+
+    zones = HrZoneResolver.resolve(_runner(), [_Run(190), _Run(178)], 60, _TODAY)
+
+    assert zones.method == "hrr"
+    assert zones.max_hr == 190
+    assert zones.floors == HrZones.from_hrr(190, 60).floors
+
+
+def test_resolver_falls_back_to_pct_max_without_resting():
+
+    zones = HrZoneResolver.resolve(_runner(), [_Run(178)], None, _TODAY)
+
+    assert zones.method == "max"
+    assert zones.max_hr == 184
+
+
+def test_resolver_ignores_implausible_peaks_and_non_runs():
+
+    zones = HrZoneResolver.resolve(
+        _runner(), [_Run(240), _Run(199, sport="Ride")], None, _TODAY
+    )
+
+    assert zones.max_hr == 184
+
+
+def test_resolver_none_without_age_or_peaks():
+
+    assert HrZoneResolver.resolve(_runner(age=None), [], None, _TODAY) is None
+
+
+# ------------------------------------------- persistência das zonas do relógio
+
+
+class _FakeRepo:
+
+    def __init__(self, hr_zones=None):
+
+        self.data = {"hr_zones": hr_zones}
+
+    def load(self, profile):
+
+        return SimpleNamespace(**self.data)
+
+    def update_fields(self, profile, updates):
+
+        self.data.update(updates)
+
+
+class _FakeGarmin:
+
+    def connectapi(self, path):
+
+        return [{
+            "sport": "DEFAULT",
+            "trainingMethod": "HR_RESERVE",
+            "maxHeartRateUsed": 194,
+            "restingHeartRateUsed": 66,
+        }]
+
+
+def _remember(monkeypatch, repo, floors, day):
+
+    from datetime import datetime
+
+    from app.infrastructure.integrations.garmin import garmin_activity_source
+    from app.infrastructure.persistence import runner_profile_repository
+
+    monkeypatch.setattr(
+        runner_profile_repository, "RunnerProfileRepository", lambda: repo
+    )
+
+    garmin_activity_source.GarminActivitySource._remember_watch_zones(
+        "x", _FakeGarmin(), floors, datetime.fromisoformat(day)
+    )
+
+
+def test_backfill_of_old_activity_does_not_overwrite_current_zones(monkeypatch):
+    """Bug do backfill (25/09): re-buscar treino ANTIGO trazia os pisos da
+    config da época e sobrescrevia a atual. Só treino mais novo grava."""
+
+    repo = _FakeRepo()
+
+    _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
+    _remember(monkeypatch, repo, [128, 153, 179, 204, 230], "2026-08-01")
+
+    assert repo.data["hr_zones"]["floors"] == [130, 143, 156, 168, 181]
+    assert repo.data["hr_zones"]["as_of"] == "2026-09-25"
+    assert repo.data["hr_zones"]["max_hr"] == 194
+
+
+def test_newer_activity_with_new_config_updates_zones(monkeypatch):
+
+    repo = _FakeRepo()
+
+    _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
+    _remember(monkeypatch, repo, [131, 144, 157, 170, 182], "2026-09-27")
+
+    assert repo.data["hr_zones"]["floors"] == [131, 144, 157, 170, 182]
+
+
+def test_legacy_stored_zones_without_as_of_are_replaced(monkeypatch):
+
+    repo = _FakeRepo({"floors": [128, 153, 179, 204, 230], "method": "garmin"})
+
+    _remember(monkeypatch, repo, [130, 143, 156, 168, 181], "2026-09-25")
+
+    assert repo.data["hr_zones"]["floors"] == [130, 143, 156, 168, 181]
+
+
+# ------------------------------------------------------------ régua VIVA
+
+
+_WATCH = {
+    "floors": [130, 143, 156, 168, 181],
+    "method": "garmin:HR_RESERVE",
+    "max_hr": 194,
+    "resting_hr": 66,
+    "as_of": "2026-09-25",
+}
+
+
+def test_watch_zones_dropped_when_watch_max_was_exceeded():
+    """A FC máx do relógio (194) já foi ultrapassada (199) numa corrida
+    recente: a config do relógio ficou pra trás — régua calculada assume,
+    com o pico real como teto."""
+
+    zones = HrZoneResolver.resolve(
+        _runner(hr_zones=_WATCH), [_Run(199)], 60, _TODAY
+    )
+
+    assert zones.method == "hrr"
+    assert zones.max_hr == 199
+
+
+def test_watch_zones_dropped_when_stale():
+    """Relógio sem treino novo há 60+ dias (largou o Garmin)."""
+
+    stale = {**_WATCH, "as_of": "2026-06-01"}
+
+    zones = HrZoneResolver.resolve(_runner(hr_zones=stale), [], 60, _TODAY)
+
+    assert zones.method == "hrr"
+
+
+def test_old_peaks_do_not_hold_the_ceiling_forever():
+    """Pico de 2 anos atrás não descreve o atleta de hoje: o teto sai do
+    último ano (ou Tanaka)."""
+
+    runs = [_Run(200, start_date=datetime(2024, 8, 1)), _Run(178)]
+
+    assert HrZoneResolver.max_hr(34, runs, _TODAY) == 184
+
+
+def test_resting_hr_drop_moves_the_zones():
+    """Evolução: repouso caiu 66→58 — mesma FC máx, zonas descem (o mesmo
+    esforço fica numa zona 'mais alta' relativa, como o Garmin faz)."""
+
+    before = HrZoneResolver.resolve(_runner(), [_Run(190)], 66, _TODAY)
+    after = HrZoneResolver.resolve(_runner(), [_Run(190)], 58, _TODAY)
+
+    assert after.floors[1] < before.floors[1]
+
+
+# --------------------------------------------------------------- histórico
+
+
+def test_history_records_baseline_then_only_real_changes():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    z1 = HrZones.from_hrr(194, 66)
+
+    history = HrZoneHistory.append([], z1, date(2026, 9, 1))
+
+    assert len(history) == 1
+
+    # ruído de 1 bpm no repouso não vira mudança
+    assert HrZoneHistory.append(history, HrZones.from_hrr(194, 67), _TODAY) is None
+
+    # queda real do repouso vira entrada
+    history = HrZoneHistory.append(history, HrZones.from_hrr(194, 60), _TODAY)
+
+    assert len(history) == 2
+
+
+def test_recent_change_is_reported_with_cause():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    history = [
+        HrZoneHistory.entry(HrZones.from_hrr(194, 66), date(2026, 8, 1)),
+        HrZoneHistory.entry(HrZones.from_hrr(194, 60), date(2026, 9, 20)),
+    ]
+
+    before, after = HrZoneHistory.recent_change(history, _TODAY)
+
+    text = HrZoneHistory.describe_change(before, after)
+
+    assert "20/09" in text
+    assert "FC repouso 66→60" in text
+    assert "Z2 era 143-155 bpm" in text
+
+
+def test_old_change_is_not_recent_and_baseline_is_not_change():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    base = [HrZoneHistory.entry(HrZones.from_hrr(194, 66), date(2026, 9, 24))]
+
+    assert HrZoneHistory.recent_change(base, _TODAY) is None
+
+    old = base + [
+        HrZoneHistory.entry(HrZones.from_hrr(194, 60), date(2026, 7, 1)),
+    ]
+
+    assert HrZoneHistory.recent_change(old, _TODAY) is None
+
+
+def test_switch_between_watch_and_computed_is_a_change():
+
+    from app.application.history.hr_zone_history import HrZoneHistory
+
+    watch = HrZones.from_dict(_WATCH)
+
+    history = HrZoneHistory.append([], watch, date(2026, 9, 1))
+
+    computed = HrZones(floors=watch.floors, method="hrr", max_hr=194, resting_hr=66)
+
+    assert HrZoneHistory.append(history, computed, _TODAY) is not None

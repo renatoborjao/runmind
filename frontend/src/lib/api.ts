@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b20 · coach prescreve forca";
+export const APP_BUILD = "b45 · marca Ritmind classica + pulso";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -32,6 +32,71 @@ export interface Me {
   email: string | null;
   goal: string;
   onboarding_complete: boolean;
+  has_password?: boolean;
+  google_linked?: boolean;
+}
+
+// erro legível da API ({"detail": "..."}), ou o genérico
+async function apiError(r: Response, fallback: string): Promise<string> {
+  try {
+    const body = await r.json();
+    if (typeof body?.detail === "string") return body.detail;
+  } catch { /* mantém o genérico */ }
+  return fallback;
+}
+
+/** Login por e-mail + senha. */
+export async function loginWithPassword(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await apiError(r, "Não consegui entrar agora. Tenta de novo.") };
+}
+
+/** Entrar com Google (credential = ID token do Google). Conta nova pede convite. */
+export async function googleLogin(
+  credential: string,
+  inviteCode?: string,
+): Promise<{ ok: boolean; needsInvite?: boolean; created?: boolean; error?: string }> {
+  const r = await apiFetch("/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential, invite_code: inviteCode || null }),
+  });
+  if (!r.ok) return { ok: false, error: await apiError(r, "Não consegui entrar com o Google.") };
+  const body = await r.json();
+  if (body.needs_invite) return { ok: false, needsInvite: true };
+  return { ok: true, created: !!body.created };
+}
+
+/** Configuração da tela de login (Client ID do Google, se ligado). */
+export async function getAuthConfig(): Promise<{ google_client_id: string | null }> {
+  try {
+    const r = await apiFetch("/auth/config");
+    if (r.ok) return r.json();
+  } catch { /* sem config: só e-mail/senha */ }
+  return { google_client_id: null };
+}
+
+/** Cria (1ª vez) ou troca a senha do atleta logado. */
+export async function setPassword(newPassword: string, currentPassword?: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword, current_password: currentPassword || null }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await apiError(r, "Não consegui salvar a senha.") };
+}
+
+/** Senha nova com a permissão que o link/código de acesso entrega. */
+export async function resetPassword(resetToken: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch("/auth/password/reset", {
+    method: "POST",
+    body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await apiError(r, "Não consegui salvar a senha.") };
 }
 
 /** Pede o magic link. Resposta sempre genérica (não revela se o e-mail existe). */
@@ -50,10 +115,11 @@ export async function requestLogin(email: string): Promise<boolean> {
 export async function signup(
   email: string,
   inviteCode: string,
+  password: string,
 ): Promise<{ ok: boolean; loggedIn?: boolean; message?: string; error?: string }> {
   const r = await apiFetch("/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ email, invite_code: inviteCode }),
+    body: JSON.stringify({ email, invite_code: inviteCode, password }),
   });
   if (r.ok) {
     try {
@@ -116,12 +182,16 @@ export async function completeOnboarding(
 }
 
 /** Troca o magic token pela sessão (seta o cookie). */
-export async function verifyToken(token: string): Promise<boolean> {
+/** Troca link/código de acesso por sessão. Devolve a permissão de redefinir
+ *  a senha (15 min) — quem entrou por link provou que é o dono. */
+export async function verifyToken(token: string): Promise<{ resetToken: string; hasPassword: boolean } | null> {
   const r = await apiFetch("/auth/verify", {
     method: "POST",
     body: JSON.stringify({ token }),
   });
-  return r.ok;
+  if (!r.ok) return null;
+  const body = await r.json();
+  return { resetToken: body.reset_token, hasPassword: !!body.has_password };
 }
 
 /** Quem está logado? null se não há sessão válida. */
@@ -334,6 +404,13 @@ export interface ChatMsg {
   kind?: string | null;
   title?: string | null;
   url?: string | null;
+  image_url?: string | null;   // foto que o atleta mandou (servida pela API)
+  local_image?: string | null; // prévia local (data URL) antes do servidor responder
+}
+
+// URL absoluta de uma mídia servida pela API (em produção é relativa).
+export function apiMediaSrc(path: string): string {
+  return `${API_BASE}${path}`;
 }
 
 export async function getCoachMessages(): Promise<ChatMsg[] | null> {
@@ -351,6 +428,30 @@ export async function sendCoachMessage(text: string): Promise<string | null> {
   if (!r.ok) return null;
   const data = await r.json();
   return data.reply ?? null;
+}
+
+// Foto (ou PDF) pro coach — `data` é data URL. O coach VÊ a imagem e responde.
+export async function sendCoachPhoto(data: string, caption: string): Promise<string | null> {
+  const r = await apiFetch("/coach/photo", {
+    method: "POST",
+    body: JSON.stringify({ data, caption }),
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return d.reply ?? null;
+}
+
+// Áudio pro coach — transcreve no servidor e segue como mensagem.
+export async function sendCoachVoice(
+  data: string,
+  duration: number,
+): Promise<{ transcript: string | null; reply: string } | null> {
+  const r = await apiFetch("/coach/voice", {
+    method: "POST",
+    body: JSON.stringify({ data, duration }),
+  });
+  if (!r.ok) return null;
+  return r.json();
 }
 
 // ---- Evolução (progresso) ----
@@ -400,6 +501,15 @@ export interface Profile {
   target_race: string | null;
   race_date: string | null;
   target_time: string | null;
+  strava_connected: boolean;
+  garmin_connected: boolean;
+}
+
+// Conectar o Strava pelo app: navegação de página inteira (não fetch) — o
+// backend lê o cookie de sessão, manda pro Strava e devolve o atleta pra tela
+// de origem com `?strava=ok|erro`.
+export function stravaConnectUrl(back: "perfil" | "onboarding"): string {
+  return `${API_BASE}/api/v1/strava/app-connect?back=${back}`;
 }
 
 export async function getProfile(): Promise<Profile | null> {
@@ -494,6 +604,7 @@ export interface FeedItem {
   max_hr: number | null;
   elevation_gain: number | null;
   hr_zones: number[] | null;
+  hr_zone_floors?: number[] | null;
   air_temp_c: number | null;
   name: string;
   has_track: boolean;
@@ -1014,4 +1125,61 @@ export async function moveWorkout(
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return { ok: false, message: data.detail || "Não consegui trocar o dia." };
   return { ok: true, message: data.message || "Treino movido.", watch: data.watch };
+}
+
+// ---- extras dos cards de compartilhar ----
+
+// fase do treino EXECUTADA (vem do backend, das voltas do relógio pareadas com
+// os passos do plano). "tiros" = série de repetições (fartlek/intervalado);
+// "bloco" = trecho contínuo com um alvo (ex.: 10 km leve, 4 km forte).
+export interface PlanPhase {
+  kind: "tiros" | "bloco";
+  label: string;                 // "8× 2min" / "10 km"
+  target: string | null;         // "4:50–5:05"
+  target_min_sec: number | null; // limite RÁPIDO do alvo (s/km)
+  target_max_sec: number | null; // limite LENTO do alvo (s/km)
+  reps: { pace_sec: number | null; ok: boolean | null }[];
+  ok: number;                    // quantos no alvo
+  total: number;
+  avg_pace_sec: number | null;
+}
+
+
+export interface ShareContext {
+  planned: {
+    workout_type: string;
+    distance_km: number | null;
+    pace_min: string | null;
+    pace_max: string | null;
+    duration_min: number | null;
+    pace_label?: string | null;
+    pace_structured?: boolean;
+    phases?: PlanPhase[] | null;
+  } | null;
+  quote: string | null;
+}
+
+/** Sessão do plano que a corrida cumpriu (card "Plano × feito") + frase curta
+ * do coach (card "Coach diz"). Cada campo null quando não se aplica. */
+export async function getShareContext(item: FeedItem): Promise<ShareContext> {
+  try {
+    const r = await apiFetch(
+      `/feed/share-context?date=${encodeURIComponent(item.date_iso)}&km=${item.distance_km}`,
+    );
+    if (!r.ok) return { planned: null, quote: null };
+    return await r.json();
+  } catch {
+    return { planned: null, quote: null };
+  }
+}
+
+/** Meta de km do período pelo plano (card "Meta" do resumo); null sem plano. */
+export async function getPeriodGoal(startIso: string, endIso: string): Promise<number | null> {
+  try {
+    const r = await apiFetch(`/feed/period-goal?start=${startIso}&end=${endIso}`);
+    if (!r.ok) return null;
+    return (await r.json()).goal_km ?? null;
+  } catch {
+    return null;
+  }
 }

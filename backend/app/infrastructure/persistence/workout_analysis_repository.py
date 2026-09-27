@@ -138,3 +138,37 @@ class WorkoutAnalysisRepository:
         candidates.sort(key=lambda e: e.get("created_at") or "", reverse=True)
 
         return candidates[0]
+
+    def annotate(
+        self,
+        profile: str,
+        date: str,
+        distance_km: float | None,
+        **fields,
+    ) -> bool:
+        """Grava campos extras NA análise daquele treino (mesmo casamento do
+        `find`) — ex.: a frase curta do card "Coach diz". Reanalisar o treino
+        (`record`) reescreve a entrada e descarta o extra, que se regenera.
+        False quando não há análise pro dia."""
+
+        entry = self.find(profile, date, distance_km)
+
+        if entry is None:
+
+            return False
+
+        data = self._load(profile)
+
+        for key, value in data.items():
+
+            if value == entry:
+
+                data[key] = {**value, **fields}
+
+                with open(self._file(profile), "w", encoding="utf-8") as f:
+
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+
+                return True
+
+        return False

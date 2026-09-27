@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeOnboarding, getMe, type OnboardingPayload } from "@/lib/api";
+import { completeOnboarding, getMe, getProfile, stravaConnectUrl, type OnboardingPayload } from "@/lib/api";
 
 const DAYS = [
   { i: 0, label: "Seg" },
@@ -42,8 +42,25 @@ const EMPTY: Form = {
 };
 
 // passos: cada um valida pra liberar o "Próximo"
-const STEPS = ["nome", "corpo", "experiencia", "objetivo", "dias", "treinador", "revisao"] as const;
+const STEPS = ["nome", "corpo", "experiencia", "objetivo", "dias", "treinador", "strava", "revisao"] as const;
 type StepKey = (typeof STEPS)[number];
+
+// Rascunho do cadastro: conectar o Strava sai do app (OAuth) e volta — sem
+// isso o atleta perderia tudo que já preencheu. Best-effort (modo privado etc.).
+const DRAFT_KEY = "ritmind_onboarding_draft";
+
+function loadDraft(): { f: Form; i: number } | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveDraft(f: Form, i: number) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ f, i })); } catch { /* sem storage: segue */ }
+}
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* idem */ }
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -52,6 +69,7 @@ export default function OnboardingPage() {
   const [f, setF] = useState<Form>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [strava, setStrava] = useState(false);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((p) => ({ ...p, [k]: v }));
 
@@ -60,11 +78,28 @@ export default function OnboardingPage() {
     (async () => {
       const me = await getMe();
       if (!me) { router.replace("/entrar"); return; }
-      if (me.onboarding_complete) { router.replace("/inicio"); return; }
-      if (me.name) setF((p) => ({ ...p, name: p.name || me.name }));
+      if (me.onboarding_complete) { clearDraft(); router.replace("/inicio"); return; }
+      const draft = loadDraft();
+      if (draft?.f) {
+        setF({ ...EMPTY, ...draft.f });
+        setI(Math.min(Math.max(draft.i ?? 0, 0), STEPS.length - 1));
+      } else if (me.name) {
+        setF((p) => ({ ...p, name: p.name || me.name }));
+      }
+      // volta do Strava: ?strava=ok|erro (limpa a URL depois de ler)
+      const result = new URLSearchParams(window.location.search).get("strava");
+      if (result) {
+        if (result === "erro") setErr("Não consegui conectar o Strava. Tenta de novo ou pula por agora.");
+        router.replace("/onboarding");
+      }
+      const prof = await getProfile();
+      setStrava(!!prof?.strava_connected || result === "ok");
       setReady(true);
     })();
   }, [router]);
+
+  // guarda o rascunho a cada passo/resposta
+  useEffect(() => { if (ready) saveDraft(f, i); }, [ready, f, i]);
 
   const step: StepKey = STEPS[i];
 
@@ -91,6 +126,7 @@ export default function OnboardingPage() {
         return true;
       case "dias": return f.days.length >= 1;
       case "treinador": return f.externalCoach != null;
+      case "strava": return true; // opcional: dá pra pular
       case "revisao": return true;
     }
   }, [step, f]);
@@ -136,6 +172,7 @@ export default function OnboardingPage() {
     };
     const res = await completeOnboarding(payload);
     if (res.ok) {
+      clearDraft();
       router.replace("/inicio");
     } else {
       setErr(res.error || "Não consegui finalizar.");
@@ -321,6 +358,29 @@ export default function OnboardingPage() {
             </>
           )}
 
+          {step === "strava" && (
+            <>
+              <h1 className="wz-h">Você usa o Strava?</h1>
+              <p className="wz-sub">
+                {f.externalCoach
+                  ? "Conectando, eu acompanho e analiso cada treino seu automaticamente."
+                  : "Conectando agora, eu leio seu histórico real e monto um plano do seu tamanho — não um genérico."}
+              </p>
+              {strava ? (
+                <p className="notice ok" style={{ marginTop: 6 }}>✅ Strava conectado! Já estou lendo seus treinos.</p>
+              ) : (
+                <>
+                  <a className="btn btn-strava" href={stravaConnectUrl("onboarding")} onClick={() => saveDraft(f, i)}>
+                    Conectar com Strava
+                  </a>
+                  <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>
+                    Não usa? Tudo bem — toca em <b>Próximo</b>. Dá pra conectar depois no Perfil.
+                  </p>
+                </>
+              )}
+            </>
+          )}
+
           {step === "revisao" && (
             <>
               <h1 className="wz-h">Tudo certo, {firstName}?</h1>
@@ -338,10 +398,12 @@ export default function OnboardingPage() {
                   </span>
                 </div>
               </div>
-              <p className="wz-sub" style={{ marginTop: 14 }}>
-                💡 Pra eu acompanhar seus treinos automaticamente, você conecta o
-                Strava/Garmin depois, na aba <b>Perfil</b>.
-              </p>
+              {!strava && (
+                <p className="wz-sub" style={{ marginTop: 14 }}>
+                  💡 Pra eu acompanhar seus treinos automaticamente, conecta o
+                  Strava depois, na aba <b>Perfil</b>.
+                </p>
+              )}
             </>
           )}
 

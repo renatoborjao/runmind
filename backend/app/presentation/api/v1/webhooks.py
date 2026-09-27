@@ -8,11 +8,12 @@ from fastapi.responses import PlainTextResponse
 from app.application.events.assistant_errors import (
     AssistantUnavailable,
 )
+from app.application.coach.media.coach_media_message import (
+    UNOPENABLE_IMAGE_REPLY,
+    CoachMediaMessage,
+)
 from app.application.events.coach_conversation import (
     CoachConversationEvent,
-)
-from app.application.events.external_plan_received import (
-    ExternalPlanEvent,
 )
 from app.application.events.onboarding_conversation import (
     OnboardingEvent,
@@ -25,6 +26,9 @@ from app.application.garmin.garmin_activity_poller import (
 )
 from app.application.notifications.notification_service import (
     NotificationService,
+)
+from app.application.strava.strava_activity_renamer import (
+    StravaActivityRenamer,
 )
 from app.application.use_cases.owner_resolver import (
     OwnerResolver,
@@ -51,6 +55,7 @@ from app.infrastructure.integrations.strava.client import (
 from app.infrastructure.integrations.telegram.telegram_inbound_parser import (
     TelegramInboundParser,
 )
+from app.infrastructure.integrations.media_download import download_media
 from app.infrastructure.integrations.telegram.telegram_media_client import (
     TelegramMediaClient,
 )
@@ -342,6 +347,11 @@ async def _process_strava_activity(
             # com o id do Garmin (mesmo id do arquivo) — independe do Strava.
             await GarminActivityPoller.poll_one(profile)
 
+            # a cópia do Strava ACABOU de chegar (é este webhook): aplica o
+            # nome do plano que ficou pendente quando a análise do Garmin
+            # rodou antes do sync. Ver [[project_strava_rename]].
+            await StravaActivityRenamer.retry_pending(profile)
+
             return
 
         client = StravaClient(profile)
@@ -576,7 +586,7 @@ async def route_inbound(
     # mídia de atleta cadastrado: plano do treinador (se aplicável)
     if media is not None:
 
-        reply = await _handle_profile_media(profile, media)
+        reply = await _handle_profile_media(profile, media, text)
 
         return {
 
@@ -774,30 +784,35 @@ async def _run_inbound(
 async def _handle_profile_media(
     profile: str,
     media: dict,
+    caption: str | None = None,
 ) -> str:
+    """Foto/PDF de atleta cadastrado: baixa pela fonte certa e entrega pro
+    CoachMediaMessage — o coach VÊ a imagem e responde (ou, com treinador
+    externo, registra a planilha). Mesmo caminho do app."""
 
     runner = RunnerProfileRepository().load(profile)
 
-    if runner.external_coach:
+    try:
 
-        return await ExternalPlanEvent.execute(
-            profile=profile,
-            media=media,
-        )
+        raw, downloaded_type = await download_media(runner.channel, media)
 
-    reply = (
-        "Recebi sua imagem! 📷 Por enquanto eu só leio planos de "
-        "treinador de quem treina com um — e o seu plano é comigo "
-        "mesmo. 😉 Se você passou a treinar com um treinador, me "
-        "avisa que eu registro."
+    except Exception as e:
+
+        print(f"Falha ao baixar mídia de '{profile}': {e}")
+
+        reply = UNOPENABLE_IMAGE_REPLY
+
+        await NotificationService.send(runner, reply)
+
+        return reply
+
+    return await CoachMediaMessage.image(
+        profile,
+        raw,
+        media.get("mimetype") or downloaded_type,
+        caption=media.get("caption") or caption or "",
+        notify=True,
     )
-
-    await NotificationService.send(
-        runner,
-        reply,
-    )
-
-    return reply
 
 
 # ==========================================================

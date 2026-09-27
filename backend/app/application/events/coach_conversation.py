@@ -102,11 +102,17 @@ class CoachConversationEvent:
         sender_name: str = "",
         send_fallback: bool = True,
         notify: bool = True,
+        display_text: str | None = None,
+        attachment: dict | None = None,
     ) -> str:
         """`notify=False` (chat pelo APP): roda o MESMO pipeline e persiste o
         histórico, mas NÃO reenvia a resposta pelo canal (Telegram/WhatsApp) —
         o app já mostra o retorno na tela. A conversa fica compartilhada entre
-        app e canal (mesmo ConversationRepository)."""
+        app e canal (mesmo ConversationRepository).
+
+        `display_text`/`attachment`: mensagem que veio de MÍDIA (foto/áudio) —
+        `incoming_text` é o que o coach lê (descrição/transcrição); o app mostra
+        a legenda + a mídia. Ver CoachMediaMessage."""
 
         # medidor de tokens: atribui todo Gemini deste turno ao atleta
         from app.application.monitoring.token_meter import TokenMeter
@@ -636,10 +642,21 @@ class CoachConversationEvent:
 
                 reply_text = BUSY_REPLY
 
+        # mensagem de mídia (foto/áudio): o app mostra legenda + mídia
+        media_turn = {
+            key: value
+            for key, value in (
+                ("display_text", display_text),
+                ("attachment", attachment),
+            )
+            if value is not None
+        }
+
         repo.append_turn(
             profile,
             role="user",
             text=incoming_text,
+            **media_turn,
         )
 
         repo.append_turn(

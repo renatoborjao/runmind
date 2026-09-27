@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
+import ResumoSection from "../resumo-share";
 import { getProgress, type Progress } from "@/lib/api";
 
 function Mark() {
@@ -107,6 +108,9 @@ export default function EvolucaoPage() {
           </div>
           {sinceLabel && <p className="muted" style={{ margin: "12px 0 0", textTransform: "capitalize" }}>desde {sinceLabel} 🏃</p>}
         </section>
+
+        {/* resumo semanal/mensal + compartilhar */}
+        <ResumoSection />
 
         {/* volume semanal */}
         <section className="card">

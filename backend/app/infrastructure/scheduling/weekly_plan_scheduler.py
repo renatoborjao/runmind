@@ -21,6 +21,7 @@ from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
 from app.application.review.monthly_recap_notifier import (
     MonthlyRecapNotifier,
 )
+from app.application.races.race_intel_service import RaceIntelService
 from app.application.review.race_companion_notifier import (
     RaceCompanionNotifier,
 )
@@ -33,6 +34,9 @@ from app.application.review.wellbeing_followup_notifier import (
 )
 from app.application.strava.strava_activity_catchup import (
     StravaActivityCatchup,
+)
+from app.application.strava.strava_activity_renamer import (
+    StravaActivityRenamer,
 )
 from app.core.clock import DEFAULT_TIMEZONE
 from app.core.config import get_settings
@@ -72,6 +76,17 @@ async def _garmin_poll_tick() -> None:
 
         # Garmin fora do ar / token expirado — só loga, tenta em 10 min
         print(f"Garmin poll falhou: {e}")
+
+    # rede do nome no Strava: aplica o que ficou pendente porque a cópia da
+    # corrida ainda não tinha chegado no Strava (cobre webhook perdido).
+    # Barato: só bate no Strava de quem tem pendência.
+    try:
+
+        await StravaActivityRenamer.retry_pending()
+
+    except Exception as e:
+
+        print(f"Renomear Strava pendente falhou: {e}")
 
 
 async def _garmin_health_tick() -> None:
@@ -211,6 +226,19 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
         minute=0,
         misfire_grace_time=3600,
         id="race_companion",
+    )
+
+    # Dossiê das provas — 05h20: pesquisa na web (Gemini + Google) o percurso/
+    # altimetria/largada/clima de cada prova futura (uma busca por prova,
+    # compartilhada) e atualiza a previsão do tempo na última semana. Roda
+    # antes do acompanhante de prova e do plano, que leem o cache.
+    _scheduler.add_job(
+        RaceIntelService.refresh_all,
+        trigger="cron",
+        hour=5,
+        minute=20,
+        misfire_grace_time=3600,
+        id="race_intel_refresh",
     )
 
     # Re-engajamento — 17h local (gate no ReengagementNotifier): quando o

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMySocial, getProfile, logout, saveProfile, setMySocial, type MySocial, type Profile } from "@/lib/api";
+import PasswordField from "../password-field";
+import { getMe, getMySocial, getProfile, logout, saveProfile, setMySocial, setPassword, stravaConnectUrl, type Me, type MySocial, type Profile } from "@/lib/api";
 
 function SocialSettings() {
   const [s, setS] = useState<MySocial | null>(null);
@@ -71,6 +72,102 @@ function fileToAvatar(file: File): Promise<string> {
   });
 }
 
+// Conexões: Strava o próprio atleta conecta daqui (OAuth). Garmin ainda é
+// liberado pela gente enquanto a Garmin não abre a conexão oficial.
+function Connections({ p, result }: { p: Profile; result: string | null }) {
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Conexões</span></div>
+      {result === "ok" && <p className="notice ok" style={{ margin: "0 0 10px" }}>✅ Strava conectado! Vou ler seu histórico e ajustar seu plano — te aviso no coach.</p>}
+      {result === "erro" && <p className="notice err" style={{ margin: "0 0 10px" }}>Não consegui conectar o Strava. Tenta de novo.</p>}
+      <div className="prow">
+        <span className="pl">Strava</span>
+        {p.strava_connected ? (
+          <span className="pv">Conectado ✓ · <a className="link" href={stravaConnectUrl("perfil")}>reconectar</a></span>
+        ) : (
+          <span className="pv muted">Não conectado</span>
+        )}
+      </div>
+      {!p.strava_connected && (
+        <a className="btn btn-strava" href={stravaConnectUrl("perfil")} style={{ marginTop: 10 }}>Conectar com Strava</a>
+      )}
+      <div className="prow">
+        <span className="pl">Garmin</span>
+        <span className="pv">{p.garmin_connected ? "Conectado ✓" : <span className="muted">Em breve</span>}</span>
+      </div>
+    </section>
+  );
+}
+
+// Acesso: a senha é o que garante voltar ao app sem Telegram/e-mail — quem
+// entrou por código do coach ou Google pode criar uma aqui.
+function AccessSettings() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => { (async () => setMe(await getMe()))(); }, []);
+  if (!me) return null;
+
+  async function onSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setMsg(null);
+    const res = await setPassword(next, me!.has_password ? current : undefined);
+    setSaving(false);
+    if (!res.ok) { setMsg({ ok: false, text: res.error || "Não consegui salvar." }); return; }
+    setMe({ ...me!, has_password: true });
+    setOpen(false);
+    setCurrent("");
+    setNext("");
+    setMsg({ ok: true, text: "Senha salva! ✅ Agora é só entrar com teu e-mail e senha." });
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head"><span className="eyebrow">Acesso</span></div>
+      <div className="prow">
+        <span className="pl">E-mail de login</span>
+        <span className="pv">{me.email || "—"}</span>
+      </div>
+      <div className="prow">
+        <span className="pl">Senha</span>
+        <span className="pv">
+          {me.has_password ? "Criada ✓" : <span className="muted">Não criada</span>}
+          {" · "}
+          <a className="link" onClick={() => { setOpen((o) => !o); setMsg(null); }}>
+            {me.has_password ? "trocar" : "criar"}
+          </a>
+        </span>
+      </div>
+      <div className="prow">
+        <span className="pl">Google</span>
+        <span className="pv">{me.google_linked ? "Conectado ✓" : <span className="muted">Não conectado</span>}</span>
+      </div>
+      {!me.email && !me.has_password && (
+        <p className="muted" style={{ margin: "8px 2px 0", fontSize: 12 }}>
+          Cadastra teu e-mail em <b>Dados</b> pra poder entrar com senha.
+        </p>
+      )}
+      {open && (
+        <form onSubmit={onSave} style={{ marginTop: 10 }}>
+          {me.has_password && (
+            <PasswordField id="curpw" label="Senha atual" value={current} onChange={setCurrent} autoComplete="current-password" />
+          )}
+          <PasswordField id="newpw" label="Senha nova (mín. 8 caracteres)" value={next} onChange={setNext} autoComplete="new-password" />
+          <button className="btn" type="submit" disabled={saving || next.length < 8 || !me.email}>
+            {saving ? "Salvando…" : "Salvar senha"}
+          </button>
+        </form>
+      )}
+      {msg && <p className={`notice ${msg.ok ? "ok" : "err"}`} style={{ margin: "10px 0 0" }}>{msg.text}</p>}
+    </section>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="prow">
@@ -113,9 +210,13 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [stravaResult, setStravaResult] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
+      // volta do Strava: ?strava=ok|erro (lê e limpa a URL)
+      const result = new URLSearchParams(window.location.search).get("strava");
+      if (result) { setStravaResult(result); router.replace("/perfil"); }
       const data = await getProfile();
       if (!data) { router.replace("/entrar"); return; }
       setP(data);
@@ -315,6 +416,10 @@ export default function PerfilPage() {
           <Row label="Dias preferidos" value={p.preferred_running_days.length ? p.preferred_running_days.join(", ") : "—"} />
           <p className="muted" style={{ margin: "10px 2px 0", fontSize: 12 }}>Isso é dinâmico — ajuste com o coach. 💬</p>
         </section>
+
+        <Connections p={p} result={stravaResult} />
+
+        <AccessSettings />
 
         {/* provas */}
         <section className="card tap" onClick={() => router.push("/provas")}>

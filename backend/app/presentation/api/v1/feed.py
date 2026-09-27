@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.application.planner.pace_formatter import PaceFormatter
+
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
 )
@@ -20,6 +22,13 @@ from app.infrastructure.persistence.recorded_run_repository import (
 from app.infrastructure.persistence.workout_analysis_repository import (
     WorkoutAnalysisRepository,
 )
+from app.application.share.share_context import (
+    coach_quote,
+    execution_phases,
+    match_session,
+    period_goal_km,
+    session_card,
+)
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/feed", tags=["Feed"])
@@ -30,23 +39,6 @@ _RUN_HINT = ("run", "corrida", "trail")
 def _is_run(sport: str) -> bool:
 
     return any(h in (sport or "").lower() for h in _RUN_HINT)
-
-
-def _pace(distance_m: float, moving_time_s: int) -> str | None:
-
-    km = distance_m / 1000
-
-    if km <= 0 or not moving_time_s:
-
-        return None
-
-    # segundos por km INTEIROS + divmod: evita o "5:60" (arredondar 59.6s -> 60
-    # sem virar o minuto). round primeiro, depois separa minuto/segundo.
-    total = round(moving_time_s / km)
-
-    m, s = divmod(total, 60)
-
-    return f"{m}:{s:02d}"
 
 
 def _route_preview(points: list[dict] | None, n: int = 24) -> list[list[float]] | None:
@@ -153,13 +145,35 @@ def _dedup_archived(items: list[dict]) -> list[dict]:
             dup["track_source"] = it["track_source"]
             dup["track_id"] = it["track_id"]
 
-        for k in ("avg_hr", "max_hr", "elevation_gain", "hr_zones", "air_temp_c", "pace"):
+        for k in ("avg_hr", "max_hr", "elevation_gain", "hr_zones", "hr_zone_floors", "air_temp_c", "pace"):
 
             if dup.get(k) is None and it.get(k) is not None:
 
                 dup[k] = it[k]
 
     return out
+
+
+def _zone_floors(profile: str, archived: list) -> list[int] | None:
+
+    try:
+
+        from app.application.history.hr_zone_resolver import HrZoneResolver
+        from app.infrastructure.persistence.runner_profile_repository import (
+            RunnerProfileRepository,
+        )
+
+        zones = HrZoneResolver.for_profile(
+            profile, RunnerProfileRepository().load(profile), archived
+        )
+
+        return list(zones.floors) if zones is not None else None
+
+    except Exception as e:
+
+        print(f"Feed: zonas de FC indisponíveis p/ {profile}: {e}")
+
+        return None
 
 
 def build_feed(profile: str) -> list[dict]:
@@ -174,6 +188,10 @@ def build_feed(profile: str) -> list[dict]:
     ]
 
     tracks = ActivityTrackRepository().load(profile)  # id_str -> {points,splits}
+
+    # faixas de bpm da régua de zonas do atleta (a do relógio, quando há) —
+    # o app mostra junto do tempo em cada zona
+    zone_floors = _zone_floors(profile, archived)
 
     items: list[dict] = []
 
@@ -190,11 +208,12 @@ def build_feed(profile: str) -> list[dict]:
                 "distance_km": round(a.distance / 1000, 2),
                 "duration_min": round(a.moving_time / 60),
                 "duration_s": round(a.moving_time),
-                "pace": _pace(a.distance, a.moving_time),
+                "pace": PaceFormatter.for_activity(a.distance, a.moving_time, a.average_speed),
                 "avg_hr": int(a.average_heartrate) if a.average_heartrate else None,
                 "max_hr": int(a.max_heartrate) if a.max_heartrate else None,
                 "elevation_gain": round(a.elevation_gain) if a.elevation_gain else None,
                 "hr_zones": a.hr_zone_minutes,
+                "hr_zone_floors": zone_floors if a.hr_zone_minutes else None,
                 "air_temp_c": round(a.air_temp_c) if a.air_temp_c is not None else None,
                 "name": a.name,
                 "has_track": has_arch_track,
@@ -256,6 +275,7 @@ def build_feed(profile: str) -> list[dict]:
                 "max_hr": None,
                 "elevation_gain": None,
                 "hr_zones": None,
+                "hr_zone_floors": None,
                 "air_temp_c": None,
                 "name": "Corrida no app",
                 "has_track": True,
@@ -298,6 +318,61 @@ async def activity_feed(profile: str = Depends(current_profile)):
     mapa/parciais. Só o app tem traçado hoje; as arquivadas vêm com stats."""
 
     return {"activities": build_feed(profile)}
+
+
+@router.get("/share-context")
+async def share_context(
+    date: str,
+    km: float,
+    profile: str = Depends(current_profile),
+):
+    """Extras dos cards de compartilhar de UMA corrida: a sessão do plano que
+    ela cumpriu + o executado fase a fase pelas voltas do relógio (card "Plano
+    × feito") e a frase curta do coach (card "Coach diz"). Cada um vem null
+    quando não se aplica."""
+
+    planned = None
+
+    try:
+
+        session = match_session(profile, build_feed(profile), date, km)
+
+        if session is not None:
+
+            planned = session_card(session)
+
+            planned["phases"] = await execution_phases(profile, date, km, session)
+
+    except Exception as e:
+
+        print(f"share-context: plano falhou p/ '{profile}': {e}")
+
+    return {
+        "planned": planned,
+        "quote": await coach_quote(profile, date, km),
+    }
+
+
+@router.get("/period-goal")
+async def period_goal(
+    start: str,
+    end: str,
+    profile: str = Depends(current_profile),
+):
+    """Meta de km do período (semana/mês) pelo PLANO — card "Meta" do resumo.
+    `goal_km` null quando não há plano no período."""
+
+    from datetime import date as _date
+
+    try:
+
+        goal = period_goal_km(profile, _date.fromisoformat(start), _date.fromisoformat(end))
+
+    except ValueError:
+
+        raise HTTPException(status_code=400, detail="datas inválidas")
+
+    return {"goal_km": goal}
 
 
 @router.get("/analysis")
