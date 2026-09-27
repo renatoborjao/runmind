@@ -137,7 +137,8 @@ def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> s
         "nesse quadro: SEGURAR a progressão (sem subir volume nem intensidade "
         "sobre a semana passada), qualidade enxuta e controlada (limite de baixo "
         "da faixa, menos repetições), longão sem progressão/blocos fortes, leves "
-        f"e longão{cap}. Não é descarga (o volume se mantém): é segurar até o "
-        "sinal virar. Pese isso com o resto do quadro e decida; o que escolher, "
-        "diga no purpose/mensagem com franqueza — e que o sono é a alavanca dele."
+        f"e longão{cap}. Segurar não é descarregar (o volume pode se manter) — "
+        "se o quadro também trouxer sinal de descarga, escolha entre as duas. "
+        "Pese com o resto e decida; o que escolher, diga no purpose/mensagem com "
+        "franqueza — e que o sono é a alavanca dele."
     )

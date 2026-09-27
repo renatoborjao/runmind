@@ -21,7 +21,8 @@ def test_due_after_three_building_weeks():
 
     assert d.due is True
     assert d.building_weeks == 3
-    assert deload_directive(d).startswith("SEMANA DE DESCARGA")
+    assert deload_directive(d).startswith("SINAL DE DESCARGA")
+    assert "DECIDA" in deload_directive(d)
 
 
 def test_not_due_with_short_block():

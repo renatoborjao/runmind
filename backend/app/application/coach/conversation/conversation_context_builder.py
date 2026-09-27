@@ -493,6 +493,7 @@ class ConversationContextBuilder:
                         reading.load.weekly_loads,
                         reading.recovery,
                         weeks_to_race=weeks_to_race,
+                        acwr=getattr(reading.load, "acwr", None),
                     )
                 )
 

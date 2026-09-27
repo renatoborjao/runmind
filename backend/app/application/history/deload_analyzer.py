@@ -143,33 +143,37 @@ class DeloadAnalyzer:
 
 
 def deload_directive(decision: DeloadDecision) -> str:
-    """Diretriz COACH-facing pro plano: quando a descarga está na hora, a IA
-    monta uma semana leve DE PROPÓSITO. Vazio quando não é hora — sem ruído."""
+    """Sinal COACH-facing pro plano: o bloco de carga está no ponto de descarga.
+    É CONHECIMENTO, não ordem — a IA pesa com o resto do quadro e decide
+    (descarregar, segurar ou seguir). Vazio quando não é hora — sem ruído."""
 
     if not decision.due:
 
         return ""
 
     return (
-        f"SEMANA DE DESCARGA (recuperação PLANEJADA — {decision.reason}). Monte "
-        "uma semana MAIS LEVE de propósito: reduza o volume ~35-45% e CORTE a "
-        "intensidade (nada de tiros/limiar duro; rodagem leve, no máximo um "
-        "toque de ritmo). Mantenha os MESMOS dias/frequência do atleta. NÃO é "
-        "perda de forma — é quando a forma se CONSOLIDA (supercompensação); "
-        "explique isso no propósito das sessões pra ele não achar que é recuo."
+        f"SINAL DE DESCARGA ({decision.reason}). O que um bom treinador costuma "
+        "fazer aqui: planejar uma semana MAIS LEVE de propósito (volume ~35-45% "
+        "menor, sem tiros/limiar duro, no máximo um toque de ritmo, mesmos "
+        "dias) — é quando a forma se CONSOLIDA (supercompensação). Pese com o "
+        "resto do quadro (corpo, meta/fase, o que ele vem absorvendo) e DECIDA: "
+        "descarregar, só segurar ou seguir. Se descarregar, explique no "
+        "propósito das sessões pra ele não achar que é recuo."
     )
 
 
 def deload_chat_line(decision: DeloadDecision) -> str:
     """Linha compacta pro quadro do coach de conversa — pra ele saber (e saber
-    explicar) por que a semana está mais leve. Vazio quando não é hora."""
+    explicar) por que a semana pode estar mais leve. Quem decide é a IA do
+    plano, então a linha não afirma: aponta pras sessões. Vazio quando não é
+    hora."""
 
     if not decision.due:
 
         return ""
 
     return (
-        f"- Semana de descarga (recuperação planejada após {decision.reason}): "
-        "plano mais leve DE PROPÓSITO, pra o corpo absorver e supercompensar — "
-        "não é perda de forma."
+        f"- Sinal de descarga ({decision.reason}): o plano da semana pode ter "
+        "vindo mais leve DE PROPÓSITO (confira nas sessões) — se veio, é pra o "
+        "corpo absorver e supercompensar, não é perda de forma."
     )
