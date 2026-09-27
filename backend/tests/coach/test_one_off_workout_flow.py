@@ -82,6 +82,9 @@ def _enter_common(stack, plan, engine_result=None, garmin_connected=True):
     stack.enter_context(patch(
         f"{MODULE}.WeeklyEvolutionDigest.for_profile", return_value="",
     ))
+    stack.enter_context(patch(
+        f"{MODULE}.StimulusLedger.for_profile", return_value="",
+    ))
     stack.enter_context(
         patch(f"{MODULE}.ExecutedWeekSummary.build", return_value="contexto")
     )

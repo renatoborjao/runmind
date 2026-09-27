@@ -193,6 +193,16 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{evolution}\n"
 
+        # o que ele recebeu de cada ESTÍMULO × o que a meta pede: é o que deixa
+        # o coach OFERECER o treino certo ("5 sem sem limiar, rumo aos 10k...")
+        from app.application.history.stimulus_ledger import StimulusLedger
+
+        stimulus = StimulusLedger.for_profile(profile)
+
+        if stimulus:
+
+            facts = f"{facts}\n{stimulus}\n"
+
         # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
         # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
         # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir

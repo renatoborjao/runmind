@@ -12,6 +12,7 @@ from app.application.coach.planning.one_off_workout_engine import (
 )
 from app.application.garmin.push_one_off import push_one_off
 from app.application.history.runner_portrait import build_portrait
+from app.application.history.stimulus_ledger import StimulusLedger
 from app.application.history.weekly_evolution_digest import (
     WeeklyEvolutionDigest,
 )
@@ -185,6 +186,14 @@ class OneOffWorkoutFlow:
             if evolution:
 
                 portrait = f"{portrait}\n{evolution}"
+
+        if "BALANÇO DE ESTÍMULOS" not in (athlete_context or ""):
+
+            stimulus = StimulusLedger.for_profile(profile)
+
+            if stimulus:
+
+                portrait = f"{portrait}\n{stimulus}"
 
         week_context = ExecutedWeekSummary.build(
             plan, history.activities, today

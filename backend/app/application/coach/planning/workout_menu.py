@@ -30,6 +30,8 @@ WORKOUT_MENU = """\
       movimento.
     * Progressivo: começa fácil e ACELERA em blocos até forte no fim — ensina a
       terminar forte.
+    * Tempo com surges: tempo contínuo com acelerações curtas no meio (ex.:
+      30 s mais forte a cada 5 min) — simula ataque/mudança de ritmo em prova.
   VELOCIDADE / VO2
     * Intervalado curto (VO2): 200-800m fortes + recuperação (ex.: 8x400,
       5x800) — potência aeróbica.
@@ -40,17 +42,31 @@ WORKOUT_MENU = """\
     * Tiros curtos de velocidade: 100-200m rápidos com recuperação COMPLETA —
       neuromuscular/economia (não é pra cansar).
     * Fartlek: variações de ritmo livres ou estruturadas (ex.: 2min forte /
-      2min leve x6-8, ou por poste/sensação) — troca de ritmo, quebra a
-      monotonia.
+      2min leve x6-8, ou por poste/sensação; Mona fartlek 90s-60s-30s-15s) —
+      troca de ritmo, quebra a monotonia.
+    * Cutdown / negativo: cada repetição um pouco MAIS RÁPIDA que a anterior
+      (ex.: 4x1600 do limiar ao pace de 5k) — ensina a acelerar cansado.
+    * Recuperação rodando (float): intervalos em que a pausa é trote
+      MODERADO, não parado (ex.: 8x400 com 200 float) — mais aeróbico,
+      específico pra 10k/21k.
   FORÇA ESPECÍFICA
     * Subida / tiros em rampa: 6-12x 30-90 s subindo forte, desce trotando —
       força, potência e economia (alvo por ESFORÇO/FC, não pace; fim por
       tempo ou no botão).
+    * Circuito de subida (Kenyan hills): sobe E desce num circuito contínuo
+      em esforço moderado-forte por 15-30 min — força + aeróbico juntos.
+    * Descida controlada: tiros curtos em descida suave, passada solta —
+      prepara o quadríceps pra prova com descida e melhora a cadência.
     * Terreno ondulado / trilha: rodagem ou longão em sobe-desce, por tempo e
       FC (pace não vale em subida).
   RITMO DE PROVA
     * Blocos no pace-alvo: repetições longas no ritmo da prova (ex.: 3x3km no
-      pace de 21k, 5x1km no pace de 10k) — acostuma o corpo ao ritmo.
+      pace de 21k, 5x1km no pace de 10k; Yasso 800 pra maratona) — acostuma o
+      corpo ao ritmo.
+    * Michigan / sessão mista: numa sessão só, blocos de distâncias e ritmos
+      diferentes (ex.: 1600 limiar + 1200 + 800 + 400 cada vez mais forte,
+      com trechos de tempo entre eles) — específico e desafiador, pra fase de
+      pico.
     * Simulado / prova-teste: o ENSAIO GERAL da prova — um bloco CONTÍNUO no
       RITMO-ALVO cobrindo um pedação grande da distância (NÃO a prova inteira),
       pra o atleta testar se SUSTENTA o pace e treinar o pacing/confiança
@@ -70,6 +86,8 @@ WORKOUT_MENU = """\
   TÉCNICA
     * Educativos (skipping, anfersen, dribling) no aquecimento antes de um
       treino de qualidade — em passo aberto (sem alvo).
+    * Cadência: rodagem leve com trechos focados em passada curta e rápida
+      (ex.: 6x1min pensando em cadência alta) — economia e menos impacto.
   O cardápio é o PONTO DE PARTIDA, não uma caixa fechada: qualquer estrutura
   que um treinador de verdade prescreveria é válida — e se o atleta PEDIR um
   tipo (mesmo fora da lista), monte-o."""

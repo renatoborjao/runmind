@@ -46,7 +46,8 @@ _DEMANDING_CUES = (
     # ("over"/"prova" soltos pegariam "recOVERy" e "pós-prova" — por isso a
     # forma composta)
     "simulado", "de prova", "teste", "contrarrelogio", "over-under",
-    "over under", "alternado", "cruzeiro",
+    "over under", "alternado", "cruzeiro", "cutdown", "surge", "michigan",
+    "yasso", "kenyan", "descida",
 )
 
 # Frases de DURAÇÃO que colidem com cues fortes: "por tempo"/"por minutos" (em

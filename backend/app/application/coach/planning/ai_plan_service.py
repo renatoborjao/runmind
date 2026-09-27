@@ -330,7 +330,22 @@ class AIPlanService:
         # à parte). Best-effort. Ver [[TrainingRealityAnalyzer]].
         reality_directive = AIPlanService._reality_directive(runner, history)
 
-        return PlanContextBuilder.build(
+        # a CURVA semana a semana + o BALANÇO DE ESTÍMULOS × META: o plano
+        # escolhe o estímulo pela lacuna rumo ao objetivo (faz 5 sem sem
+        # limiar? nunca fez ritmo de prova?), não no escuro. Best-effort.
+        from app.application.history.stimulus_ledger import StimulusLedger
+        from app.application.history.weekly_evolution_digest import (
+            WeeklyEvolutionDigest,
+        )
+
+        extra = "\n".join(
+            block for block in (
+                WeeklyEvolutionDigest.for_profile(profile),
+                StimulusLedger.for_profile(profile),
+            ) if block
+        )
+
+        context = PlanContextBuilder.build(
             runner=runner,
             goal=goal,
             metrics=metrics,
@@ -350,6 +365,8 @@ class AIPlanService:
             subjective=subjective,
             reality_directive=reality_directive,
         )
+
+        return f"{context}\n{extra}" if extra else context
 
     @staticmethod
     def _reality_directive(runner, history) -> str:
