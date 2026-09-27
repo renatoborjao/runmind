@@ -18,6 +18,7 @@ FORECAST = {
 
 def _run_notify_one(
     history, forecast, session_message="🏃 Treino de hoje", heat_advice=None,
+    ill=None,
 ):
 
     sent = {}
@@ -34,6 +35,7 @@ def _run_notify_one(
             f"{MODULE}.HeatWeatherAdvisor.advice",
             new=AsyncMock(return_value=heat_advice),
         ),
+        patch(f"{MODULE}.IllnessEpisode.open", return_value=ill),
     ):
 
         mock_provider.for_profile = AsyncMock(
@@ -135,3 +137,28 @@ def test_latest_coords_none_without_gps():
     ])
 
     assert DailyTrainingNotifier._latest_coords(history) is None
+
+
+def test_reminder_welcomes_an_open_illness():
+    """Doente e sem voltar a correr: o treino do dia vai com o acolhimento
+    (orienta, o atleta decide) — nunca como se nada tivesse acontecido."""
+
+    from app.domain.entities.daily_checkin import DailyCheckin
+
+    history = TrainingHistory(activities=[_outdoor(3, -23.5, -46.6)])
+
+    ill = DailyCheckin(day="2026-09-22", at="2026-09-22T08:00:00", illness=True)
+
+    sent = _run_notify_one(history, FORECAST, ill=ill)
+
+    assert "🏃 Treino de hoje" in sent["message"]
+    assert "🤒" in sent["message"] and "pula sem culpa" in sent["message"]
+
+
+def test_reminder_has_no_illness_line_when_healthy():
+
+    history = TrainingHistory(activities=[_outdoor(3, -23.5, -46.6)])
+
+    sent = _run_notify_one(history, FORECAST)
+
+    assert "🤒" not in sent["message"]

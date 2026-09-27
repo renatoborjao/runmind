@@ -122,6 +122,7 @@ class BodyReadingWriter:
         try:
 
             text = await generate_text(
+                portuguese=True,
                 model=get_settings().gemini_coach_model,
                 contents=[{"role": "user", "parts": [{"text": "Como está meu corpo?"}]}],
                 config=types.GenerateContentConfig(

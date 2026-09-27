@@ -144,7 +144,10 @@ class TrainingPatterns:
         today: date,
         weeks: int = WINDOW_WEEKS,
         ceiling: int | None = None,
+        drift: RecoveryDrift | None = None,
     ) -> str:
+        """`drift` pronta (com a leitura de HOJE) vence a dos snapshots — é a
+        mesma que o estado do corpo usa, pra não sair número diferente."""
 
         lines: list[str] = []
 
@@ -174,7 +177,7 @@ class TrainingPatterns:
 
         lines += TrainingPatterns._rpe_lines(sessions, rpes)
 
-        drift = TrainingPatterns.recovery_drift(snapshots)
+        drift = drift or TrainingPatterns.recovery_drift(snapshots)
 
         if drift is not None:
 
@@ -191,7 +194,7 @@ class TrainingPatterns:
         )
 
     @staticmethod
-    def for_profile(profile: str) -> str:
+    def for_profile(profile: str, drift: RecoveryDrift | None = None) -> str:
         """Render a partir do storage. Best-effort: falha vira ""."""
 
         try:
@@ -228,6 +231,7 @@ class TrainingPatterns:
                 SessionRpeRepository().load_sessions(profile),
                 today_local(),
                 ceiling=TrainingPatterns._ceiling_for(profile, activities),
+                drift=drift,
             )
 
         except Exception as e:

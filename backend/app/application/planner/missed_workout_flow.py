@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from app.application.coach.intelligence.illness_episode import IllnessEpisode
 from app.application.coach.planning.missed_workout_judge import (
     MissedWorkoutJudge,
 )
@@ -60,6 +61,13 @@ class MissedWorkoutFlow:
         )
 
         if missed is None:
+
+            return None
+
+        # DOENTE (relatou e não voltou a correr): o motivo do furo já é
+        # conhecido — perguntar "o que tá pegando?" é não ouvir. Quem volta a
+        # falar com ele é o acompanhamento da doença (WellbeingFollowUpNotifier).
+        if IllnessEpisode.open(profile, history.activities, reference_date):
 
             return None
 

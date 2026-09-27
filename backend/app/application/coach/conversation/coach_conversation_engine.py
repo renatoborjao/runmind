@@ -137,6 +137,7 @@ class CoachConversationEngine:
         # reenviada e, se persistir, levanta pro fallback do chamador —
         # o atleta nunca recebe mensagem em branco.
         return await generate_text(
+            portuguese=True,
             model=settings.gemini_chat_model,
             contents=contents,
             config=types.GenerateContentConfig(

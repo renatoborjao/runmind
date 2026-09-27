@@ -384,12 +384,20 @@ class WeeklyPlanMessageFormatter:
             f"{label}{size}"
         )
 
-        # Sessão já passou: uma linha marcada, sem detalhe de execução —
-        # não faz sentido "como executar" um treino que já foi.
+        # Sessão já passou (ou é de HOJE e já foi feita): uma linha marcada,
+        # sem detalhe de execução — não faz sentido "como executar" um treino
+        # que já foi (o longão de hoje da Fernanda aparecia "a fazer" 27/09).
+        done_today = (
+            reference_date is not None
+            and session_date_obj == reference_date
+            and done_days is not None
+            and session.day in done_days
+        )
+
         if (
             reference_date is not None
             and session_date_obj < reference_date
-        ):
+        ) or done_today:
 
             if done_days is not None:
 

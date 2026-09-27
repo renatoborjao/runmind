@@ -273,7 +273,11 @@ class CoachBrainExecutor:
         combinada — nenhuma troca fica de fora (o bug do Renato). Uma ação (ou
         mistura rara com rotina/objetivo) segue o caminho de sempre."""
 
-        proposal = [a for a in actions if a.type in _PROPOSAL_ACTIONS]
+        proposal = [
+            a for a in actions
+            if a.type in _PROPOSAL_ACTIONS
+            and not CoachBrainExecutor._skips(a)
+        ]
 
         if len(actions) >= 2 and len(proposal) == len(actions):
 
@@ -315,14 +319,25 @@ class CoachBrainExecutor:
 
         goals = [a for a in actions if a.type == "goal"]
 
-        week = [a for a in actions if a.type in _PROPOSAL_ACTIONS]
+        # PULAR não é proposta: é decisão do atleta (aplica na hora, ver _skip)
+        week = [
+            a for a in actions
+            if a.type in _PROPOSAL_ACTIONS
+            and not CoachBrainExecutor._skips(a)
+        ]
 
         replan = any(a.type == "replan" for a in actions)
 
+        # o relógio vai por ÚLTIMO — já com a semana do jeito que ficou
+        watch = any(a.type == "watch" for a in actions)
+
         state = [
             a for a in actions
-            if a.type not in _PROPOSAL_ACTIONS
-            and a.type not in ("goal", "replan")
+            if (
+                a.type not in _PROPOSAL_ACTIONS
+                or CoachBrainExecutor._skips(a)
+            )
+            and a.type not in ("goal", "replan", "watch")
         ]
 
         parts: list[str | None] = []
@@ -372,6 +387,10 @@ class CoachBrainExecutor:
                 )
             )
 
+        if watch:
+
+            parts.append(await CoachBrainExecutor._watch(profile, runner))
+
         texts = list(dict.fromkeys(p.strip() for p in parts if p and p.strip()))
 
         if not texts:
@@ -390,6 +409,20 @@ class CoachBrainExecutor:
         """Concretiza UMA ação: mudança da semana vira PROPOSTA (pede 'sim');
         rotina durável vira MEMÓRIA; objetivo/preferência os appliers aplicam.
         None se não deu."""
+
+        if CoachBrainExecutor._skips(action):
+
+            reply, removed = await CoachBrainExecutor._skip(
+                profile, runner, action,
+            )
+
+            # nada saiu (não havia treino / já feito): a fala do coach pode ter
+            # dito "cancelei" — fica só a verdade do sistema (lab 27/09, Hélio)
+            if not removed:
+
+                return reply
+
+            return f"{say}\n\n{reply}" if say and reply else reply
 
         if action.type in _PROPOSAL_ACTIONS:
 
@@ -469,6 +502,12 @@ class CoachBrainExecutor:
 
             return f"{say}\n\n{reply}" if say and reply else reply
 
+        if action.type == "watch":
+
+            reply = await CoachBrainExecutor._watch(profile, runner)
+
+            return f"{say}\n\n{reply}" if say and reply else reply
+
         if action.type == "goal":
 
             return await CoachBrainExecutor._goals(profile, runner, [action], say)
@@ -486,6 +525,148 @@ class CoachBrainExecutor:
             return await CoachBrainExecutor._shoe(profile, runner, incoming_text)
 
         return None
+
+    @staticmethod
+    async def _watch(profile, runner: RunnerProfile) -> str | None:
+        """Manda a semana pro Garmin AGORA e devolve o resultado real (o que
+        desceu, ou o erro) — nunca "vou tentar sincronizar" sem fazer (Renato
+        27/09: o envio falhou, ele disse "sim" pra tentar de novo e o coach só
+        prometeu). Treinador externo: o relógio é da ferramenta dele."""
+
+        if runner.external_coach:
+
+            return None
+
+        from app.application.garmin.garmin_sync import GarminSync
+
+        return await GarminSync._push(profile, runner)
+
+    @staticmethod
+    def _skips(action: BrainAction) -> bool:
+        """PULAR — a semana ("não vou conseguir cumprir o plano") ou um dia
+        dito ("hoje não vou conseguir"). Sem dia resolvido, segue o caminho da
+        proposta (o MoveSkipEngine acha o dia no texto)."""
+
+        return action.type == "skip" and (
+            action.scope == "week" or bool(action.target_day)
+        )
+
+    @staticmethod
+    async def _skip(
+        profile, runner: RunnerProfile, action: BrainAction,
+    ) -> tuple[str | None, bool]:
+        """Pular é decisão DO ATLETA (doente, viagem, não vai dar): tira NA HORA
+        e diz EXATAMENTE o que saiu — ou que não havia treino. Nunca proposta
+        esperando um 'sim' que o doente não manda, nem "já tirei" sem ter tirado.
+        Antes o pulo da SEMANA caía no MoveSkipEngine, que só entende UM dia:
+        nada era aplicado e o coach prometia "vou pausar a semana" — o Hélio
+        resfriado recebeu o longão no bom dia e a cobrança do furo (22-27/09).
+        Só sai o que ainda está por vir e não foi feito. Treinador externo: a
+        semana é do treinador, não mexemos. Devolve (texto, saiu_algo)."""
+
+        from datetime import timedelta
+
+        from app.application.planner.weekly_plan_matcher import (
+            WeeklyPlanMatcher,
+        )
+        from app.application.use_cases.load_training_history import (
+            LoadTrainingHistory,
+        )
+        from app.core.weekdays import WEEKDAYS, weekday_label
+
+        if runner.external_coach:
+
+            return None, False
+
+        _, plan = await CurrentPlanProvider.for_profile(profile)
+
+        if not plan.sessions or plan.source == "externo":
+
+            return None, False
+
+        history = await LoadTrainingHistory.execute(profile=profile)
+
+        fulfilled = WeeklyPlanMatcher.fulfilled_days(plan, history.activities)
+
+        today = today_local()
+
+        ahead = [
+            session for session in plan.sessions
+            if plan.session_date(session) >= today
+            and session.day not in fulfilled
+        ]
+
+        week = action.scope == "week"
+
+        if week:
+
+            days = list(dict.fromkeys(session.day for session in ahead))
+
+            if not days:
+
+                return "🗓️ Desta semana não sobrou treino pra tirar.", False
+
+        else:
+
+            index = {name: i for i, name in WEEKDAYS.items()}.get(action.target_day)
+
+            if index is None:
+
+                return None, False
+
+            # o PRÓXIMO dia com esse nome (hoje incluso) — no domingo o plano
+            # vigente já pode ser o da semana que vem
+            when = today + timedelta(days=(index - today.weekday()) % 7)
+
+            label = weekday_label(action.target_day)
+
+            days = [
+                session.day for session in ahead
+                if plan.session_date(session) == when
+            ]
+
+            if not days:
+
+                if any(plan.session_date(s) == when for s in plan.sessions):
+
+                    return f"🗓️ O treino de {label} você já fez. 💪", False
+
+                return (
+                    f"🗓️ {label.capitalize()} não tinha treino no plano — é só "
+                    "descansar."
+                ), False
+
+            days = days[:1]
+
+        updated = PlanChangeApplier.apply(
+            profile,
+            PlanProposal(
+                kind="skip",
+                week_start=plan.week_start.isoformat(),
+                preview="",
+                created_at=now_local().isoformat(),
+                operations=[{"action": "drop", "day": d} for d in days],
+            ),
+        )
+
+        if updated is None:
+
+            return None, False
+
+        if week:
+
+            labels = ", ".join(weekday_label(d) for d in days)
+
+            done = (
+                f"🗓️ Tirei os treinos que faltavam desta semana ({labels}). "
+                "Quando estiver bem, me avisa que a gente volta com calma."
+            )
+
+        else:
+
+            done = f"🗓️ Tirei o treino de {label} do teu plano."
+
+        return done + watch_update_offer(profile), True
 
     @staticmethod
     async def _goals(

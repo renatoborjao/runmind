@@ -12,7 +12,7 @@ OUT="${1:?uso: coach_audit.sh <saida.md> [--days N]}"; shift
 
 scp -q -i "$KEY" "$ROOT/ops/coach_audit.py" "$VM:/tmp/coach_audit.py"
 
-QUOTED=$(printf '%q ' "$@")
+QUOTED=""; [ $# -eq 0 ] || QUOTED=$(printf '%q ' "$@")
 ssh -i "$KEY" "$VM" "cd ~/runmind/backend && timeout 600 .venv/bin/python /tmp/coach_audit.py $QUOTED 2>&1 | grep -v -E '^\[token|DeprecationWarning'" > "$OUT"
 
 echo "==> auditoria: $OUT ($(grep -c '⚠️' "$OUT" || true) achados)"

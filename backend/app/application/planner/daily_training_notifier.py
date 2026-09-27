@@ -1,3 +1,4 @@
+from app.application.coach.intelligence.illness_episode import IllnessEpisode
 from app.application.coach.intelligence.weather_advisor import (
     WeatherAdvisor as HeatWeatherAdvisor,
 )
@@ -90,6 +91,12 @@ class DailyTrainingNotifier:
 
             return None
 
+        illness = await DailyTrainingNotifier._illness_line(profile)
+
+        if illness:
+
+            message = f"{message}\n\n{illness}"
+
         weather = await DailyTrainingNotifier._weather_line(profile)
 
         if weather:
@@ -97,6 +104,25 @@ class DailyTrainingNotifier:
             message = f"{message}\n\n{weather}"
 
         return runner, message
+
+    @staticmethod
+    async def _illness_line(profile: str) -> str:
+        """Doença relatada e ainda em aberto: o treino do dia vai, mas com o
+        acolhimento — orienta, o atleta decide. Vazio se não há (ou falhou)."""
+
+        try:
+
+            history = await LoadTrainingHistory.execute(profile=profile)
+
+            ill = IllnessEpisode.open(profile, history.activities, today_local())
+
+            return IllnessEpisode.reminder_line(ill) if ill else ""
+
+        except Exception as e:
+
+            print(f"Doença no lembrete falhou para '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     async def _weather_line(

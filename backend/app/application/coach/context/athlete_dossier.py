@@ -247,13 +247,60 @@ class AthleteDossier:
                     data.zones.max_hr, data.zones.resting_hr,
                 )
 
-            data.drift = TrainingPatterns.drift_for_profile(profile)
+            data.drift = AthleteDossier._live_drift(profile, data)
 
         except Exception as e:
 
             print(f"Dossiê: régua de FC falhou p/ '{profile}': {e}")
 
         return data
+
+    @staticmethod
+    def _open_illness(data: _Inputs):
+        """Doença relatada ainda em aberto (ver IllnessEpisode). Best-effort."""
+
+        try:
+
+            from app.application.coach.intelligence.illness_episode import (
+                IllnessEpisode,
+            )
+
+            return IllnessEpisode.open(data.profile, data.activities, data.today)
+
+        except Exception as e:
+
+            print(f"Dossiê: doença em aberto falhou p/ '{data.profile}': {e}")
+
+            return None
+
+    @staticmethod
+    def _live_drift(profile: str, data: _Inputs):
+        """A deriva de recuperação com a leitura de HOJE no fim da série (os
+        snapshots gravados podem ainda não ter o de hoje) — senão o estado
+        dizia "3 leituras seguidas em alerta" e os padrões "2", e o sono saía
+        com dois números (João/Leonardo 27/09). Uma leitura só pra tudo."""
+
+        from app.application.coach.intelligence.body_reading_service import (
+            BodyReadingService,
+        )
+        from app.application.history.training_patterns import TrainingPatterns
+        from app.core.clock import now_local
+        from app.infrastructure.persistence.body_reading_history_repository import (
+            BodyReadingHistoryRepository,
+        )
+
+        snapshots = [
+            s for s in BodyReadingHistoryRepository().load(profile)
+            if s.day < data.today
+        ]
+
+        reading = data.reading
+
+        if reading is not None and reading.recovery.has_data:
+
+            snapshots.append(BodyReadingService.snapshot_of(reading, now_local()))
+
+        return TrainingPatterns.recovery_drift(snapshots)
 
     @staticmethod
     def _archive_history(activities):
@@ -606,6 +653,21 @@ class AthleteDossier:
 
                 lines.append(f"Estado: {state}{extra}.")
 
+        ill = AthleteDossier._open_illness(data)
+
+        if ill is not None:
+
+            lines.append(
+                f"DOENÇA EM ABERTO: ele relatou estar doente em "
+                f"{ill.day[8:10]}/{ill.day[5:7]}"
+                + (f' ("{ill.note}")' if ill.note else "")
+                + " e NÃO correu desde então — o estado acima é da CARGA (ele "
+                "parou), não da saúde: não é folga pra puxar. Quando voltar, "
+                "retorno leve e curto; se ainda estiver doente, descanso."
+            )
+
+        if reading is not None:
+
             lines.append(
                 body_plan_directive(
                     reading, data.trajectory, data.drift, data.ceiling,
@@ -924,7 +986,7 @@ class AthleteDossier:
 
             print(f"Dossiê: aderência falhou p/ '{data.profile}': {e}")
 
-        lines.append(TrainingPatterns.for_profile(data.profile))
+        lines.append(TrainingPatterns.for_profile(data.profile, drift=data.drift))
 
         lines.append(StimulusLedger.for_profile(data.profile))
 

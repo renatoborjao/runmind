@@ -155,6 +155,17 @@ class GarminSync:
 
             return f"{runner.name}, {LATE_TODAY_NOTE}"
 
+        if not results:
+
+            # nada pela frente pra agendar (a semana acabou ou o que faltava
+            # saiu do plano) — o push já limpou do relógio o que saiu. Não é
+            # falha: antes dizia "não consegui agendar" (Renato 27/09, depois de
+            # cancelar o último treino da semana)
+            return (
+                "⌚ Relógio em dia! Desta semana não sobrou treino pra agendar — "
+                "o que saiu do plano saiu do relógio também."
+            )
+
         if not sent:
 
             return (

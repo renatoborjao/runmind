@@ -176,7 +176,70 @@ def _is_retryable(exc: Exception) -> bool:
     return isinstance(code, int) and code in RETRYABLE_STATUS
 
 
+# O modelo às vezes escorrega pro português SEM acento ("nao", "voce",
+# "recuperacao") — Maurício/Leonardo/João 27/09. Texto assim não vai pro
+# atleta: re-gera. Detector conservador: NENHUM caractere acentuado E 2+
+# palavras que só existem com acento (uma frase curta ou um eco do atleta não
+# dispara).
+_ACCENTED = set("áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ")
+
+_UNACCENTED_MARKERS = {
+    "nao", "voce", "voces", "tambem", "entao", "atencao", "recuperacao",
+    "proximo", "proxima", "proximos", "proximas", "sessao", "sessoes",
+    "distancia", "lesao", "amanha", "ja", "ate", "sao", "otimo",
+    "otima", "possivel", "voltara", "sera", "tera", "intencao", "media",
+}
+
+_ACCENT_RETRIES = 2
+
+
+def unaccented_portuguese(text: str) -> bool:
+
+    if not text or any(c in _ACCENTED for c in text):
+
+        return False
+
+    words = re.findall(r"[a-z]+", text.lower())
+
+    return sum(1 for w in words if w in _UNACCENTED_MARKERS) >= 2
+
+
 async def generate_text(
+    model: str,
+    contents,
+    config: types.GenerateContentConfig,
+    *,
+    require_text: bool = False,
+    capture: list | None = None,
+    portuguese: bool = False,
+) -> str:
+    """generate_text de sempre; `portuguese=True` (texto que vai pro atleta)
+    re-gera quando o modelo escreve sem acento."""
+
+    text = await _generate_text_once(
+        model, contents, config, require_text=require_text, capture=capture,
+    )
+
+    if not portuguese:
+
+        return text
+
+    for attempt in range(_ACCENT_RETRIES):
+
+        if not unaccented_portuguese(text):
+
+            return text
+
+        print(f"Gemini sem acento (tentativa {attempt + 1}): re-gerando")
+
+        text = await _generate_text_once(
+            model, contents, config, require_text=require_text, capture=capture,
+        )
+
+    return text
+
+
+async def _generate_text_once(
     model: str,
     contents,
     config: types.GenerateContentConfig,
@@ -329,6 +392,10 @@ async def generate_json(
     Nunca levanta por JSON ruim: devolve o objeto parseado ou None. Falha de
     API (após os retries internos) propaga pro try/except do chamador."""
 
+    # JSON válido mas SEM acento: guarda e tenta de novo; se todas vierem
+    # assim, entrega o melhor que teve (sem acento > nada)
+    unaccented = None
+
     for attempt in range(attempts):
 
         raw = await generate_text(
@@ -342,14 +409,25 @@ async def generate_json(
 
         if result is not None:
 
-            return result
+            if not unaccented_portuguese(raw):
+
+                return result
+
+            unaccented = result
+
+            print(
+                f"Gemini sem acento (tentativa {attempt + 1}/{attempts}): "
+                "re-gerando"
+            )
+
+            continue
 
         print(
             f"Gemini JSON inválido (tentativa {attempt + 1}/{attempts}): "
             "re-gerando"
         )
 
-    return None
+    return unaccented
 
 
 # reexport pra quem precisa montar Part/config sem importar o SDK direto

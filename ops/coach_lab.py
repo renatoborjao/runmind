@@ -786,6 +786,40 @@ async def _brain_eval(budgets: list[int], repeats: int) -> None:
     print("\n".join(summary))
 
 
+def _read_only() -> None:
+    """O lab SÓ LÊ: toda escrita que um redator/motor faz de passagem vira
+    no-op. Antes a revisão semanal simulada gravava a "cobrança da semana" no
+    log de atenção de PRODUÇÃO (Hélio/João 27/09: cobrança fantasma no dossiê)."""
+
+    import importlib
+
+    for module, owner, method in (
+        ("app.infrastructure.persistence.coach_attention_log",
+         "CoachAttentionLog", "record"),
+        ("app.infrastructure.persistence.weekly_plan_repository",
+         "WeeklyPlanRepository", "save"),
+        ("app.infrastructure.persistence.plan_proposal_repository",
+         "PlanProposalRepository", "save"),
+        ("app.infrastructure.persistence.missed_notification_repository",
+         "MissedNotificationRepository", "mark"),
+        ("app.infrastructure.persistence.runner_profile_repository",
+         "RunnerProfileRepository", "update_fields"),
+        ("app.infrastructure.persistence.dispatch_guard", "DispatchGuard", "mark"),
+        ("app.application.coach.intelligence.perception_recorder",
+         "PerceptionRecorder", "from_chat"),
+    ):
+
+        try:
+
+            cls = getattr(importlib.import_module(module), owner)
+
+            setattr(cls, method, staticmethod(lambda *a, **k: None))
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"(lab: não blindei {owner}.{method}: {e})")
+
+
 async def main() -> None:
 
     parser = argparse.ArgumentParser()
@@ -812,6 +846,8 @@ async def main() -> None:
     if args.overlay:
 
         sys.meta_path.insert(0, _Overlay(Path(args.overlay)))
+
+    _read_only()
 
     from app.application.use_cases.load_runner_profile import LoadRunnerProfile
     from app.core.clock import use_athlete_timezone

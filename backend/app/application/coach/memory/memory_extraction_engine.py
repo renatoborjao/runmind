@@ -74,6 +74,14 @@ REGRAS:
   estímulos de base — esses podem ficar como ele disse.
 - Só fatos duráveis. Perguntas, cumprimentos e comentários sobre um treino
   pontual NÃO geram memória.
+- Pedido pra mexer SÓ num treino, num dia ou nesta semana ("passa o de hoje
+  pra amanhã", "essa semana quinta não dá", "reorganiza por causa da prova de
+  sábado") é AÇÃO do momento, NÃO memória. Dia/rotina só vira memória quando ele
+  diz que vale DAQUI PRA FRENTE ("a partir de agora", "sempre", "toda semana",
+  "meus dias são"). Senão uma troca de um dia vira regra e o plano passa a usar
+  o dia errado (Maurício: "passa o de hoje pra sexta" virou "prefere sexta").
+- Quando ele FIXA os dias/rotina de novo, ARQUIVE ("archive") as notas de dia
+  antigas que a nova contradiz — a memória não pode ter duas verdades.
 - "content" em uma linha curta, em português, terceira pessoa implícita
   (ex: "Dor no joelho direito").
 - NÃO duplique memória ativa existente (nem com outras palavras).

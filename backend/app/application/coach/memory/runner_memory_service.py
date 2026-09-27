@@ -161,7 +161,9 @@ class RunnerMemoryService:
         recent = memories[-MAX_MEMORIES_IN_CONTEXT:]
 
         lines = [
-            "Memória do corredor (fatos anotados de conversas anteriores):"
+            "Memória do corredor (fatos anotados de conversas anteriores; "
+            "quando duas notas se contradizem, vale a MAIS RECENTE — a data "
+            "está no fim de cada uma):"
         ]
 
         for entry in recent:

@@ -423,11 +423,8 @@ class StimulusLedger:
 
         missing: list[str] = []
 
-        for family in needs + _GENERAL:
-
-            if family in missing:
-
-                continue
+        # a mesma família pode estar nas duas listas (ex.: acelerações)
+        for family in dict.fromkeys(needs + _GENERAL):
 
             stat = stats.get(family)
 

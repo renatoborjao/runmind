@@ -37,7 +37,9 @@ STORAGE = BACKEND / "storage"
 PROMISE = re.compile(
     r"(estou preparando|to preparando|tô preparando|em instantes|já te envio|"
     r"vou te mandar|vou te enviar|vou montar e te|te mando (o|a|já|em)|"
-    r"estou montando|estou finalizando|em breve te envio)",
+    r"estou montando|estou finalizando|em breve te envio|vou tentar|"
+    r"vou (sincronizar|cancelar|pausar|pular|tirar|remover|atualizar|"
+    r"refazer|mandar|enviar))",
     re.I,
 )
 
@@ -131,7 +133,7 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
 
         say = str(e.get("say") or "")
 
-        if PROMISE.search(say) and not types & {"replan", "one_off"}:
+        if PROMISE.search(say) and not (types - {None}):
 
             findings.append(
                 f"PROMESSA SEM ENTREGA {e['ts'][:16]}: \"{say[:160]}\" "
@@ -274,6 +276,7 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
     memory = [
         m for m in _load(STORAGE / "memory" / f"{profile}.json", [])
         if m.get("status") == "active" and m.get("category") == "disponibilidade"
+        and not re.search(r"\blong(ão|ao|o)\b", m.get("content", ""), re.I)
     ]
 
     if memory:

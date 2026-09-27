@@ -46,6 +46,7 @@ class ReengagementWriter:
         try:
 
             text = await generate_text(
+                portuguese=True,
                 model=get_settings().gemini_coach_model,
                 contents=[
                     {"role": "user", "parts": [{"text": "(reaproximar o atleta)"}]}

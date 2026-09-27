@@ -33,7 +33,7 @@ def _plan() -> TrainingPlan:
     )
 
 
-def _run(judgment, missed=True, last_notified=None, runner=None):
+def _run(judgment, missed=True, last_notified=None, runner=None, ill=None):
 
     runner = runner or make_runner()
 
@@ -50,6 +50,7 @@ def _run(judgment, missed=True, last_notified=None, runner=None):
         patch(f"{MODULE}.PlanProposalRepository", return_value=proposal_repo),
         patch(f"{MODULE}.MissedNotificationRepository", return_value=marker),
         patch.object(MissedWorkoutFlow, "_portrait", return_value="retrato"),
+        patch(f"{MODULE}.IllnessEpisode.open", return_value=ill),
     ):
 
         load_runner.execute.return_value = runner
@@ -64,12 +65,14 @@ def _run(judgment, missed=True, last_notified=None, runner=None):
             MissedWorkoutFlow.process("renato", reference_date=WEDNESDAY)
         )
 
-    return result, proposal_repo, marker
+        judged = judge.judge.await_count
+
+    return result, proposal_repo, marker, judged
 
 
 def test_no_miss_returns_none():
 
-    result, proposal_repo, marker = _run(judgment=None, missed=False)
+    result, proposal_repo, marker, _ = _run(judgment=None, missed=False)
 
     assert result is None
     marker.mark.assert_not_called()
@@ -79,7 +82,7 @@ def test_low_impact_sends_message_without_a_proposal():
 
     judgment = MissedJudgment(message="Segue igual. 💪", operations=[])
 
-    result, proposal_repo, marker = _run(judgment=judgment)
+    result, proposal_repo, marker, _ = _run(judgment=judgment)
 
     runner, message = result
     assert "Segue igual" in message
@@ -94,7 +97,7 @@ def test_meaningful_stores_a_proposal():
         operations=[{"action": "drop", "day": "Thursday"}],
     )
 
-    result, proposal_repo, marker = _run(judgment=judgment)
+    result, proposal_repo, marker, _ = _run(judgment=judgment)
 
     assert result is not None
     saved = proposal_repo.save.call_args.args[1]
@@ -108,7 +111,7 @@ def test_already_notified_is_not_repeated():
     judgment = MissedJudgment(message="x", operations=[])
 
     # já avisamos o furo de ontem (terça 07/07)
-    result, proposal_repo, marker = _run(
+    result, proposal_repo, marker, _ = _run(
         judgment=judgment, last_notified="2026-07-07",
     )
 
@@ -118,8 +121,21 @@ def test_already_notified_is_not_repeated():
 
 def test_external_coach_is_skipped():
 
-    result, proposal_repo, marker = _run(
+    result, proposal_repo, marker, _ = _run(
         judgment=None, runner=make_runner(external_coach=True),
     )
 
     assert result is None
+
+
+def test_sick_athlete_is_not_charged_for_the_miss():
+    """Hélio 27/09: relatou resfriado e não voltou a correr — o motivo do furo
+    já é conhecido; nada de "o que tá pegando?"."""
+
+    judgment = MissedJudgment(message="o que tá pegando?", operations=[])
+
+    result, proposal_repo, marker, judged = _run(judgment=judgment, ill=object())
+
+    assert result is None
+    assert judged == 0
+    marker.mark.assert_not_called()
