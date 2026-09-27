@@ -36,6 +36,7 @@ fi
 scp -q -i "$KEY" "$ROOT/ops/coach_lab.py" "$VM:/tmp/coach_lab.py"
 
 echo "==> rodando na VM (pode levar alguns minutos — chama a IA de verdade)"
-ssh -i "$KEY" "$VM" "cd ~/runmind/backend && timeout 1800 .venv/bin/python /tmp/coach_lab.py ${REMOTE_ARGS[*]} 2>&1 | grep -v -E '^\[token|AFC|DeprecationWarning' " > "$OUT"
+QUOTED=$(printf '%q ' "${REMOTE_ARGS[@]}")
+ssh -i "$KEY" "$VM" "cd ~/runmind/backend && timeout 1800 .venv/bin/python /tmp/coach_lab.py $QUOTED 2>&1 | grep -v -E '^\[token|AFC|DeprecationWarning' " > "$OUT"
 
 echo "==> relatório: $OUT ($(wc -l < "$OUT") linhas)"

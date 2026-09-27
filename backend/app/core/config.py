@@ -354,9 +354,10 @@ class Settings(BaseSettings):
     # tempo-alvo/relação degrau×norte) e um executor determinístico aplica com a
     # âncora certa (prova datada MAIS PRÓXIMA nunca é atropelada por uma mais
     # distante), preserva o objetivo-mãe e grava a hierarquia na memória. OFF =
-    # roteia pro GoalChangeApplier de sempre (fallback estável). Canário no
-    # renato2 até validar offline. Ver [[project_multiplos_objetivos]].
-    goal_brain_enabled: bool = False
+    # roteia pro GoalChangeApplier de sempre (fallback estável). LIGADO PRA
+    # TODOS (27/09: o canário só-renato2 deixou a troca de meta do João cair no
+    # aplicador antigo). Ver [[project_multiplos_objetivos]].
+    goal_brain_enabled: bool = True
 
     goal_brain_profiles: str = ""
 

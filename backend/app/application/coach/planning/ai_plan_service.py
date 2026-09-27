@@ -96,6 +96,14 @@ class AIPlanService:
 
                 plan.phase = PhaseEngine.execute(goal, week_start)
 
+            # REFAZER NO MEIO DA SEMANA (o atleta mudou meta/dias e pediu o
+            # plano novo): o que já passou — e o de hoje, se já foi feito — fica
+            # como estava. O feito é histórico, não se reescreve; a IA refaz só
+            # o que falta.
+            if existing is not None and existing.week_start == week_start:
+
+                AIPlanService._keep_past_days(existing, plan, history)
+
             # km estimado das sessões por TEMPO (duração ÷ pace) + volume real
             # da semana contando TODOS os tipos (não só os por distância).
             AIPlanService._fill_time_based_km(plan, metrics)
@@ -116,6 +124,35 @@ class AIPlanService:
                 profile, runner, assessment, metrics, goal,
                 history, reference_date,
             )
+
+    @staticmethod
+    def _keep_past_days(old: TrainingPlan, new: TrainingPlan, history) -> None:
+        """Sessões de dias que já passaram (e a de hoje já cumprida) vêm do
+        plano antigo; a IA só manda do que falta em diante."""
+
+        from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
+
+        today = today_local()
+
+        done = {
+            day.lower()
+            for day in WeeklyPlanMatcher.fulfilled_days(old, history.activities)
+        }
+
+        kept = [
+            s for s in old.sessions
+            if old.session_date(s) < today
+            or (old.session_date(s) == today and s.day.lower() in done)
+        ]
+
+        kept_days = {s.day for s in kept}
+
+        fresh = [
+            s for s in new.sessions
+            if new.session_date(s) >= today and s.day not in kept_days
+        ]
+
+        new.sessions = sorted(kept + fresh, key=new.session_date)
 
     @staticmethod
     async def _generate_ai(
@@ -217,6 +254,7 @@ class AIPlanService:
             runner=runner,
             goal=goal,
             week_start=week_start,
+            today=today_local(),
             days_to_race=days_to_race,
             run_walk=run_walk,
             last_plan=last_week_plan,

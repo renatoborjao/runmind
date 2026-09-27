@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from app.application.planner.pace_formatter import PaceFormatter
-from app.core.weekdays import weekday_label
+from app.core.weekdays import weekday_label, weekday_name
 from app.domain.entities.adherence_report import AdherenceReport
 from app.domain.entities.runner_metrics import RunnerMetrics
 from app.domain.entities.runner_profile import RunnerProfile
@@ -30,6 +30,7 @@ class PlanContextBuilder:
         recent_plans: list[TrainingPlan] | None = None,
         executed: str = "",
         dossier: str = "",
+        today: date | None = None,
     ) -> str:
 
         week_end = week_start + timedelta(days=6)
@@ -47,6 +48,18 @@ class PlanContextBuilder:
             )
 
         lines = [target]
+
+        # REFAZENDO a semana que já começou (o atleta mudou meta/dias e pediu o
+        # plano novo): os dias anteriores ficam como estão
+        if today is not None and week_start < today <= week_end:
+
+            lines.append(
+                f"A SEMANA JÁ COMEÇOU: hoje é {weekday_label(weekday_name(today))} "
+                f"({today.strftime('%d/%m')}). Os dias ANTERIORES a hoje ficam "
+                "como estão (o que ele fez está no plano da semana, no dossiê) — "
+                "monte as sessões SÓ de hoje em diante, nos dias dele que ainda "
+                "vêm, com a dose coerente com o que ele já correu nesta semana."
+            )
 
         # iniciante que começa correndo-caminhando: os dados do onboarding
         # (peso/altura/capacidade) guiam a IA a montar caminhada + run/walk
@@ -154,7 +167,18 @@ class PlanContextBuilder:
 
         if goal.race_date is None:
 
-            return f"Objetivo do atleta: {goal.name} (sem prova marcada)."
+            pace = PlanContextBuilder._goal_pace(goal)
+
+            # meta com TEMPO sem prova ("5 km em 23 min"): o alvo e o ritmo
+            # dele vão explícitos, senão a IA mira no escuro
+            target = (
+                f" — alvo {goal.target_time} nos {goal.distance_km:g} km "
+                f"(~{pace}/km)"
+                if goal.target_time and pace
+                else ""
+            )
+
+            return f"Objetivo do atleta: {goal.name}{target} (sem prova marcada)."
 
         pace = PlanContextBuilder._goal_pace(goal)
 

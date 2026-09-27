@@ -46,7 +46,7 @@ _CARDS = {
 
 _ACTION_TYPES = {
     "move", "skip", "adjust", "simplify", "one_off", "routine", "goal",
-    "preference", "coach_switch", "shoe",
+    "preference", "coach_switch", "shoe", "days", "replan",
 }
 
 _SCOPES = {"single_session", "week"}
@@ -89,7 +89,7 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
   "actions": [] | [{{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
-preference|coach_switch|shoe>,
+preference|coach_switch|shoe|days|replan>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
@@ -101,7 +101,9 @@ null>, "distance_km": <SÓ em goal com prova: número em km | null>,
 resolvida pelo calendário | null>, "target_time": <SÓ em goal: tempo-alvo \
 "h:mm:ss"/"mm:ss", ou null se ele só quer completar/sem cronômetro>,
                      "relationship": <SÓ em goal: primary|stepping_stone|\
-additional|replace | null>}}, ...],
+additional|replace | null>,
+                     "days": <SÓ em type=days: a lista COMPLETA dos dias de \
+corrida em inglês, ex. ["Monday","Thursday","Saturday"] | null>}}, ...],
   "on_pending": null | <apply|reject|refine>,
   "perception": null | {{"day": "<aaaa-mm-dd do treino de que ele fala>", \
 "rpe": <0-10 | null>, "feel": "<as palavras dele, curto> | null"}}}}
@@ -214,6 +216,40 @@ reconheça e, se for prova, situe a hierarquia (degrau × norte) com a voz do \
 coach; NUNCA diga que já regerou o plano/mandou pro relógio (o sistema decide e \
 executa). Uma prova por item; várias provas na mesma mensagem = vários itens \
 goal.
+- ENTENDA O QUE ELE ESTÁ FAZENDO COM A META (erro aqui desorganiza tudo) — \
+confira no QUADRO as metas/provas que ele JÁ tem antes de classificar: \
+  * TROCA ("replace"): o objetivo anterior DEIXA DE VALER — ele muda o que \
+está buscando ("o objetivo é X" ao pedir pra mudar o plano, "esquece os 10 \
+km, agora é 5 km em 23", "mudei de ideia, quero X"); \
+  * PRINCIPAL ("primary"): ele define ou AJUSTA a meta-mãe e as provas que \
+já tem CONTINUAM de pé ("meu objetivo principal é a meia em 1h50" com a 15k \
+marcada: a 15k segue como degrau); \
+  * SOMA ("additional"): mais uma prova/meta além das que tem ("também \
+quero", "e mais uma"); DEGRAU ("stepping_stone"): prova que prepara pra a \
+meta maior. \
+  Se as provas/metas que ele já tem continuam valendo, NÃO é replace. Meta com \
+tempo sem prova ("5 km em 23 min") também é goal: preencha distance_km (5) e \
+target_time ("00:23:00"). Na dúvida entre trocar e somar, PERGUNTE no \
+"say" ("troca o dos 10 km ou soma?") e não emita goal.
+- DIAS DE TREINO (mudança DURÁVEL de quais dias ele corre: "tenho \
+disponibilidade seg, qui e sáb", "agora só consigo terça e quinta", "quero \
+correr 4x: ..."): type="days" com a lista COMPLETA de dias daqui pra frente em \
+"days". NÃO é "routine" (routine é formato/duração, ex. "treinos de até 50 \
+min"). Mover UM treino desta semana continua sendo "move".
+- REFAZER A SEMANA AGORA: quando ele pede o plano novo JÁ ("monta meu plano \
+novo", "refaz minha semana", "no aguardo do novo treino") ou quando ele mudou \
+objetivo/dias e a semana atual deixou de fazer sentido E ele quer ajustar já: \
+inclua {{"type": "replan"}} (junto com o goal/days, se houver). O sistema refaz \
+os dias que FALTAM da semana com tudo que você sabe e manda pra ele na hora — \
+então NÃO peça permissão nem diga "estou preparando": o "say" só apresenta \
+("refiz tua semana com isso, olha aí 👇").
+- ELE RECLAMA QUE ALGO QUE PEDIU NÃO FOI FEITO ("mas eu tinha mudado o \
+objetivo", "eu falei que corro seg/qui/sáb"): CONFIRA no QUADRO (meta, dias, \
+plano). Se não está aplicado, emita AGORA as ações que aplicam (goal/days, e \
+replan se a semana precisa mudar) — nunca só peça desculpa ou prometa \
+"vamos alinhar".
+- VÁRIAS COISAS NA MESMA MENSAGEM (ex.: troca de objetivo + troca de dias): \
+um item em "actions" pra CADA uma — o sistema executa todas.
 - Se há PROPOSTA PENDENTE (bloco acima): a mensagem é a resposta a ela. \
 "on_pending"="apply" se ele aceitou; "reject" se recusou; "refine" se está \
 CORRIGINDO ("não é a semana, é o de amanhã", "sim mas 12km") — no refine, \
@@ -244,6 +280,10 @@ REGRAS DURAS:
 proponha dia que já passou.
 - NUNCA diga que já aplicou/atualizou o plano ou que mandou pro relógio nesta \
 mensagem — quem executa é o sistema depois do "sim". Não finja.
+- NUNCA PROMETA o que nenhuma ação sua faz ("já estou preparando", "em \
+instantes te envio", "vou montar e te mando"): se ele quer o plano novo, emita \
+"replan" (o sistema entrega AGORA); se não for pra agora, diga a verdade (ex.: \
+"o plano de domingo já nasce com isso"). Promessa sem entrega é a pior falha.
 - Não dê conselho médico além do que está no quadro; dor/lesão → orientar \
 procurar profissional.
 - CONTEXTO DA CONVERSA: a mensagem pode dar sequência aos ÚLTIMOS TURNOS abaixo \
@@ -285,6 +325,10 @@ class BrainAction:
     target_time: str | None = None  # "h:mm:ss"/"mm:ss"; None = meta de conclusão
 
     relationship: str | None = None
+
+    # --- SÓ na ação type="days": a lista completa de dias de corrida daqui pra
+    # frente (inglês canônico) ---
+    days: list[str] | None = None
 
 
 @dataclass(slots=True)
@@ -536,7 +580,26 @@ class CoachBrain:
                 if raw.get("relationship") in _RELATIONSHIPS
                 else None
             ),
+            days=CoachBrain._clean_days(raw.get("days")),
         )
+
+    @staticmethod
+    def _clean_days(value) -> list[str] | None:
+        """Dias canônicos (inglês), sem repetição, na ordem da semana."""
+
+        if not isinstance(value, list):
+
+            return None
+
+        order = list(WEEKDAYS.values())
+
+        days = {
+            _CANON_DAY[str(d).strip().lower()]
+            for d in value
+            if str(d).strip().lower() in _CANON_DAY
+        }
+
+        return sorted(days, key=order.index) or None
 
     @staticmethod
     def _clean_str(value) -> str | None:

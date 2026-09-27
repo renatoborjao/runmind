@@ -290,15 +290,102 @@ class CoachBrainExecutor:
                 profile, runner, actions, say,
             )
 
-        return await CoachBrainExecutor._act(
-            profile, runner, actions[0], repo, incoming_text, context_facts,
-            say,
+        if len(actions) == 1:
+
+            return await CoachBrainExecutor._act(
+                profile, runner, actions[0], repo, incoming_text, context_facts,
+                say,
+            )
+
+        return await CoachBrainExecutor._act_mixed(
+            profile, runner, actions, repo, incoming_text, context_facts, say,
         )
+
+    @staticmethod
+    async def _act_mixed(
+        profile, runner, actions: list[BrainAction], repo, incoming_text,
+        context_facts="", say="",
+    ) -> str | None:
+        """MISTURA de pedidos na mesma mensagem (ex.: troca de objetivo + troca
+        de dias + "refaz minha semana"): executa TODOS, na ordem que faz
+        sentido — o estado (meta, dias, rotina, preferência...) primeiro, a
+        semana depois, e o replanejamento por último (já com o estado novo).
+        Antes só a 1ª ação rodava e o resto sumia calado (João 05/09: trocou
+        meta E dias; os dias se perderam e o coach seguiu prometendo)."""
+
+        goals = [a for a in actions if a.type == "goal"]
+
+        week = [a for a in actions if a.type in _PROPOSAL_ACTIONS]
+
+        replan = any(a.type == "replan" for a in actions)
+
+        state = [
+            a for a in actions
+            if a.type not in _PROPOSAL_ACTIONS
+            and a.type not in ("goal", "replan")
+        ]
+
+        parts: list[str | None] = []
+
+        lead = (say or "").strip()
+
+        if goals:
+
+            # o executor de metas abre com a VOZ do coach (o say)
+            # com "replan" na mesma mensagem, a semana é refeita UMA vez, no fim
+            parts.append(
+                await CoachBrainExecutor._goals(
+                    profile, runner, goals, lead, regenerate=not replan,
+                )
+            )
+
+            lead = ""
+
+        for action in state:
+
+            parts.append(
+                await CoachBrainExecutor._act(
+                    profile, runner, action, repo, incoming_text,
+                    context_facts, "", replan_follows=replan,
+                )
+            )
+
+        if replan:
+
+            # refazer a semana já cobre as mudanças pontuais dela
+            parts.append(await CoachBrainExecutor._replan(profile, runner))
+
+        elif len(week) >= 2:
+
+            parts.append(
+                await CoachBrainExecutor._propose_multi(
+                    profile, runner, week, repo, context_facts,
+                )
+            )
+
+        elif week:
+
+            parts.append(
+                await CoachBrainExecutor._act(
+                    profile, runner, week[0], repo, incoming_text,
+                    context_facts, "",
+                )
+            )
+
+        texts = list(dict.fromkeys(p.strip() for p in parts if p and p.strip()))
+
+        if not texts:
+
+            return None
+
+        body = "\n\n".join(texts)
+
+        return f"{lead}\n\n{body}" if lead else body
 
     @staticmethod
     async def _act(
         profile, runner, action: BrainAction, repo, incoming_text,
-        context_facts="", say="",
+        context_facts="", say="", replan_follows=False,
     ) -> str | None:
         """Concretiza UMA ação: mudança da semana vira PROPOSTA (pede 'sim');
         rotina durável vira MEMÓRIA; objetivo/preferência os appliers aplicam.
@@ -368,6 +455,20 @@ class CoachBrainExecutor:
 
             return await CoachBrainExecutor._routine(profile, runner, incoming_text)
 
+        if action.type == "days":
+
+            reply = CoachBrainExecutor._days(
+                profile, runner, action, replan_follows=replan_follows,
+            )
+
+            return f"{say}\n\n{reply}" if say and reply else reply
+
+        if action.type == "replan":
+
+            reply = await CoachBrainExecutor._replan(profile, runner)
+
+            return f"{say}\n\n{reply}" if say and reply else reply
+
         if action.type == "goal":
 
             return await CoachBrainExecutor._goals(profile, runner, [action], say)
@@ -388,7 +489,7 @@ class CoachBrainExecutor:
 
     @staticmethod
     async def _goals(
-        profile, runner, actions: list[BrainAction], say="",
+        profile, runner, actions: list[BrainAction], say="", regenerate=True,
     ) -> str | None:
         """Roteia a(s) meta(s)/prova(s). Flag goal_brain ON: executor
         ESTRUTURADO (âncora certa + hierarquia degrau×norte + múltiplas provas
@@ -404,7 +505,7 @@ class CoachBrainExecutor:
             )
 
             result = await GoalActionExecutor.apply_many(
-                profile, runner, actions, say,
+                profile, runner, actions, say, regenerate=regenerate,
             )
 
             if result is not None:
@@ -484,6 +585,99 @@ class CoachBrainExecutor:
             "treino. 🙌 Vou montar cada semana ancorado no teu histórico, no teu "
             "corpo e na tua meta — e evoluindo contigo. Bora começar: aqui está "
             f"teu plano desta semana. 💪\n\n{plan_text}{watch_update_offer(profile)}"
+        )
+
+    @staticmethod
+    def _days(profile, runner, action: BrainAction, replan_follows=False) -> str | None:
+        """Mudança DURÁVEL dos dias de corrida: vira o dado do perfil que o plano
+        usa pra agendar (não só uma nota na memória — o João pediu seg/qui/sáb
+        duas vezes e o plano seguiu ter/sáb, 05/09). A semana ATUAL só muda se
+        ele pedir pra refazer (replan)."""
+
+        from app.core.weekdays import weekday_label
+
+        days = action.days or []
+
+        if not days:
+
+            return None
+
+        RunnerProfileRepository().update_fields(
+            profile,
+            {"preferred_running_days": days, "weekly_training_days": len(days)},
+        )
+
+        runner.preferred_running_days = days
+
+        runner.weekly_training_days = len(days)
+
+        labels = ", ".join(weekday_label(d) for d in days)
+
+        try:
+
+            from app.application.coach.memory.runner_memory_service import (
+                RunnerMemoryService,
+            )
+            from app.core.clock import today_local
+
+            RunnerMemoryService.process(
+                profile,
+                {
+                    "add": [{
+                        "category": "disponibilidade",
+                        "content": (
+                            f"Dias de corrida a partir de "
+                            f"{today_local().strftime('%d/%m')}: {labels} "
+                            f"({len(days)}x/semana) — o plano segue esses dias."
+                        ),
+                    }]
+                },
+            )
+
+        except Exception as e:
+
+            print(f"Memória dos dias falhou p/ '{profile}': {e}")
+
+        reply = f"📅 Teus dias de treino agora: {labels} ({len(days)}x/semana)."
+
+        if runner.external_coach or replan_follows:
+
+            return reply
+
+        return (
+            f"{reply} A semana atual segue como está e o plano de domingo já "
+            "nasce nesses dias — se quiser que eu refaça esta semana agora, é "
+            "só falar."
+        )
+
+    @staticmethod
+    async def _replan(profile, runner) -> str | None:
+        """Refaz AGORA os dias que faltam da semana, com o estado atual (meta,
+        dias, corpo — o dossiê inteiro), e entrega o plano + oferta do relógio.
+        É a ação que cumpre o "monta meu plano novo" — antes o coach prometia
+        "já estou preparando, em instantes te envio" e nada chegava."""
+
+        if runner.external_coach:
+
+            return None
+
+        from app.application.garmin.watch_offer import watch_update_offer
+        from app.application.planner.current_plan_provider import (
+            CurrentPlanProvider,
+        )
+        from app.application.planner.weekly_plan_message_formatter import (
+            WeeklyPlanMessageFormatter,
+        )
+
+        fresh, plan = await CurrentPlanProvider.for_profile(profile, force=True)
+
+        plan_text = WeeklyPlanMessageFormatter.week_plan_message(
+            fresh.name, plan, profile=profile,
+        )
+
+        return (
+            f"Refiz o que falta da tua semana com isso 👇\n\n{plan_text}"
+            f"{watch_update_offer(profile)}"
         )
 
     @staticmethod

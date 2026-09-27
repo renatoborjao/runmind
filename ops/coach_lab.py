@@ -110,14 +110,14 @@ async def _dossier(profile):
     print(text)
 
 
-async def _chat(profile, runner):
+async def _chat(profile, runner, messages=CHAT_SCENARIOS):
 
     from app.application.coach.conversation.coach_brain import CoachBrain
     from app.application.coach.conversation.conversation_context_builder import (
         ConversationContextBuilder,
     )
 
-    for message in CHAT_SCENARIOS:
+    for message in messages:
 
         started = time.time()
 
@@ -151,6 +151,11 @@ async def _chat(profile, runner):
             print(
                 f"ação: {action.type} / {action.scope} / {action.target_day} — "
                 f"{action.instruction}"
+                + (f" | relação={action.relationship}" if action.relationship else "")
+                + (f" | {action.distance_km:g} km" if action.distance_km else "")
+                + (f" | alvo {action.target_time}" if action.target_time else "")
+                + (f" | prova {action.race_date}" if action.race_date else "")
+                + (f" | dias={action.days}" if action.days else "")
             )
 
         if decision.perception:
@@ -460,6 +465,9 @@ async def main() -> None:
 
     parser.add_argument("--only", default=",".join(ALL))
 
+    # mensagens próprias pro cenário de chat, separadas por "||"
+    parser.add_argument("--messages", default="")
+
     args = parser.parse_args()
 
     sys.path.insert(0, str(BACKEND))
@@ -503,7 +511,11 @@ async def main() -> None:
 
         steps = (
             ("dossier", lambda: _dossier(profile)),
-            ("chat", lambda: _chat(profile, runner)),
+            ("chat", lambda: _chat(
+                profile, runner,
+                [m.strip() for m in args.messages.split("||") if m.strip()]
+                or CHAT_SCENARIOS,
+            )),
             ("analysis", lambda: _analysis(profile)),
             ("conduct", lambda: _conduct(profile, runner)),
             ("missed", lambda: _missed(profile, runner)),

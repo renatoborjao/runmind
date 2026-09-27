@@ -85,6 +85,7 @@ class GoalActionExecutor:
         runner: RunnerProfile,
         actions: list[BrainAction],
         say: str = "",
+        regenerate: bool = True,
     ) -> str | None:
         """Aplica UMA OU VÁRIAS metas/provas da mesma mensagem (ex.: turno em
         que o atleta cita a meia como norte E a 15k como degrau). Registra cada
@@ -115,7 +116,7 @@ class GoalActionExecutor:
             return lead or "Anotado! 🎯"
 
         # regeração: no MÁXIMO uma, só se alguma âncora mudou dentro da janela
-        if any(o.regen_due for o in outcomes):
+        if regenerate and any(o.regen_due for o in outcomes):
 
             _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
 
@@ -172,11 +173,52 @@ class GoalActionExecutor:
 
             runner.goal = goal_text  # snapshot coerente entre ações da mensagem
 
+            GoalActionExecutor._set_open_target(repo, profile, runner, action)
+
         regen_due = anchor_changed and GoalActionExecutor._within_regen_window(
             action.race_date
         )
 
         return _GoalOutcome(action, relationship, anchor_changed, regen_due)
+
+    @staticmethod
+    def _set_open_target(
+        repo: RunnerProfileRepository,
+        profile: str,
+        runner: RunnerProfile,
+        action: BrainAction,
+    ) -> None:
+        """Meta com TEMPO sem prova marcada ("5 km em 23 min") vira o alvo do
+        perfil — tempo e distância — quando não há prova FUTURA ancorando (aí a
+        prova segue mandando no ritmo). Sem isto o João trocou pra 5k/23 min e o
+        perfil seguiu "10 km em 55 min" (27/09)."""
+
+        if action.race_date or not (action.target_time or action.distance_km):
+
+            return
+
+        today = today_local().isoformat()
+
+        if runner.race_date and str(runner.race_date) >= today:
+
+            return
+
+        label = f"{action.distance_km:g} km" if action.distance_km else None
+
+        repo.update_fields(
+            profile,
+            {
+                "target_time": action.target_time,
+                "target_race": label,
+                "race_date": None,
+            },
+        )
+
+        runner.target_time = action.target_time
+
+        runner.target_race = label
+
+        runner.race_date = None
 
     @staticmethod
     def _remember(
