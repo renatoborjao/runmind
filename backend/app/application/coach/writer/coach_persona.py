@@ -57,3 +57,20 @@ def first_name(name: str | None) -> str:
     parts = (name or "").strip().split()
 
     return parts[0] if parts else ""
+
+
+def address_by_first_name(full_name: str | None, text: str) -> str:
+    """O coach fala com o atleta pelo PRIMEIRO nome em toda mensagem. Aplicado
+    no ponto único de saída (CoachOutbox + resposta do chat) em vez de caçar
+    as ~40 mensagens que interpolam o nome ("Bom dia, Renato Borges!" soava
+    robô). Só troca o nome COMPLETO exato — nada mais do texto muda."""
+
+    full = (full_name or "").strip()
+
+    first = first_name(full)
+
+    if not text or not full or first == full:
+
+        return text
+
+    return text.replace(full, first)

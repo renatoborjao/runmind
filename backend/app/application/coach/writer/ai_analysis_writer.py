@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from google.genai import types
 
 from app.application.coach.context.coach_context import CoachContext
-from app.application.coach.writer.coach_voice import COACH_VOICE, first_name
+from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.application.coach.writer.labels import (
     intensity_label,
     plan_workout_label,

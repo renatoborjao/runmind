@@ -6,6 +6,7 @@ from google.genai import types
 from app.application.coach.planning.ai_session_builder import (
     build_session_dict,
 )
+from app.application.coach.writer.coach_persona import first_name
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
 from app.domain.entities.planned_session import PlannedSession
@@ -32,6 +33,7 @@ Execução até agora nesta semana: cumpriu {done} de {total} treinos.
 
 RETRATO REAL DO ATLETA (histórico e evolução — a base da sua decisão):
 {portrait}
+{patterns}
 
 DECIDA, como treinador, usando o retrato acima:
 
@@ -66,7 +68,16 @@ Furo que importa:
 próximos dias pra manter a evolução — quer que eu ajuste?",
   "operations": [ ... ]}}
 
-Sem markdown. Tom de WhatsApp, curto e humano — nunca culpando o atleta.
+- FURO REPETIDO (os PADRÕES RECENTES mostram vários furos — ex.: "fez 2 de 7",
+  ou o mesmo tipo/dia furando): NÃO responda "tranquilo, segue o mesmo". Sem
+  culpa, sem sermão e sem frases de julgamento, mas com franqueza de treinador:
+  diga o que o padrão mostra (com o número), pergunte o que está travando
+  (horário? dias? cansaço? o tipo de treino?) e ofereça ajustar o plano à vida
+  dele (menos dias, sessões mais curtas, trocar o dia). Um plano que não cabe
+  na rotina não serve — o objetivo é ele treinar, não o plano ficar bonito.
+
+Sem markdown. Tom de WhatsApp, curto e humano — nunca culpando o atleta. Fale
+com ele pelo primeiro nome.
 """
 
 
@@ -93,12 +104,13 @@ class MissedWorkoutJudge:
         done: int,
         total: int,
         portrait: str,
+        patterns: str = "",
     ) -> MissedJudgment | None:
 
         settings = get_settings()
 
         prompt = PROMPT_TEMPLATE.format(
-            runner_name=runner.name,
+            runner_name=first_name(runner.name) or runner.name,
             objective=plan.objective or runner.goal,
             missed_label=weekday_label(missed.day),
             missed_type=missed.workout_type,
@@ -111,6 +123,7 @@ class MissedWorkoutJudge:
             done=done,
             total=total,
             portrait=portrait or "(sem retrato disponível)",
+            patterns=patterns,
         )
 
         return await generate_json(

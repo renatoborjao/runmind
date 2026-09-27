@@ -85,7 +85,7 @@ class CoachWriter:
         name: str,
     ) -> str:
 
-        from app.application.coach.writer.coach_voice import first_name
+        from app.application.coach.writer.coach_persona import first_name
 
         return GREETING_TEMPLATE.format(name=first_name(name) or name)
 

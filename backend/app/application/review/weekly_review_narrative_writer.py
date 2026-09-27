@@ -9,7 +9,7 @@ import json
 
 from google.genai import types
 
-from app.application.coach.writer.coach_voice import COACH_VOICE, first_name
+from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import (

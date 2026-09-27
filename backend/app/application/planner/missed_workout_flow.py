@@ -90,6 +90,7 @@ class MissedWorkoutFlow:
             done=done,
             total=len(running),
             portrait=MissedWorkoutFlow._portrait(runner, history),
+            patterns=MissedWorkoutFlow._patterns(profile),
         )
 
         if judgment is None:
@@ -114,6 +115,15 @@ class MissedWorkoutFlow:
         marker.mark(profile, missed_date)
 
         return runner, judgment.message
+
+    @staticmethod
+    def _patterns(profile: str) -> str:
+        """O que SE REPETE (aderência, furos por tipo, corpo) — furo isolado
+        não é padrão, mas 5 de 7 é: aí o coach conversa sobre a rotina."""
+
+        from app.application.history.training_patterns import TrainingPatterns
+
+        return TrainingPatterns.for_profile(profile)
 
     @staticmethod
     def _portrait(

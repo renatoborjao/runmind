@@ -73,7 +73,7 @@ class StatePortraitWriter:
             reading, evolution, worsening,
         )
 
-        from app.application.coach.writer.coach_voice import first_name
+        from app.application.coach.writer.coach_persona import first_name
 
         lines = [
             f"📷 Como você está, {first_name(runner_name) or runner_name}",

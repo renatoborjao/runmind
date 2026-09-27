@@ -642,6 +642,16 @@ class CoachConversationEvent:
 
                 reply_text = BUSY_REPLY
 
+        # o coach fala pelo PRIMEIRO nome — mesma regra das automáticas
+        # (CoachOutbox), aplicada no ponto único de saída do chat
+        from app.application.coach.writer.coach_persona import (
+            address_by_first_name,
+        )
+
+        reply_text = address_by_first_name(
+            getattr(runner, "name", None), reply_text,
+        )
+
         # mensagem de mídia (foto/áudio): o app mostra legenda + mídia
         media_turn = {
             key: value

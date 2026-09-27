@@ -43,6 +43,13 @@ class CoachOutbox:
         (teto diário + isenção dos essenciais + dedup). Sem `kind` ou flag OFF,
         segue igual a hoje. Ver [[ProactiveGovernor]]."""
 
+        # o coach fala pelo PRIMEIRO nome em toda mensagem automática
+        from app.application.coach.writer.coach_persona import (
+            address_by_first_name,
+        )
+
+        message = address_by_first_name(getattr(runner, "name", None), message)
+
         governed = bool(kind) and profile is not None and (
             get_settings().proactive_governor_active_for(profile)
         )

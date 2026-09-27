@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from google.genai import types
 
-from app.application.coach.writer.coach_voice import COACH_VOICE, first_name
+from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.infrastructure.integrations.gemini.client import (

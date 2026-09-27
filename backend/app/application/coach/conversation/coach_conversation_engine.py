@@ -1,5 +1,6 @@
 from google.genai import types
 
+from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import generate_text
 
@@ -11,6 +12,7 @@ MAX_OUTPUT_TOKENS = 400
 SYSTEM_PROMPT_TEMPLATE = """Você é o coach de corrida do Ritmind, conversando \
 por WhatsApp com {runner_name}.
 
+{voice}
 TOM: mensagens curtas, diretas, tom de treinador experiente e cordial — como uma
 conversa real de WhatsApp. NÃO use markdown: nada de "**", "##" ou listas
 numeradas — WhatsApp e Telegram não renderizam isso e os símbolos aparecem crus.
@@ -111,7 +113,8 @@ class CoachConversationEngine:
         settings = get_settings()
 
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
-            runner_name=runner_name,
+            runner_name=first_name(runner_name) or runner_name,
+            voice=COACH_VOICE,
             context_facts=context_facts,
         )
 
