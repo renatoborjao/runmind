@@ -21,7 +21,10 @@ class CurrentPlanProvider:
     async def for_profile(
         profile: str,
         force: bool = False,
+        request: str = "",
     ) -> tuple[RunnerProfile, TrainingPlan]:
+        """`request`: o pedido do atleta que motivou refazer a semana (as
+        palavras dele + a leitura do coach) — sem ele a IA refazia no escuro."""
 
         runner = LoadRunnerProfile.execute(profile)
 
@@ -51,6 +54,7 @@ class CurrentPlanProvider:
             goal=goal,
             history=history,
             force=force,
+            request=request,
         )
 
         return runner, plan

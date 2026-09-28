@@ -168,6 +168,67 @@ async def _chat(profile, runner, messages=CHAT_SCENARIOS):
             print(f"percepção: {decision.perception}")
 
 
+async def _replan(profile, runner, messages):
+    """REFAZER A SEMANA pelo caminho real: cérebro → pedido que desce pro plano
+    → IA refaz a semana ATUAL (nada é gravado). 2 chamadas por mensagem."""
+
+    from app.application.coach.conversation.coach_brain import CoachBrain
+    from app.application.coach.conversation.coach_brain_executor import (
+        CoachBrainExecutor,
+    )
+    from app.application.coach.conversation.conversation_context_builder import (
+        ConversationContextBuilder,
+    )
+    from app.application.planner.current_plan_provider import CurrentPlanProvider
+    from app.core.clock import today_local
+
+    for message in messages:
+
+        context = await ConversationContextBuilder.build(profile, message)
+
+        decision = await CoachBrain.decide(
+            runner_name=runner.name, context_facts=context, incoming_text=message,
+        )
+
+        actions = decision.all_actions if decision else []
+
+        request = CoachBrainExecutor._replan_request(message, actions)
+
+        _s(f"REFAZER: \"{message}\" — ações {[a.type for a in actions]}")
+
+        print(f"pedido que desce pro plano: {request}")
+
+        # uma geração só (custa crédito pago — 28/09): o "sem pedido" é o antes
+        for label, req in (("COM o pedido", request),):
+
+            _, plan = await CurrentPlanProvider.for_profile(
+                profile, force=True, request=req,
+            )
+
+            print(f"\n[{label}] objetivo: {plan.weekly_objective}")
+
+            for session in plan.sessions:
+
+                day = plan.session_date(session)
+
+                if day < today_local():
+
+                    continue
+
+                size = (
+                    f"{session.planned_distance_km:g} km"
+                    if session.planned_distance_km
+                    else f"{session.planned_duration_minutes or 0:g} min"
+                )
+
+                print(
+                    f"  {day:%a %d/%m} {session.workout_type} · {size} · "
+                    f"{session.target_pace_min}-{session.target_pace_max}"
+                )
+
+                print(f"     {(session.structure or '').replace(chr(10), ' / ')[:240]}")
+
+
 async def _analysis(profile):
 
     from app.application.coach.writer.ai_analysis_writer import AIAnalysisWriter
@@ -687,8 +748,11 @@ BRAIN_EVAL = [
     ("renato2", "passa o treino de quinta pra sexta e deixa ele mais curto, "
      "uns 30 minutos", [{"move"}],
      {"target_day": "Friday", "content_change": True}),
+    # adjust/simplify + replan juntos: o replan vence e leva o pedido junto
+    # (28/09) — refaz a semana honrando o "só leve até sexta"
     ("mauricio", "tô gripado, refaz minha semana só com treino leve até "
-     "sexta", [{"replan"}, {"adjust"}, {"simplify"}], {}),
+     "sexta", [{"replan"}, {"adjust"}, {"simplify"}, {"adjust", "replan"},
+               {"simplify", "replan"}], {}),
     ("fernanda", "refaz minha semana, mudou tudo aqui na minha rotina",
      [{"replan"}], {}),
     # ---- PULAR (aplica na hora)
@@ -1054,6 +1118,12 @@ async def main() -> None:
             ("recap", lambda: _recap(profile, runner)),
             ("race", lambda: _race(profile, runner)),
             ("reengage", lambda: _reengage(profile, runner)),
+            # só quando pedido (--only replan): chama a IA 2x por mensagem
+            ("replan", lambda: _replan(
+                profile, runner,
+                [m.strip() for m in args.messages.split("||") if m.strip()]
+                or ["tô gripado, refaz minha semana só com treino leve até sexta"],
+            )),
         )
 
         for name, run in steps:

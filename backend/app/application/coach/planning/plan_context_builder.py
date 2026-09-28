@@ -32,6 +32,7 @@ class PlanContextBuilder:
         dossier: str = "",
         today: date | None = None,
         block: str = "",
+        request: str = "",
     ) -> str:
 
         week_end = week_start + timedelta(days=6)
@@ -53,6 +54,18 @@ class PlanContextBuilder:
         if block:
 
             lines.append(block)
+
+        # O PEDIDO que fez o atleta pedir pra refazer a semana ("tô gripado,
+        # só leve até sexta"). O dossiê não tem a mensagem atual — sem isto a IA
+        # refazia a semana sem saber o que ele pediu (lab 28/09, Maurício).
+        if request.strip():
+
+            lines.append(
+                "PEDIDO DO ATLETA AGORA — é POR ISSO que você está refazendo a "
+                f"semana: {request.strip()}. Honre o pedido nos dias que ele "
+                "cobre (a dose e a forma são suas, com o quadro inteiro); o que "
+                "ele não citou segue o seu critério."
+            )
 
         # REFAZENDO a semana que já começou (o atleta mudou meta/dias e pediu o
         # plano novo): os dias anteriores ficam como estão

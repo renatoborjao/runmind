@@ -37,6 +37,7 @@ class AIPlanService:
         history: TrainingHistory,
         reference_date: date | None = None,
         force: bool = False,
+        request: str = "",
     ) -> TrainingPlan:
 
         reference_date = reference_date or today_local()
@@ -75,6 +76,7 @@ class AIPlanService:
             context = AIPlanService._build_context(
                 profile, runner, metrics, goal, history,
                 repository, week_start, assessment.run_walk,
+                request=request,
             )
 
             # medidor: rotula a geração como "plano" (context manager reseta
@@ -211,7 +213,7 @@ class AIPlanService:
     @staticmethod
     def _build_context(
         profile, runner, metrics, goal, history,
-        repository, week_start, run_walk,
+        repository, week_start, run_walk, request: str = "",
     ) -> str:
 
         # "plano anterior" = o da SEMANA ANTERIOR (a que acabou), NÃO o da
@@ -272,6 +274,7 @@ class AIPlanService:
             block=AIPlanService._block_line(
                 AIPlanService._active_block(repository, profile, week_start),
             ),
+            request=request,
         )
 
     @staticmethod

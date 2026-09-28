@@ -367,8 +367,15 @@ class CoachBrainExecutor:
 
         if replan:
 
-            # refazer a semana já cobre as mudanças pontuais dela
-            parts.append(await CoachBrainExecutor._replan(profile, runner))
+            # refazer a semana já cobre as mudanças pontuais dela — por isso o
+            # que elas pediam vai JUNTO pro refazer (antes "adjust + replan"
+            # refazia a semana sem o "só leve até sexta" do atleta)
+            parts.append(
+                await CoachBrainExecutor._replan(
+                    profile, runner,
+                    CoachBrainExecutor._replan_request(incoming_text, actions),
+                )
+            )
 
         elif len(week) >= 2:
 
@@ -498,7 +505,10 @@ class CoachBrainExecutor:
 
         if action.type == "replan":
 
-            reply = await CoachBrainExecutor._replan(profile, runner)
+            reply = await CoachBrainExecutor._replan(
+                profile, runner,
+                CoachBrainExecutor._replan_request(incoming_text, [action]),
+            )
 
             return f"{say}\n\n{reply}" if say and reply else reply
 
@@ -832,11 +842,35 @@ class CoachBrainExecutor:
         )
 
     @staticmethod
-    async def _replan(profile, runner) -> str | None:
+    def _replan_request(incoming_text: str, actions: list[BrainAction]) -> str:
+        """O pedido que o refazer tem que honrar: as palavras do atleta + o que
+        o coach entendeu delas (as instruções das ações da semana e do próprio
+        replan — num "sim" a uma pergunta, é a instrução que carrega o sentido)."""
+
+        readings = list(dict.fromkeys(
+            a.instruction.strip() for a in actions
+            if (a.type in _PROPOSAL_ACTIONS or a.type == "replan")
+            and not CoachBrainExecutor._skips(a)
+            and (a.instruction or "").strip()
+        ))
+
+        text = f'"{(incoming_text or "").strip()}"' if (incoming_text or "").strip() else ""
+
+        if readings:
+
+            reading = "; ".join(readings)
+
+            text = f"{text} — o que você entendeu: {reading}" if text else reading
+
+        return text
+
+    @staticmethod
+    async def _replan(profile, runner, request: str = "") -> str | None:
         """Refaz AGORA os dias que faltam da semana, com o estado atual (meta,
-        dias, corpo — o dossiê inteiro), e entrega o plano + oferta do relógio.
-        É a ação que cumpre o "monta meu plano novo" — antes o coach prometia
-        "já estou preparando, em instantes te envio" e nada chegava."""
+        dias, corpo — o dossiê inteiro) E o pedido que motivou refazer, e
+        entrega o plano + oferta do relógio. É a ação que cumpre o "monta meu
+        plano novo" — antes o coach prometia "já estou preparando, em instantes
+        te envio" e nada chegava."""
 
         if runner.external_coach:
 
@@ -850,7 +884,9 @@ class CoachBrainExecutor:
             WeeklyPlanMessageFormatter,
         )
 
-        fresh, plan = await CurrentPlanProvider.for_profile(profile, force=True)
+        fresh, plan = await CurrentPlanProvider.for_profile(
+            profile, force=True, request=request,
+        )
 
         plan_text = WeeklyPlanMessageFormatter.week_plan_message(
             fresh.name, plan, profile=profile,

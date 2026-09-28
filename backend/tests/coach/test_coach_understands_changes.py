@@ -86,7 +86,7 @@ def test_mixed_message_executes_goal_days_and_replan_in_order():
 
         return "📅 dias"
 
-    async def replan(profile, runner):
+    async def replan(profile, runner, request=""):
 
         calls.append(("replan",))
 
@@ -174,7 +174,7 @@ def test_replan_delivers_the_plan_now():
 
         reply = asyncio.run(CoachBrainExecutor._replan("joao", runner))
 
-    provider.assert_awaited_once_with("joao", force=True)
+    provider.assert_awaited_once_with("joao", force=True, request="")
     assert "PLANO NOVO" in reply and "[relógio?]" in reply
 
 
@@ -304,3 +304,103 @@ def test_context_tells_the_ai_the_week_already_started():
     )
 
     assert "A SEMANA JÁ COMEÇOU" in ctx and "24/09" in ctx
+
+
+# ---- refazer a semana COM o pedido (Maurício 28/09, lab) ------------------
+# "tô gripado, refaz minha semana só com treino leve até sexta": o cérebro às
+# vezes manda adjust + replan; o replan vencia e refazia a semana SEM o pedido
+# (o dossiê não tem a mensagem atual) — o "só leve até sexta" se perdia.
+
+
+def test_adjust_plus_replan_carries_the_request_into_the_rebuild():
+
+    seen = {}
+
+    async def replan(profile, runner, request=""):
+
+        seen["request"] = request
+
+        return "semana refeita"
+
+    actions = [
+        _action(type="adjust", scope="week",
+                instruction="treinos até sexta só rodagens leves"),
+        _action(type="replan", instruction=""),
+    ]
+
+    with patch.object(CoachBrainExecutor, "_replan", side_effect=replan):
+
+        reply = asyncio.run(
+            CoachBrainExecutor._act_all(
+                "mauricio", make_runner(), actions, MagicMock(),
+                "tô gripado, refaz minha semana só com treino leve até sexta",
+                "", "Saúde primeiro.",
+            )
+        )
+
+    assert seen["request"] == (
+        '"tô gripado, refaz minha semana só com treino leve até sexta" — o '
+        "que você entendeu: treinos até sexta só rodagens leves"
+    )
+    assert "semana refeita" in reply
+
+
+def test_a_yes_carries_the_meaning_through_the_replan_instruction():
+    """Num "sim" à pergunta do coach, o sentido está na instrução."""
+
+    request = CoachBrainExecutor._replan_request(
+        "sim", [_action(type="replan", instruction="semana só com treino leve")],
+    )
+
+    assert request == '"sim" — o que você entendeu: semana só com treino leve'
+
+
+def test_skip_is_not_part_of_the_rebuild_request():
+
+    request = CoachBrainExecutor._replan_request(
+        "vou viajar", [
+            _action(type="skip", scope="week", instruction="tirar a semana"),
+            _action(type="replan", instruction=""),
+        ],
+    )
+
+    assert request == '"vou viajar"'
+
+
+def test_replan_passes_the_request_to_the_plan():
+
+    runner = make_runner()
+
+    with (
+        patch(
+            "app.application.planner.current_plan_provider.CurrentPlanProvider."
+            "for_profile",
+            new=AsyncMock(return_value=(runner, MagicMock())),
+        ) as provider,
+        patch(
+            "app.application.planner.weekly_plan_message_formatter."
+            "WeeklyPlanMessageFormatter.week_plan_message",
+            return_value="PLANO",
+        ),
+        patch("app.application.garmin.watch_offer.watch_update_offer", return_value=""),
+    ):
+
+        asyncio.run(CoachBrainExecutor._replan("m", runner, '"só leve"'))
+
+    provider.assert_awaited_once_with("m", force=True, request='"só leve"')
+
+
+def test_plan_context_puts_the_request_up_front():
+
+    context = PlanContextBuilder.build(
+        runner=make_runner(), goal=None, week_start=date(2026, 9, 28),
+        request='"tô gripado, só leve até sexta"',
+    )
+
+    assert (
+        'PEDIDO DO ATLETA AGORA — é POR ISSO que você está refazendo a semana: '
+        '"tô gripado, só leve até sexta".'
+    ) in context
+    assert "PEDIDO DO ATLETA" not in PlanContextBuilder.build(
+        runner=make_runner(), goal=None, week_start=date(2026, 9, 28),
+    )
