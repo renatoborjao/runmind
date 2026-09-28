@@ -8,6 +8,7 @@ esforço-âncora e a da meta forem MUITO diferentes (ex.: prever maratona a
 partir de um esforço de 3km), a extrapolação de Riegel é conhecidamente
 pouco confiável -> corta, também None."""
 
+from app.application.history.pace_model_builder import gps_broken
 from app.application.history.runner_metrics import WALK_PACE_CUTOFF
 from app.application.planner.race_time_formatter import RaceTimeFormatter
 from app.domain.entities.training_history import TrainingHistory
@@ -100,6 +101,8 @@ class RaceTimePredictor:
     @staticmethod
     def _best_anchor(history: TrainingHistory):
 
+        # GPS quebrado não ancora: Hélio 27/09 recebeu "10 km em ~49:05" de uma
+        # corrida com pico de 100,9 km/h ("7,6 km a 4:49"; ele roda 6:50)
         candidates = [
             a for a in history.activities
             if (
@@ -107,6 +110,7 @@ class RaceTimePredictor:
                 and a.distance / 1000 >= MIN_ANCHOR_KM
                 and a.average_speed > 0
                 and RaceTimePredictor._pace(a) <= WALK_PACE_CUTOFF
+                and not gps_broken(a)
             )
         ]
 

@@ -459,3 +459,20 @@ def test_km_milestone_is_dated_only_on_the_live_path():
     records = PersonalRecordRepository().load(runner.id)
 
     assert records["total_km_milestone_date"] == "2026-07-01"
+
+
+def test_gps_jump_is_never_a_record():
+    """Salto de GPS (pico sobre-humano) infla pace e distância: não é PR."""
+
+    from app.domain.entities.training_history import TrainingHistory
+
+    broken = _run(4, 8, 7_570, 1000 / (4.83 * 60), id_=1)
+    broken.max_speed = 100.9 / 3.6
+    real = _run(17, 9, 6_000, 1000 / (6.8 * 60), id_=2)
+
+    bests = PersonalRecordDetector.compute_bests(
+        TrainingHistory(activities=[broken, real]),
+    )
+
+    assert bests["pace_by_band"] == {"5-8": 6.8}
+    assert bests["longest_km"] == 6.0

@@ -85,3 +85,18 @@ def test_anchor_date_is_carried():
     result = RaceTimePredictor.predict(history, goal_distance_km=10.0)
 
     assert result["anchor_date"] == "2026-07-15"
+
+
+def test_gps_jump_never_anchors_the_projection():
+    """Hélio 27/09: "10 km em ~49:05" veio de uma corrida com pico de
+    100,9 km/h (7,6 km a 4:49; ele roda 6:50). GPS quebrado não é nível."""
+
+    broken = _run(7_570, 1000 / (4.83 * 60), id_=1, day=4, month=8)
+    broken.max_speed = 100.9 / 3.6
+    real = _run(8_000, 1000 / (6.8 * 60), id_=2, day=17, month=9)
+
+    prediction = RaceTimePredictor.predict(
+        TrainingHistory(activities=[broken, real]), goal_distance_km=10.0,
+    )
+
+    assert prediction["anchor_date"] == "2026-09-17"

@@ -30,6 +30,7 @@ chamada explícita, `after_feedback` também semeia sozinho na primeira vez
 que rodar — mas aí o primeiro treino processado é sempre "gasto" só
 semeando, nunca comemorando."""
 
+from app.application.history.pace_model_builder import gps_broken
 from app.application.history.runner_metrics import (
     RUN_MIN_DISTANCE_KM,
     WALK_PACE_CUTOFF,
@@ -139,6 +140,10 @@ class PersonalRecordDetector:
 
         dist_km = current.distance / 1000
 
+        # GPS quebrado (pico sobre-humano) infla distância e pace: não vira
+        # recorde (Hélio: "4:49 nos 5-8 km" de um salto de 100,9 km/h)
+        broken = gps_broken(current)
+
         current_date = activity_date(current).isoformat()
 
         # -- corrida mais longa ------------------------------------------
@@ -146,6 +151,7 @@ class PersonalRecordDetector:
 
         if (
             current.sport in RUN_SPORTS
+            and not broken
             and dist_km >= _LONGEST_MIN_KM
             and dist_km > longest_km
         ):
@@ -165,6 +171,7 @@ class PersonalRecordDetector:
 
         if (
             current.sport in RUN_SPORTS
+            and not broken
             and band is not None
             and pace is not None
             and dist_km >= RUN_MIN_DISTANCE_KM
@@ -322,7 +329,9 @@ class PersonalRecordDetector:
 
         runs = [
             a for a in history.activities
-            if a.sport in RUN_SPORTS and a.distance / 1000 >= _LONGEST_MIN_KM
+            if a.sport in RUN_SPORTS
+            and a.distance / 1000 >= _LONGEST_MIN_KM
+            and not gps_broken(a)
         ]
 
         if runs:
@@ -347,6 +356,7 @@ class PersonalRecordDetector:
 
             if (
                 activity.sport not in RUN_SPORTS
+                or gps_broken(activity)
                 or band is None
                 or pace is None
                 or dist_km < RUN_MIN_DISTANCE_KM
