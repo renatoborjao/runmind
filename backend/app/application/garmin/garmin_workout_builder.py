@@ -45,6 +45,11 @@ _STEP_TYPE = {
     REST: (StepType.REST, "rest", 5),
 }
 
+# passo só com teto de FC: piso = teto − isto (bem abaixo de qualquer rodagem),
+# nunca abaixo de _HR_FLOOR_MIN
+_HR_FLOOR_SPAN = 60
+_HR_FLOOR_MIN = 60
+
 
 def _pace_to_speed_ms(pace: str | None) -> float | None:
     """'4:45' (min:seg/km) -> velocidade em m/s (como o Garmin guarda pace)."""
@@ -125,7 +130,18 @@ def _target(step: WorkoutStep) -> dict:
             "targetValueTwo": max(speed_slow, speed_fast),
         }
 
-    if step.hr_min and step.hr_max:
+    hr_low = step.hr_min
+
+    # só o TETO (ex.: rodagem aliviada do bom dia, "leve com FC até ~153"): o
+    # relógio só aceita a faixa INTEIRA — sem piso o passo descia sem alvo e o
+    # relógio ficava mudo. Piso folgado: quem manda é o teto; embaixo ele só
+    # reclama se o atleta praticamente parar. Com pace no passo, o pace segue
+    # sendo o alvo (acima) e o teto fica no texto.
+    if step.hr_max and not hr_low:
+
+        hr_low = max(_HR_FLOOR_MIN, step.hr_max - _HR_FLOOR_SPAN)
+
+    if hr_low and step.hr_max:
 
         return {
             "targetType": {
@@ -133,8 +149,8 @@ def _target(step: WorkoutStep) -> dict:
                 "workoutTargetTypeKey": "heart.rate.zone",
                 "displayOrder": 4,
             },
-            "targetValueOne": float(min(step.hr_min, step.hr_max)),
-            "targetValueTwo": float(max(step.hr_min, step.hr_max)),
+            "targetValueOne": float(min(hr_low, step.hr_max)),
+            "targetValueTwo": float(max(hr_low, step.hr_max)),
         }
 
     return {

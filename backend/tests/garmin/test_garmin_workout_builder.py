@@ -162,6 +162,36 @@ def test_hr_target_step():
     assert step["targetValueTwo"] == 150.0
 
 
+def test_ceiling_only_step_reaches_the_watch():
+    """Rodagem aliviada do bom dia ("leve, FC até ~153", sem pace): antes o
+    passo descia SEM alvo e o relógio ficava mudo."""
+
+    session = _session(
+        steps=[WorkoutStep(kind="run", distance_m=6000, hr_max=153)]
+    )
+
+    step = _steps(GarminWorkoutBuilder.build(session, "Rodagem leve"))[0]
+
+    assert step["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
+    assert (step["targetValueOne"], step["targetValueTwo"]) == (93.0, 153.0)
+
+
+def test_pace_stays_the_watch_target_when_the_step_has_both():
+    """Leve do Maurício: 6:20-6:50 + teto 153 — o relógio apita pelo pace
+    (a faixa que ele pediu); o teto fica no texto."""
+
+    session = _session(
+        steps=[WorkoutStep(
+            kind="run", distance_m=6000, pace_min="6:20", pace_max="6:50",
+            hr_max=153,
+        )]
+    )
+
+    step = _steps(GarminWorkoutBuilder.build(session, "Rodagem"))[0]
+
+    assert step["targetType"]["workoutTargetTypeKey"] == "pace.zone"
+
+
 def test_walk_session_builds_walking_workout():
 
     workout = GarminWorkoutBuilder.build(
