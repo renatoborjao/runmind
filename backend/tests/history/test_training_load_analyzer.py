@@ -387,3 +387,44 @@ def test_base_is_contiguous_block_before_taper_not_old_volume():
     # base ancora no bloco pré-taper (~420/sem), NÃO no volume antigo além do
     # gap (~630/sem) nem no taper (~175/sem)
     assert 380.0 <= aware.chronic_load <= 460.0
+
+
+# ---- base baixa e semana parada (Leonardo/João 27/09) ----------------------
+
+
+def test_a_week_off_does_not_turn_the_return_into_a_spike():
+    """Leonardo: uma semana SEM treino no mês derrubava a base e a volta ao
+    normal (o mesmo tempo de sempre) virava ACWR 1,62 — 'risco de lesão alto'."""
+
+    # 3 semanas ativas; a de 7-13 dias atrás ficou PARADA
+    acts = [_act(d, 40) for d in (1, 4, 15, 18, 22, 25)]
+
+    load = _analyze(acts)
+
+    assert load.acwr == 1.0
+    assert load.status == LOAD_OPTIMAL
+
+
+def test_low_base_needs_a_real_increase_of_time_to_be_a_spike():
+    """João: ~40 min/semana; uma corrida um pouco maior não é 'sobrecarga'."""
+
+    base = [_act(d, 35) for d in (9, 16, 23)]
+    this_week = [_act(2, 55)]
+
+    load = _analyze(base + this_week)
+
+    assert load.acwr > 1.3
+    assert load.status == LOAD_OPTIMAL
+    assert load.low_base == (40, 15)
+
+
+def test_beginner_big_jump_is_still_a_spike():
+    """Base baixa, mas saltou de 40 pra 150 min: pico de verdade."""
+
+    base = [_act(d, 40) for d in (9, 16, 23)]
+    this_week = [_act(d, 50) for d in (1, 2, 3)]
+
+    load = _analyze(base + this_week)
+
+    assert load.status == LOAD_HIGH
+    assert load.low_base is None

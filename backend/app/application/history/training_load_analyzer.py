@@ -35,6 +35,14 @@ _MIN_HISTORY_DAYS = 21
 _ACUTE_DAYS = 7
 _CHRONIC_DAYS = 28
 
+# BASE BAIXA: quem treina menos de ~1h30 por semana "sobe 40%" com UMA corrida um
+# pouco mais forte (João 27/09: 30 min na semana, base de ~40 — "sobrecarregado").
+# Nessa base, a razão só é pico com aumento REAL de tempo. Base normal segue a
+# razão pura (pico de INTENSIDADE com o mesmo tempo é pico de verdade), e o
+# iniciante que salta de 60 pra 150 min continua sinalizado.
+_LOW_BASE_MINUTES = 90
+_MIN_SPIKE_MINUTES = 30
+
 # uma semana abaixo desta fração do PICO da janela é "taper" (afiação pré-prova),
 # não a carga normal do atleta — ao calcular a crônica pós-prova, essas semanas
 # ficam de fora (senão deflacionam a base e o ACWR vira um pico falso). Espelha o
@@ -114,6 +122,31 @@ class TrainingLoadAnalyzer:
 
             chronic = race_aware
 
+        weekly = TrainingLoadAnalyzer._weekly_loads(per_day, ref)
+
+        # SEMANA PARADA (férias, doença, viagem) não é a base dele: com 2+
+        # semanas ativas no mês, a base é a média das ATIVAS — senão a volta ao
+        # normal parece pico (Leonardo 27/09: uma semana zerada derrubou a base
+        # e o ACWR foi a 1,62 com o mesmo tempo de treino). Voltando de parada
+        # LONGA (menos de 2 semanas ativas) segue a média cheia: aí é pico mesmo.
+        if race_aware is None:
+
+            active = [w for w in weekly if w > 0]
+
+            if 2 <= len(active) < len(weekly):
+
+                chronic = round(sum(active) / len(active), 1)
+
+        minutes = TrainingLoadAnalyzer._weekly_minutes(history, ref)
+
+        active_minutes = [m for m in minutes if m > 0]
+
+        base_minutes = (
+            sum(active_minutes) / len(active_minutes)
+            if 2 <= len(active_minutes) < len(minutes)
+            else sum(minutes) / len(minutes)
+        )
+
         acute = round(acute, 1)
 
         days_of_history = TrainingLoadAnalyzer._history_span(per_day, ref)
@@ -126,13 +159,27 @@ class TrainingLoadAnalyzer:
 
         status = TrainingLoadAnalyzer._status(acwr, days_of_history)
 
+        low_base = None
+
+        if (
+            status in (LOAD_CAUTION, LOAD_HIGH)
+            and base_minutes < _LOW_BASE_MINUTES
+            and minutes[-1] - base_minutes < _MIN_SPIKE_MINUTES
+        ):
+
+            status = LOAD_OPTIMAL
+
+            low_base = (round(base_minutes), round(minutes[-1] - base_minutes))
+
         return TrainingLoad(
             acute_load=acute,
             chronic_load=chronic,
             acwr=acwr,
             status=status,
             days_of_history=days_of_history,
-            weekly_loads=TrainingLoadAnalyzer._weekly_loads(per_day, ref),
+            weekly_loads=weekly,
+            weekly_minutes=minutes,
+            low_base=low_base,
         )
 
     # ------------------------------------------------------------------
@@ -454,6 +501,31 @@ class TrainingLoadAnalyzer:
                         if start <= day <= end
                     ),
                     1,
+                )
+            )
+
+        return weeks
+
+    @staticmethod
+    def _weekly_minutes(history: TrainingHistory, ref: date) -> list[float]:
+        """Minutos de treino de cada uma das últimas 4 semanas (antigo→novo),
+        nas MESMAS janelas da carga."""
+
+        weeks: list[float] = []
+
+        for w in range(3, -1, -1):
+
+            end = ref - timedelta(days=7 * w)
+
+            start = end - timedelta(days=6)
+
+            weeks.append(
+                round(
+                    sum(
+                        (a.moving_time or 0) / 60
+                        for a in history.activities
+                        if start <= a.start_date.date() <= end
+                    )
                 )
             )
 

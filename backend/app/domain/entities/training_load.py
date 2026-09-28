@@ -63,3 +63,7 @@ class TrainingLoad:
     status: str                # LOAD_* acima
     days_of_history: int       # dias entre o treino mais antigo e a referência
     weekly_loads: list[float] = field(default_factory=list)  # 4 sem, antigo→novo
+    weekly_minutes: list[float] = field(default_factory=list)  # idem, minutos
+    # BASE BAIXA: a razão alta não virou pico porque o aumento REAL de tempo
+    # foi pequeno — (minutos/semana da base, minutos a mais nesta semana)
+    low_base: tuple[int, int] | None = None

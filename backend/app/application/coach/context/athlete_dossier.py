@@ -645,6 +645,16 @@ class AthleteDossier:
 
                 extra += f"; carga aguda/crônica (ACWR) {acwr:.2f}" if acwr else ""
 
+                low_base = getattr(reading.load, "low_base", None)
+
+                if isinstance(low_base, tuple):
+
+                    extra += (
+                        f" — razão alta só pela base BAIXA (~{low_base[0]} min/"
+                        f"semana, {low_base[1]:+d} min reais nesta): NÃO é pico "
+                        "de carga"
+                    )
+
                 if reading.body_state == "ABSORBING" and acwr and acwr > 1.3:
 
                     # absorvendo = a RECUPERAÇÃO está em dia; com a carga subindo

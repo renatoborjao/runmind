@@ -53,8 +53,9 @@ class InjuryRiskAnalyzer:
 
             reasons.append("forma quebrando sob fadiga (cadência caindo no fim)")
 
-        # SPIKE de carga (ACWR)
-        if load.acwr is not None:
+        # SPIKE de carga (ACWR) — em BASE BAIXA sem aumento real de tempo a
+        # razão alta não é pico (o analisador da carga já decidiu: low_base)
+        if load.acwr is not None and load.low_base is None:
 
             if load.acwr > ACWR_CAUTION_MAX:
 
@@ -71,7 +72,7 @@ class InjuryRiskAnalyzer:
                 reasons.append(f"carga na faixa de atenção (ACWR {load.acwr:.1f})")
 
         # RAMPA de volume (última semana muito acima da anterior)
-        if InjuryRiskAnalyzer._ramped(load.weekly_loads):
+        if load.low_base is None and InjuryRiskAnalyzer._ramped(load.weekly_loads):
 
             points += 1
 
