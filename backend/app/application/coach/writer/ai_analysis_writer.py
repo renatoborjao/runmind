@@ -98,10 +98,13 @@ FATOS DO TREINO + DOSSIÊ DO ATLETA (use SÓ isto, não invente número nenhum):
 
 O QUE LER NOS FATOS:
 - INTENÇÃO × EXECUÇÃO: compare o que o treino PEDIA (tipo, pace, blocos, \
-intenção) com o que saiu. Leve/regenerativo/longão-base com FC acima do teto \
-aeróbico dele ou com muito tempo em Z3+ NÃO foi leve, mesmo com o pace no alvo \
-— diga isso, não chame de "controle". Passar do combinado num dia leve não é \
-mérito. Cortar/não completar a sessão-chave pesa.
+intenção) com o que saiu. O critério de LEVE é o TETO AERÓBICO dele (nos \
+fatos): leve/regenerativo/longão-base com FC acima do teto NÃO foi leve, mesmo \
+com o pace no alvo — diga isso, não chame de "controle". Abaixo do teto FOI \
+leve, qualquer que seja o número da zona do relógio (na régua pela FC máxima, \
+a Z3 inteira pode ficar abaixo do teto — não cobre Z3 abaixo do teto). Passar \
+do combinado num dia leve não é mérito. Cortar/não completar a sessão-chave \
+pesa.
 - FC × PACE: FC subindo com o pace parado (deriva, desacoplamento) = fadiga, \
 calor ou base curta. Em tiros, FC de recuperação quase igual à de pico \
 (diferença menor que ~10 bpm) = pausa curta/rápida demais ou corpo cansado.
@@ -552,9 +555,8 @@ class AIAnalysisWriter:
 
         zones = getattr(context.executed, "hr_zones", None)
 
-        ceiling = (
-            TrainingPatterns.aerobic_ceiling(zones.max_hr, zones.resting_hr)
-            if zones is not None else None
+        ceiling = TrainingPatterns.ceiling_of(
+            zones, getattr(context.runner, "id", None),
         )
 
         norm = StimulusLedger._normalize(planned.workout_type)
@@ -748,7 +750,9 @@ class AIAnalysisWriter:
 
             return None
 
-        return TrainingPatterns.aerobic_ceiling(zones.max_hr, zones.resting_hr)
+        return TrainingPatterns.ceiling_of(
+            zones, getattr(context.runner, "id", None),
+        )
 
     @staticmethod
     def block_hr_verdict(block, aerobic_ceiling: int | None) -> str | None:

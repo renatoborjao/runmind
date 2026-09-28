@@ -257,17 +257,34 @@ class TrainingPatterns:
                 profile, LoadRunnerProfile.execute(profile), activities,
             )
 
-            if zones is None:
-
-                return None
-
-            return TrainingPatterns.aerobic_ceiling(zones.max_hr, zones.resting_hr)
+            return TrainingPatterns.ceiling_of(zones, profile)
 
         except Exception as e:
 
             print(f"Teto aeróbico falhou p/ '{profile}': {e}")
 
             return None
+
+    @staticmethod
+    def ceiling_of(zones, profile: str | None) -> int | None:
+        """O LEVE do coach — o MESMO número no plano (hr_max dos passos, que
+        vira o alerta do relógio), na análise, no dossiê e no balanço de
+        intensidade (decisão do Renato 28/09: leve = abaixo do teto
+        aeróbico). 70% da reserva com o repouso REAL de hoje: o repouso das
+        zonas do relógio é o da configuração do Garmin e envelhece (Maurício:
+        74 na config × 61 real → teto 157, dentro da Z4 dele)."""
+
+        if zones is None:
+
+            return None
+
+        from app.application.history.hr_zone_resolver import HrZoneResolver
+
+        resting = HrZoneResolver.resting_now(profile) if profile else None
+
+        return TrainingPatterns.aerobic_ceiling(
+            zones.max_hr, resting or zones.resting_hr,
+        )
 
     @staticmethod
     def drift_for_profile(profile: str) -> RecoveryDrift | None:

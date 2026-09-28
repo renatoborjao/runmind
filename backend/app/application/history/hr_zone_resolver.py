@@ -131,7 +131,14 @@ class HrZoneResolver:
         vencidas e aí a régua calculada precisa dela. Best-effort: falha de
         leitura cai no %FCmáx."""
 
-        resting = None
+        return HrZoneResolver.resolve(
+            runner, activities, HrZoneResolver.resting_now(profile),
+        )
+
+    @staticmethod
+    def resting_now(profile: str) -> int | None:
+        """FC de repouso ATUAL: mediana dos últimos 30 dias da saúde do
+        Garmin. None sem dado (atleta sem relógio) ou falha de leitura."""
 
         try:
 
@@ -139,7 +146,7 @@ class HrZoneResolver:
                 GarminHealthRepository,
             )
 
-            resting = HrZoneResolver.median_resting(
+            return HrZoneResolver.median_resting(
                 GarminHealthRepository().load(profile)
             )
 
@@ -147,7 +154,7 @@ class HrZoneResolver:
 
             print(f"Zonas de FC: repouso indisponível p/ {profile}: {e}")
 
-        return HrZoneResolver.resolve(runner, activities, resting)
+            return None
 
     @staticmethod
     def max_hr(age, activities: list, today: date | None = None) -> int | None:

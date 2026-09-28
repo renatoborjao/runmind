@@ -256,11 +256,7 @@ class AthleteDossier:
                 profile, data.runner, data.activities,
             )
 
-            if data.zones is not None:
-
-                data.ceiling = TrainingPatterns.aerobic_ceiling(
-                    data.zones.max_hr, data.zones.resting_hr,
-                )
+            data.ceiling = TrainingPatterns.ceiling_of(data.zones, profile)
 
             data.drift = AthleteDossier._live_drift(profile, data)
 
@@ -518,7 +514,9 @@ class AthleteDossier:
 
                 ruler += (
                     f"; teto aeróbico ~{data.ceiling} bpm (70% da reserva de FC)"
-                    " — leve/longão-base de verdade fica abaixo dele"
+                    " — o LEVE é abaixo dele: leve/longão-base de verdade fica "
+                    "abaixo do teto, e o número da zona do relógio abaixo dele "
+                    "(ex.: Z3) ainda é leve/aeróbico"
                 )
 
             lines.append(ruler)

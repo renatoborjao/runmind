@@ -384,9 +384,15 @@ class StimulusLedger:
 
                 zones = HrZoneResolver.for_profile(profile, runner, activities)
 
+                # repouso REAL de hoje — o mesmo do teto aeróbico (o da
+                # config do relógio envelhece)
                 if zones is not None:
 
-                    max_hr, resting_hr = zones.max_hr, zones.resting_hr
+                    max_hr = zones.max_hr
+
+                    resting_hr = (
+                        HrZoneResolver.resting_now(profile) or zones.resting_hr
+                    )
 
             except Exception as e:
 
