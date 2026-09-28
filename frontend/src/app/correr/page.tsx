@@ -6,6 +6,21 @@ import { getHome, saveRun, type RunPayload, type TodaySession, type WorkoutStep 
 
 type Phase = "idle" | "recording" | "paused" | "saving" | "done" | "error";
 
+// sinal do GPS: procurando | bom (conta distância) | fraco (céu fechado) |
+// aproximado (Chrome com "localização aproximada": precisão de km) | perdido
+type GpsState = "searching" | "good" | "weak" | "approx" | "lost";
+
+// precisão (m) que conta distância; acima disso o ponto é ignorado
+const GOOD_ACC = 65;
+// acima disto não é céu fechado: é a permissão de localização APROXIMADA
+const APPROX_ACC = 300;
+// deslocamento mínimo entre pontos (abaixo é tremida do GPS parado)
+const MIN_STEP_M = 3;
+// velocidade acima disto entre dois pontos = salto de GPS (36 km/h)
+const MAX_SPEED_MS = 10;
+// sem ponto novo há mais que isto durante a corrida = sinal perdido
+const LOST_AFTER_S = 20;
+
 // corrida em andamento guardada localmente — se o app fechar/for pro fundo no
 // meio, dá pra recuperar e salvar depois (o GPS da web para com a tela apagada)
 const RUN_KEY = "rm_run_progress";
@@ -150,6 +165,23 @@ function spokenPace(s: Segment): string {
   return "";
 }
 
+// o que o atleta precisa saber do sinal — e o que FAZER quando não está bom
+function gpsText(state: GpsState, acc: number | null, idle: boolean): string {
+  const m = acc != null ? ` (precisão ${acc < 1000 ? `${acc} m` : `${(acc / 1000).toFixed(1).replace(".", ",")} km`})` : "";
+  switch (state) {
+    case "good":
+      return `🟢 GPS pronto${m}${idle ? " — pode iniciar" : ""}`;
+    case "weak":
+      return `🟡 Sinal fraco${m} — vá pra céu aberto; a distância conta quando firmar`;
+    case "approx":
+      return `🔴 Localização APROXIMADA${m}. No Chrome: Configurações do site › Localização › ative "Usar localização precisa"`;
+    case "lost":
+      return idle ? "🟡 Sinal caiu — procurando…" : "🟡 Sinal perdido — procurando… (o tempo segue contando)";
+    default:
+      return `⏳ Procurando GPS…${idle ? " (em céu aberto leva de segundos a 1 min)" : ""}`;
+  }
+}
+
 function announce(s: Segment): string {
   const amt = spokenAmount(s);
   // "Tiro 1/4" soa melhor falado como "Tiro 1 de 4"
@@ -162,7 +194,6 @@ export default function CorrerPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [dist, setDist] = useState(0);
   const [elapsed, setElapsed] = useState(0);
-  const [gpsOk, setGpsOk] = useState<boolean | null>(null);
   const [errMsg, setErrMsg] = useState("");
 
   // treino do dia (guiado)
@@ -176,13 +207,15 @@ export default function CorrerPage() {
   const [voiceOn, setVoiceOn] = useState(true);
   const [recoverable, setRecoverable] = useState<RunPayload | null>(null);
   const [savingRec, setSavingRec] = useState(false);
-  const [gpsDbg, setGpsDbg] = useState(""); // leitura de GPS na tela (diagnóstico)
+  // estado REAL do sinal (o GPS liga ao abrir a tela, não só no Iniciar)
+  const [gps, setGps] = useState<GpsState>("searching");
+  const [gpsAcc, setGpsAcc] = useState<number | null>(null);
   const [saveFailed, setSaveFailed] = useState(false); // envio falhou (ficou pendente)
 
   const voiceRef = useRef(true);
   const lastNudge = useRef(0);
   const lastPersist = useRef(0);
-  const fixes = useRef(0); // nº de posições GPS recebidas (diagnóstico)
+  const lastFixAt = useRef(0); // Date.now() do último ponto recebido
   useEffect(() => { voiceRef.current = voiceOn; }, [voiceOn]);
 
   const segments = useRef<Segment[]>([]);
@@ -193,7 +226,8 @@ export default function CorrerPage() {
 
   const watchId = useRef<number | null>(null);
   const wakeLock = useRef<{ release: () => void } | null>(null);
-  const last = useRef<{ lat: number; lon: number } | null>(null);
+  // âncora da distância: o último ponto ACEITO (com o instante, pra velocidade)
+  const last = useRef<{ lat: number; lon: number; ms: number } | null>(null);
   const points = useRef<{ lat: number; lon: number; t: number }[]>([]);
   const distRef = useRef(0);
   const startTs = useRef(0);
@@ -217,6 +251,10 @@ export default function CorrerPage() {
         else localStorage.removeItem(RUN_KEY);
       }
     } catch { /* ok */ }
+    // liga o GPS JÁ na tela de início: o 1º sinal do celular leva de segundos
+    // a um minuto — quando ele tocar em Iniciar, o sinal já está firme
+    startWatch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // mantém a tela ligada de novo quando o app volta ao foco durante a corrida
@@ -240,6 +278,11 @@ export default function CorrerPage() {
       if (phaseRef.current !== "recording") return;
       const e = nowElapsedSec();
       setElapsed(e);
+
+      // sinal sumiu no meio da corrida (túnel, prédio): avisa, não derruba
+      if (lastFixAt.current && Date.now() - lastFixAt.current > LOST_AFTER_S * 1000) {
+        setGps("lost");
+      }
 
       // guarda o progresso local a cada ~5s (rede de segurança se o app fechar)
       if (e - lastPersist.current >= 5) { persistProgress(e); lastPersist.current = e; }
@@ -302,43 +345,63 @@ export default function CorrerPage() {
   }, []);
 
   function onPos(pos: GeolocationPosition) {
-    if (phaseRef.current !== "recording") return;
     const acc = pos.coords.accuracy;
-    const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-    fixes.current += 1;
-    // GPS de navegador no celular reporta 20–60m fácil (assistido por wifi/cell,
-    // 1º fix, área urbana). O teto antigo de 30m rejeitava TODO ponto e a
-    // distância nunca subia — corrida "morta". Aceita até 65m (ainda barra lixo).
-    if (acc != null && acc > 65) {
-      setGpsDbg(`fix ${fixes.current} · precisão ${Math.round(acc)}m (fraca, ignorado) · ${Math.round(distRef.current)}m`);
+    const now = Date.now();
+    lastFixAt.current = now;
+    setGpsAcc(acc != null ? Math.round(acc) : null);
+    // GPS de navegador reporta 20–60 m fácil (1º fix, área urbana): até 65 m
+    // conta. Centenas de metros/km não é céu fechado — é o Chrome com
+    // localização APROXIMADA (o atleta precisa ligar a precisa).
+    const state: GpsState = acc == null || acc <= GOOD_ACC ? "good" : acc > APPROX_ACC ? "approx" : "weak";
+    setGps(state);
+    if (phaseRef.current !== "recording" || state !== "good") return;
+
+    const p = { lat: pos.coords.latitude, lon: pos.coords.longitude, ms: now };
+    if (!last.current) {
+      last.current = p;
+      points.current.push({ lat: p.lat, lon: p.lon, t: Math.floor((now - startTs.current) / 1000) });
       return;
     }
-    if (last.current) {
-      const d = haversine(last.current, p);
-      if (d >= 2 && d < 60) {
-        distRef.current += d;
-        setDist(distRef.current);
-        recent.current.push({ t: nowElapsedSec(), d: distRef.current });
-        if (recent.current.length > 120) recent.current.shift();
-      }
-    }
+    const d = haversine(last.current, p);
+    // tremida parado: não move a âncora (passos pequenos se ACUMULAM até
+    // passar do mínimo — antes a âncora andava e a distância sumia)
+    if (d < MIN_STEP_M) return;
+    // salto de GPS: velocidade impossível desde o último ponto aceito. Pela
+    // VELOCIDADE, não por um teto fixo de metros — sinal espaçado (20 s sem
+    // ponto) é corrida de verdade, não salto
+    const dt = (now - last.current.ms) / 1000;
+    if (dt > 0 && d / dt > MAX_SPEED_MS) return;
+    distRef.current += d;
+    setDist(distRef.current);
+    recent.current.push({ t: nowElapsedSec(), d: distRef.current });
+    if (recent.current.length > 120) recent.current.shift();
     last.current = p;
-    points.current.push({ ...p, t: Math.floor((Date.now() - startTs.current) / 1000) });
-    setGpsDbg(`fix ${fixes.current} · precisão ${acc != null ? Math.round(acc) : "?"}m · ${Math.round(distRef.current)}m`);
+    points.current.push({ lat: p.lat, lon: p.lon, t: Math.floor((now - startTs.current) / 1000) });
   }
 
+  // só PERMISSÃO NEGADA encerra. Demora/indisponível (1º sinal, prédio,
+  // túnel) é passageiro: o GPS segue procurando e a corrida continua — antes
+  // qualquer demora de 15 s derrubava a corrida ("Não consegui pegar o GPS")
   function onErr(e: GeolocationPositionError) {
-    setGpsOk(false);
-    setErrMsg(e.code === 1 ? "Permissão de localização negada. Libere o GPS pro app nas configurações do navegador." : "Não consegui pegar o GPS. Tenta num lugar aberto.");
-    setPhase("error");
+    if (e.code === 1) {
+      stopWatch();
+      setErrMsg("Permissão de localização negada. Libere a localização (precisa) pro site nas configurações do Chrome e tente de novo.");
+      if (phaseRef.current === "idle") setPhase("error");
+      else setGps("lost");
+      return;
+    }
+    setGps(lastFixAt.current ? "lost" : "searching");
   }
 
   function startWatch() {
+    if (watchId.current != null) return;
     if (!("geolocation" in navigator)) {
-      setGpsOk(false); setErrMsg("Este aparelho não tem GPS disponível no navegador."); setPhase("error"); return;
+      setErrMsg("Este aparelho não tem GPS disponível no navegador."); setPhase("error"); return;
     }
+    // sem `timeout`: o GPS procura o tempo que precisar (o aviso de sinal
+    // perdido é nosso, no tick)
     watchId.current = navigator.geolocation.watchPosition(onPos, onErr, {
-      enableHighAccuracy: true, maximumAge: 1000, timeout: 15000,
+      enableHighAccuracy: true, maximumAge: 0,
     });
   }
 
@@ -382,14 +445,13 @@ export default function CorrerPage() {
     segIdxRef.current = 0; setSegIdx(0);
     segStartDist.current = 0; segStartElapsed.current = 0;
     setSegDist(0); setSegElapsed(0); setLivePace(null);
-    setGpsOk(true);
     startTs.current = Date.now();
     segStart.current = Date.now();
     elapsedBase.current = 0;
     distRef.current = 0; setDist(0); setElapsed(0);
+    // a distância conta a partir do 1º ponto BOM depois do Iniciar
     last.current = null; points.current = []; recent.current = [];
     lastNudge.current = 0; lastPersist.current = 0;
-    fixes.current = 0; setGpsDbg("");
     setRecoverable(null); clearProgress();
     setPhase("recording"); phaseRef.current = "recording";
     startWatch();
@@ -405,6 +467,8 @@ export default function CorrerPage() {
     setPhase("paused"); phaseRef.current = "paused";
   }
   function onResume() {
+    // o que ele andou PAUSADO não conta: a âncora recomeça no próximo ponto
+    last.current = null;
     segStart.current = Date.now();
     setPhase("recording"); phaseRef.current = "recording";
   }
@@ -503,7 +567,7 @@ export default function CorrerPage() {
         {phase === "error" ? (
           <div className="card center">
             <p className="notice err">{errMsg}</p>
-            <button className="btn" style={{ marginTop: 16 }} onClick={() => { setPhase("idle"); setGpsOk(null); }}>Tentar de novo</button>
+            <button className="btn" style={{ marginTop: 16 }} onClick={() => { setPhase("idle"); setGps("searching"); startWatch(); }}>Tentar de novo</button>
           </div>
         ) : (
           <>
@@ -609,14 +673,8 @@ export default function CorrerPage() {
               </div>
             )}
 
-            {gpsOk === true && phase !== "done" && (
-              <p className="muted center" style={{ fontSize: 11, marginTop: 8 }}>GPS ativo 🟢</p>
-            )}
-
-            {(recording || paused) && (
-              <p className="muted center" style={{ fontSize: 11, marginTop: 4, opacity: 0.7 }}>
-                📍 {gpsDbg || "aguardando 1º sinal de GPS…"}
-              </p>
+            {(phase === "idle" || recording || paused) && (
+              <p className={`gps-status ${gps}`}>{gpsText(gps, gpsAcc, phase === "idle")}</p>
             )}
           </>
         )}

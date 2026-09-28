@@ -380,6 +380,9 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .run-sub > div { text-align: center; }
 .run-v { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 26px; font-variant-numeric: tabular-nums; }
 .run-l { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.gps-status { text-align: center; font-size: 12.5px; line-height: 1.4; margin: 10px 16px 0; color: var(--muted); }
+.gps-status.good { color: var(--accent-ink); }
+.gps-status.approx { color: var(--rose); font-weight: 600; }
 .run-actions { display: flex; gap: 10px; }
 .run-actions .run-btn { flex: 1; }
 .run-btn { width: 100%; flex: none; border: none; cursor: pointer; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; padding: 18px; border-radius: 16px; transition: transform .1s ease, opacity .1s ease; }
