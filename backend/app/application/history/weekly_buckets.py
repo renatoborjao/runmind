@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from app.domain.entities.activity import Activity
+from app.domain.value_objects.sports import is_run_sport
 
 WeekKey = tuple[int, int]
 
@@ -57,6 +58,12 @@ def week_start(week_key: WeekKey) -> date:
 
 
 def week_stats(activities: list[Activity]) -> dict:
+    """Números da semana SÓ com corrida ([[project_pace_so_corrida]]). Com a
+    caminhada junto, a semana de 14/09 da Fernanda (1 corrida de 8 km + 3
+    caminhadas) saiu "16,3 km a 8:17" e o resumo disse que o volume "quase
+    dobrou" — a corrida foi de 8 pra 32 km."""
+
+    activities = [a for a in activities if is_run_sport(a.sport)]
 
     distance_km = sum(
         activity.distance for activity in activities
