@@ -10,7 +10,7 @@ from app.application.coach.planning.workout_menu import (
     PHASE_EMPHASIS,
     STEPS_RULE,
     TIME_OR_DISTANCE_RULE,
-    WORKOUT_MENU,
+    ONE_OFF_MENU,
 )
 from app.core.config import get_settings
 from app.domain.entities.runner_profile import RunnerProfile
@@ -130,7 +130,7 @@ class OneOffWorkoutEngine:
             week_context=week_context or "(nada registrado nesta semana)",
             portrait=portrait or "(sem retrato disponível)",
             athlete_context=OneOffWorkoutEngine._context_block(athlete_context),
-            menu=WORKOUT_MENU,
+            menu=ONE_OFF_MENU,
             phase=PHASE_EMPHASIS,
             time_rule=TIME_OR_DISTANCE_RULE,
             steps_rule=STEPS_RULE,

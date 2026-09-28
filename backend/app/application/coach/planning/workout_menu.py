@@ -49,16 +49,6 @@ WORKOUT_MENU = """\
     * Recuperação rodando (float): intervalos em que a pausa é trote
       MODERADO, não parado (ex.: 8x400 com 200 float) — mais aeróbico,
       específico pra 10k/21k.
-  FORÇA ESPECÍFICA
-    * Subida / tiros em rampa: 6-12x 30-90 s subindo forte, desce trotando —
-      força, potência e economia (alvo por ESFORÇO/FC, não pace; fim por
-      tempo ou no botão).
-    * Circuito de subida (Kenyan hills): sobe E desce num circuito contínuo
-      em esforço moderado-forte por 15-30 min — força + aeróbico juntos.
-    * Descida controlada: tiros curtos em descida suave, passada solta —
-      prepara o quadríceps pra prova com descida e melhora a cadência.
-    * Terreno ondulado / trilha: rodagem ou longão em sobe-desce, por tempo e
-      FC (pace não vale em subida).
   RITMO DE PROVA
     * Blocos no pace-alvo: repetições longas no ritmo da prova (ex.: 3x3km no
       pace de 21k, 5x1km no pace de 10k; Yasso 800 pra maratona) — acostuma o
@@ -90,7 +80,23 @@ WORKOUT_MENU = """\
       (ex.: 6x1min pensando em cadência alta) — economia e menos impacto.
   O cardápio é o PONTO DE PARTIDA, não uma caixa fechada: qualquer estrutura
   que um treinador de verdade prescreveria é válida — e se o atleta PEDIR um
-  tipo (mesmo fora da lista), monte-o."""
+  tipo (mesmo fora da lista), monte-o. Treino de SUBIDA/rampa não entra no
+  plano da semana: é particular do percurso de cada um, só quando ele pede."""
+
+# SUBIDA fica FORA do plano da semana (Renato 27/09: "é algo muito particular,
+# tem que ser pedido meio que avulso") — só o treino AVULSO a oferece.
+HILL_MENU = """  FORÇA ESPECÍFICA
+    * Subida / tiros em rampa: 6-12x 30-90 s subindo forte, desce trotando —
+      força, potência e economia (alvo por ESFORÇO/FC, não pace; fim por
+      tempo ou no botão).
+    * Circuito de subida (Kenyan hills): sobe E desce num circuito contínuo
+      em esforço moderado-forte por 15-30 min — força + aeróbico juntos.
+    * Descida controlada: tiros curtos em descida suave, passada solta —
+      prepara o quadríceps pra prova com descida e melhora a cadência.
+    * Terreno ondulado / trilha: rodagem ou longão em sobe-desce, por tempo e
+      FC (pace não vale em subida)."""
+
+ONE_OFF_MENU = WORKOUT_MENU + "\n" + HILL_MENU
 
 # como descrever os passos ESTRUTURADOS (viram treino guiado no relógio) —
 # fonte única pros motores que montam sessão. Sem chaves duplas: entra como

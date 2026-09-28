@@ -69,8 +69,9 @@ _NEEDS_BY_DISTANCE: list[tuple[float, tuple[str, ...]]] = [
     (99.0, (LONG, STEADY, THRESHOLD, RACE_PACE)),
 ]
 
-# estímulos que ninguém deveria ficar semanas sem (economia/força/variação)
-_GENERAL = (HILLS, STRIDES, FARTLEK)
+# estímulos que ninguém deveria ficar semanas sem (economia/variação). SUBIDA
+# não entra: fica fora do plano da semana, só no avulso quando o atleta pede
+_GENERAL = (STRIDES, FARTLEK)
 
 # famílias que contam como "qualidade" (não fica sem por muito tempo)
 _QUALITY = {RACE_PACE, HILLS, FARTLEK, THRESHOLD, VO2, PROGRESSION}
@@ -444,14 +445,14 @@ class StimulusLedger:
 
             phase = (
                 "sem prova marcada: desenvolvimento geral — alterne limiar, "
-                "VO2 e longão, com força/economia (subida, acelerações)"
+                "VO2 e longão, com economia (acelerações)"
             )
 
         elif weeks_to_race > 12:
 
             phase = (
                 f"prova em ~{weeks_to_race} sem (BASE): volume, longão, limiar; "
-                "subida e acelerações pra força/economia"
+                "acelerações pra economia"
             )
 
         elif weeks_to_race > 4:

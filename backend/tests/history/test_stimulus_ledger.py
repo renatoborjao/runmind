@@ -107,11 +107,13 @@ def test_done_missed_last_and_gaps_toward_goal():
 
     assert "limiar: fez 0, furou 1" in text
     assert "ESPECÍFICA" in text
-    # meta 10k: limiar e ritmo de prova são lacunas; subida nunca
+    # meta 10k: limiar e ritmo de prova são lacunas
     assert "LACUNAS" in text
     assert "limiar (nenhum em 8 sem)" in text
     assert "ritmo de prova / simulado (nenhum em 8 sem)" in text
-    assert "subida / força (nenhum em 8 sem)" in text
+    # subida fica fora do plano da semana (só avulso, quando o atleta pede):
+    # não é lacuna
+    assert "subida / força" not in text.split("LACUNAS")[1]
     assert "Intensidade real" in text
 
 

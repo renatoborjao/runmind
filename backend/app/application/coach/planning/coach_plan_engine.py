@@ -127,16 +127,19 @@ REGRAS:
     na semana é decisão sua: pese frequência, corpo, fase, meta e o que ele vem
     absorvendo — semana com forte demais + leve saindo forte vira fadiga
     crônica, não evolução.
-- VARIE O ESTÍMULO — isto é EXPERTISE de treinador, não enfeite. Um bom plano
-  NÃO repete os mesmos 3 tipos toda semana; você tem um LEQUE e GIRA entre eles
-  conforme a fase e a meta, sempre mantendo a sobrecarga progressiva:
+- EVOLUÇÃO É O CRITÉRIO DE ESCOLHA — escolha LIVRE, de treinador. Antes de
+  montar, responda pra você: "o que ESTA semana acrescenta de novo à evolução
+  dele rumo à meta, em relação às últimas?" Se a resposta for "nada", a semana
+  está errada. Vale pra semana INTEIRA, não só pro dia forte: o leve pode ser
+  rodagem com acelerações, steady, cadência, fartlek solto; o longão pode ser
+  constante, por tempo, progressivo, com final rápido ou com blocos no
+  ritmo-alvo; o forte pode ser qualquer um do repertório. Quando o corpo pede
+  SEGURAR, a novidade vem da FORMA (outro estímulo na mesma dose), não da
+  carga. Repertório (ponto de partida, não lista fechada):
 {menu}
-  QUANDO usar: longe da prova / construindo base -> volume, longão, tempo de
-  limiar; perto da prova -> afiar no ritmo-alvo (tiros no pace de prova). Se as
-  SEMANAS RECENTES vieram com os mesmos tipos, TRAGA algo diferente que sirva à
-  fase/meta (troque um "tiro" por um TEMPO de limiar, um longão constante por um
-  PROGRESSIVO, meta um FARTLEK no lugar do intervalado na pista). Repetir o mesmo
-  cardápio semana após semana é plano preguiçoso — evite.
+  Longe da prova / construindo base -> volume, longão, limiar; perto da prova
+  -> afiar no ritmo-alvo e ensaiar (simulado). Diga no "weekly_objective" o
+  que a semana acrescenta.
 - LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E
   claramente ACIMA da rodagem típica dele. Se o atleta ainda corre pouco (ex.:
   rodagem típica/maior treino ~5 km), NÃO rotule nenhuma corrida de "Longão" —

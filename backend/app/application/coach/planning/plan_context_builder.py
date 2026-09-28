@@ -350,29 +350,30 @@ class PlanContextBuilder:
 
         for plan in recent_plans:
 
-            types = [
-                session.workout_type
+            sessions = [
+                f"{weekday_label(session.day)[:3]} {session.workout_type}"
                 for session in plan.sessions
                 if session.kind in _RUNNING_KINDS and session.workout_type
             ]
 
-            if types:
+            if sessions:
 
                 label = plan.week_start.strftime("%d/%m")
 
-                weeks.append(f"{label}: {', '.join(types)}")
+                weeks.append(f"{label}: {' · '.join(sessions)}")
 
         if not weeks:
 
             return ""
 
         return (
-            "Tipos de treino das últimas semanas — "
+            "AS ÚLTIMAS SEMANAS, dia a dia — "
             + " | ".join(weeks)
-            + ". IMPORTANTE: se os tipos vêm SE REPETINDO, VARIE agora (traga "
-            "tempo/limiar, fartlek ou progressivo que sirva à fase/meta) em "
-            "vez de repetir o mesmo cardápio. Uma preferência de 'dia de "
-            "qualidade' (ex: forte na terça) fixa o DIA, não o TIPO: reveze o "
-            "estímulo forte (intervalado/fartlek/VO2/tempo) conforme a "
-            "evolução × meta — nunca engesse no mesmo tipo toda semana."
+            + ". Olhe a SEMANA INTEIRA, não só o dia forte: se a FORMA se repete "
+            "(o leve sempre igual, o longão sempre igual, o forte só trocando de "
+            "nome), ela parou de trazer estímulo novo. A escolha é LIVRE — "
+            "qualquer treino do repertório ou fora dele, em QUALQUER dia (o "
+            "leve e o longão também mudam de forma) — desde que sirva à "
+            "evolução dele rumo à meta, no momento do corpo. Uma preferência de "
+            "'dia de qualidade' fixa o DIA, não o TIPO."
         )
