@@ -1,9 +1,9 @@
 """Tendência dos sinais de recuperação (HRV, FC repouso, sono, stress, body
 battery, VO2max) a partir da série diária de saúde do Garmin. Puro/testável.
 
-Direção = compara a metade RECENTE com a ANTERIOR da janela (com folga pra
-'estável'). HRV subindo e FC de repouso caindo são os dois marcadores de ouro
-de recuperação/adaptação. Ver [[project_analise_corpo_garmin]]."""
+Direção dos marcadores de ouro (HRV, FC de repouso) = a última semana contra a
+FAIXA NORMAL do atleta (~2 meses); sem base suficiente, a metade recente contra
+a anterior da janela. HRV subindo e FC de repouso caindo = recuperação/adaptação. Ver [[project_analise_corpo_garmin]]."""
 
 from datetime import date
 
@@ -29,6 +29,17 @@ _RESP_DELTA = 1.0      # respiração no sono (rpm)
 
 # noite curta (limitador de recuperação)
 _SHORT_NIGHT_HOURS = 6.0
+
+# FAIXA NORMAL DO ATLETA pros marcadores de ouro (HRV e FC de repouso): a última
+# semana contra a faixa dele nos ~2 meses anteriores (média ± 1 desvio-padrão, no
+# mínimo a folga fixa acima). Só é "piorando" quando SAI da faixa dele — não
+# quando oscila dentro dela. Antes comparava a semana com a anterior com folga de
+# 2 ms / 1,5 bpm: a oscilação normal virava alerta e os atletas passavam 75-80%
+# do tempo "em alerta" (27/09). É como o próprio Garmin lê o HRV (status vs a
+# linha de base pessoal).
+_RECENT_DAYS = 7
+_BASELINE_DAYS = 60
+_MIN_BASELINE_POINTS = 14
 
 
 class RecoveryTrendAnalyzer:
@@ -66,7 +77,15 @@ class RecoveryTrendAnalyzer:
 
         trend.hrv_recent = RecoveryTrendAnalyzer._last(hrv)
 
-        trend.hrv_direction = RecoveryTrendAnalyzer._direction(
+        trend.hrv_direction = RecoveryTrendAnalyzer._band_direction(
+            series,
+            lambda h: (
+                h.hrv_weekly_avg if h.hrv_weekly_avg is not None
+                else h.hrv_last_night
+            ),
+            _HRV_DELTA,
+            higher_is_better=True,
+        ) or RecoveryTrendAnalyzer._direction(
             hrv, _HRV_DELTA, higher_is_better=True
         )
 
@@ -74,7 +93,9 @@ class RecoveryTrendAnalyzer:
 
         trend.rhr_recent = RecoveryTrendAnalyzer._last(rhr)
 
-        trend.rhr_direction = RecoveryTrendAnalyzer._direction(
+        trend.rhr_direction = RecoveryTrendAnalyzer._band_direction(
+            series, lambda h: h.resting_hr, _RHR_DELTA, higher_is_better=False,
+        ) or RecoveryTrendAnalyzer._direction(
             rhr, _RHR_DELTA, higher_is_better=False
         )
 
@@ -200,6 +221,45 @@ class RecoveryTrendAnalyzer:
         points = [v for v in values if v is not None]
 
         return round(sum(points) / len(points)) if points else None
+
+    @staticmethod
+    def _band_direction(
+        series, value_of, delta: float, higher_is_better: bool,
+    ) -> str | None:
+        """A última semana contra a FAIXA NORMAL do atleta (média ± 1 DP dos ~2
+        meses anteriores, mínimo `delta`). None quando não há base suficiente
+        (aí vale a comparação semana × semana)."""
+
+        import statistics
+
+        recent = [
+            v for v in (value_of(h) for h in series[-_RECENT_DAYS:])
+            if v is not None
+        ]
+
+        baseline = [
+            v for v in (
+                value_of(h)
+                for h in series[-(_BASELINE_DAYS + _RECENT_DAYS):-_RECENT_DAYS]
+            )
+            if v is not None
+        ]
+
+        if len(recent) < 3 or len(baseline) < _MIN_BASELINE_POINTS:
+
+            return None
+
+        margin = max(delta, statistics.pstdev(baseline))
+
+        change = statistics.mean(recent) - statistics.mean(baseline)
+
+        if abs(change) < margin:
+
+            return STABLE
+
+        improving = (change > 0) if higher_is_better else (change < 0)
+
+        return RISING if improving else FALLING
 
     @staticmethod
     def _direction(values, delta: float, higher_is_better: bool) -> str:

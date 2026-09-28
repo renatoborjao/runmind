@@ -224,3 +224,61 @@ def test_tier2_absent_stays_none():
     assert trend.spo2_sleep_avg is None
     assert trend.steps_avg is None
     assert trend.intensity_minutes_avg is None
+
+
+# ---- faixa normal do atleta (27/09: 75-80% do tempo "em alerta") ------------
+
+
+def _series_band(rhr_recent, hrv_recent, days=60):
+    """~2 meses de base oscilando dentro da faixa dele + a última semana."""
+
+    from datetime import date as _date, timedelta as _td
+
+    from app.domain.entities.daily_health import DailyHealth
+
+    start = _date(2026, 7, 1)
+
+    out = []
+
+    for i in range(days):
+
+        wobble = (-1) ** i * (i % 3)  # oscilação normal do dia a dia
+
+        out.append(DailyHealth(
+            date=(start + _td(days=i)).isoformat(),
+            resting_hr=58 + wobble, hrv_last_night=50 + 2 * wobble,
+        ))
+
+    for i in range(7):
+
+        out.append(DailyHealth(
+            date=(start + _td(days=days + i)).isoformat(),
+            resting_hr=rhr_recent, hrv_last_night=hrv_recent,
+        ))
+
+    return out
+
+
+def test_normal_wobble_inside_his_range_is_not_an_alert():
+
+    from app.application.history.recovery_trend_analyzer import (
+        RecoveryTrendAnalyzer,
+    )
+
+    trend = RecoveryTrendAnalyzer.analyze(_series_band(59, 48))
+
+    assert trend.rhr_direction == STABLE
+    assert trend.hrv_direction == STABLE
+
+
+def test_leaving_his_range_is_flagged():
+    """Renato 27/09: FC de repouso ~10 bpm acima da base dele."""
+
+    from app.application.history.recovery_trend_analyzer import (
+        RecoveryTrendAnalyzer,
+    )
+
+    trend = RecoveryTrendAnalyzer.analyze(_series_band(68, 38))
+
+    assert trend.rhr_direction == FALLING
+    assert trend.hrv_direction == FALLING
