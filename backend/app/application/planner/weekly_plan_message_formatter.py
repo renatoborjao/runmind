@@ -75,11 +75,22 @@ class WeeklyPlanMessageFormatter:
 
             lines.append(f"🎯 {plan.weekly_objective}")
 
+        if getattr(plan, "block_label", None):
+
+            lines.append(f"📦 Bloco: {plan.block_label}")
+
         label = PHASE_LABELS.get(plan.phase)
 
         if label:
 
             lines.append(f"📈 Fase: {label}")
+
+        if getattr(plan, "extra_day_note", None):
+
+            lines.append(
+                f"💡 {plan.extra_day_note} Se topar, me responde que eu incluo "
+                "no plano."
+            )
 
         if plan.is_deload:
 

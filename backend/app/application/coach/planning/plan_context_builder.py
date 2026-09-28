@@ -31,6 +31,7 @@ class PlanContextBuilder:
         executed: str = "",
         dossier: str = "",
         today: date | None = None,
+        block: str = "",
     ) -> str:
 
         week_end = week_start + timedelta(days=6)
@@ -48,6 +49,10 @@ class PlanContextBuilder:
             )
 
         lines = [target]
+
+        if block:
+
+            lines.append(block)
 
         # REFAZENDO a semana que já começou (o atleta mudou meta/dias e pediu o
         # plano novo): os dias anteriores ficam como estão

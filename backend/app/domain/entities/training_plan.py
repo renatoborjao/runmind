@@ -55,6 +55,19 @@ class TrainingPlan:
     # velocidade rumo ao sub-50 sem inflar volume").
     weekly_objective: str = ""
 
+    # BLOCO (mesociclo) que ESTE plano abriu ou redefiniu: {"start": ISO,
+    # "weeks": N, "focus": str, "weeks_plan": [papel de cada semana]}. As
+    # semanas seguintes acham o bloco ativo no histórico. None = seguiu o bloco
+    # já aberto (ou nenhum).
+    block: dict | None = None
+
+    # "semana 2 de 4 — foco" (pro atleta ver o arco, na mensagem do plano)
+    block_label: str | None = None
+
+    # proposta do coach de UM dia a mais (nunca adicionado sozinho — o atleta
+    # decide no chat). None = sem proposta nesta semana.
+    extra_day_note: str | None = None
+
     # Quando este plano foi gerado pela primeira vez (ISO datetime). É o marco
     # de "a partir de quando as sessões existiram pro atleta": um plano montado
     # no meio da semana (atleta que entrou na quinta) NÃO pode cobrar a segunda

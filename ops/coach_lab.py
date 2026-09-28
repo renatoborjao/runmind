@@ -614,6 +614,18 @@ async def _plan(profile, runner):
 
         print(f"objetivo da semana: {plan.weekly_objective}")
 
+    block_ctx = next(
+        (line for line in context.splitlines() if line.startswith("BLOCO")), "",
+    )
+
+    print(f"contexto do bloco: {block_ctx[:160]}")
+
+    if plan.block:
+
+        print(f"BLOCO ABERTO: {plan.block['focus']} | " + " | ".join(plan.block["weeks_plan"]))
+
+    print(f"dia extra: {plan.extra_day_note or '—'}")
+
     for session in plan.sessions:
 
         size = (

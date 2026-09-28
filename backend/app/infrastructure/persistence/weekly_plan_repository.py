@@ -197,6 +197,9 @@ class WeeklyPlanRepository:
             "reviewed": plan.reviewed,
             "weekly_objective": plan.weekly_objective,
             "generated_at": plan.generated_at,
+            "block": plan.block,
+            "block_label": plan.block_label,
+            "extra_day_note": plan.extra_day_note,
             "sessions": [
                 asdict(session)
                 for session in plan.sessions
@@ -241,4 +244,7 @@ class WeeklyPlanRepository:
             reviewed=data.get("reviewed", False),
             weekly_objective=data.get("weekly_objective", ""),
             generated_at=data.get("generated_at"),
+            block=data.get("block"),
+            block_label=data.get("block_label"),
+            extra_day_note=data.get("extra_day_note"),
         )

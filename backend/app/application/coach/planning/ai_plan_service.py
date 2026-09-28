@@ -104,6 +104,14 @@ class AIPlanService:
 
                 AIPlanService._keep_past_days(existing, plan, history)
 
+                # o bloco que ESTA semana abriu continua valendo se a IA não
+                # o redefiniu ao refazer
+                if plan.block is None and existing.block is not None:
+
+                    plan.block = existing.block
+
+            AIPlanService._stamp_block(repository, profile, plan)
+
             # km estimado das sessões por TEMPO (duração ÷ pace) + volume real
             # da semana contando TODOS os tipos (não só os por distância).
             AIPlanService._fill_time_based_km(plan, metrics)
@@ -261,7 +269,125 @@ class AIPlanService:
             recent_plans=recent_plans,
             executed=executed,
             dossier=dossier,
+            block=AIPlanService._block_line(
+                AIPlanService._active_block(repository, profile, week_start),
+            ),
         )
+
+    @staticmethod
+    def _active_block(repository, profile, week_start: date):
+        """(bloco, semana k) em andamento na semana-alvo — o último plano
+        ANTERIOR que abriu/redefiniu um bloco que ainda cobre a semana. None se
+        não há (esta semana abre um). Best-effort: falha = sem bloco."""
+
+        try:
+
+            return AIPlanService._find_block(repository, profile, week_start)
+
+        except Exception as e:
+
+            print(f"Bloco ativo falhou p/ '{profile}': {e}")
+
+            return None
+
+    @staticmethod
+    def _find_block(repository, profile, week_start: date):
+
+        past = sorted(
+            (p for p in repository.history(profile) if p.week_start < week_start),
+            key=lambda p: p.week_start,
+            reverse=True,
+        )
+
+        current = repository.load(profile)
+
+        if current is not None and current.week_start < week_start:
+
+            past.insert(0, current)
+
+        for plan in past:
+
+            block = plan.block
+
+            if not block:
+
+                continue
+
+            try:
+
+                start = date.fromisoformat(block["start"])
+
+                weeks = int(block["weeks"])
+
+            except (KeyError, TypeError, ValueError):
+
+                return None
+
+            index = (week_start - start).days // 7 + 1
+
+            return (block, index) if 1 <= index <= weeks else None
+
+        return None
+
+    @staticmethod
+    def _block_line(active) -> str:
+
+        if active is None:
+
+            return (
+                "BLOCO: nenhum em andamento — esta semana ABRE um bloco novo: "
+                "defina \"block\" (foco rumo à meta/prova e o papel de cada "
+                "semana)."
+            )
+
+        block, index = active
+
+        roles = " | ".join(block["weeks_plan"])
+
+        role = block["weeks_plan"][index - 1]
+
+        return (
+            f"BLOCO EM ANDAMENTO — semana {index} de {block['weeks']} (desde "
+            f"{date.fromisoformat(block['start']):%d/%m}), foco: {block['focus']}. "
+            f"Plano do bloco: {roles}. ESTA semana: {role}. Monte cumprindo "
+            "esse papel; se precisar desviar, redefina \"block\"."
+        )
+
+    @staticmethod
+    def _stamp_block(repository, profile, plan: TrainingPlan) -> None:
+        """Carimba o bloco no plano: o que a IA abriu/redefiniu começa ESTA
+        semana; senão segue o bloco em andamento. `block_label` pro atleta ver
+        o arco. Best-effort — nunca derruba o plano."""
+
+        try:
+
+            if plan.block:
+
+                plan.block = {**plan.block, "start": plan.week_start.isoformat()}
+
+                block, index = plan.block, 1
+
+            else:
+
+                active = AIPlanService._active_block(
+                    repository, profile, plan.week_start,
+                )
+
+                if active is None:
+
+                    plan.block_label = None
+
+                    return
+
+                block, index = active
+
+            plan.block_label = (
+                f"semana {index} de {block['weeks']} — {block['focus']}"
+            )
+
+        except Exception as e:
+
+            print(f"Bloco do plano falhou p/ '{profile}': {e}")
 
     @staticmethod
     def _weeks_since_race(profile, history, week_start: date) -> int | None:

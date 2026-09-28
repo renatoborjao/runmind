@@ -140,6 +140,22 @@ REGRAS:
   Longe da prova / construindo base -> volume, longão, limiar; perto da prova
   -> afiar no ritmo-alvo e ensaiar (simulado). Diga no "weekly_objective" o
   que a semana acrescenta.
+- PERIODIZAÇÃO EM BLOCOS — como treinador de verdade, você pensa em BLOCOS
+  (3 a 6 semanas) com começo, meio e fim, não semana solta. O contexto diz se
+  há BLOCO EM ANDAMENTO (e o papel desta semana nele) ou se esta semana ABRE
+  um bloco. Ao ABRIR: defina "block" — o FOCO do bloco rumo à meta/prova e o
+  PAPEL de cada semana (ex.: construir, construir, consolidar, aliviar — o
+  alívio no fim quando o bloco carrega; a forma e a dose são suas). Em
+  andamento: monte a semana cumprindo o papel dela e devolva "block": null. Se
+  o corpo/vida pedir desvio (doença, sobrecarga, prova nova), desvie e
+  REDEFINA o bloco em "block" — o novo começa ESTA semana.
+- MAIS UM DIA DE TREINO? A frequência é escolha DELE: NUNCA adicione dia ao
+  plano. Mas, pensando na EVOLUÇÃO rumo à meta, se um dia a mais faria
+  diferença real (a meta pede mais volume do que os dias dele comportam, ele
+  vem cumprindo bem, o corpo está absorvendo) e ele não recusou isso há pouco
+  (veja o que você já disse), PROPONHA em "suggest_extra_day": UMA frase — qual
+  dia livre, que treino (curto/leve costuma bastar) e por quê. Senão, null.
+  Com o corpo em alerta ou aderência baixa, não é hora: null.
 - LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E
   claramente ACIMA da rodagem típica dele. Se o atleta ainda corre pouco (ex.:
   rodagem típica/maior treino ~5 km), NÃO rotule nenhuma corrida de "Longão" —
@@ -176,6 +192,9 @@ Responda APENAS com JSON (o exemplo abaixo é só de FORMATO — NÃO é templat
 copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedade):
 {{"weekly_objective": "objetivo/foco curto da semana",
   "phase": "BUILD",
+  "block": null | {{"weeks": 4, "focus": "foco do bloco rumo à meta",
+            "weeks_plan": ["sem 1: ...", "sem 2: ...", "sem 3: ...", "sem 4: ..."]}},
+  "suggest_extra_day": null | "proposta curta de UM dia a mais (qual, o quê, por quê)",
   "sessions": [
     {{"day": "Tuesday", "kind": "run", "workout_type": "Velocidade",
       "distance_km": 9.0, "pace_min": "4:45", "pace_max": "4:50",
@@ -340,7 +359,33 @@ class CoachPlanEngine:
             week_start=week_start,
             sessions=sessions,
             weekly_objective=str(data.get("weekly_objective", "")).strip(),
+            block=CoachPlanEngine._parse_block(data.get("block")),
+            extra_day_note=(
+                str(data.get("suggest_extra_day")).strip()
+                if data.get("suggest_extra_day") else None
+            ),
         )
+
+    @staticmethod
+    def _parse_block(raw) -> dict | None:
+        """O bloco que a IA abriu/redefiniu: foco + papel de cada semana (2 a 8
+        semanas). None se não veio ou veio torto."""
+
+        if not isinstance(raw, dict):
+
+            return None
+
+        weeks_plan = [
+            str(w).strip() for w in (raw.get("weeks_plan") or []) if str(w).strip()
+        ]
+
+        focus = str(raw.get("focus") or "").strip()
+
+        if not focus or not 2 <= len(weeks_plan) <= 8:
+
+            return None
+
+        return {"weeks": len(weeks_plan), "focus": focus, "weeks_plan": weeks_plan}
 
     @staticmethod
     def _parse_sessions(raw_sessions) -> list[PlannedSession]:
