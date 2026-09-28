@@ -27,6 +27,7 @@ from app.domain.entities.body_reading import (
     BodyReading,
 )
 from app.domain.entities.training_history import TrainingHistory
+from app.domain.value_objects.sports import is_foot_sport
 from app.domain.entities.training_load import (
     LOAD_CAUTION,
     LOAD_HIGH,
@@ -35,9 +36,6 @@ from app.domain.entities.training_load import (
 )
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
-)
-from app.infrastructure.persistence.cross_training_repository import (
-    CrossTrainingRepository,
 )
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
@@ -72,14 +70,16 @@ class BodyReadingBuilder:
         resting_hr = BodyReadingBuilder._resting_hr(series)
 
 
-        # o corpo sente TODO o estresse: a carga soma a corrida (arquivo) COM o
-        # cross-training do Garmin (musculação/natação/Hyrox). Isso NUNCA entra
-        # na leitura/plano/chat de corrida — só no contador do corpo. Ver
-        # [[project_analise_corpo_garmin]].
-        activities = (
-            ActivityArchiveRepository().load_activities(profile)
-            + CrossTrainingRepository().load_activities(profile)
-        )
+        # a CARGA (razão aguda/crônica = risco de lesão da CORRIDA: impacto,
+        # tendão, osso) é só corrida/caminhada. Musculação/futebol/bike cansam,
+        # mas o cansaço geral já aparece na RECUPERAÇÃO (HRV, FC repouso, sono) —
+        # somar os minutos deles na carga inflava "pico" (João 27/09: a
+        # musculação virou "sobrecarregado"). Somos coach de CORRIDA (Renato).
+        # O cross-training segue no dossiê como contexto de cansaço.
+        activities = [
+            a for a in ActivityArchiveRepository().load_activities(profile)
+            if is_foot_sport(a.sport)
+        ]
 
         # FC máx da régua única de zonas (a do relógio, quando há) — a mesma do
         # gráfico/mensagem; Tanaka só quando não há régua. Ver [[HrZoneResolver]].

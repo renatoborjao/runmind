@@ -97,6 +97,21 @@ class _Inputs:
     zones: object = None
 
 
+# nomes das atividades fora da corrida (Garmin) pro dossiê
+_OTHER_SPORT_PT = {
+    "strength_training": "musculação",
+    "indoor_cardio": "cardio",
+    "hiit": "HIIT",
+    "cycling": "bike",
+    "indoor_cycling": "bike indoor",
+    "lap_swimming": "natação",
+    "open_water_swimming": "natação",
+    "yoga": "yoga",
+    "pilates": "pilates",
+    "soccer": "futebol",
+    "other": "outra atividade",
+}
+
 class AthleteDossier:
 
     HEADER = (
@@ -254,6 +269,51 @@ class AthleteDossier:
             print(f"Dossiê: régua de FC falhou p/ '{profile}': {e}")
 
         return data
+
+    @staticmethod
+    def _other_activities(data: _Inputs) -> str:
+        """O que ele fez FORA da corrida nos últimos 7 dias (musculação, futebol,
+        bike...) — não entra na carga de corrida, mas cansa: contexto pra pesar
+        com a recuperação. Vazio se nada/falhou."""
+
+        try:
+
+            from app.application.history.weekly_buckets import activity_date
+            from app.infrastructure.persistence.cross_training_repository import (
+                CrossTrainingRepository,
+            )
+
+            since = data.today - timedelta(days=6)
+
+            done: dict[str, list[float]] = {}
+
+            for a in CrossTrainingRepository().load_activities(data.profile):
+
+                if since <= activity_date(a) <= data.today:
+
+                    label = _OTHER_SPORT_PT.get(a.sport, "outra atividade")
+
+                    done.setdefault(label, []).append((a.moving_time or 0) / 60)
+
+            if not done:
+
+                return ""
+
+            parts = ", ".join(
+                f"{label} {len(mins)}x (~{sum(mins):.0f} min)"
+                for label, mins in done.items()
+            )
+
+            return (
+                f"Fora da corrida (últimos 7 dias): {parts}. Não entra na carga "
+                "de corrida, mas cansa — pese junto da recuperação."
+            )
+
+        except Exception as e:
+
+            print(f"Dossiê: outras atividades falhou p/ '{data.profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _open_illness(data: _Inputs):
@@ -662,6 +722,12 @@ class AthleteDossier:
                     state = "recuperação em dia, mas a carga subiu rápido"
 
                 lines.append(f"Estado: {state}{extra}.")
+
+        other = AthleteDossier._other_activities(data)
+
+        if other:
+
+            lines.append(other)
 
         ill = AthleteDossier._open_illness(data)
 
