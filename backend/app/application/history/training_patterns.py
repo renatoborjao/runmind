@@ -527,8 +527,6 @@ class TrainingPatterns:
 
         heavy_easy = []
 
-        recent = []
-
         for day, session, family, act in sessions:
 
             rpe = by_day.get(day.isoformat())
@@ -537,17 +535,11 @@ class TrainingPatterns:
 
                 continue
 
-            recent.append(f"{session.workout_type} {rpe.rpe}/10")
-
             if family == EASY and rpe.rpe >= 6:
 
                 heavy_easy.append(f"{day:%d/%m} ({rpe.rpe}/10)")
 
         lines = []
-
-        if recent:
-
-            lines.append("- RPE que ele respondeu: " + "; ".join(recent[-5:]) + ".")
 
         if heavy_easy:
 

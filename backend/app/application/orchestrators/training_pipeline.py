@@ -54,13 +54,13 @@ class TrainingPipeline:
         coach_analysis = result["analysis"]
 
         # --------------------------------------------------
-        # Auto-calibração: registra o ERRO de previsão de pace (prescrito ×
-        # sustentado nos tiros) desta atividade — o coach mede o próprio erro
-        # pra ajustar o alvo ao que o atleta aguenta. Best-effort, dedup por
-        # atividade; nunca derruba a análise.
+        # PLANEJADO × EXECUTADO: guarda a execução bloco-a-bloco (voltas do
+        # relógio × passos prescritos) — é de onde o coach calibra os alvos e
+        # lê a evolução, vivo. O arquivo reduzido não tem voltas pra recalcular
+        # depois. Best-effort; nunca derruba a análise.
         # --------------------------------------------------
 
-        TrainingPipeline._record_pace_calibration(profile, coach_context)
+        TrainingPipeline._record_execution(profile, coach_context)
 
         # ESTÍMULO de tiro: guarda o veredito bloco-a-bloco (executou os
         # intervalados no ritmo?) pra o report de aderência ler em lote — o
@@ -208,40 +208,41 @@ class TrainingPipeline:
         }
 
     @staticmethod
-    def _record_pace_calibration(profile: str, coach_context) -> None:
-        """Extrai o erro de pace dos tiros deste treino e guarda pra
-        auto-calibração. Best-effort — nunca derruba a análise."""
+    def _record_execution(profile: str, coach_context) -> None:
+        """Grava a execução bloco-a-bloco deste treino pro PLANEJADO ×
+        EXECUTADO do dossiê. Best-effort — nunca derruba a análise."""
 
         try:
 
-            comparison = coach_context.block_comparison
+            from app.application.history.execution_log import (
+                entry_from_comparison,
+            )
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+            from app.infrastructure.persistence.execution_log_store import (
+                ExecutionLogStore,
+            )
 
-            if comparison is None:
+            entry = entry_from_comparison(coach_context.block_comparison)
+
+            if entry is None:
 
                 return
 
-            from app.application.history.pace_calibration_analyzer import (
-                PaceCalibrationAnalyzer,
-            )
-            from app.infrastructure.persistence.pace_calibration_store import (
-                PaceCalibrationStore,
-            )
+            activity = coach_context.executed.activity
 
-            deltas = PaceCalibrationAnalyzer.deltas_from_blocks(
-                comparison.blocks
+            ExecutionLogStore().record(
+                profile,
+                activity.id,
+                TrainingPatterns._local_day(activity.start_date).isoformat(),
+                (activity.distance or 0) / 1000,
+                entry,
             )
-
-            if deltas:
-
-                PaceCalibrationStore().record(
-                    profile,
-                    coach_context.executed.activity.id,
-                    deltas,
-                )
 
         except Exception as e:
 
-            print(f"Calibração de pace falhou p/ '{profile}': {e}")
+            print(f"Registro de execução falhou p/ '{profile}': {e}")
 
     @staticmethod
     def _record_stimulus_result(profile: str, coach_context) -> None:

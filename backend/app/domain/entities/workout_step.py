@@ -65,11 +65,13 @@ def _to_seconds(item: dict) -> int | None:
 
     if isinstance(item.get("duration_sec"), (int, float)):
 
-        return int(item["duration_sec"])
+        return round(item["duration_sec"])
 
+    # round, não int: "20s" vem da IA como 0.33 min -> 19.8 s; int() truncava
+    # pra 19 s no relógio (strides do Mauricio, 28/09)
     if isinstance(item.get("duration_min"), (int, float)):
 
-        return int(float(item["duration_min"]) * 60)
+        return round(float(item["duration_min"]) * 60)
 
     return None
 

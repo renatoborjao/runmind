@@ -115,7 +115,14 @@ recuperação/aquecimento podem ir sem alvo
     * "repeat" agrupa o que se repete: {"kind":"repeat","reps":6,"steps":[bloco \
 de esforço, bloco de recuperação]} (repeat dentro de repeat vale pra séries)
   O formato aceita QUALQUER treino: contínuo, intervalado, pirâmide, subida, \
-run-walk, strides, fartlek, progressivo, blocos no pace de prova."""
+run-walk, strides, fartlek, progressivo, blocos no pace de prova.
+  Cada passo é uma MUDANÇA REAL de estímulo — no relógio, cada passo apita e \
+troca de tela como um bloco novo. Trecho CONTÍNUO no mesmo alvo = UM passo só \
+(rodagem de 8 km = 1 passo de 8 km; progressivo = um passo por trecho de \
+ritmo). Nunca fatie um contínuo em passos de 1 km: o atleta sente cada km \
+como um bloco novo (vira um intervalado falso) e o relógio já marca cada km \
+sozinho (volta automática). Parcial por km (estratégia de prova) vai no \
+texto, não nos passos."""
 
 # a periodização em uma frase: qual ênfase puxar conforme a distância pra prova
 PHASE_EMPHASIS = (

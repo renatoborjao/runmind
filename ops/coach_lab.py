@@ -692,8 +692,10 @@ BRAIN_EVAL = [
     ("fernanda", "refaz minha semana, mudou tudo aqui na minha rotina",
      [{"replan"}], {}),
     # ---- PULAR (aplica na hora)
+    # "amanhã" é relativo ao dia em que o catálogo roda (fixo "Monday" só
+    # valia no domingo em que foi escrito)
     ("helio", "amanhã não vou conseguir treinar, tenho plantão", [{"skip"}],
-     {"target_day": "Monday", "scope": "single_session"}),
+     {"target_day": "TOMORROW", "scope": "single_session"}),
     ("joaosoares", "estou resfriado, não vou conseguir treinar essa semana",
      [{"skip"}], {"scope": "week"}),
     ("leonardo", "vou viajar a trabalho a semana toda, não vou conseguir "
@@ -708,8 +710,11 @@ BRAIN_EVAL = [
      "minutos durante a semana", [{"routine"}], {}),
     ("renato2", "de agora em diante quero o longão sempre sem pace, só por "
      "sensação", [{"routine"}, {"preference"}], {}),
+    # com fartlek NA SEMANA, negociar a troca dele (perguntar ou ajustar) é o
+    # comportamento desenhado (aversão: negocia, não obedece); o "não gosto"
+    # durável vai pra memória pela extração. Sem fartlek na semana: routine.
     ("joaosoares", "não gosto de fartlek, prefiro tiro na pista",
-     [{"preference"}, {"routine"}], {}),
+     [{"preference"}, {"routine"}, {"adjust"}, {"routine", "adjust"}, set()], {}),
     # ---- RELÓGIO (manda na hora, nunca "vou tentar")
     ("renato2", "manda os treinos da semana pro relógio", [{"watch"}], {}),
     ("mauricio", "não chegou no Garmin, tenta de novo", [{"watch"}], {}),
@@ -796,9 +801,22 @@ def _grade(decision, expected_sets, extra) -> list[str]:
 
         target = next((a.target_day for a in actions), None)
 
-        if target != extra["target_day"]:
+        expected = extra["target_day"]
 
-            errors.append(f"dia-alvo {target} ≠ {extra['target_day']}")
+        if expected == "TOMORROW":
+
+            from datetime import timedelta
+
+            from app.core.clock import today_local
+
+            expected = (
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                "Saturday", "Sunday",
+            )[(today_local() + timedelta(days=1)).weekday()]
+
+        if target != expected:
+
+            errors.append(f"dia-alvo {target} ≠ {expected}")
 
     if "scope" in extra:
 

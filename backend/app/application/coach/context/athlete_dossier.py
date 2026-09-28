@@ -542,28 +542,6 @@ class AthleteDossier:
 
             print(f"Dossiê: projeção falhou p/ '{data.profile}': {e}")
 
-        try:
-
-            from app.application.history.pace_calibration_analyzer import (
-                PaceCalibrationAnalyzer,
-                calibration_directive,
-            )
-            from app.infrastructure.persistence.pace_calibration_store import (
-                PaceCalibrationStore,
-            )
-
-            lines.append(
-                calibration_directive(
-                    PaceCalibrationAnalyzer.assess(
-                        PaceCalibrationStore().deltas(data.profile)
-                    )
-                )
-            )
-
-        except Exception as e:
-
-            print(f"Dossiê: calibração falhou p/ '{data.profile}': {e}")
-
         return lines
 
     @staticmethod
@@ -1023,6 +1001,7 @@ class AthleteDossier:
             PlanContextBuilder,
         )
         from app.application.history.adherence_analyzer import AdherenceAnalyzer
+        from app.application.history.execution_log import ExecutionLog
         from app.application.history.stimulus_ledger import StimulusLedger
         from app.application.history.training_patterns import TrainingPatterns
         from app.application.planner.weekly_plan_service import (
@@ -1063,6 +1042,10 @@ class AthleteDossier:
             print(f"Dossiê: aderência falhou p/ '{data.profile}': {e}")
 
         lines.append(TrainingPatterns.for_profile(data.profile, drift=data.drift))
+
+        # sessão a sessão, o alvo × o feito — de onde sai a calibração e a
+        # leitura de evolução (a IA lê e decide; nada de viés pronto)
+        lines.append(ExecutionLog.for_profile(data.profile))
 
         lines.append(StimulusLedger.for_profile(data.profile))
 
