@@ -207,9 +207,22 @@ def test_external_coach_hides_identified_type():
     assert "Intensidade:" in joined
 
 
-def test_non_external_still_shows_identified_type():
+def test_planned_session_hides_identified_type():
+    """Fernanda 25/09: Tempo Run no alvo (blocos ✅) e a ficha dizia "Tipo
+    identificado: Rodagem leve · Intensidade: Muito alta" — o prescrito já
+    está no Planejado."""
 
-    context = make_context()
+    message = CoachWriter.write(make_context(), CoachSummary(runner_name="Fer"))
+
+    joined = "\n".join(message.executed_lines)
+
+    assert "Tipo identificado" not in joined
+    assert "Intensidade:" in joined
+
+
+def test_extra_run_still_shows_identified_type():
+
+    context = make_context(planned=None)
 
     message = CoachWriter.write(context, CoachSummary(runner_name="Renato"))
 

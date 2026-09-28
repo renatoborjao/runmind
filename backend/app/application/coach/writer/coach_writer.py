@@ -63,6 +63,7 @@ class CoachWriter:
             executed_lines=CoachWriter._executed_lines(
                 context.executed,
                 context.runner.external_coach,
+                planned=context.planned is not None,
             ),
             interval_lines=CoachWriter._interval_lines(context.executed),
             block_lines=CoachWriter._block_lines(
@@ -138,6 +139,7 @@ class CoachWriter:
     def _executed_lines(
         executed: EnrichedActivity,
         external_coach: bool = False,
+        planned: bool = False,
     ) -> list[str]:
         """Ficha completa do treino: tudo que o Strava entrega, pra o
         atleta não precisar abrir o app pra ver os números."""
@@ -213,11 +215,13 @@ class CoachWriter:
 
             lines.append(f"Esforço relativo: {int(activity.suffer_score)}")
 
-        # atleta com treinador: o tipo PRESCRITO manda (já vai no Planejado).
-        # A inferência do tipo EXECUTADO é pouco confiável em treino
-        # estruturado/run-walk (chamava o fracionado de "Longão") — some pra
-        # não confundir. A intensidade (medida da FC/esforço) fica.
-        if not external_coach:
+        # treino do plano (nosso ou do treinador): o tipo PRESCRITO manda (já
+        # vai no Planejado). A inferência do tipo EXECUTADO é pouco confiável
+        # em treino estruturado/run-walk — chamava o fracionado de "Longão" e o
+        # Tempo Run no alvo da Fernanda de "Rodagem leve" (25/09), logo abaixo
+        # dos blocos ✅. Só aparece em treino EXTRA (sem sessão planejada). A
+        # intensidade (medida da FC/esforço) fica sempre.
+        if not (external_coach or planned):
 
             lines.append(
                 f"Tipo identificado: "
