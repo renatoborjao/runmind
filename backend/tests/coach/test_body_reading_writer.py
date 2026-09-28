@@ -130,7 +130,8 @@ def test_trajectory_note_enters_the_facts_for_the_ai():
         _reading(body_state=BODY_STRAINED), "Fernanda", _traj()
     )
 
-    assert "Trajetória: É a 2ª leitura seguida" in facts
+    # entra marcada como padrão já conhecido (meia frase, não a abertura)
+    assert "nunca a abertura): É a 2ª leitura seguida" in facts
 
 
 def test_trajectory_folds_into_verdict_block_on_fallback():

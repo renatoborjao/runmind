@@ -864,6 +864,9 @@ export interface BodyReading {
   limiter?: string | null;
   limiter_label?: string | null;
   narrative?: string | null;
+  // título de HOJE e a frase do veredito, escritos pelo coach na narrativa
+  headline?: string | null;
+  verdict_line?: string | null;
   trend?: BodyTrend | null;
   sleep?: SleepDetail | null;
   acwr?: number | null;

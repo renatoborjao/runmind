@@ -108,6 +108,36 @@ _LIMITER = {
 }
 
 
+def _headline(narrative: str | None) -> tuple[str | None, str | None]:
+    """(título de hoje, frase do veredito) tirados da narrativa do coach — a
+    home mostrava 3 frases fixas pelo estado ("Dá pra treinar, com cautela"
+    todo dia, mesmo acordando com bateria 87). Narrativa antiga/fallback, com o
+    cabeçalho genérico, não tem título: (None, veredito)."""
+
+    if not narrative:
+
+        return None, None
+
+    lines = [line.strip() for line in narrative.splitlines() if line.strip()]
+
+    title = None
+
+    if lines and lines[0].startswith("🩺"):
+
+        head = lines[0].removeprefix("🩺").strip()
+
+        if head and head.lower() != "leitura do corpo":
+
+            title = head
+
+    verdict = next(
+        (line.removeprefix("⚖️").strip() for line in lines if line.startswith("⚖️")),
+        None,
+    )
+
+    return title, verdict
+
+
 @router.get("")
 async def get_body(profile: str = Depends(current_profile)):
     """Leitura do corpo: estado/limitador/ACWR/tendências são determinísticos
@@ -169,6 +199,8 @@ async def get_body(profile: str = Depends(current_profile)):
         "state_label": label,
         "tone": tone,
         "narrative": narrative,
+        "headline": _headline(narrative)[0],
+        "verdict_line": _headline(narrative)[1],
         "limiter": reading.limiter,
         "limiter_label": _LIMITER.get(reading.limiter or "", None),
         "acwr": reading.load.acwr,

@@ -47,16 +47,17 @@ experiente, sem markdown).
 FORMATO OBRIGATÓRIO (seções separadas por linha em branco, NUNCA um parágrafo \
 único corrido; cada seção com 1-2 frases curtas):
 
-🩺 Leitura do corpo
+🩺 [TÍTULO DE HOJE: uma frase curta (até 8 palavras) com o que o dia de HOJE \
+permite, pesando a noite que acabou E a tendência — é o título da tela do app]
 
-⚖️ [o veredito: como o corpo está lidando com o treino, cruzando carga e \
-recuperação]
+⚖️ [o veredito do DIA: a noite que acabou à luz da tendência e da carga — o \
+que isso muda HOJE]
 
 ❤️ [os sinais que sustentam o veredito, em linguagem de gente — sem jogar \
 números crus]
 
-🎯 [o ponto de atenção acionável desta semana; se não houver limitador, o que \
-manter]
+🎯 [o ponto de atenção acionável; se não houver limitador, o que manter — \
+coerente com o que HOJE tem no plano (dia sem treino é descanso, não "treino")]
 
 REGRA NÃO-NEGOCIÁVEL: a carga de treino NUNCA é apresentada sozinha nem como \
 susto. Você recebe um VEREDITO já calculado que cruza carga E recuperação — \
@@ -67,9 +68,18 @@ caindo. Se houver um limitador (ex.: sono), aponte-o como o ponto de atenção \
 real. Nunca dê conselho médico; fale como coach. Não repita números crus como \
 se fossem o diagnóstico — traduza pro que importa pro atleta.
 
-TRAJETÓRIA: se os FATOS trouxerem uma linha "Trajetória", incorpore-a no bloco \
-⚖️ com naturalidade (ex.: se repetindo há várias leituras, ou melhorou/piorou \
-desde a última) — é o que diferencia um dia isolado de um padrão. Se não vier, \
+HOJE × TENDÊNCIA: o atleta lê isto TODO DIA — a notícia é o que MUDOU. Os \
+FATOS separam a NOITE DE HOJE (o dado do dia) da TENDÊNCIA (últimos 7 dias \
+contra a faixa normal dele). Se a noite de hoje destoa da tendência (bem melhor \
+ou bem pior), ABRA por ela, com o que ela permite hoje. Uma noite ótima não \
+apaga semanas de tendência, nem uma ruim cria um padrão — diga os dois com \
+honestidade, sem contradizer o número que ele vê no relógio (FC de repouso 57 \
+hoje não é "subindo": a MÉDIA da semana é que está acima do normal dele). Se a \
+noite de hoje ainda não chegou do relógio, não fale como se tivesse chegado.
+
+TRAJETÓRIA: se os FATOS trouxerem uma linha "Trajetória", use-a em MEIA frase \
+no bloco ⚖️ — é o que diferencia um dia isolado de um padrão. NÃO abra pela \
+contagem de leituras nem a repita como a notícia: ele já sabe. Se não vier, \
 não invente trajetória alguma.
 
 FRONTEIRA: se os FATOS disserem que a carga está "no limite" de uma faixa, NÃO \
@@ -185,14 +195,25 @@ class BodyReadingWriter:
 
         if rec.has_data:
 
+            # a TENDÊNCIA vai sem o número do dia: "FC repouso 57 (subindo)"
+            # juntava o valor de hoje com a direção da semana e a IA contradizia
+            # o relógio (renato2 28/09: acordou com 57, a leitura falou em FC
+            # subindo). O número do dia mora na linha NOITE DE HOJE.
             lines.append(
-                "Recuperação: "
-                f"HRV {rec.hrv_recent} ({BodyReadingWriter._hrv_word(rec.hrv_direction)}), "
-                f"FC repouso {rec.rhr_recent} ({BodyReadingWriter._rhr_word(rec.rhr_direction)}), "
+                "Recuperação — TENDÊNCIA (últimos 7 dias contra a faixa normal "
+                "dele): "
+                f"HRV {BodyReadingWriter._hrv_word(rec.hrv_direction)}, "
+                f"FC de repouso {BodyReadingWriter._rhr_word(rec.rhr_direction)}, "
                 f"sono médio {rec.sleep_avg_hours}h "
                 f"({rec.short_nights} de {rec.nights_counted} noites curtas), "
                 f"stress médio {rec.stress_avg}, VO2max {rec.vo2max}"
             )
+
+            if profile:
+
+                lines.append(BodyReadingWriter._tonight_facts(profile))
+
+                lines.append(BodyReadingWriter._today_plan_facts(profile))
 
         else:
 
@@ -224,7 +245,10 @@ class BodyReadingWriter:
         # decidiu isso: entrou/saiu de alerta ou segue em alerta)
         if trajectory is not None and trajectory.has_note:
 
-            lines.append(f"Trajetória: {trajectory.athlete_note}")
+            lines.append(
+                "Trajetória (o padrão — ele já sabe; meia frase, nunca a "
+                f"abertura): {trajectory.athlete_note}"
+            )
 
         # o DOSSIÊ do atleta — a MESMA base do plano, da análise e do chat
         # (evolução, percepção, padrões, plano, o que o coach já disse)
@@ -241,6 +265,109 @@ class BodyReadingWriter:
                 lines.append(dossier)
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _tonight_facts(profile: str) -> str:
+        """A NOITE QUE ACABOU, crua do relógio — o dado do DIA, separado da
+        tendência. Se a noite de hoje ainda não chegou, diz isso (a leitura
+        gerada de madrugada falava da noite anterior como se fosse a de hoje)."""
+
+        try:
+
+            from app.core.clock import today_local
+            from app.infrastructure.persistence.garmin_health_repository import (
+                GarminHealthRepository,
+            )
+
+            days = [h for h in GarminHealthRepository().load(profile) if h.has_data]
+
+            today = today_local()
+
+            night = days[-1] if days else None
+
+            if night is None or str(night.date) != today.isoformat():
+
+                last = f" (último dado: {night.date})" if night else ""
+
+                return f"NOITE DE HOJE: ainda não chegou do relógio{last}."
+
+            bits = []
+
+            if night.sleep_hours is not None:
+
+                hours = int(night.sleep_hours)
+
+                minutes = round((night.sleep_hours - hours) * 60)
+
+                score = f" (nota {night.sleep_score})" if night.sleep_score else ""
+
+                bits.append(f"sono {hours}h{minutes:02d}{score}")
+
+            if night.body_battery_at_wake is not None:
+
+                bits.append(f"bateria ao acordar {night.body_battery_at_wake}")
+
+            if night.hrv_last_night is not None:
+
+                bits.append(f"HRV da noite {night.hrv_last_night}")
+
+            if night.resting_hr is not None:
+
+                bits.append(f"FC de repouso {night.resting_hr}")
+
+            if night.stress_avg is not None:
+
+                bits.append(f"stress {night.stress_avg}")
+
+            return (
+                f"NOITE DE HOJE ({today:%d/%m}) — o dado do dia: "
+                + ", ".join(bits) + "."
+            )
+
+        except Exception as e:
+
+            print(f"Noite de hoje falhou p/ '{profile}': {e}")
+
+            return ""
+
+    @staticmethod
+    def _today_plan_facts(profile: str) -> str:
+        """O que HOJE tem no plano — a leitura mandava "aproveite a energia no
+        treino" num dia de descanso (renato2 28/09)."""
+
+        try:
+
+            from app.core.clock import today_local
+            from app.core.weekdays import weekday_label
+            from app.infrastructure.persistence.weekly_plan_repository import (
+                WeeklyPlanRepository,
+            )
+
+            plan = WeeklyPlanRepository().load(profile)
+
+            today = today_local()
+
+            if plan is None:
+
+                return ""
+
+            label = f"{weekday_label(today.strftime('%A'))} {today:%d/%m}"
+
+            todays = [s for s in plan.sessions if plan.session_date(s) == today]
+
+            if not todays:
+
+                return f"HOJE ({label}) no plano: sem treino — dia de descanso."
+
+            return f"HOJE ({label}) no plano: " + "; ".join(
+                s.workout_type for s in todays
+            ) + "."
+
+        except Exception as e:
+
+            print(f"Plano de hoje falhou p/ '{profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _garmin_facts(rec) -> str | None:

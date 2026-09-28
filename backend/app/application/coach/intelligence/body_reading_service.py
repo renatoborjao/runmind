@@ -109,10 +109,14 @@ class BodyReadingService:
 
         today_snapshot = snapshots[-1] if snapshots and snapshots[-1].day == today else None
 
+        # reaproveita só se foi escrita com os MESMOS números — a noite nova
+        # chegando muda HRV/FC/sono/limitador. Antes a leitura das 03:16 (com a
+        # noite anterior) valia o dia todo (renato2 28/09: acordou com bateria
+        # 87 e o app seguia na leitura da madrugada).
         if (
             today_snapshot is not None
             and today_snapshot.narrative
-            and today_snapshot.body_state == reading.body_state
+            and BodyReadingService._same_basis(today_snapshot, reading)
         ):
 
             return today_snapshot.narrative
@@ -131,6 +135,27 @@ class BodyReadingService:
             )
 
         return narrative
+
+    @staticmethod
+    def _same_basis(snapshot, reading: BodyReading) -> bool:
+
+        rec = reading.recovery
+
+        return (
+            snapshot.body_state,
+            snapshot.limiter,
+            snapshot.hrv_recent,
+            snapshot.rhr_recent,
+            snapshot.sleep_avg_hours,
+            snapshot.short_nights,
+        ) == (
+            reading.body_state,
+            reading.limiter,
+            rec.hrv_recent,
+            rec.rhr_recent,
+            rec.sleep_avg_hours,
+            rec.short_nights,
+        )
 
     @staticmethod
     def snapshot_of(

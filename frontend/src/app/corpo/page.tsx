@@ -221,6 +221,7 @@ export default function CorpoPage() {
             <div className={`state-card ${b.tone}`}>
               <div className="st">Estado do corpo 🩺</div>
               <h2>{b.state_label}</h2>
+              {b.headline && <p style={{ margin: "4px 0 0", fontWeight: 700 }}>{b.headline}</p>}
               {b.narrative ? (
                 <p style={{ margin: "6px 0 0", whiteSpace: "pre-line" }}>{narrativeBody(b.narrative)}</p>
               ) : (

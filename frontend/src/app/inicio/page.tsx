@@ -39,9 +39,11 @@ const TONE_COLOR: Record<string, string> = {
 };
 
 // Veredito do herói. Preferimos SEMPRE a leitura REAL do corpo (backend, ciente
-// do histórico: estado + tom + limitador) e amarramos ao treino de hoje. Só
-// caímos no veredito raso pelo número do anel quando não há leitura de corpo —
-// assim a home nunca "decide no vácuo" nem diverge da tela /corpo.
+// do histórico: estado + tom + limitador) e amarramos ao treino de hoje. Título
+// e nota vêm do COACH (a leitura do dia, que pesa a noite que acabou E a
+// tendência) — as 3 frases fixas por tom repetiam "Dá pra treinar, com
+// cautela" todo dia, mesmo acordando com bateria 87 (Renato 28/09); ficam só
+// de reserva. Sem leitura de corpo, cai no veredito raso pelo anel.
 function heroVerdict(
   bd: BodyReading | null,
   session: TodaySession | null,
@@ -71,6 +73,9 @@ function heroVerdict(
         : "Recuperação em dia. Bom dia pra descansar bem.";
     }
     if (bd.limiter_label) note += ` Ponto de atenção: ${bd.limiter_label.toLowerCase()}.`;
+    if (bd.headline) {
+      return { badge: bd.state_label, title: bd.headline, note: bd.verdict_line || note, tone };
+    }
     return { badge: bd.state_label, title, note, tone };
   }
   const v = readinessVerdict(ringVal);
