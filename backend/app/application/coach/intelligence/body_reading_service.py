@@ -54,25 +54,22 @@ class BodyReadingService:
         # corpo não ajuda a comparar nada
         if persist and reading.recovery.has_data:
 
-            # preserva a narrativa já cacheada hoje (se o estado não mudou) —
-            # sem isso, toda releitura no dia (ex.: chat) apagaria o cache e
-            # forçaria a IA a rodar de novo na próxima abertura da tela
+            # preserva a narrativa já cacheada hoje — ela vale pela NOITE de
+            # sono, não pelo estado; sem isso, toda releitura no dia (ex.: chat)
+            # apagaria o cache e forçaria a IA a rodar de novo
             today_snapshot = (
                 all_snapshots[-1]
                 if all_snapshots and all_snapshots[-1].day == today
                 else None
             )
 
-            narrative = (
-                today_snapshot.narrative
-                if today_snapshot and today_snapshot.body_state == reading.body_state
-                else None
-            )
-
             repo.record(
                 profile,
                 BodyReadingService.snapshot_of(
-                    reading, now_local(), narrative=narrative
+                    reading,
+                    now_local(),
+                    narrative=today_snapshot.narrative if today_snapshot else None,
+                    night=today_snapshot.night if today_snapshot else None,
                 ),
             )
 
@@ -86,15 +83,16 @@ class BodyReadingService:
         trajectory: BodyTrajectory,
         reference_date: date | None = None,
     ) -> str | None:
-        """Narrativa da IA pra leitura de HOJE, com cache de 1 geração por dia
-        (telas home/corpo chamam isso a cada abertura — sem cache seria 1
-        chamada Gemini por load). None quando não há recuperação de verdade
-        (sem Garmin/carga insuficiente): nada honesto pra narrar ainda.
+        """Narrativa da IA da leitura do corpo — UMA por noite de sono (Renato
+        28/09: "deve ser alterada apenas quando recebemos os dados do sono,
+        1x ao dia"). Telas home/corpo e o chat chamam isso a cada abertura;
+        a IA só roda quando chega uma noite nova do relógio. Até a noite de
+        hoje chegar, vale a leitura da última noite. Números que mudam durante
+        o dia (a FC de repouso do Garmin é recalculada) não reescrevem nada.
+        None quando não há recuperação de verdade: nada honesto pra narrar.
 
-        Cache vive no MESMO snapshot diário do histórico de trajetória — se já
-        existe um snapshot de hoje com narrativa, reusa; senão gera (IA, com
-        fallback determinístico do BodyReadingWriter) e só GRAVA no cache
-        quando veio da IA de verdade (fallback não trava o dia: a próxima
+        O cache vive no snapshot diário do histórico de trajetória e só é
+        GRAVADO quando veio da IA de verdade (fallback não trava: a próxima
         abertura tenta a IA de novo)."""
 
         if not reading.recovery.has_data:
@@ -105,21 +103,13 @@ class BodyReadingService:
 
         repo = BodyReadingHistoryRepository()
 
-        snapshots = repo.load(profile)
+        night = BodyReadingService._last_night(profile)
 
-        today_snapshot = snapshots[-1] if snapshots and snapshots[-1].day == today else None
+        cached = BodyReadingService._cached(repo.load(profile), night, today)
 
-        # reaproveita só se foi escrita com os MESMOS números — a noite nova
-        # chegando muda HRV/FC/sono/limitador. Antes a leitura das 03:16 (com a
-        # noite anterior) valia o dia todo (renato2 28/09: acordou com bateria
-        # 87 e o app seguia na leitura da madrugada).
-        if (
-            today_snapshot is not None
-            and today_snapshot.narrative
-            and BodyReadingService._same_basis(today_snapshot, reading)
-        ):
+        if cached:
 
-            return today_snapshot.narrative
+            return cached
 
         narrative, from_ai = await BodyReadingWriter.narrate(
             reading, runner_name, trajectory, profile=profile,
@@ -130,36 +120,62 @@ class BodyReadingService:
             repo.record(
                 profile,
                 BodyReadingService.snapshot_of(
-                    reading, now_local(), narrative=narrative
+                    reading, now_local(), narrative=narrative, night=night
                 ),
             )
 
         return narrative
 
     @staticmethod
-    def _same_basis(snapshot, reading: BodyReading) -> bool:
+    def _cached(snapshots, night: str | None, today: date) -> str | None:
+        """A narrativa que ainda vale: a última escrita com a MESMA noite de
+        sono. Sem sono no relógio (ou cache anterior a esta regra, sem a
+        noite gravada): uma por dia."""
 
-        rec = reading.recovery
+        written = [s for s in snapshots if s.narrative]
 
-        return (
-            snapshot.body_state,
-            snapshot.limiter,
-            snapshot.hrv_recent,
-            snapshot.rhr_recent,
-            snapshot.sleep_avg_hours,
-            snapshot.short_nights,
-        ) == (
-            reading.body_state,
-            reading.limiter,
-            rec.hrv_recent,
-            rec.rhr_recent,
-            rec.sleep_avg_hours,
-            rec.short_nights,
-        )
+        if not written:
+
+            return None
+
+        last = written[-1]
+
+        if night is None or last.night is None:
+
+            return last.narrative if last.day == today else None
+
+        return last.narrative if last.night == night else None
+
+    @staticmethod
+    def _last_night(profile: str) -> str | None:
+        """Data da última noite de sono que chegou do relógio."""
+
+        try:
+
+            from app.infrastructure.persistence.garmin_health_repository import (
+                GarminHealthRepository,
+            )
+
+            nights = [
+                str(h.date)
+                for h in GarminHealthRepository().load(profile)
+                if h.sleep_hours is not None
+            ]
+
+            return max(nights) if nights else None
+
+        except Exception as e:
+
+            print(f"Noite de sono falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def snapshot_of(
-        reading: BodyReading, at, narrative: str | None = None
+        reading: BodyReading,
+        at,
+        narrative: str | None = None,
+        night: str | None = None,
     ) -> BodyReadingSnapshot:
         """Congela o essencial da leitura num snapshot. `at` é datetime (hora
         local da leitura; no backfill, o dia histórico reconstruído)."""
@@ -180,4 +196,5 @@ class BodyReadingService:
             short_nights=rec.short_nights,
             nights_counted=rec.nights_counted,
             narrative=narrative,
+            night=night,
         )

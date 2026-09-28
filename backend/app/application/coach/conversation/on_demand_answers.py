@@ -160,8 +160,18 @@ class OnDemandAnswers:
                 else None
             )
 
-            text = await BodyReadingWriter.write(
-                reading, runner.name, trajectory=note, profile=profile,
+            # a MESMA leitura do app — uma por noite de sono, sem IA a cada
+            # pergunta; sem relógio (só carga) não há cache e escreve na hora
+            cached = await BodyReadingService.narrative_for(
+                profile, runner.name, reading, trajectory,
+            )
+
+            text = (
+                BodyReadingWriter.with_panel(cached, reading)
+                if cached
+                else await BodyReadingWriter.write(
+                    reading, runner.name, trajectory=note, profile=profile,
+                )
             )
 
             # se o corpo pede freio e AMANHÃ tem treino exigente, o coach já

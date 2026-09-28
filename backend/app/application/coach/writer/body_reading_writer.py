@@ -105,6 +105,11 @@ class BodyReadingWriter:
             reading, runner_name, trajectory, profile=profile,
         )
 
+        return BodyReadingWriter.with_panel(narrative, reading)
+
+    @staticmethod
+    def with_panel(narrative: str, reading: BodyReading) -> str:
+
         # painel factual dos números de recuperação — o veredito narra, o
         # painel MOSTRA o dado concreto por trás (camada de saúde à mostra).
         panel = HealthSnapshotFormatter.panel(reading.recovery)

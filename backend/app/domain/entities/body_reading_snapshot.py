@@ -30,6 +30,7 @@ class BodyReadingSnapshot:
     short_nights: int
     nights_counted: int
     narrative: str | None = None  # narrativa da IA do dia (cache; None = ainda não gerada)
+    night: str | None = None  # noite de sono (YYYY-MM-DD) com que a narrativa foi escrita
 
     @property
     def day(self) -> date:

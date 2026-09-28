@@ -3,12 +3,16 @@ sono 8h31 nota 92, FC de repouso 57 — e o app seguia "Dá pra treinar, com
 cautela", com a leitura escrita às 03:16 com a noite anterior e "FC repouso 57
 (subindo)" nos fatos)."""
 
-from datetime import date
-from types import SimpleNamespace
-from unittest.mock import patch
+import asyncio
+from datetime import date, datetime, time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
+)
+from app.domain.entities.body_reading import BODY_STRAINED
+from app.infrastructure.persistence.body_reading_history_repository import (
+    BodyReadingHistoryRepository,
 )
 from app.application.coach.writer.body_reading_writer import (
     _SYSTEM_PROMPT,
@@ -79,21 +83,107 @@ def test_prompt_leads_with_what_changed_and_titles_the_day():
     assert "NÃO abra pela" in _SYSTEM_PROMPT
 
 
-def test_cached_reading_is_rewritten_when_the_night_arrives():
+SVC = "app.application.coach.intelligence.body_reading_service"
+D27, D28 = date(2026, 9, 27), date(2026, 9, 28)
 
-    reading = _reading()
-    rec = reading.recovery
-    same = SimpleNamespace(
-        body_state=reading.body_state, limiter=reading.limiter,
-        hrv_recent=rec.hrv_recent, rhr_recent=rec.rhr_recent,
-        sleep_avg_hours=rec.sleep_avg_hours, short_nights=rec.short_nights,
+
+def _snap(day: date, narrative, night, reading=None):
+
+    return BodyReadingService.snapshot_of(
+        reading or _reading(), datetime.combine(day, time(7)),
+        narrative=narrative, night=night,
     )
 
-    assert BodyReadingService._same_basis(same, reading)
 
-    before_the_night = SimpleNamespace(**{**vars(same), "rhr_recent": 67.0})
+def _narrate(tmp_path, snapshots, nights, today=D28, reading=None):
+    """narrative_for com o histórico no tmp, as noites do relógio e a IA
+    mockada. Devolve (texto, nº de chamadas à IA, snapshots gravados)."""
 
-    assert not BodyReadingService._same_basis(before_the_night, reading)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+
+    repo = BodyReadingHistoryRepository()
+    repo.storage = tmp_path
+
+    for s in snapshots:
+        repo.record("r", s)
+
+    narrate = AsyncMock(return_value=("🩺 nova", True))
+
+    with patch(f"{SVC}.BodyReadingHistoryRepository", lambda: repo), \
+            patch(REPO, return_value=[_night(d) for d in nights]), \
+            patch(f"{SVC}.BodyReadingWriter.narrate", new=narrate), \
+            patch(f"{SVC}.now_local", return_value=datetime.combine(today, time(15))):
+
+        text = asyncio.run(BodyReadingService.narrative_for(
+            "r", "Renato", reading or _reading(), MagicMock(), reference_date=today,
+        ))
+
+    return text, narrate.await_count, repo.load("r")
+
+
+def test_same_night_never_calls_the_ai_again(tmp_path):
+    """FC de repouso recalculada à tarde (números mudam) não reescreve."""
+
+    text, calls, _ = _narrate(
+        tmp_path, [_snap(D28, "🩺 manhã", "2026-09-28")],
+        ["2026-09-27", "2026-09-28"], reading=_reading(rhr_recent=55.0),
+    )
+
+    assert (text, calls) == ("🩺 manhã", 0)
+
+
+def test_new_night_rewrites_once_and_remembers_the_night(tmp_path):
+
+    text, calls, saved = _narrate(
+        tmp_path, [_snap(D27, "🩺 ontem", "2026-09-27")],
+        ["2026-09-27", "2026-09-28"],
+    )
+
+    assert (text, calls) == ("🩺 nova", 1)
+    assert (saved[-1].day, saved[-1].night) == (D28, "2026-09-28")
+
+
+def test_before_tonight_syncs_the_last_nights_reading_holds(tmp_path):
+
+    text, calls, _ = _narrate(
+        tmp_path, [_snap(D27, "🩺 ontem", "2026-09-27")], ["2026-09-27"],
+    )
+
+    assert (text, calls) == ("🩺 ontem", 0)
+
+
+def test_no_sleep_in_the_watch_is_one_a_day(tmp_path):
+
+    assert _narrate(tmp_path / "a", [_snap(D28, "🩺 hoje", None)], [])[:2] == ("🩺 hoje", 0)
+    assert _narrate(tmp_path / "b", [_snap(D27, "🩺 ontem", None)], [])[:2] == ("🩺 nova", 1)
+
+
+def test_todays_reading_from_before_this_rule_is_kept(tmp_path):
+    """Deploy no meio do dia: a leitura de hoje sem a noite gravada vale."""
+
+    text, calls, _ = _narrate(
+        tmp_path, [_snap(D28, "🩺 hoje", None)], ["2026-09-28"],
+    )
+
+    assert (text, calls) == ("🩺 hoje", 0)
+
+
+def test_rereading_the_body_keeps_the_nights_reading(tmp_path):
+    """Chat/tick relendo o corpo com o estado mudado não apaga o cache."""
+
+    from tests.coach.test_body_reading_service import _run
+
+    repo = BodyReadingHistoryRepository()
+    repo.storage = tmp_path
+    repo.record("renato", _snap(D28, "🩺 manhã", "2026-09-28"))
+
+    _run(tmp_path, _reading(body_state=BODY_STRAINED), D28)
+
+    kept = repo.load("renato")[-1]
+
+    assert (kept.narrative, kept.night, kept.body_state) == (
+        "🩺 manhã", "2026-09-28", BODY_STRAINED,
+    )
 
 
 def test_home_title_and_note_come_from_the_coach():
