@@ -52,6 +52,7 @@ Branch: `fix/avulso-ajuste-sem-loop`. "Stamp" = backup na VM tirado **antes** da
 | 27 | `da5788e` | Carga/ACWR: semana SEM treino no mês não entra na base (com 2+ semanas ativas) — a volta ao normal virava pico (Leonardo: 1,62 "risco de lesão alto" → 1,22); base baixa (<90 min/sem) só é pico com +30 min reais; risco de lesão respeita isso; dossiê explica | history/training_load_analyzer, injury_risk_analyzer; domain/entities/training_load; coach/context/athlete_dossier | 20260927-222803 |
 | 28 | `7069ac4` | Carga do corpo (ACWR/risco de lesão) só com corrida/caminhada — musculação/futebol/bike saem da razão (antes somavam e inflavam pico: João) e aparecem no dossiê como "fora da corrida (7 dias)" pra pesar com a recuperação — decisão do Renato: coach de corrida | coach/intelligence/body_reading_builder; coach/context/athlete_dossier | 20260927-223300 |
 | 29 | `93ff0f3` | HRV e FC de repouso: a última semana contra a FAIXA NORMAL do atleta (média ± 1 DP dos ~2 meses; mínimo 2 ms / 1,5 bpm) em vez de semana × semana — sem base de 2 meses, regra antiga. Recálculo de 8 semanas dia a dia: Maurício 62%→30% do tempo em alerta, Renato 55%→42%, Fernanda 21%→7%; episódios reais mantidos | history/recovery_trend_analyzer | 20260927-223853 |
+| 30 | `69b96ca` | Calibração de pace contra a FAIXA prescrita (dentro = 0): medir contra o limite lento fazia "acertou o alvo" virar "~10 s mais rápido, APERTE" (renato2 4/4 e 7/8 no alvo) | history/pace_calibration_analyzer | 20260927-224600 |
 
 ### Dados (não é código)
 
@@ -68,6 +69,7 @@ Branch: `fix/avulso-ajuste-sem-loop`. "Stamp" = backup na VM tirado **antes** da
 | 27/09 | `coach_attention/*.json`: removidas as cobranças "weekly" que NUNCA foram enviadas (a revisão simulada do lab gravava em produção) — fernanda 3→1, helio 2→1, joaosoares 2→0, leonardo 2→0, mauricio 3→1, renato2 2→0 | copiar `rollback_points/coach-2026-09-27/data/coach_attention_antes_limpeza/*` de volta |
 | 27/09 | `memory/renato2.json`: tirada a data duplicada "(27/09) (27/09)" da nota do longão | copiar `rollback_points/coach-2026-09-27/data/memory_renato2_antes_data_dup.json` de volta |
 | 27/09 | `memory/mauricio.json`: arquivadas 4 notas de dia pontuais/superadas (01/09 chuva, 10/09 "o de hoje pra amanhã", 11/09 longo domingo + sexta — superada pela de 13/09 "fixos ter/qui/sáb", 17/09 prova de 19/09) | copiar `rollback_points/coach-2026-09-27/data/memory_mauricio_antes_dias.json` de volta |
+| 27/09 | `pace_calibration/*.json`: amostras zeradas (medidas contra o limite lento da faixa — viés falso de "mais rápido"); ids processadas mantidas | copiar `rollback_points/coach-2026-09-27/data/pace_calibration_antes/*` de volta |
 | 27/09 → | `session_rpe/{perfil}.json` ganha `feel`/`note`/`source` | **ATENÇÃO ao reverter o nº 20**: o código antigo lê com `SessionRpe(**record)` e quebraria com os campos novos — antes, remover as chaves `feel`,`note`,`source` dos registros |
 
 ## Como desfazer
