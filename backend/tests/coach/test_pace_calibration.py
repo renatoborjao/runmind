@@ -11,6 +11,7 @@ class _Block:
     kind: str
     pace_max: str | None
     executed_pace: float | None  # min/km
+    pace_min: str | None = None
 
 
 def test_deltas_only_from_interval_blocks():
@@ -67,3 +68,16 @@ def test_pace_parse_handles_bad_input():
     blocks = [_Block("interval", "abc", 5.0), _Block("interval", None, 5.0)]
 
     assert PaceCalibrationAnalyzer.deltas_from_blocks(blocks) == []
+
+
+def test_inside_the_range_is_on_target_not_faster():
+    """renato2 27/09: correr DENTRO da faixa contava como "mais rápido que o
+    prescrito" (media contra o limite lento) e o coach mandava APERTAR."""
+
+    blocks = [
+        _Block("interval", "5:35", 5 + 28 / 60, pace_min="5:25"),  # 5:28 dentro
+        _Block("interval", "5:35", 5 + 20 / 60, pace_min="5:25"),  # 5:20 = -5
+        _Block("interval", "5:35", 5 + 40 / 60, pace_min="5:25"),  # 5:40 = +5
+    ]
+
+    assert [round(d) for d in PaceCalibrationAnalyzer.deltas_from_blocks(blocks)] == [0, -5, 5]

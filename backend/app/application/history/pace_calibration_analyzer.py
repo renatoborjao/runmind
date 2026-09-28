@@ -34,8 +34,12 @@ class PaceCalibrationAnalyzer:
 
     @staticmethod
     def deltas_from_blocks(blocks) -> list[float]:
-        """Erro por bloco de qualidade: executado − teto prescrito (s/km).
-        + = correu mais devagar que o alvo; − = mais rápido. Ignora bloco sem
+        """Erro por bloco de qualidade CONTRA A FAIXA prescrita (s/km): DENTRO
+        da faixa = 0 (acertou); mais rápido que o limite rápido = negativo; mais
+        lento que o limite lento = positivo. Antes media contra o limite LENTO:
+        quem corria a 5:28 numa faixa 5:25-5:35 contava "7 s mais rápido" — o
+        coach concluía "bate os tiros ~10 s mais rápido, APERTE" com o atleta
+        acertando o alvo (renato2 27/09: 4/4 e 7/8 no alvo). Ignora bloco sem
         alvo de pace ou sem execução."""
 
         out: list[float] = []
@@ -46,13 +50,29 @@ class PaceCalibrationAnalyzer:
 
                 continue
 
-            target = PaceCalibrationAnalyzer._sec(block.pace_max)
+            slow = PaceCalibrationAnalyzer._sec(block.pace_max)
 
-            if target is None or not block.executed_pace:
+            fast = PaceCalibrationAnalyzer._sec(getattr(block, "pace_min", None))
+
+            if slow is None or not block.executed_pace:
 
                 continue
 
-            out.append(block.executed_pace * 60 - target)
+            executed = block.executed_pace * 60
+
+            fast = fast if fast is not None and fast <= slow else slow
+
+            if executed < fast:
+
+                out.append(executed - fast)
+
+            elif executed > slow:
+
+                out.append(executed - slow)
+
+            else:
+
+                out.append(0.0)
 
         return out
 
