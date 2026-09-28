@@ -116,6 +116,12 @@ async function buildMapCard(points: { lat: number; lon: number }[], W: number, H
   return cv;
 }
 
+// nome do treino na tela: o prefixo "Ritmind · " (posto no Strava/relógio pra
+// marcar o treino do plano) é ruído dentro do próprio app
+function showName(name: string): string {
+  return name.replace(/Ritmind · /g, "").trim() || name;
+}
+
 // ---- estilos de card compartilhável (foto OU mapa real de fundo) ----
 const MONTHS_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function shortDate(iso: string): string {
@@ -675,7 +681,7 @@ function AtividadesInner() {
             <button className="icon-btn" aria-label="Voltar" onClick={() => setSel(null)}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             </button>
-            <div className="title"><div className="k">{fmtDate(it.datetime ?? it.date_iso)}</div><div className="t">{it.name}</div></div>
+            <div className="title"><div className="k">{fmtDate(it.datetime ?? it.date_iso)}</div><div className="t">{showName(it.name)}</div></div>
             <button className="icon-btn" aria-label="Editar" onClick={() => { setMetaOpen((v) => !v); setTitleDraft(it.custom_title ? it.name : ""); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
             </button>
@@ -832,6 +838,7 @@ function AtividadesInner() {
                     {it.has_photo && <span className="src-tag photo">📷</span>}
                     {!!it.comment_count && <span className="src-tag photo">💬 {it.comment_count}</span>}
                   </div>
+                  {it.name && <div className="rr-name">{showName(it.name)}</div>}
                   <div className="rr-km">{km(it.distance_km)} km</div>
                   <div className="rr-meta">{it.duration_min} min · {it.pace ?? "—"}/km{it.avg_hr ? ` · ${it.avg_hr} bpm` : ""}</div>
                 </div>
