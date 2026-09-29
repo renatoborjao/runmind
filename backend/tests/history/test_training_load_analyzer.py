@@ -10,6 +10,7 @@ from app.domain.entities.training_load import (
     LOAD_DETRAINING,
     LOAD_HIGH,
     LOAD_INSUFFICIENT,
+    LOAD_LIGHT,
     LOAD_OPTIMAL,
 )
 
@@ -67,15 +68,16 @@ def test_high_when_ramping_fast():
     assert load.status == LOAD_HIGH
 
 
-def test_one_light_week_is_not_detraining():
+def test_one_light_week_is_light_not_detraining():
 
     # carregou 21 dias e parou SÓ na última semana -> aguda 0 -> ACWR 0, mas uma
-    # semana leve é só uma semana leve (viagem, treino que mudou de dia)
+    # semana leve é só uma semana leve (viagem, pausa médica, treino que mudou de
+    # dia): estado próprio — nem "equilibrada" nem "queda de forma"
     load = _analyze([_act(d, 60) for d in range(7, 28)])
 
     assert load.acute_load == 0.0
     assert load.acwr == 0.0
-    assert load.status == LOAD_OPTIMAL
+    assert load.status == LOAD_LIGHT
 
 
 def test_detraining_when_two_full_weeks_stay_below_usual():

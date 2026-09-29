@@ -356,7 +356,14 @@ class AthleteDossier:
 
             snapshots.append(BodyReadingService.snapshot_of(reading, now_local()))
 
-        return TrainingPatterns.recovery_drift(snapshots)
+        from app.application.history.recovery_alert_run import RecoveryAlertRun
+
+        return TrainingPatterns.recovery_drift(
+            snapshots,
+            alert_since=RecoveryAlertRun.since_for_profile(
+                data.profile, data.today
+            ),
+        )
 
     @staticmethod
     def _archive_history(activities):

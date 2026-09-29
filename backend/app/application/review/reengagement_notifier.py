@@ -9,6 +9,7 @@ faz dedup por episódio. Fecha a peça de retenção que faltava
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from app.application.coach.intelligence.absence_window import AbsenceWindow
 from app.application.history.silence_detector import SilenceDetector
 from app.application.notifications.coach_outbox import CoachOutbox
 from app.application.review.reengagement_writer import ReengagementWriter
@@ -60,6 +61,13 @@ class ReengagementNotifier:
             return
 
         today = local.date()
+
+        # quem AVISOU que ia parar (viagem, afastamento médico) não sumiu: o
+        # silêncio dele é combinado, o coach não vai atrás — (Renato 29/09: 7
+        # dias sem treinar por orientação médica)
+        if AbsenceWindow.open(profile, today) is not None:
+
+            return
 
         history = await LoadTrainingHistory.execute(
             profile=profile,

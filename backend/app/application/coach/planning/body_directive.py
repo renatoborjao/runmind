@@ -17,6 +17,22 @@ from app.domain.entities.body_reading_snapshot import (
     BodyTrajectory,
 )
 
+def _span(source) -> str:
+    """O alerta em TEMPO ("há 16 dias (desde 12/09)") — a contagem de leituras
+    soa como N dias ruins e a série é uma tendência de 7 dias. Sem o tempo
+    (objeto antigo), cai na contagem."""
+
+    days = getattr(source, "alert_days", 0)
+
+    since = getattr(source, "alert_since", None)
+
+    if days:
+
+        return f"há {days} dias" + (f" (desde {since:%d/%m})" if since else "")
+
+    return f"há {source.alert_streak} leituras seguidas"
+
+
 _LIMITER = {
     "sono": "o sono (noites curtas)",
     "fc_repouso": "a FC de repouso, que vem subindo",
@@ -53,8 +69,8 @@ def body_plan_directive(
     if state == BODY_STRAINED:
 
         persist = (
-            f" E não é de hoje: {trajectory.alert_streak} leituras seguidas em "
-            "alerta — o corpo não está assimilando, dá mais peso a isto."
+            f" E não é de hoje: em alerta {_span(trajectory)} — o corpo não "
+            "está assimilando, dá mais peso a isto."
             if persisting
             else ""
         )
@@ -84,7 +100,7 @@ def body_plan_directive(
     # limitador CRÔNICO que ele sustenta (ex.: sono curto com corpo equilibrado)
     # não pode encolher a dose toda semana, senão ele fica subtreinado pra sempre.
     recur = (
-        f" Esse sinal se repete ({trajectory.alert_streak} leituras) — confirme "
+        f" Esse sinal se repete ({_span(trajectory)}) — confirme "
         "nos APRENDIZADOS se é o BASELINE dele (que ele sustenta) ou se está "
         "piorando de verdade."
         if persisting
@@ -131,8 +147,8 @@ def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> s
 
     return (
         "STATUS DO CORPO — PIORA REAL DA RECUPERAÇÃO (não é o normal dele; "
-        f"você é o COACH, a decisão é sua){lim}: em alerta há "
-        f"{drift.alert_streak} leituras seguidas, {', '.join(evidence)} — contra "
+        f"você é o COACH, a decisão é sua){lim}: em alerta "
+        f"{_span(drift)}, {', '.join(evidence)} — contra "
         "a própria base de semanas atrás. O que um bom treinador costuma fazer "
         "nesse quadro: SEGURAR a progressão (sem subir volume nem intensidade "
         "sobre a semana passada), qualidade enxuta e controlada (limite de baixo "

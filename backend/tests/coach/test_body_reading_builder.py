@@ -190,3 +190,22 @@ def test_build_load_counts_only_running():
         ids = {a.id for a in history.activities}
 
         assert ids == {1}   # só a corrida na carga
+
+
+def test_light_week_with_good_recovery_is_fresh_not_balanced():
+    """Semana sem correr (pausa médica, viagem): não é 'equilibrada' — descansado,
+    com espaço pra puxar, e SEM chamar de destreino."""
+
+    from app.domain.entities.training_load import LOAD_LIGHT
+
+    assert BodyReadingBuilder._verdict(LOAD_LIGHT, _rec()) == BODY_FRESH
+
+
+def test_light_week_with_declining_recovery_flags_recovery():
+
+    from app.domain.entities.training_load import LOAD_LIGHT
+
+    assert (
+        BodyReadingBuilder._verdict(LOAD_LIGHT, _rec(hrv=FALLING))
+        == BODY_RECOVERY_FLAG
+    )

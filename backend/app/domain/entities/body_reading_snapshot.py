@@ -58,6 +58,12 @@ class BodyTrajectory:
     previous_state: str | None    # estado da última leitura (None se 1ª)
     athlete_note: str = ""        # frase pro atleta ("" quando nada a dizer)
     fact: str = ""                # frase pro cérebro coach ("" quando 1ª)
+    # o alerta em TEMPO (dias de calendário desde a 1ª leitura da sequência, com
+    # hoje) — é assim que o atleta e as vozes do coach falam dele. A CONTAGEM de
+    # leituras (alert_streak) segue só pra decisão: "16 leituras seguidas" soa
+    # como 16 dias ruins, e não é (a série é uma tendência de 7 dias).
+    alert_days: int = 0
+    alert_since: date | None = None
 
     @property
     def has_note(self) -> bool:

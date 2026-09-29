@@ -18,10 +18,15 @@ MAX_OUTPUT_TOKENS = 400
 
 EMPTY_OPS: dict = {"add": [], "archive": []}
 
+_WEEKDAYS_PT = (
+    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+    "sexta-feira", "sábado", "domingo",
+)
+
 EXTRACTION_PROMPT_TEMPLATE = """Você mantém a memória de longo prazo do coach \
 de corrida do Ritmind sobre o corredor {runner_name}.
 
-Hoje é {today} (use para resolver datas relativas como "em agosto").
+Hoje é {today} ({weekday}) — use para resolver datas relativas como "em agosto", \n"terça que vem", "daqui a 7 dias".
 
 Analise a MENSAGEM NOVA do corredor e decida se ela contém fatos duráveis que
 o coach deve lembrar em conversas futuras. Categorias possíveis:
@@ -53,7 +58,7 @@ MENSAGEM NOVA DO CORREDOR:
 {incoming_text}
 
 Responda APENAS com JSON neste formato:
-{{"add": [{{"category": "...", "content": "..."}}], "archive": ["id"]}}
+{{"add": [{{"category": "...", "content": "...", "until": "AAAA-MM-DD ou null"}}], \n"archive": ["id"]}}
 
 PROVA ALVO (opcional): se a mensagem definir ou mudar uma prova alvo do
 corredor (distância e/ou data), inclua também:
@@ -87,6 +92,22 @@ REGRAS:
 - NÃO duplique memória ativa existente (nem com outras palavras).
 - Se a mensagem indicar que um fato registrado se resolveu ou mudou
   (ex: "o joelho melhorou"), inclua o id correspondente em "archive".
+- PRAZO ("until"): fato que TEM FIM — ausência, viagem, pausa/afastamento (inclusive
+  por orientação médica), repouso, recuperação, "por N dias/semanas", "até X" —
+  leva "until" = o ÚLTIMO dia em que ele vale (AAAA-MM-DD), contado a partir de
+  hoje ({today}). Escreva o "content" com as DATAS (dd/mm) e o dia da volta, nunca
+  só "por 7 dias" solto. Ex.: hoje 29/09 (terça), "vou ficar 7 dias sem treinar"
+  → content "Sem treinar de 29/09 a 05/10 (7 dias, orientação médica); volta a
+  treinar em 06/10", until "2026-10-05". Fato durável (preferência, objetivo,
+  rotina): "until" null.
+- PRAZO NOVO: se a mensagem, MESMO CURTA, fala da data de VOLTA de um fato ativo
+  ("mas terça que vem voltamos", "só volto quinta", "vou ficar mais 3 dias"), o
+  fato CONTINUA valendo até lá. Se o "content" ativo já traz essa data, NÃO faça
+  nada (nem archive). Se a data mudou, ARQUIVE o antigo E ADICIONE o atualizado
+  com o "until" novo. Só ARQUIVE sem adicionar quando ele já VOLTOU ou foi
+  liberado AGORA ("o médico liberou", "já posso correr", "voltei"). Dizer que
+  volta DEPOIS nunca encerra a ausência: arquivar aqui apaga a pausa dele da
+  memória enquanto ele ainda está parado.
 - Sem fatos novos e nada a arquivar: {{"add": [], "archive": []}}
 """
 
@@ -106,6 +127,7 @@ class MemoryExtractionEngine:
         prompt = EXTRACTION_PROMPT_TEMPLATE.format(
             runner_name=runner_name,
             today=today_local().isoformat(),
+            weekday=_WEEKDAYS_PT[today_local().weekday()],
             current_memories=MemoryExtractionEngine._render_memories(
                 current_memories,
             ),
@@ -183,7 +205,7 @@ class MemoryExtractionEngine:
             return None
 
         add = [
-            item
+            MemoryExtractionEngine._clean_item(item)
             for item in data.get("add", [])
             if isinstance(item, dict)
             and item.get("content")
@@ -210,6 +232,28 @@ class MemoryExtractionEngine:
             ops["race"] = race
 
         return ops
+
+    @staticmethod
+    def _clean_item(item: dict) -> dict:
+        """`until` só passa se for uma data ISO válida (a IA erra conta; o ciclo
+        de vida ainda descarta prazo absurdo). Senão o item segue sem prazo e a
+        rede do MemoryLifecycle deduz do texto."""
+
+        until = item.get("until")
+
+        if isinstance(until, str):
+
+            try:
+
+                date.fromisoformat(until[:10])
+
+                return {**item, "until": until[:10]}
+
+            except ValueError:
+
+                pass
+
+        return {k: v for k, v in item.items() if k != "until"}
 
     @staticmethod
     def _parse_race(

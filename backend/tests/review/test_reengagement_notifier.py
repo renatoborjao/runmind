@@ -9,7 +9,7 @@ from tests.coach.factories import make_runner
 MODULE = "app.application.review.reengagement_notifier"
 
 
-def _run(hour, verdict, already_sent=False):
+def _run(hour, verdict, already_sent=False, absence=None):
 
     runner = make_runner(name="Renato", phone="+5511900000001")
 
@@ -21,6 +21,7 @@ def _run(hour, verdict, already_sent=False):
         patch(f"{MODULE}.LoadRunnerProfile") as mock_load_runner,
         patch(f"{MODULE}.LoadTrainingHistory") as mock_load_history,
         patch(f"{MODULE}.ConversationRepository"),
+        patch(f"{MODULE}.AbsenceWindow") as mock_absence,
         patch(f"{MODULE}.SilenceDetector") as mock_detector,
         patch(f"{MODULE}.DispatchGuard") as mock_guard,
         patch(f"{MODULE}.BuildTrainingGoal"),
@@ -38,6 +39,8 @@ def _run(hour, verdict, already_sent=False):
         mock_repo_cls.return_value = mock_repo
 
         mock_load_runner.execute.return_value = runner
+
+        mock_absence.open.return_value = absence
 
         mock_load_history.execute = AsyncMock(return_value=history)
 
@@ -98,6 +101,21 @@ def test_dedup_one_touch_per_episode():
     """Já cutucado neste episódio → não repete (orientar, não repetir)."""
 
     mock_outbox, mock_guard = _run(hour=17, verdict=_DARK, already_sent=True)
+
+    mock_outbox.send.assert_not_awaited()
+    mock_guard.mark.assert_not_called()
+
+
+def test_no_nudge_during_a_declared_absence():
+    """Quem avisou que ia parar (viagem, afastamento médico) não 'sumiu'."""
+
+    from datetime import date
+
+    from app.application.coach.intelligence.absence_window import AbsenceWindow
+
+    pause = AbsenceWindow(until=date(2026, 10, 5), note="Sem treinar de 29/09 a 05/10")
+
+    mock_outbox, mock_guard = _run(hour=17, verdict=_DARK, absence=pause)
 
     mock_outbox.send.assert_not_awaited()
     mock_guard.mark.assert_not_called()

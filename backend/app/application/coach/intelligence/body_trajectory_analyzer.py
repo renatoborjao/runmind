@@ -44,6 +44,13 @@ _RANK = {
 }
 
 
+def _weeks(n: int) -> str:
+
+    return {1: "uma semana", 2: "duas semanas", 3: "três semanas"}.get(
+        n, f"{n} semanas"
+    )
+
+
 class BodyTrajectoryAnalyzer:
 
     @staticmethod
@@ -51,10 +58,14 @@ class BodyTrajectoryAnalyzer:
         history: list[BodyReadingSnapshot],
         reading: BodyReading,
         today,
+        alert_since=None,
     ) -> BodyTrajectory:
         """`history` = snapshots ANTERIORES (antigo->novo), já sem o de hoje.
         `reading` = a leitura recém-calculada. `today` entra só pra assinatura
-        simétrica com o resto (a comparação é por ordem, não por data)."""
+        simétrica com o resto (a comparação é por ordem, não por data).
+        `alert_since` = início da sequência de dias em alerta RECONSTRUÍDA da
+        série com a régua atual ([[RecoveryAlertRun]]); manda sobre as leituras
+        gravadas (que misturam calibrações antigas) quando vem."""
 
         current = reading.body_state
 
@@ -74,22 +85,36 @@ class BodyTrajectoryAnalyzer:
 
         prev_alert = previous in _ALERT
 
-        streak = BodyTrajectoryAnalyzer._alert_streak(prior, current_alert)
+        streak, since = BodyTrajectoryAnalyzer._alert_streak(
+            prior, current_alert, today
+        )
+
+        # a série reconstruída com a régua de hoje é a autoridade do TEMPO em
+        # alerta; as leituras gravadas só decidem a contagem
+        if current_alert and alert_since is not None:
+
+            since = min(alert_since, today)
+
+        alert_days = (today - since).days + 1 if since else 0
 
         movement = BodyTrajectoryAnalyzer._movement(
             current, previous, current_alert, prev_alert, streak
         )
 
         athlete_note = BodyTrajectoryAnalyzer._athlete_note(
-            movement, streak, current_alert, prev_alert
+            movement, streak, current_alert, prev_alert,
+            weeks_now=(today - since).days // 7 if since else 0,
+            weeks_before=(prior[-1].day - since).days // 7 if since else 0,
         )
 
         fact = (
             f"Trajetória do corpo: agora {current}, na leitura anterior "
             f"{previous} ({movement})"
             + (
-                f"; {streak} leituras seguidas em alerta"
-                if streak >= 2
+                f"; a tendência de recuperação está fora da faixa dele há "
+                f"{alert_days} dias (desde {since:%d/%m}) — é a média de 7 "
+                "dias, que muda devagar"
+                if streak >= 2 and since
                 else ""
             )
             + "."
@@ -101,6 +126,8 @@ class BodyTrajectoryAnalyzer:
             previous_state=previous,
             athlete_note=athlete_note,
             fact=fact,
+            alert_days=alert_days,
+            alert_since=since,
         )
 
     # ------------------------------------------------------------------
@@ -109,15 +136,18 @@ class BodyTrajectoryAnalyzer:
     def _alert_streak(
         prior: list[BodyReadingSnapshot],
         current_alert: bool,
-    ) -> int:
-        """Quantas leituras SEGUIDAS (terminando na de hoje) estão em alerta.
-        0 se a de hoje não é alerta — a sequência quebrou."""
+        today,
+    ) -> tuple[int, object | None]:
+        """(quantas leituras SEGUIDAS estão em alerta, dia em que a sequência
+        começou). (0, None) se a de hoje não é alerta — a sequência quebrou."""
 
         if not current_alert:
 
-            return 0
+            return 0, None
 
         streak = 1
+
+        since = today
 
         for snap in reversed(prior):
 
@@ -125,11 +155,13 @@ class BodyTrajectoryAnalyzer:
 
                 streak += 1
 
+                since = snap.day
+
             else:
 
                 break
 
-        return streak
+        return streak, since
 
     @staticmethod
     def _movement(
@@ -166,19 +198,28 @@ class BodyTrajectoryAnalyzer:
         streak: int,
         current_alert: bool,
         prev_alert: bool,
+        weeks_now: int = 0,
+        weeks_before: int = 0,
     ) -> str:
         """Só fala quando há NOTÍCIA: entrou em alerta, saiu do alerta, ou
-        segue em alerta pela 2ª+ vez. Melhora/piora DENTRO do verde fica muda
-        (não vira ruído pro atleta)."""
+        segue em alerta. A sequência longa NÃO é repetida todo dia (nem em
+        "N leituras seguidas", que soa como N dias ruins): fala na 2ª leitura e
+        de novo a cada SEMANA nova de alerta, em tempo. Melhora/piora DENTRO do
+        verde fica muda (não vira ruído pro atleta)."""
 
         if movement == TRAJ_PERSISTING:
 
             if streak >= 3:
 
-                return (
-                    f"E não é de hoje: {streak}ª leitura seguida com o corpo "
-                    "pedindo atenção — isso virou padrão, não um dia isolado."
-                )
+                # o mesmo recado todo dia é ruído: só quando virou uma semana nova
+                if weeks_now > weeks_before and weeks_now >= 1:
+
+                    return (
+                        f"E já faz {_weeks(weeks_now)} com a recuperação fora "
+                        "da faixa dele — virou padrão, não um dia isolado."
+                    )
+
+                return ""
 
             return (
                 "E não foi só hoje: é a 2ª leitura seguida assim, vale levar a "

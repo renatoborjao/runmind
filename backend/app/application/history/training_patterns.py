@@ -67,6 +67,10 @@ class RecoveryDrift:
     sleep_avg: float | None
     short_nights: int
     nights: int
+    # o alerta em TEMPO (dias desde o início da sequência, com hoje) — é como o
+    # coach fala dele; alert_streak (leituras) fica pra decisão
+    alert_days: int = 0
+    alert_since: date | None = None
 
     @property
     def worsening(self) -> bool:
@@ -93,7 +97,12 @@ class RecoveryDrift:
 class TrainingPatterns:
 
     @staticmethod
-    def recovery_drift(snapshots: list[BodyReadingSnapshot]) -> RecoveryDrift | None:
+    def recovery_drift(
+        snapshots: list[BodyReadingSnapshot],
+        alert_since: date | None = None,
+    ) -> RecoveryDrift | None:
+        """`alert_since` = início da sequência reconstruída da série com a régua
+        atual ([[RecoveryAlertRun]]); sem ele, cai nas leituras gravadas."""
 
         if not snapshots:
 
@@ -103,6 +112,8 @@ class TrainingPatterns:
 
         streak = 0
 
+        since = None
+
         for snap in reversed(snapshots):
 
             if snap.body_state not in _ALERT_STATES:
@@ -110,6 +121,8 @@ class TrainingPatterns:
                 break
 
             streak += 1
+
+            since = snap.day
 
         recent = snapshots[-3:]
 
@@ -133,6 +146,11 @@ class TrainingPatterns:
             sleep_avg=latest.sleep_avg_hours,
             short_nights=latest.short_nights,
             nights=latest.nights_counted,
+            # a série reconstruída com a régua atual manda no TEMPO em alerta
+            alert_days=(
+                (latest.day - (alert_since or since)).days + 1 if since else 0
+            ),
+            alert_since=(alert_since or since) if since else None,
         )
 
     @staticmethod
@@ -295,8 +313,16 @@ class TrainingPatterns:
                 BodyReadingHistoryRepository,
             )
 
+            from app.application.history.recovery_alert_run import (
+                RecoveryAlertRun,
+            )
+            from app.core.clock import today_local
+
             return TrainingPatterns.recovery_drift(
-                BodyReadingHistoryRepository().load(profile)
+                BodyReadingHistoryRepository().load(profile),
+                alert_since=RecoveryAlertRun.since_for_profile(
+                    profile, today_local()
+                ),
             )
 
         except Exception as e:
@@ -584,7 +610,14 @@ class TrainingPatterns:
         if drift.alert_streak:
 
             lines.append(
-                f"- Corpo em alerta há {drift.alert_streak} leituras seguidas."
+                "- Corpo em alerta "
+                + (
+                    f"há {drift.alert_days} dias (desde {drift.alert_since:%d/%m})"
+                    if drift.alert_days and drift.alert_since
+                    else f"há {drift.alert_streak} leituras seguidas"
+                )
+                + " — é a tendência de 7 dias contra a faixa dele, que muda "
+                "devagar."
             )
 
         trend = []

@@ -41,6 +41,10 @@ _RECENT_DAYS = 7
 _BASELINE_DAYS = 60
 _MIN_BASELINE_POINTS = 14
 
+# body battery ao acordar abaixo disto = acordou "no vermelho" (não recarregou)
+# — aí sim é sinal de recuperação ruim. Acordar cheio (mesmo caindo de leve) não.
+LOW_WAKE_BATTERY = 30
+
 
 class RecoveryTrendAnalyzer:
 
@@ -149,6 +153,25 @@ class RecoveryTrendAnalyzer:
         RecoveryTrendAnalyzer._apply_tier2(trend, window)
 
         return trend
+
+    @staticmethod
+    def is_declining(trend: RecoveryTrend) -> bool:
+        """A recuperação está PIORANDO? Marcadores de ouro (HRV e FC de repouso)
+        pela DIREÇÃO contra a faixa dele; body battery só pelo NÍVEL absoluto
+        (acordar no vermelho) — nunca pela direção com o tanque cheio (acordar em
+        91 caindo de leve não é alerta). É a definição ÚNICA de "alerta": o
+        veredito do corpo e a sequência de dias em alerta usam esta mesma régua."""
+
+        waking_drained = (
+            trend.body_battery_wake is not None
+            and trend.body_battery_wake < LOW_WAKE_BATTERY
+        )
+
+        return (
+            trend.hrv_direction == FALLING
+            or trend.rhr_direction == FALLING
+            or waking_drained
+        )
 
     @staticmethod
     def _apply_tier2(trend: RecoveryTrend, window) -> None:

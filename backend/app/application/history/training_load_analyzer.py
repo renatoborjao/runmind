@@ -23,6 +23,7 @@ from app.domain.entities.training_load import (
     LOAD_DETRAINING,
     LOAD_HIGH,
     LOAD_INSUFFICIENT,
+    LOAD_LIGHT,
     LOAD_OPTIMAL,
     TrainingLoad,
 )
@@ -610,10 +611,11 @@ class TrainingLoadAnalyzer:
 
         if acwr < ACWR_DETRAINING:
 
-            # uma semana leve é só uma semana leve (viagem, ajuste do plano,
-            # treino que mudou de dia): só vira destreino se as duas últimas
-            # semanas completas confirmarem
-            return LOAD_DETRAINING if light_confirmed else LOAD_OPTIMAL
+            # uma semana leve é só uma semana leve (viagem, pausa médica, treino
+            # que mudou de dia): só vira destreino se as duas últimas semanas
+            # completas confirmarem. Antes disso é LIGHT — nem "equilibrada"
+            # (aguda bem abaixo da base) nem "queda de forma".
+            return LOAD_DETRAINING if light_confirmed else LOAD_LIGHT
 
         if acwr <= ACWR_OPTIMAL_MAX:
 

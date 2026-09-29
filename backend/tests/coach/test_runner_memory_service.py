@@ -344,3 +344,45 @@ def test_ops_without_race_do_not_touch_profile_race(tmp_path):
             (tmp_path / "renato.json").read_text(encoding="utf-8")
         )
         assert "race_date" not in profile
+
+
+def test_absence_gets_an_end_date_and_the_context_shows_when_it_ends(tmp_path):
+
+    memory_repo, profile_repo = _patched_repos(tmp_path)
+
+    with (
+        patch(f"{MODULE}.RunnerMemoryRepository", return_value=memory_repo),
+        patch(f"{MODULE}.RunnerProfileRepository", return_value=profile_repo),
+        patch(f"{MODULE}.now_local") as now,
+    ):
+
+        from datetime import datetime, timedelta, timezone
+
+        now.return_value = datetime(
+            2026, 9, 29, 15, 21, tzinfo=timezone(timedelta(hours=-3)),
+        )
+
+        RunnerMemoryService.process(
+            "renato",
+            {
+                "add": [
+                    {
+                        "category": "disponibilidade",
+                        "content": "Sem treinar de 29/09 a 05/10 (7 dias); volta em 06/10",
+                        "until": "2026-10-05",
+                    },
+                ],
+                "archive": [],
+            },
+        )
+
+        entry = memory_repo.load("renato")[0]
+
+        assert entry.expires_at == "2026-10-05"
+
+        # a leitura do contexto mostra até quando vale (a data de volta)
+        with patch(
+            "app.infrastructure.persistence.runner_memory_repository.today_local",
+            return_value=__import__("datetime").date(2026, 10, 1),
+        ):
+            assert "vale até 05/10" in RunnerMemoryService.render("renato")

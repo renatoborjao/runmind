@@ -48,9 +48,6 @@ from app.infrastructure.persistence.runner_profile_repository import (
 # recuperação (dia após dia muito em pé/andando cobra, mesmo sem treinar mais)
 _HIGH_LIFE_LOAD_STEPS = 12000
 
-# body battery ao acordar abaixo disto = acordou "no vermelho" (não recarregou)
-# — aí sim é sinal de recuperação ruim. Acordar cheio (mesmo caindo de leve) não.
-_LOW_WAKE_BATTERY = 30
 
 
 class BodyReadingBuilder:
@@ -177,21 +174,9 @@ class BodyReadingBuilder:
     def _verdict(load_status: str, recovery) -> str:
         """A régua central: cruza carga × recuperação."""
 
-        # recuperação vem do Garmin em direção-de-recuperação (RISING=melhora,
-        # FALLING=piora); sem dado de recuperação, nada "caindo". Marcadores de
-        # ouro: HRV e FC de repouso pela DIREÇÃO. Body battery entra pelo NÍVEL
-        # absoluto (acordar no vermelho = não recarregou) — nunca pela direção
-        # com tanque cheio (acordar em 91 caindo de leve não é alerta).
-        waking_drained = (
-            recovery.body_battery_wake is not None
-            and recovery.body_battery_wake < _LOW_WAKE_BATTERY
-        )
-
-        recovery_declining = (
-            recovery.hrv_direction == FALLING
-            or recovery.rhr_direction == FALLING
-            or waking_drained
-        )
+        # a definição de "recuperação piorando" é UMA só (a mesma que conta os
+        # dias em alerta): ver RecoveryTrendAnalyzer.is_declining
+        recovery_declining = RecoveryTrendAnalyzer.is_declining(recovery)
 
         # sem histórico de carga suficiente: veredito puxado pela recuperação
         if load_status == LOAD_INSUFFICIENT:
@@ -218,7 +203,8 @@ class BodyReadingBuilder:
 
             return BODY_BALANCED
 
-        # LOAD_DETRAINING
+        # LOAD_LIGHT / LOAD_DETRAINING: carga abaixo do normal dele e a
+        # recuperação em dia — descansado, com espaço pra puxar
         return BODY_FRESH
 
     @staticmethod

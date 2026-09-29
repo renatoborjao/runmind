@@ -249,3 +249,18 @@ def test_life_load_limiter_labeled_in_fallback():
 
     assert "🎯" in text
     assert "rotina fora do treino" in text
+
+
+def test_light_week_is_told_to_the_ai_as_not_yet_a_drop_in_form():
+
+    reading = _reading(body_state=BODY_ABSORBING)
+
+    reading.load = TrainingLoad(
+        acute_load=0.0, chronic_load=334.9, acwr=0.0, status="LIGHT",
+        days_of_history=28, weekly_loads=[402.1, 367.8, 324.6, 0.0],
+    )
+
+    facts = BodyReadingWriter._facts(reading, "Renato")
+
+    assert "semana mais leve que o normal dele" in facts
+    assert "NÃO é queda de forma" in facts

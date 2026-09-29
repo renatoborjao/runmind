@@ -131,3 +131,29 @@ def test_race_with_invalid_date_is_dropped():
     )
 
     assert "race" not in ops
+
+
+def test_extract_keeps_a_valid_until_and_drops_a_bad_one():
+
+    ops, _ = _extract(
+        '{"add": [{"category": "disponibilidade", "content": "Sem treinar de 29/09 a 05/10",'
+        ' "until": "2026-10-05"},'
+        ' {"category": "disponibilidade", "content": "Viaja em breve", "until": "semana que vem"}],'
+        ' "archive": []}'
+    )
+
+    assert ops["add"][0]["until"] == "2026-10-05"
+    assert "until" not in ops["add"][1]
+
+
+def test_prompt_teaches_deadline_and_the_short_return_confirmation():
+
+    _, kwargs = _extract('{"add": [], "archive": []}')
+
+    prompt = kwargs["contents"]
+
+    assert '"until"' in prompt
+    assert "PRAZO NOVO" in prompt
+    # o dia da semana de hoje entra (ajuda "terça que vem")
+    assert any(d in prompt for d in ("segunda-feira", "terça-feira", "quarta-feira",
+                                      "quinta-feira", "sexta-feira", "sábado", "domingo"))

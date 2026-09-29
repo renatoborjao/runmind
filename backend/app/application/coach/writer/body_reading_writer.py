@@ -26,7 +26,7 @@ from app.domain.entities.body_reading import (
     BodyReading,
 )
 from app.domain.entities.body_reading_snapshot import BodyTrajectory
-from app.domain.entities.training_load import acwr_border_label
+from app.domain.entities.training_load import LOAD_LIGHT, acwr_border_label
 from app.infrastructure.integrations.gemini.client import generate_text
 
 THINKING_BUDGET = 256
@@ -71,16 +71,21 @@ se fossem o diagnóstico — traduza pro que importa pro atleta.
 HOJE × TENDÊNCIA: o atleta lê isto TODO DIA — a notícia é o que MUDOU. Os \
 FATOS separam a NOITE DE HOJE (o dado do dia) da TENDÊNCIA (últimos 7 dias \
 contra a faixa normal dele). Se a noite de hoje destoa da tendência (bem melhor \
-ou bem pior), ABRA por ela, com o que ela permite hoje. Uma noite ótima não \
-apaga semanas de tendência, nem uma ruim cria um padrão — diga os dois com \
-honestidade, sem contradizer o número que ele vê no relógio (FC de repouso 57 \
+ou bem pior), ABRA por ela, com o que ela permite hoje. Uma noite ótima é \
+BOA NOTÍCIA de verdade: reconheça-a como tal (ele dormiu bem, o corpo \
+respondeu) e NUNCA a minimize — jamais escreva que ela "não apaga", "não \
+muda" ou "não desfaz" o padrão, nem a emende com um "mas". A tendência entra \
+DEPOIS, em meia frase, como contexto: é uma média de 7 dias e muda devagar; o \
+que a vira é repetir noites assim. Uma noite ruim também não cria um padrão — \
+diga com honestidade, sem contradizer o número que ele vê no relógio (FC de repouso 57 \
 hoje não é "subindo": a MÉDIA da semana é que está acima do normal dele). Se a \
 noite de hoje ainda não chegou do relógio, não fale como se tivesse chegado.
 
 TRAJETÓRIA: se os FATOS trouxerem uma linha "Trajetória", use-a em MEIA frase \
-no bloco ⚖️ — é o que diferencia um dia isolado de um padrão. NÃO abra pela \
-contagem de leituras nem a repita como a notícia: ele já sabe. Se não vier, \
-não invente trajetória alguma.
+no bloco ⚖️ — é o que diferencia um dia isolado de um padrão — e SEMPRE em \
+TEMPO ("faz duas semanas", "desde dia 12"), nunca em "N leituras seguidas" \
+(leitura não é dia, e o número assusta sem informar). NÃO abra por ela nem a \
+repita como a notícia: ele já sabe. Se não vier, não invente trajetória alguma.
 
 FRONTEIRA: se os FATOS disserem que a carga está "no limite" de uma faixa, NÃO \
 a apresente como salto, estouro ou susto — o ACWR é ruidoso e meio ponto \
@@ -189,6 +194,13 @@ class BodyReadingWriter:
         if border:
 
             acwr_desc += f"; {border} — fronteira, não um salto"
+
+        if load.status == LOAD_LIGHT:
+
+            acwr_desc += (
+                "; semana mais leve que o normal dele — ainda NÃO é queda de "
+                "forma (só vira com 2 semanas seguidas abaixo)"
+            )
 
         acwr_desc += ")"
 

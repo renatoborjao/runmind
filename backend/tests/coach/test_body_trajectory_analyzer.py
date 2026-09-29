@@ -88,7 +88,11 @@ def test_persisting_counts_streak_across_readings():
     traj = BodyTrajectoryAnalyzer.of(history, _reading(BODY_STRAINED), TODAY)
 
     assert traj.alert_streak == 4
-    assert "4ª leitura seguida" in traj.athlete_note
+    # falado em TEMPO (3 semanas desde 29/06), nunca "4ª leitura seguida"
+    assert "leitura seguida" not in traj.athlete_note
+    assert "três semanas" in traj.athlete_note
+    assert traj.alert_days == 22
+    assert traj.alert_since == date(2026, 6, 29)
 
 
 def test_streak_breaks_when_a_green_reading_interrupts():
@@ -153,3 +157,63 @@ def test_today_snapshot_is_ignored_in_comparison():
 
     assert traj.previous_state == BODY_STRAINED
     assert traj.movement == TRAJ_PERSISTING
+
+
+def _daily_alert(start: date, days: int):
+
+    from datetime import timedelta
+
+    return [_snap(BODY_RECOVERY_FLAG, start + timedelta(days=i)) for i in range(days)]
+
+
+def test_long_alert_is_not_repeated_every_day():
+    """Renato 29/09: 'E não é de hoje: 16ª leitura seguida' todo dia, inclusive
+    depois de uma noite ótima. A sequência longa só fala quando vira semana."""
+
+    # alerta desde 12/07; hoje 20/07 = 9º dia (1 semana completa já passou em 19/07)
+    history = _daily_alert(date(2026, 7, 12), 7)  # 12..18
+
+    traj = BodyTrajectoryAnalyzer.of(history, _reading(BODY_RECOVERY_FLAG), date(2026, 7, 19))
+
+    # 19/07 = 8º dia: cruzou a 1ª semana -> notícia
+    assert "uma semana" in traj.athlete_note
+
+    history = _daily_alert(date(2026, 7, 12), 8)  # 12..19
+
+    traj = BodyTrajectoryAnalyzer.of(history, _reading(BODY_RECOVERY_FLAG), TODAY)
+
+    # 20/07 = 9º dia, mesma semana de alerta: quieto (o coach não repete)
+    assert traj.movement == TRAJ_PERSISTING
+    assert traj.athlete_note == ""
+    assert traj.has_note is False
+    # mas a decisão continua com a contagem, e o cérebro recebe o tempo
+    assert traj.alert_streak == 9
+    assert "há 9 dias (desde 12/07)" in traj.fact
+    assert "leituras seguidas" not in traj.fact
+
+
+def test_second_reading_still_says_it_was_not_only_today():
+
+    history = _daily_alert(date(2026, 7, 19), 1)
+
+    traj = BodyTrajectoryAnalyzer.of(history, _reading(BODY_RECOVERY_FLAG), TODAY)
+
+    assert "2ª leitura seguida" in traj.athlete_note
+
+
+def test_alert_time_comes_from_the_rebuilt_series_not_from_old_snapshots():
+    """Renato 29/09: as leituras gravadas antes de 27/09 vinham de outra régua
+    (mais sensível) e puxavam o começo do alerta pra 30/08; pela régua atual ele
+    começa em 04/09. A série reconstruída manda no TEMPO."""
+
+    history = _daily_alert(date(2026, 7, 12), 8)  # 12..19 (gravadas)
+
+    traj = BodyTrajectoryAnalyzer.of(
+        history, _reading(BODY_RECOVERY_FLAG), TODAY, alert_since=date(2026, 7, 15),
+    )
+
+    assert traj.alert_since == date(2026, 7, 15)
+    assert traj.alert_days == 6  # 15..20
+    assert "há 6 dias (desde 15/07)" in traj.fact
+    # a contagem de decisão segue nas leituras gravadas
+    assert traj.alert_streak == 9

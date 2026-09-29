@@ -39,6 +39,10 @@ def acwr_border_label(acwr: float | None) -> str | None:
 # status possíveis (string, não enum, pra casar com o estilo do projeto)
 LOAD_INSUFFICIENT = "INSUFFICIENT_DATA"
 LOAD_DETRAINING = "DETRAINING"
+# semana mais leve que o normal dele (aguda bem abaixo da crônica) MAS ainda sem
+# confirmação: uma semana parada (viagem, pausa médica, treino que mudou de dia)
+# não é queda de forma — só vira DETRAINING com 2 semanas seguidas.
+LOAD_LIGHT = "LIGHT"
 LOAD_OPTIMAL = "OPTIMAL"
 LOAD_CAUTION = "CAUTION"
 LOAD_HIGH = "HIGH"

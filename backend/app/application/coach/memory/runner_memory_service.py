@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import uuid4
 
 from app.core.clock import now_local
@@ -93,7 +93,7 @@ class RunnerMemoryService:
                 source="conversation",
                 created_at=created_at,
                 expires_at=MemoryLifecycle.expiry_for(
-                    category, content, created_at,
+                    category, content, created_at, until=item.get("until"),
                 ),
             ),
         )
@@ -173,10 +173,36 @@ class RunnerMemoryService:
             ).strftime("%d/%m")
 
             lines.append(
-                f"- [{entry.category}] {entry.content} ({registered})"
+                f"- [{entry.category}] {entry.content} "
+                f"({registered}{RunnerMemoryService._absence_tail(entry)})"
             )
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _absence_tail(entry) -> str:
+        """Ausência/pausa mostra ATÉ QUANDO vale — quem lê a memória (chat, plano
+        da semana, revisão) enxerga a data de VOLTA, não um "por 7 dias" solto."""
+
+        if not MemoryLifecycle.is_absence(entry.category, entry.content):
+
+            return ""
+
+        expiry = entry.expires_at or MemoryLifecycle.expiry_for(
+            entry.category, entry.content, entry.created_at,
+        )
+
+        if not expiry:
+
+            return ""
+
+        try:
+
+            return f"; vale até {date.fromisoformat(expiry[:10]):%d/%m}"
+
+        except ValueError:
+
+            return ""
 
     @staticmethod
     def motivation_anchor(profile: str) -> str:

@@ -14,6 +14,7 @@ from app.application.coach.intelligence.body_trajectory_analyzer import (
     BodyTrajectoryAnalyzer,
 )
 from app.application.coach.writer.body_reading_writer import BodyReadingWriter
+from app.application.history.recovery_alert_run import RecoveryAlertRun
 from app.core.clock import now_local, today_local
 from app.domain.entities.body_reading import BodyReading
 from app.domain.entities.body_reading_snapshot import (
@@ -48,7 +49,10 @@ class BodyReadingService:
 
         prior = [s for s in all_snapshots if s.day < today]
 
-        trajectory = BodyTrajectoryAnalyzer.of(prior, reading, today)
+        trajectory = BodyTrajectoryAnalyzer.of(
+            prior, reading, today,
+            alert_since=RecoveryAlertRun.since_for_profile(profile, today),
+        )
 
         # só guarda leitura com dado de recuperação de verdade — snapshot sem
         # corpo não ajuda a comparar nada

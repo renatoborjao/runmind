@@ -115,3 +115,81 @@ def test_device_synonym_merges_relogio_and_garmin():
         "Deseja que os treinos sejam enviados para o relógio",
         "Deseja que os treinos atualizados sejam enviados para o Garmin",
     ) is True
+
+
+# ------------------------------------------------- ausência com FIM (29/09)
+
+PAUSA = (
+    "Vai se ausentar dos treinos por 7 dias devido à remoção de pintas "
+    "(proibido fazer atividade física no período)."
+)
+CRIADO = "2026-09-29T15:21:19-03:00"
+
+
+def test_absence_by_duration_has_an_end():
+    """A pausa médica do Renato virou memória ETERNA: 'por 7 dias' não era
+    reconhecido como janela e disponibilidade é durável."""
+    exp = MemoryLifecycle.expiry_for("disponibilidade", PAUSA, CRIADO)
+    assert exp == "2026-10-05"  # 29/09 + 7 dias, inclusive
+
+
+def test_explicit_until_from_the_extraction_wins():
+    exp = MemoryLifecycle.expiry_for(
+        "disponibilidade", "Sem treinar de 29/09 a 05/10", CRIADO,
+        until="2026-10-05",
+    )
+    assert exp == "2026-10-05"
+
+
+def test_absurd_until_is_ignored_and_the_net_takes_over():
+    for bad in ("2020-01-01", "2031-01-01", "amanhã", ""):
+        assert MemoryLifecycle.expiry_for(
+            "disponibilidade", PAUSA, CRIADO, until=bad,
+        ) == "2026-10-05"
+
+
+def test_absence_until_a_date_or_weekday():
+    assert MemoryLifecycle.expiry_for(
+        "disponibilidade", "Viaja até 12/10, sem correr", CRIADO,
+    ) == "2026-10-12"
+
+    # terça 29/09 -> "até sexta" = 02/10
+    assert MemoryLifecycle.expiry_for(
+        "disponibilidade", "Ausente até sexta", CRIADO,
+    ) == "2026-10-02"
+
+
+def test_absence_duration_counts_from_the_cited_start():
+    assert MemoryLifecycle.expiry_for(
+        "disponibilidade", "Ausente a partir de 05/10 por 2 semanas", CRIADO,
+    ) == "2026-10-18"
+
+
+def test_trip_and_word_numbers():
+    assert MemoryLifecycle.expiry_for(
+        "vida", "Viagem de trabalho, dez dias fora", CRIADO,
+    ) == "2026-10-08"
+
+
+def test_routine_with_days_is_not_an_absence():
+    """'3 dias por semana' e 'até 50 min' são rotina durável, não pausa."""
+    for text in ("Treina 3 dias por semana pela manhã", "Prefere treinos de até 50 min"):
+        assert MemoryLifecycle.expiry_for("disponibilidade", text, CRIADO) is None
+
+
+def test_injury_is_never_expired_by_the_net():
+    assert MemoryLifecycle.expiry_for(
+        "lesao", "Dor no joelho, precisa parar por 2 semanas", CRIADO,
+    ) is None
+
+
+def test_is_absence_cues_and_categories():
+    assert MemoryLifecycle.is_absence("disponibilidade", PAUSA) is True
+    assert MemoryLifecycle.is_absence("preferencia", PAUSA) is False
+    assert MemoryLifecycle.is_absence("disponibilidade", "Prefere correr de manhã") is False
+
+
+def test_legacy_absence_without_expires_at_expires_by_derivation():
+    legacy = _entry("disponibilidade", PAUSA, CRIADO)
+    assert MemoryLifecycle.is_expired(legacy, date(2026, 10, 5)) is False
+    assert MemoryLifecycle.is_expired(legacy, date(2026, 10, 6)) is True

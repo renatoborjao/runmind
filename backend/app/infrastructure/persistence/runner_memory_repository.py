@@ -1,8 +1,8 @@
 import json
 from dataclasses import asdict
-from datetime import date
 from pathlib import Path
 
+from app.core.clock import today_local
 from app.domain.entities.memory_entry import MemoryEntry
 from app.domain.memory_lifecycle import MemoryLifecycle
 
@@ -56,7 +56,9 @@ class RunnerMemoryRepository:
         (categoria/conteúdo/data) — assim a higiene vale retroativa, sem
         migração. Ver [[MemoryLifecycle]]."""
 
-        today = date.today()
+        # 'hoje' do atleta (BRT): date.today() é o relógio do SERVIDOR (UTC) e
+        # vencia o fato um dia antes à noite. Ver feedback_validar_datas_sempre.
+        today = today_local()
 
         return [
             entry

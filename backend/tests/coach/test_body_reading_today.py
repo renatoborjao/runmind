@@ -80,7 +80,17 @@ def test_prompt_leads_with_what_changed_and_titles_the_day():
 
     assert "TÍTULO DE HOJE" in _SYSTEM_PROMPT
     assert "HOJE × TENDÊNCIA" in _SYSTEM_PROMPT
-    assert "NÃO abra pela" in _SYSTEM_PROMPT
+    # a trajetória não abre a mensagem e é dita em TEMPO, nunca em "N leituras"
+    assert "NÃO abra por ela" in _SYSTEM_PROMPT
+    assert 'nunca em "N leituras seguidas"' in _SYSTEM_PROMPT
+
+
+def test_prompt_celebrates_a_good_night_instead_of_dismissing_it():
+    """Renato 28/09: noite ótima (8,5h, bateria 87) e o coach escreveu que ela
+    'não apaga o padrão de 15 leituras' — invalidou a noite boa dele."""
+
+    assert "BOA NOTÍCIA de verdade" in _SYSTEM_PROMPT
+    assert 'jamais escreva que ela "não apaga"' in _SYSTEM_PROMPT
 
 
 SVC = "app.application.coach.intelligence.body_reading_service"
