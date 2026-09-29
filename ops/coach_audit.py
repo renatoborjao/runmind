@@ -59,6 +59,18 @@ NAG = re.compile(
 
 ILL = re.compile(r"(gripe|gripad|resfriad|doente|febre|virose|covid)", re.I)
 
+# o atleta avisou que vai PARAR / se ausentar / voltar em tal data — fato com FIM
+# que o coach precisa ter na memória (29/09: "7 dias sem treinar" virou memória
+# eterna e o "voltamos terça" nunca foi gravado)
+ABSENCE_MSG = re.compile(
+    r"(me ausentar|vou (ficar|estar) (fora|ausente|sem)|vou viajar|viagem|f[eé]rias|"
+    r"n[aã]o (vou|posso|consigo) (poder )?(treinar|correr|fazer atividade)|"
+    r"sem (treinar|correr|atividade)|cirurgia|afastad|vou operar|"
+    r"\bvolt(o|amos|a) (dia|na|no|em|terça|quarta|quinta|sexta|s[aá]bado|domingo|segunda)|"
+    r"s[oó] volto|at[eé] (o )?(dia )?\d{1,2}/\d{1,2})",
+    re.I,
+)
+
 _PT_DAYS = {
     "segunda": "Monday", "terça": "Tuesday", "terca": "Tuesday",
     "quarta": "Wednesday", "quinta": "Thursday", "sexta": "Friday",
@@ -151,6 +163,64 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
         if e.get("fallback"):
 
             findings.append(f"CÉREBRO CAIU NO FALLBACK {e['ts'][:16]}: \"{str(e.get('incoming'))[:100]}\"")
+
+    # ------------------------------------------------ ausência × memória
+    # buraco que nunca pode existir: o que o atleta disse sobre parar/voltar tem
+    # que estar na memória COM FIM. Duas checagens, sem IA:
+    #  (a) mensagem com pista de ausência sem NENHUMA memória de ausência gravada
+    #      em ±1 dia;  (b) ausência ativa sem data de fim (memória eterna).
+    from app.domain.memory_lifecycle import MemoryLifecycle
+
+    memory = _load(STORAGE / "memory" / f"{profile}.json", [])
+
+    for e in brain:
+
+        incoming = str(e.get("incoming") or "")
+
+        if not ABSENCE_MSG.search(incoming):
+
+            continue
+
+        sent_day = _day(e.get("ts"))
+
+        covered = any(
+            sent_day is not None
+            and (_day(m.get("created_at")) is not None)
+            and abs((_day(m.get("created_at")) - sent_day).days) <= 1
+            and MemoryLifecycle.is_absence(m.get("category", ""), m.get("content", ""))
+            for m in memory
+        )
+
+        if not covered:
+
+            findings.append(
+                f"AUSÊNCIA DITA E NÃO GRAVADA {str(e['ts'])[:16]}: "
+                f"\"{incoming[:140]}\" — nenhuma memória de ausência em ±1 dia"
+            )
+
+    from types import SimpleNamespace
+
+    for m in memory:
+
+        if m.get("status") != "active":
+
+            continue
+
+        entry = SimpleNamespace(
+            category=m.get("category", ""), content=m.get("content", ""),
+            created_at=m.get("created_at", ""), expires_at=m.get("expires_at"),
+        )
+
+        if (
+            entry.category == "disponibilidade"
+            and MemoryLifecycle.is_absence(entry.category, entry.content)
+            and MemoryLifecycle.absence_end(entry) is None
+        ):
+
+            findings.append(
+                f"AUSÊNCIA SEM FIM NA MEMÓRIA ({str(entry.created_at)[:10]}): "
+                f"\"{entry.content[:140]}\" — sem prazo, fica ativa pra sempre"
+            )
 
     # ---------------------------------------------------------- proativos
     outbox = [
