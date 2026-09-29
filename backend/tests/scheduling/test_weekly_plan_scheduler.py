@@ -43,11 +43,11 @@ def test_registers_hourly_notifier_jobs_for_multi_timezone():
             assert "day_of_week" not in job
             assert "hour" not in job
 
-        # o "bom dia" do despertar roda a cada 15 min (janela + dado da noite
-        # decidem por atleta), não de hora em hora
+        # o "bom dia" do despertar roda a cada 5 min (janela + sono + prazo
+        # decidem por atleta), não de hora em hora — o mesmo TICK do notificador
         briefing = jobs["morning_briefing"]
         assert briefing["trigger"] == "interval"
-        assert briefing["minutes"] == 15
+        assert briefing["minutes"] == 5
 
         mock_instance.start.assert_called_once()
 

@@ -337,3 +337,52 @@ def test_body_context_for_empty_when_no_summary():
     garmin = _fake_garmin(get_user_summary=None)
 
     assert GarminHealthSource.body_context_for(garmin, "2026-07-21") == {}
+
+
+# --- sonda barata do despertar (1 chamada) ---
+
+
+def _sleep_closed(garmin):
+
+    with patch(f"{MODULE}.GarminClient.connect", return_value=garmin):
+
+        return GarminHealthSource.sleep_closed("renato2", "2026-09-29")
+
+
+def test_sleep_closed_true_quando_o_sono_da_noite_fechou():
+
+    assert _sleep_closed(_fake_garmin()) is True
+
+
+def test_sleep_closed_false_com_o_atleta_ainda_dormindo():
+    """Antes de acordar/sincronizar o Garmin devolve o DTO sem a duração."""
+
+    garmin = _fake_garmin(
+        get_sleep_data={"dailySleepDTO": {"sleepTimeSeconds": None}}
+    )
+
+    assert _sleep_closed(garmin) is False
+
+
+def test_sleep_closed_so_bate_no_endpoint_de_sono():
+
+    calls = []
+
+    garmin = _fake_garmin()
+    original = garmin.get_sleep_data
+
+    def _tracked(*a, **k):
+        calls.append("sleep")
+        return original(*a, **k)
+
+    garmin.get_sleep_data = _tracked
+    garmin.get_hrv_data = lambda *a, **k: calls.append("hrv")
+
+    _sleep_closed(garmin)
+
+    assert calls == ["sleep"]
+
+
+def test_sleep_closed_false_sem_conexao_garmin():
+
+    assert _sleep_closed(None) is False

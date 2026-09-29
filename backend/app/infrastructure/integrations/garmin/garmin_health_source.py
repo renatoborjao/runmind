@@ -128,6 +128,27 @@ class GarminHealthSource:
 
         return health
 
+    @staticmethod
+    def sleep_closed(profile: str, day: str) -> bool:
+        """Sonda BARATA (1 chamada): o sono da noite que termina em `day` já
+        fechou na nuvem da Garmin? Serve a quem vigia o despertar em tick curto
+        — o retrato completo (`fetch`, 9 chamadas) só quando o sono chegou, pra
+        não martelar a API não-oficial enquanto o atleta dorme."""
+
+        garmin = GarminClient.connect(profile)
+
+        if garmin is None:
+
+            return False
+
+        probe = DailyHealth(date=day)
+
+        GarminHealthSource._apply_sleep(
+            probe, GarminHealthSource._safe(lambda: garmin.get_sleep_data(day))
+        )
+
+        return probe.sleep_hours is not None
+
     # ------------------------------------------------------------------
 
     @staticmethod

@@ -366,8 +366,11 @@ def _ready(existing, fetched=None, fetch_error=None):
         )
 
         if fetch_error:
-            source.fetch.side_effect = fetch_error
+            source.sleep_closed.side_effect = fetch_error
         else:
+            source.sleep_closed.return_value = bool(
+                fetched and fetched.get("sleep_hours") is not None
+            )
             source.fetch.return_value = (
                 DailyHealth(date="2026-09-29", **fetched) if fetched else None
             )
@@ -389,7 +392,9 @@ def test_parcial_da_madrugada_sem_sono_nao_conta_como_acordou():
     )
 
     assert ready is False
-    source.fetch.assert_called_once()
+    # só a sonda de 1 chamada — o retrato completo espera o sono fechar
+    source.sleep_closed.assert_called_once()
+    source.fetch.assert_not_called()
     repo.upsert.assert_not_called()
 
 
@@ -398,6 +403,7 @@ def test_sono_ja_ingerido_libera_sem_bater_na_api():
     ready, repo, source = _ready(existing={"sleep_hours": 7.6})
 
     assert ready is True
+    source.sleep_closed.assert_not_called()
     source.fetch.assert_not_called()
 
 
@@ -462,7 +468,7 @@ def test_antes_do_prazo_segue_esperando_o_sono():
 
 
 def test_decide_no_ultimo_tick_antes_do_prazo():
-    """Tick de 15 min: às 04h46 o próximo tick (05h01) já passaria do prazo
+    """Tick de 5 min: às 04h56 o próximo tick (05h01) já passaria do prazo
     das 05h00 — manda agora, não depois."""
 
     sent = _run(
@@ -470,7 +476,7 @@ def test_decide_no_ultimo_tick_antes_do_prazo():
         today="🏃 Hoje: limiar",
         data_ready=False,
         hour=4,
-        minute=46,
+        minute=56,
         deadline=time(5, 0),
     )
 
@@ -620,3 +626,17 @@ def test_complemento_uma_vez_por_dia():
     sent = _followup(done=True, readiness="Bom dia!")
 
     assert "message" not in sent
+
+
+def test_um_tick_antes_da_ultima_janela_ainda_espera():
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=4,
+        minute=54,
+        deadline=time(5, 0),
+    )
+
+    assert sent == {}

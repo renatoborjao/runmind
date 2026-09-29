@@ -34,8 +34,8 @@ from app.infrastructure.persistence.runner_profile_repository import (
 )
 
 # Janela de VIGÍLIA do despertar (hora local): o coach fica esperando o dado da
-# noite chegar. Roda a cada ~15 min (o scheduler), mas só age nesta faixa. O
-# fim vai até 11h30 pra dar folga aos ticks da última rede das 11h (abaixo).
+# noite chegar. Roda a cada TICK (o scheduler), mas só age nesta faixa. O fim
+# vai até 11h30 pra dar folga aos ticks do teto das 11h (abaixo).
 WINDOW_START = time(4, 30)
 WINDOW_END = time(11, 30)
 
@@ -52,10 +52,11 @@ LAST_RESORT = time(11, 0)
 # treino): cedo o bastante pra chegar antes de um treino de manhã.
 NO_HISTORY_DEADLINE = time(7, 0)
 
-# Intervalo do job (weekly_plan_scheduler). O prazo é o limite MÁXIMO: decide no
-# último tick ANTES dele — senão o envio escorregava até um tick inteiro depois
-# (prazo 04h57 saindo 05h12, pra quem corre 05h17).
-TICK = timedelta(minutes=15)
+# Intervalo do job (weekly_plan_scheduler): curto pra o "bom dia" sair poucos
+# minutos depois de o sono sincronizar (a espera usa a sonda de 1 chamada, não
+# o retrato completo). O prazo é o limite MÁXIMO: decide no último tick ANTES
+# dele — senão o envio escorregava até um tick inteiro depois.
+TICK = timedelta(minutes=5)
 
 
 class MorningBriefingNotifier:
@@ -384,6 +385,12 @@ class MorningBriefingNotifier:
             return True
 
         try:
+
+            # sonda de 1 chamada a cada tick; o retrato completo (9 chamadas)
+            # só quando o sono fechou — gentil com a API não-oficial
+            if not GarminHealthSource.sleep_closed(profile, today_iso):
+
+                return False
 
             health = GarminHealthSource.fetch(profile, today_iso)
 

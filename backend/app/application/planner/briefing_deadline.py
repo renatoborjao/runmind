@@ -5,7 +5,7 @@ from app.domain.value_objects.sports import is_run_sport
 
 # Antecedência do aviso em relação ao horário habitual de treino: o atleta tem
 # que ler o treino ANTES de sair, não na porta. (O notificador decide no último
-# tick antes do prazo, então chega 20–35 min antes.)
+# tick antes do prazo, então chega 20–25 min antes.)
 LEAD = timedelta(minutes=20)
 
 # Janela de hábito: ~10 semanas — recente o bastante pra seguir a rotina atual.
