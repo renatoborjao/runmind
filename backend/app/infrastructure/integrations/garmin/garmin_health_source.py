@@ -17,6 +17,7 @@ trainingBalanceFeedbackPhrase` (ex.: "AEROBIC_HIGH_SHORTAGE"). No FR165 ambos
 vêm vazios (None), sem quebrar."""
 
 import re
+from datetime import UTC, datetime
 
 from app.domain.entities.daily_health import DailyHealth
 from app.domain.entities.race_prediction import RacePrediction
@@ -148,6 +149,33 @@ class GarminHealthSource:
         )
 
         return probe.sleep_hours is not None
+
+    @staticmethod
+    def last_sync_at(profile: str) -> datetime | None:
+        """Quando o relógio subiu dado pra nuvem pela ÚLTIMA vez (UTC), 1
+        chamada. Com o sono ainda aberto, um sync recente diz que o atleta
+        ESTÁ dormindo (se tivesse acordado, o sono teria fechado nesse sync).
+        None quando não dá pra saber."""
+
+        garmin = GarminClient.connect(profile)
+
+        if garmin is None:
+
+            return None
+
+        data = GarminHealthSource._safe(lambda: garmin.get_device_last_used())
+
+        if not isinstance(data, dict):
+
+            return None
+
+        ms = data.get("lastUsedDeviceUploadTime")
+
+        if not isinstance(ms, (int, float)) or ms <= 0:
+
+            return None
+
+        return datetime.fromtimestamp(ms / 1000, UTC)
 
     # ------------------------------------------------------------------
 

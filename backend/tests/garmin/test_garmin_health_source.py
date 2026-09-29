@@ -1,3 +1,4 @@
+from datetime import UTC
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -386,3 +387,39 @@ def test_sleep_closed_so_bate_no_endpoint_de_sono():
 def test_sleep_closed_false_sem_conexao_garmin():
 
     assert _sleep_closed(None) is False
+
+
+# --- último sync do relógio (1 chamada) ---
+
+
+def _last_sync(garmin):
+
+    with patch(f"{MODULE}.GarminClient.connect", return_value=garmin):
+
+        return GarminHealthSource.last_sync_at("renato2")
+
+
+def test_last_sync_at_le_o_upload_do_relogio_em_utc():
+    """Formato real (FR165, 29/09): epoch ms do último upload."""
+
+    from datetime import datetime
+
+    garmin = SimpleNamespace(
+        get_device_last_used=lambda: {
+            "lastUsedDeviceName": "Forerunner 165",
+            "lastUsedDeviceUploadTime": 1790678827000,
+        }
+    )
+
+    assert _last_sync(garmin) == datetime(2026, 9, 29, 10, 47, 7, tzinfo=UTC)
+
+
+def test_last_sync_at_none_sem_dado_ou_sem_conexao():
+
+    assert _last_sync(None) is None
+    assert _last_sync(SimpleNamespace(get_device_last_used=lambda: {})) is None
+
+    def _boom():
+        raise RuntimeError("404")
+
+    assert _last_sync(SimpleNamespace(get_device_last_used=_boom)) is None

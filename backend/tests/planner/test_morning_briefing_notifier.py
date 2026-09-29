@@ -26,6 +26,7 @@ def _run(
     is_race_day=False,
     deadline=time(11, 0),
     probe=None,
+    still_asleep=False,
 ):
 
     sent = {}
@@ -56,6 +57,10 @@ def _run(
             f"{MODULE}.MorningBriefingNotifier._body_followup",
             new_callable=AsyncMock,
         ) as followup,
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._still_asleep",
+            return_value=still_asleep,
+        ),
     ):
 
         now_in.return_value = datetime(2026, 7, 14, hour, minute)
@@ -640,3 +645,92 @@ def test_um_tick_antes_da_ultima_janela_ainda_espera():
     )
 
     assert sent == {}
+
+
+
+# --- amarrado ao sono: passou do prazo, mas o relógio prova que ele dorme ---
+
+
+def test_passou_do_prazo_mas_relogio_prova_que_dorme_segura():
+    """Caso real 29/09: renato2 dormiu até 07h28 num dia de treino cedo. Prazo
+    04h55, mas o relógio sincronizou há pouco com o sono aberto → segura."""
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=5,
+        minute=0,
+        deadline=time(4, 55),
+        still_asleep=True,
+    )
+
+    assert sent == {}
+
+
+def test_passou_do_prazo_sem_prova_de_sono_manda():
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=5,
+        minute=0,
+        deadline=time(4, 55),
+        still_asleep=False,
+    )
+
+    assert sent["message"] == "🏃 Hoje: limiar"
+
+
+def test_dormindo_nao_segura_alem_do_teto_das_11h():
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=10,
+        minute=55,
+        deadline=time(4, 55),
+        still_asleep=True,
+    )
+
+    assert sent["message"] == "🏃 Hoje: limiar"
+
+
+# --- _still_asleep: sync recente com o sono aberto = dormindo ---
+
+
+def _asleep(last_sync, now):
+
+    with patch(f"{MODULE}.GarminHealthSource") as source:
+
+        if isinstance(last_sync, Exception):
+            source.last_sync_at.side_effect = last_sync
+        else:
+            source.last_sync_at.return_value = last_sync
+
+        return MorningBriefingNotifier._still_asleep("renato2", now)
+
+
+_NOW = datetime(2026, 9, 29, 7, 55, tzinfo=__import__("datetime").timezone.utc)
+
+
+def test_sync_de_10_min_atras_com_sono_aberto_esta_dormindo():
+
+    from datetime import timedelta
+
+    assert _asleep(_NOW - timedelta(minutes=10), _NOW) is True
+
+
+def test_sync_velho_nao_prova_nada():
+
+    from datetime import timedelta
+
+    assert _asleep(_NOW - timedelta(minutes=40), _NOW) is False
+
+
+def test_sync_desconhecido_ou_erro_nao_segura():
+
+    assert _asleep(None, _NOW) is False
+    assert _asleep(RuntimeError("429"), _NOW) is False

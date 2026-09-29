@@ -58,6 +58,13 @@ NO_HISTORY_DEADLINE = time(7, 0)
 # dele — senão o envio escorregava até um tick inteiro depois.
 TICK = timedelta(minutes=5)
 
+# Passou do prazo e o sono segue ABERTO: se o relógio sincronizou há no máximo
+# isto, o atleta ESTÁ dormindo (acordado, o sono teria fechado nesse sync) — o
+# coach segura, em vez de soltar o treino com ele na cama. Pior caso: o atleta
+# acorda logo após um sync e o celular para de sincronizar → o aviso sai até
+# esta janela depois daquele sync (ainda antes do treino).
+ASLEEP_SYNC_WINDOW = timedelta(minutes=15)
+
 
 class MorningBriefingNotifier:
     """"Bom dia" do despertar, numa mensagem só, por atleta. O gatilho é o dado
@@ -73,10 +80,12 @@ class MorningBriefingNotifier:
     segura o briefing inteiro até o SONO da noite sincronizar — mas o treino não
     espera o sync: o PRAZO é pessoal (BriefingDeadline — 20 min antes do horário
     em que ele costuma treinar naquele dia da semana; teto 11h pra quem treina à
-    tarde/noite). Estourou o prazo, sai furo + treino sem o corpo, e o corpo vem
-    como COMPLEMENTO quando o sono chegar (se ainda não treinou e se houver o que
-    dizer). Quem NÃO tem relógio recebe furo + treino na rede das 06h (ou antes,
-    pelo mesmo prazo). Ver [[project_analise_corpo_garmin]]."""
+    tarde/noite). Estourou o prazo, segue esperando SÓ se o relógio prova que ele
+    ainda dorme (sync recente com o sono aberto); senão sai furo + treino sem o
+    corpo, e o corpo vem como COMPLEMENTO quando o sono chegar (se ainda não
+    treinou e se houver o que dizer). Quem NÃO tem relógio recebe furo + treino
+    na rede das 06h (ou antes, pelo mesmo prazo).
+    Ver [[project_analise_corpo_garmin]]."""
 
     @staticmethod
     async def notify_all() -> None:
@@ -142,8 +151,10 @@ class MorningBriefingNotifier:
         # Quando enviar?
         #  • COM Garmin: SEGURA o briefing inteiro (furo + corpo + treino) até o
         #    SONO da noite chegar — pra não soltar o "bom dia" sem o corpo de
-        #    quem tem como medir. Mas só até o PRAZO pessoal (antes do horário
-        #    habitual de treino dele): aí manda sem o corpo, que vem depois.
+        #    quem tem como medir. Passado o PRAZO pessoal (antes do horário
+        #    habitual de treino dele), só segue esperando se o relógio PROVA que
+        #    ele ainda dorme (sync recente com o sono aberto); sem essa prova,
+        #    manda sem o corpo, que vem depois (complemento).
         #  • SEM relógio: não há dado pra esperar — rede das 06h (ou o prazo
         #    pessoal, se ele treina mais cedo que isso).
         deadline = MorningBriefingNotifier._deadline(profile, local.date())
@@ -161,6 +172,21 @@ class MorningBriefingNotifier:
             )
 
             if not data_ready and local.time() < send_by:
+
+                return
+
+            # estourou o prazo sem o sono: ainda dormindo? (até o teto das 11h)
+            last_send_by = (
+                datetime.combine(local.date(), LAST_RESORT) - TICK
+            ).time()
+
+            if (
+                not data_ready
+                and local.time() < last_send_by
+                and await asyncio.to_thread(
+                    MorningBriefingNotifier._still_asleep, profile, local
+                )
+            ):
 
                 return
 
@@ -299,6 +325,43 @@ class MorningBriefingNotifier:
             return
 
         await CoachOutbox.send(runner, body, profile=profile, kind="morning_body")
+
+    @staticmethod
+    def _still_asleep(profile: str, now: datetime) -> bool:
+        """O sono de hoje ainda está ABERTO (quem chama acabou de conferir) E o
+        relógio sincronizou há pouco (ASLEEP_SYNC_WINDOW)? Então ele está
+        dormindo — se tivesse acordado, o sono teria fechado nesse sync.
+        Sync velho/desconhecido = não dá pra saber → False (manda). Loga a
+        decisão (a cadência de sync da madrugada é o que calibra isto)."""
+
+        try:
+
+            last = GarminHealthSource.last_sync_at(profile)
+
+        except Exception as e:
+
+            print(f"Briefing [{profile}]: último sync do relógio falhou: {e}")
+
+            return False
+
+        if last is None:
+
+            print(f"Briefing [{profile}] {now:%H:%M}: prazo passou, sono aberto, "
+                  "sync desconhecido → manda sem o sono")
+
+            return False
+
+        age = now - last
+
+        asleep = timedelta(0) <= age <= ASLEEP_SYNC_WINDOW
+
+        print(
+            f"Briefing [{profile}] {now:%H:%M}: prazo passou, sono aberto, "
+            f"último sync há {int(age.total_seconds() // 60)} min → "
+            + ("segura (dormindo)" if asleep else "manda sem o sono")
+        )
+
+        return asleep
 
     @staticmethod
     def _deadline(profile: str, day: date) -> time:
