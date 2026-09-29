@@ -18,6 +18,7 @@ import {
   type ShareContext,
   type TrackData,
 } from "@/lib/api";
+import { GPS_RUN_ENABLED } from "@/lib/features";
 import { drawCoachDiz, drawPeito, drawPlanoFeito, planHasTargets, type RunExtras } from "@/lib/run-card-extras";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
 import {
@@ -817,14 +818,20 @@ function AtividadesInner() {
         </div>
         <div className="greet"><h1>Atividades</h1></div>
 
-        <button className="cta-btn" onClick={() => router.push("/correr")}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" /></svg>
-          Correr agora (GPS)
-        </button>
+        {GPS_RUN_ENABLED && (
+          <button className="cta-btn" onClick={() => router.push("/correr")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" /></svg>
+            Correr agora (GPS)
+          </button>
+        )}
 
         {feed.length === 0 ? (
           <div className="card center">
-            <p className="muted" style={{ margin: 0 }}>Nenhuma atividade ainda. Grava uma corrida pelo app ou conecta o Strava/Garmin. 🏃</p>
+            <p className="muted" style={{ margin: 0 }}>
+              {GPS_RUN_ENABLED
+                ? "Nenhuma atividade ainda. Grava uma corrida pelo app ou conecta o Strava/Garmin. 🏃"
+                : "Nenhuma atividade ainda. Conecta o Strava ou o Garmin e suas corridas aparecem aqui. 🏃"}
+            </p>
           </div>
         ) : (
           feed.map((it) => (

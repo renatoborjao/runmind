@@ -11,6 +11,7 @@ import {
   addComment, deleteComment, getComments,
   type ActivityComment, type FeedItem, type TrackData,
 } from "@/lib/api";
+import { GPS_RUN_ENABLED } from "@/lib/features";
 
 // Carrega o Leaflet (mapa real, tiles do OpenStreetMap — grátis, sem chave) sob
 // demanda via CDN. Resolve quando window.L está pronto.
@@ -497,7 +498,7 @@ export function ActivityDetailBody({ item, track, loadingTrack, analysisSlot, sh
         )
       ) : (
         <div className="card center">
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Trajeto e parciais não foram salvos nesta atividade. Corridas gravadas pelo app mostram o mapa e os splits. 🗺️</p>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Trajeto e parciais não foram salvos nesta atividade.{GPS_RUN_ENABLED ? " Corridas gravadas pelo app mostram o mapa e os splits. 🗺️" : ""}</p>
         </div>
       )}
 

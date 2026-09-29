@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getWorkouts, moveWorkout, pushWatch, type TodaySession, type WorkoutDay, type WorkoutStep } from "@/lib/api";
+import { GPS_RUN_ENABLED } from "@/lib/features";
 
 const STEP_PT: Record<string, string> = {
   warmup: "Aquecimento",
@@ -165,10 +166,12 @@ function DetalheInner() {
           <div className="blocks">{rows}</div>
 
           <div className="actions" style={{ marginTop: 6 }}>
-            <button className="btn-primary" onClick={() => router.push("/correr")}>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4" /></svg>
-              Começar corrida
-            </button>
+            {GPS_RUN_ENABLED && (
+              <button className="btn-primary" onClick={() => router.push("/correr")}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+                Começar corrida
+              </button>
+            )}
 
             <button className="btn-ghost" onClick={() => { setPicking((v) => !v); setTarget(null); setMoveMsg(null); }}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /><path d="M14 15l2 2 4-4" /></svg>

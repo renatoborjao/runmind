@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getHome, saveRun, type RunPayload, type TodaySession, type WorkoutStep } from "@/lib/api";
+import { GPS_RUN_ENABLED } from "@/lib/features";
 
 type Phase = "idle" | "recording" | "paused" | "saving" | "done" | "error";
 
@@ -189,7 +190,21 @@ function announce(s: Segment): string {
   return `${label}. ${amt}${spokenPace(s)}.`.replace(/\s+/g, " ").trim();
 }
 
+// Porta da rota: com a gravação por GPS desligada (lib/features.ts) ninguém
+// chega na tela — favorito, PWA antigo ou link velho voltam pro início.
 export default function CorrerPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!GPS_RUN_ENABLED) router.replace("/inicio");
+  }, [router]);
+
+  if (!GPS_RUN_ENABLED) return null;
+
+  return <CorrerScreen />;
+}
+
+function CorrerScreen() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [dist, setDist] = useState(0);

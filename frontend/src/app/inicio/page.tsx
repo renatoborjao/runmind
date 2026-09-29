@@ -23,6 +23,7 @@ import {
   type WeekDay,
   type WorkoutStep,
 } from "@/lib/api";
+import { GPS_RUN_ENABLED } from "@/lib/features";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "";
@@ -444,12 +445,14 @@ export default function InicioPage() {
           )}
         </section>
 
-        {/* CORRER AGORA */}
-        <button className="cta-btn" onClick={() => router.push("/correr")}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" /></svg>
-          Correr agora (GPS)
-        </button>
-        <a className="link center" style={{ display: "block", marginTop: -2 }} onClick={() => router.push("/atividades")}>Minhas atividades</a>
+        {/* CORRER AGORA (desligado até o app nativo — ver lib/features.ts) */}
+        {GPS_RUN_ENABLED && (
+          <button className="cta-btn" onClick={() => router.push("/correr")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" /></svg>
+            Correr agora (GPS)
+          </button>
+        )}
+        <a className="link center" style={{ display: "block", marginTop: GPS_RUN_ENABLED ? -2 : 6 }} onClick={() => router.push("/atividades")}>Minhas atividades</a>
 
         {/* ÚLTIMA CORRIDA (card com traçado, estilo Strava) */}
         {lastRun && (
