@@ -193,3 +193,21 @@ def test_legacy_absence_without_expires_at_expires_by_derivation():
     legacy = _entry("disponibilidade", PAUSA, CRIADO)
     assert MemoryLifecycle.is_expired(legacy, date(2026, 10, 5)) is False
     assert MemoryLifecycle.is_expired(legacy, date(2026, 10, 6)) is True
+
+
+def test_absence_end_ignores_the_category_ttl():
+
+    ttl_only = _entry(
+        "vida", "Sono ruim, piorou a recuperação", "2026-09-27T19:18:08-03:00",
+        expires_at="2026-10-11",
+    )
+    assert MemoryLifecycle.absence_end(ttl_only) is None
+
+    explicit = _entry(
+        "disponibilidade", "Sem treinar de 29/09 a 05/10", CRIADO,
+        expires_at="2026-10-05",
+    )
+    assert MemoryLifecycle.absence_end(explicit) == date(2026, 10, 5)
+
+    from_text = _entry("disponibilidade", PAUSA, CRIADO)
+    assert MemoryLifecycle.absence_end(from_text) == date(2026, 10, 5)

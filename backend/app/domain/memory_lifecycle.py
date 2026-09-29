@@ -51,7 +51,7 @@ ABSENCE_CUES = (
     "ausent", "afast", "viaj", "viagem", "pausa", "pausar", "parar", "parad",
     "sem treinar", "sem correr", "repouso", "proibid", "nao pode",
     "nao vai poder", "nao podera", "impedid", "ferias", "licenca",
-    "cirurgi", "procedimento", "internad", "recuper",
+    "cirurgi", "procedimento", "internad",
 )
 
 # só estas categorias entram na rede: lesão fica de fora (some quando o atleta
@@ -169,6 +169,44 @@ class MemoryLifecycle:
         text = MemoryLifecycle._normalize(content)
 
         return any(cue in text for cue in ABSENCE_CUES)
+
+    @staticmethod
+    def absence_end(entry) -> date | None:
+        """ÚLTIMO dia da ausência declarada nesta memória, ou None se ela não é
+        uma ausência COM FIM. Só conta um prazo que é de verdade o fim da pausa:
+        o `expires_at` explícito (escrito pela extração) ou o fim que o próprio
+        texto diz ("por 7 dias", "até 05/10"). O vencimento automático da
+        categoria (TTL de `vida`/`outro`) NÃO é fim de ausência — uma nota sobre
+        sono que cita "recuperação" não vira pausa até o TTL."""
+
+        if not MemoryLifecycle.is_absence(entry.category, entry.content):
+
+            return None
+
+        created = MemoryLifecycle._to_date(entry.created_at)
+
+        stored = getattr(entry, "expires_at", None)
+
+        if stored:
+
+            ttl = MemoryLifecycle._category_expiry(entry.category, created)
+
+            if stored[:10] != ttl:
+
+                try:
+
+                    return date.fromisoformat(stored[:10])
+
+                except ValueError:
+
+                    return None
+
+        return MemoryLifecycle._absence_end(
+            entry.category,
+            entry.content,
+            MemoryLifecycle._normalize(entry.content),
+            created,
+        )
 
     @staticmethod
     def _explicit_until(until: str | None, created: date) -> date | None:

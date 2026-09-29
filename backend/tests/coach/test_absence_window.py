@@ -74,3 +74,27 @@ def test_unreadable_memory_never_breaks_the_caller():
     with patch(f"{MODULE}.RunnerMemoryRepository", return_value=Boom()):
 
         assert AbsenceWindow.open("renato", date(2026, 10, 1)) is None
+
+
+def test_a_note_that_only_mentions_recovery_is_not_an_absence():
+    """Regressão (29/09): a nota de vape do Renato cita 'recuperação' e tinha o
+    TTL de `vida` (14 dias) — virou 'ausente até 11/10'."""
+
+    vape = _entry(
+        "vida",
+        "Teve recaída recente com o uso de vape e piora na recuperação",
+        created="2026-09-27T19:18:08-03:00",
+        expires="2026-10-11",
+    )
+
+    assert _open([vape], date(2026, 9, 30)) is None
+
+
+def test_ttl_expiry_of_a_life_note_is_not_an_absence_end():
+
+    trip = _entry(
+        "vida", "Fez uma viagem longa e voltou cansado",
+        created="2026-09-27T10:00:00-03:00", expires="2026-10-11",
+    )
+
+    assert _open([trip], date(2026, 9, 30)) is None

@@ -184,25 +184,9 @@ class RunnerMemoryService:
         """Ausência/pausa mostra ATÉ QUANDO vale — quem lê a memória (chat, plano
         da semana, revisão) enxerga a data de VOLTA, não um "por 7 dias" solto."""
 
-        if not MemoryLifecycle.is_absence(entry.category, entry.content):
+        end = MemoryLifecycle.absence_end(entry)
 
-            return ""
-
-        expiry = entry.expires_at or MemoryLifecycle.expiry_for(
-            entry.category, entry.content, entry.created_at,
-        )
-
-        if not expiry:
-
-            return ""
-
-        try:
-
-            return f"; vale até {date.fromisoformat(expiry[:10]):%d/%m}"
-
-        except ValueError:
-
-            return ""
+        return f"; vale até {end:%d/%m}" if end else ""
 
     @staticmethod
     def motivation_anchor(profile: str) -> str:

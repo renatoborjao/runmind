@@ -46,27 +46,9 @@ class AbsenceWindow:
 
         for entry in entries:
 
-            if not MemoryLifecycle.is_absence(entry.category, entry.content):
+            until = MemoryLifecycle.absence_end(entry)
 
-                continue
-
-            expiry = entry.expires_at or MemoryLifecycle.expiry_for(
-                entry.category, entry.content, entry.created_at,
-            )
-
-            if not expiry:
-
-                continue
-
-            try:
-
-                until = date.fromisoformat(expiry[:10])
-
-            except ValueError:
-
-                continue
-
-            if until < today:
+            if until is None or until < today:
 
                 continue
 
