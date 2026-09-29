@@ -300,7 +300,7 @@ export default function CorpoPage() {
                     <span className="pl">Sua média (4 semanas)</span>
                     <span className="pv">
                       {kmText(b.week_load.avg_km)}
-                      {b.week_load.avg_runs != null ? ` · ${String(b.week_load.avg_runs).replace(".", ",")} treinos` : ""}
+                      {b.week_load.avg_runs != null ? ` · ${runsText(Math.round(b.week_load.avg_runs), null)} por semana` : ""}
                     </span>
                   </div>
                 )}
