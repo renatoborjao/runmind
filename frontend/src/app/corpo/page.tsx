@@ -175,6 +175,16 @@ function SleepCard({ s }: { s: import("@/lib/api").SleepDetail }) {
   );
 }
 
+function kmText(km: number): string {
+  return `${String(km).replace(".", ",")} km`;
+}
+
+// "2 de 3 treinos" enquanto a semana está dentro do plano; passou do plano, só a contagem
+function runsText(runs: number, planned: number | null): string {
+  if (planned && runs <= planned) return `${runs} de ${planned} treinos`;
+  return `${runs} ${runs === 1 ? "treino" : "treinos"}`;
+}
+
 export default function CorpoPage() {
   const router = useRouter();
   const [b, setB] = useState<BodyReading | null>(null);
@@ -278,16 +288,28 @@ export default function CorpoPage() {
               </section>
             )}
 
-            <section className="card">
-              <div className="card-head"><span className="eyebrow">Carga de treino</span></div>
-              <div className="prow">
-                <span className="pl">ACWR (aguda ÷ crônica)</span>
-                <span className="pv">{b.acwr ?? "—"} {b.acwr_status ? `· ${b.acwr_status}` : ""}</span>
-              </div>
-              <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
-                Perto de 1,0 = carga equilibrada. Bem acima = risco de sobrecarga; bem abaixo = destreino.
-              </p>
-            </section>
+            {b.week_load && (
+              <section className="card">
+                <div className="card-head"><span className="eyebrow">Carga da semana</span></div>
+                <div className="prow">
+                  <span className="pl">Esta semana</span>
+                  <span className="pv">{kmText(b.week_load.km)} · {runsText(b.week_load.runs, b.week_load.planned_runs)}</span>
+                </div>
+                {b.week_load.avg_km != null && (
+                  <div className="prow">
+                    <span className="pl">Sua média (4 semanas)</span>
+                    <span className="pv">
+                      {kmText(b.week_load.avg_km)}
+                      {b.week_load.avg_runs != null ? ` · ${String(b.week_load.avg_runs).replace(".", ",")} treinos` : ""}
+                    </span>
+                  </div>
+                )}
+                <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
+                  A semana vai de segunda a domingo e o número cresce a cada treino.{" "}
+                  <a className="link" onClick={() => router.push("/evolucao")}>Ver as últimas semanas →</a>
+                </p>
+              </section>
+            )}
 
             <p className="muted center" style={{ marginTop: 2 }}>Quer o papo completo? Fala com o coach 💬</p>
           </>

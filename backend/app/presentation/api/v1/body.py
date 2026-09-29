@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.application.coach.intelligence.body_reading_service import (
     BodyReadingService,
 )
+from app.application.home.week_load_builder import WeekLoadBuilder
 from app.infrastructure.persistence.garmin_health_repository import (
     GarminHealthRepository,
 )
@@ -140,7 +141,7 @@ def _headline(narrative: str | None) -> tuple[str | None, str | None]:
 
 @router.get("")
 async def get_body(profile: str = Depends(current_profile)):
-    """Leitura do corpo: estado/limitador/ACWR/tendências são determinísticos
+    """Leitura do corpo: estado/limitador/carga da semana/tendências são determinísticos
     (sem IA, sem gravar); a narrativa é gerada pela IA a partir do veredito já
     calculado, com cache de 1x/dia (persistida) e fallback determinístico se a
     IA falhar."""
@@ -191,6 +192,18 @@ async def get_body(profile: str = Depends(current_profile)):
 
         sleep = None
 
+    # a carga que o atleta lê: km/treinos da semana × a média dele (nada de ACWR
+    # cru na tela — o número mudava por horário e ninguém sabia lê-lo)
+    try:
+
+        week_load = WeekLoadBuilder.build(profile)
+
+    except Exception as e:
+
+        print(f"Carga da semana falhou p/ '{profile}': {e}")
+
+        week_load = None
+
     return {
         "has_data": True,
         "trend": trend,
@@ -203,8 +216,7 @@ async def get_body(profile: str = Depends(current_profile)):
         "verdict_line": _headline(narrative)[1],
         "limiter": reading.limiter,
         "limiter_label": _LIMITER.get(reading.limiter or "", None),
-        "acwr": reading.load.acwr,
-        "acwr_status": reading.load.status,
+        "week_load": week_load,
         "recovery": {
             "hrv_recent": rec.hrv_recent,
             "hrv_direction": rec.hrv_direction,

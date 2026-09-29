@@ -93,7 +93,10 @@ class TrainingLoadAnalyzer:
         crônica é calculada IGNORANDO as semanas de taper/prova — a base passa a
         ser a carga real do atleta, não a afiação temporária."""
 
-        ref = reference_date or today_local()
+        # a janela termina no último dia COMPLETO — ver _last_complete_day
+        ref = TrainingLoadAnalyzer._last_complete_day(
+            history, reference_date or today_local()
+        )
 
         # carga por dia — Edwards (histograma relido com UMA régua) quando toda
         # a janela tem histograma, senão intensidade por FC média, senão duração
@@ -157,7 +160,14 @@ class TrainingLoadAnalyzer:
             else None
         )
 
-        status = TrainingLoadAnalyzer._status(acwr, days_of_history)
+        # com prova na janela, semana leve é o taper/recuperação — não destreino
+        light_confirmed = race_aware is None and TrainingLoadAnalyzer._two_light_weeks(
+            per_day, ref
+        )
+
+        status = TrainingLoadAnalyzer._status(
+            acwr, days_of_history, light_confirmed
+        )
 
         low_base = None
 
@@ -532,7 +542,67 @@ class TrainingLoadAnalyzer:
         return weeks
 
     @staticmethod
-    def _status(acwr: float | None, days_of_history: int) -> str:
+    def _last_complete_day(history: TrainingHistory, ref: date) -> date:
+        """Último dia COMPLETO da janela. Hoje só entra quando já tem treino:
+        numa manhã de treino a corrida do dia ainda não aconteceu, e a janela de
+        7 dias já soltou a do mesmo dia da semana passada — a aguda perde 1
+        sessão de 3 e o ACWR cai por horário, não por carga (Renato 29/09: 0,73
+        às 7h da terça com o volume de sempre; 1,00 na véspera). Sem treino hoje,
+        a janela termina ontem; qualquer outra data de referência já é um dia
+        fechado e passa direto."""
+
+        if ref != today_local():
+
+            return ref
+
+        if any(
+            (a.moving_time or 0) > 0 and a.start_date.date() == ref
+            for a in history.activities
+        ):
+
+            return ref
+
+        return ref - timedelta(days=1)
+
+    @staticmethod
+    def _two_light_weeks(per_day: dict[date, float], ref: date) -> bool:
+        """Destreino é queda que SE SUSTENTA, não uma semana leve: as duas
+        últimas semanas de calendário (seg–dom) COMPLETAS abaixo de 80% da média
+        das 4 semanas ativas antes delas. Semana parcial nunca entra. Sem base
+        pra comparar (menos de 2 semanas ativas antes) não confirma — não chuta."""
+
+        # domingo que fechou a última semana completa (ref já é dia fechado)
+        last_sunday = ref - timedelta(days=(ref.weekday() + 1) % 7)
+
+        def week_load(end: date) -> float:
+
+            start = end - timedelta(days=6)
+
+            return sum(v for d, v in per_day.items() if start <= d <= end)
+
+        base = [
+            load
+            for load in (
+                week_load(last_sunday - timedelta(days=7 * k)) for k in range(2, 6)
+            )
+            if load > 0
+        ]
+
+        if len(base) < 2:
+
+            return False
+
+        limit = ACWR_DETRAINING * (sum(base) / len(base))
+
+        return (
+            week_load(last_sunday) < limit
+            and week_load(last_sunday - timedelta(days=7)) < limit
+        )
+
+    @staticmethod
+    def _status(
+        acwr: float | None, days_of_history: int, light_confirmed: bool
+    ) -> str:
 
         if acwr is None or days_of_history < _MIN_HISTORY_DAYS:
 
@@ -540,7 +610,10 @@ class TrainingLoadAnalyzer:
 
         if acwr < ACWR_DETRAINING:
 
-            return LOAD_DETRAINING
+            # uma semana leve é só uma semana leve (viagem, ajuste do plano,
+            # treino que mudou de dia): só vira destreino se as duas últimas
+            # semanas completas confirmarem
+            return LOAD_DETRAINING if light_confirmed else LOAD_OPTIMAL
 
         if acwr <= ACWR_OPTIMAL_MAX:
 

@@ -67,14 +67,131 @@ def test_high_when_ramping_fast():
     assert load.status == LOAD_HIGH
 
 
-def test_detraining_when_acute_drops():
+def test_one_light_week_is_not_detraining():
 
-    # carregou 21 dias e parou na última semana -> aguda 0 -> ACWR 0
+    # carregou 21 dias e parou SÓ na última semana -> aguda 0 -> ACWR 0, mas uma
+    # semana leve é só uma semana leve (viagem, treino que mudou de dia)
     load = _analyze([_act(d, 60) for d in range(7, 28)])
 
     assert load.acute_load == 0.0
     assert load.acwr == 0.0
+    assert load.status == LOAD_OPTIMAL
+
+
+def test_detraining_when_two_full_weeks_stay_below_usual():
+
+    # 4 semanas de carga normal e depois as DUAS últimas semanas de calendário
+    # (seg–dom) completas sem treinar -> queda que se sustenta = destreino
+    load = _analyze([_act(d, 60) for d in range(17, 45)])
+
+    assert load.acute_load == 0.0
+    assert load.acwr == 0.0
     assert load.status == LOAD_DETRAINING
+
+
+def test_current_partial_week_never_counts_as_light():
+
+    # semanas completas normais (4 corridas de 60 min por semana) e a semana
+    # em andamento com só 1 corrida: semana parcial não é queda
+    acts = [_act(d, 60) for d in range(3, 60) if (REF - timedelta(days=d)).weekday() in (0, 2, 4, 5)]
+
+    load = _analyze(acts)
+
+    assert load.status != LOAD_DETRAINING
+
+
+# ---------------- janela ancorada no último dia COMPLETO ----------------
+
+_TODAY = date(2026, 9, 29)  # terça
+
+
+def _run(day: date, minutes: int = 60):
+
+    return SimpleNamespace(
+        start_date=datetime(day.year, day.month, day.day, 7, 0),
+        moving_time=minutes * 60,
+        hr_zone_minutes=None,
+        hr_histogram=None,
+        average_heartrate=None,
+    )
+
+
+def _tue_thu_sat(first: date, last: date):
+    """3x por semana (ter/qui/sáb), 60 min — a rotina do Renato."""
+
+    days = [first + timedelta(days=i) for i in range((last - first).days + 1)]
+
+    return [_run(d) for d in days if d.weekday() in (1, 3, 5)]
+
+
+def _as_of_today(monkeypatch, today: date):
+
+    monkeypatch.setattr(
+        "app.application.history.training_load_analyzer.today_local",
+        lambda: today,
+    )
+
+
+def test_training_morning_before_the_run_is_not_a_drop(monkeypatch):
+
+    # Renato 29/09, 7h da terça: a corrida de hoje ainda não aconteceu e a da
+    # terça passada (22/09) já saiu da janela de 7 dias — a aguda ficava com 2
+    # corridas de 3 e o ACWR ia a 0,73 ("destreino") com o volume de sempre
+    _as_of_today(monkeypatch, _TODAY)
+
+    load = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=_tue_thu_sat(date(2026, 8, 1), date(2026, 9, 26))),
+        reference_date=_TODAY,
+    )
+
+    assert load.acwr == 1.0
+    assert load.status == LOAD_OPTIMAL
+
+
+def test_after_todays_run_the_day_counts(monkeypatch):
+
+    _as_of_today(monkeypatch, _TODAY)
+
+    acts = _tue_thu_sat(date(2026, 8, 1), date(2026, 9, 29))
+
+    load = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=acts), reference_date=_TODAY
+    )
+
+    assert load.acwr == 1.0
+
+
+def test_same_load_reads_the_same_before_and_after_the_run(monkeypatch):
+
+    # manhã (sem a corrida de hoje) e noite (com ela) dizem a MESMA coisa
+    _as_of_today(monkeypatch, _TODAY)
+
+    before = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=_tue_thu_sat(date(2026, 8, 1), date(2026, 9, 26))),
+        reference_date=_TODAY,
+    )
+
+    after = TrainingLoadAnalyzer.analyze(
+        TrainingHistory(activities=_tue_thu_sat(date(2026, 8, 1), date(2026, 9, 29))),
+        reference_date=_TODAY,
+    )
+
+    assert before.acwr == after.acwr == 1.0
+
+
+def test_last_complete_day_only_moves_today_without_a_session(monkeypatch):
+
+    _as_of_today(monkeypatch, _TODAY)
+
+    quiet = TrainingHistory(activities=[_run(date(2026, 9, 26))])
+    ran = TrainingHistory(activities=[_run(_TODAY)])
+
+    day = TrainingLoadAnalyzer._last_complete_day
+
+    assert day(quiet, _TODAY) == date(2026, 9, 28)
+    assert day(ran, _TODAY) == _TODAY
+    # data de referência passada já é dia fechado: não anda
+    assert day(quiet, date(2026, 9, 20)) == date(2026, 9, 20)
 
 
 def test_insufficient_history_overrides_ratio():

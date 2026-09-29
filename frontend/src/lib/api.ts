@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b45 · marca Ritmind classica + pulso";
+export const APP_BUILD = "b46 · carga da semana, sem GPS no app";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -856,6 +856,16 @@ export interface SleepDetail {
   nights?: SleepNight[];
 }
 
+// Carga da semana (seg–dom, só corrida): o feito até agora × a média das últimas
+// 4 semanas completas. Mesmos dados das barras da Evolução.
+export interface WeekLoad {
+  km: number;
+  runs: number;
+  planned_runs: number | null;
+  avg_km: number | null;
+  avg_runs: number | null;
+}
+
 export interface BodyReading {
   has_data: boolean;
   body_state?: string;
@@ -869,8 +879,7 @@ export interface BodyReading {
   verdict_line?: string | null;
   trend?: BodyTrend | null;
   sleep?: SleepDetail | null;
-  acwr?: number | null;
-  acwr_status?: string | null;
+  week_load?: WeekLoad | null;
   recovery?: {
     hrv_recent: number | null;
     hrv_direction: string;
