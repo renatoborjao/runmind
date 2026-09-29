@@ -15,13 +15,16 @@ from app.application.garmin.watch_update_reminder_notifier import (
     WatchUpdateReminderNotifier,
 )
 from app.application.planner.morning_briefing_notifier import (
+    TICK as MORNING_BRIEFING_TICK,
+)
+from app.application.planner.morning_briefing_notifier import (
     MorningBriefingNotifier,
 )
 from app.application.planner.weekly_plan_notifier import WeeklyPlanNotifier
+from app.application.races.race_intel_service import RaceIntelService
 from app.application.review.monthly_recap_notifier import (
     MonthlyRecapNotifier,
 )
-from app.application.races.race_intel_service import RaceIntelService
 from app.application.review.race_companion_notifier import (
     RaceCompanionNotifier,
 )
@@ -292,15 +295,17 @@ def start_weekly_plan_scheduler() -> AsyncIOScheduler:
     )
 
     # "Bom dia" do DESPERTAR — a cada 15 min, mas só age na janela da manhã
-    # (04:30–11:30 local). Quem TEM Garmin: segura o briefing inteiro até o dado
+    # (04:30–11:30 local). Quem TEM Garmin: segura o briefing inteiro até o SONO
     # da noite chegar (atleta acordou e sincronizou) — furo de ONTEM + corpo/
-    # prontidão + treino de HOJE numa mensagem só, ANTES do treino; se não vier
-    # até as 11h, manda sem o corpo. Quem NÃO tem relógio: rede das 06h (sem o
-    # bloco de corpo). Dedup: um por dia.
+    # prontidão + treino de HOJE numa mensagem só; se o sono não vier até o
+    # PRAZO pessoal (antes do horário habitual de treino), manda sem o corpo e o
+    # corpo vem como complemento. Quem NÃO tem relógio: rede das 06h. Dedup: um
+    # por dia. O intervalo é o TICK do notificador (ele decide no último tick
+    # antes do prazo).
     _scheduler.add_job(
         MorningBriefingNotifier.notify_all,
         trigger="interval",
-        minutes=15,
+        minutes=int(MORNING_BRIEFING_TICK.total_seconds() // 60),
         misfire_grace_time=_INTERVAL_GRACE,
         id="morning_briefing",
     )

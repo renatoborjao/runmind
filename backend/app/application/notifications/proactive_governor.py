@@ -52,6 +52,7 @@ _TIERS = {
     "announcement": CRITICAL,      # informativo do dono (broadcast)
     # ESSENCIAIS — âncoras agendadas esperadas (sempre saem, isentas do teto)
     "morning_briefing": HIGH,
+    "morning_body": HIGH,          # corpo que chegou depois do bom dia (sync atrasou)
     "weekly_review": HIGH,
     "weekly_plan": HIGH,
     "wellbeing_followup": HIGH,

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, time
 from unittest.mock import AsyncMock, patch
 
 from app.application.planner.morning_briefing_notifier import (
@@ -24,6 +24,8 @@ def _run(
     already_sent=False,
     has_garmin=True,
     is_race_day=False,
+    deadline=time(11, 0),
+    probe=None,
 ):
 
     sent = {}
@@ -46,6 +48,14 @@ def _run(
             f"{MODULE}.MorningBriefingNotifier._is_race_day",
             return_value=is_race_day,
         ),
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._deadline",
+            return_value=deadline,
+        ),
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._body_followup",
+            new_callable=AsyncMock,
+        ) as followup,
     ):
 
         now_in.return_value = datetime(2026, 7, 14, hour, minute)
@@ -74,6 +84,12 @@ def _run(
         notifier.send = AsyncMock(side_effect=_capture)
 
         asyncio.run(MorningBriefingNotifier._notify_one("renato"))
+
+        # o que foi marcado no guard e se o complemento do corpo foi chamado
+        if probe is not None:
+
+            probe["marks"] = [c.args[0] for c in guard.mark.call_args_list]
+            probe["followup"] = followup.await_count
 
         # como o treino foi cumprimentado? (só quando algo foi enviado, pra não
         # sujar os casos de silêncio que asseguram sent == {})
@@ -406,3 +422,201 @@ def test_fetch_falha_segura_o_briefing():
     ready, _, _ = _ready(existing=None, fetch_error=RuntimeError("429"))
 
     assert ready is False
+
+
+# --- prazo pessoal: o treino não espera o sync do sono ---
+
+
+def test_sono_atrasado_estoura_o_prazo_e_manda_o_treino_sem_o_corpo():
+    """Corre 05h20: prazo 04h50. Sono não sincronizou às 04h50 → sai furo +
+    treino (sem corpo) e o corpo fica DEVENDO pro complemento."""
+
+    probe = {}
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=4,
+        minute=50,
+        deadline=time(4, 50),
+        probe=probe,
+    )
+
+    assert sent["message"] == "🏃 Hoje: limiar"
+    assert probe["marks"] == ["briefing", "briefing_body_due"]
+
+
+def test_antes_do_prazo_segue_esperando_o_sono():
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=4,
+        minute=30,
+        deadline=time(5, 0),
+    )
+
+    assert sent == {}
+
+
+def test_decide_no_ultimo_tick_antes_do_prazo():
+    """Tick de 15 min: às 04h46 o próximo tick (05h01) já passaria do prazo
+    das 05h00 — manda agora, não depois."""
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=False,
+        hour=4,
+        minute=46,
+        deadline=time(5, 0),
+    )
+
+    assert sent["message"] == "🏃 Hoje: limiar"
+
+
+def test_sono_chegou_antes_do_prazo_nao_deixa_corpo_devendo():
+
+    probe = {}
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: limiar",
+        data_ready=True,
+        readiness="Bom dia! Corpo ok.",
+        hour=4,
+        minute=40,
+        deadline=time(4, 50),
+        probe=probe,
+    )
+
+    assert sent["message"].startswith("Bom dia! Corpo ok.")
+    assert probe["marks"] == ["briefing"]
+
+
+def test_sem_relogio_que_treina_cedo_recebe_antes_das_06h():
+
+    sent = _run(
+        missed=None,
+        today="🏃 Hoje: rodagem",
+        has_garmin=False,
+        hour=5,
+        minute=0,
+        deadline=time(5, 0),
+    )
+
+    assert sent["message"] == "🏃 Hoje: rodagem"
+
+
+def test_bom_dia_ja_enviado_chama_so_o_complemento_do_corpo():
+
+    probe = {}
+
+    sent = _run(
+        missed="Furou", today="🏃 Hoje", hour=7, already_sent=True, probe=probe,
+    )
+
+    assert sent == {}
+    assert probe["followup"] == 1
+
+
+# --- complemento do corpo (sono chegou depois do bom dia) ---
+
+
+def _followup(*, due=True, done=False, data_ready=True, ran_today=False,
+              readiness=None, proposal=None):
+
+    from datetime import date
+
+    state = {"briefing_body_due": due, "briefing_body": done}
+    sent = {}
+
+    with (
+        patch(f"{MODULE}.DispatchGuard") as guard,
+        patch(f"{MODULE}.ReadinessNotifier") as readiness_mod,
+        patch(f"{MODULE}.BodyConductProposer") as proposer,
+        patch(f"{MODULE}.CoachOutbox") as outbox,
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._night_data_ready",
+            return_value=data_ready,
+        ),
+        patch(
+            f"{MODULE}.MorningBriefingNotifier._ran_today",
+            return_value=ran_today,
+        ),
+    ):
+
+        guard.already_sent.side_effect = lambda kind, p, period: state[kind]
+        readiness_mod.block = AsyncMock(return_value=readiness)
+        proposer.for_briefing = AsyncMock(return_value=proposal)
+
+        async def _capture(runner, message, **kwargs):
+            sent["message"] = message
+            sent["kind"] = kwargs.get("kind")
+
+        outbox.send = AsyncMock(side_effect=_capture)
+
+        asyncio.run(
+            MorningBriefingNotifier._body_followup(
+                RUNNER, "renato2", "2026-09-29", date(2026, 9, 29)
+            )
+        )
+
+        sent["marks"] = [c.args[0] for c in guard.mark.call_args_list]
+
+    return sent
+
+
+def test_complemento_manda_o_corpo_quando_o_sono_chega_antes_do_treino():
+
+    sent = _followup(readiness="Bom dia! Teu HRV caiu, pega leve.")
+
+    assert sent["message"] == "Bom dia! Teu HRV caiu, pega leve."
+    assert sent["kind"] == "morning_body"
+    assert sent["marks"] == ["briefing_body"]
+
+
+def test_complemento_leva_a_proposta_de_aliviar_em_sobrecarga():
+
+    sent = _followup(proposal="Bom dia! Corpo em sobrecarga — alivio hoje?")
+
+    assert sent["message"].startswith("Bom dia! Corpo em sobrecarga")
+
+
+def test_complemento_calado_se_ja_treinou():
+
+    sent = _followup(ran_today=True, readiness="Bom dia! Pega leve.")
+
+    assert "message" not in sent
+    assert sent["marks"] == ["briefing_body"]
+
+
+def test_complemento_calado_quando_o_corpo_nao_tem_o_que_dizer():
+
+    sent = _followup()
+
+    assert "message" not in sent
+
+
+def test_complemento_espera_o_sono_sem_gastar_a_decisao():
+
+    sent = _followup(data_ready=False, readiness="Bom dia!")
+
+    assert "message" not in sent
+    assert sent["marks"] == []
+
+
+def test_complemento_so_quando_o_bom_dia_saiu_sem_o_corpo():
+
+    sent = _followup(due=False, readiness="Bom dia!")
+
+    assert "message" not in sent
+
+
+def test_complemento_uma_vez_por_dia():
+
+    sent = _followup(done=True, readiness="Bom dia!")
+
+    assert "message" not in sent

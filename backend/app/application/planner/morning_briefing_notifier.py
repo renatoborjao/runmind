@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
@@ -8,6 +8,7 @@ from app.application.garmin.garmin_health_poller import GarminHealthPoller
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
 )
+from app.application.planner.briefing_deadline import BriefingDeadline
 from app.application.planner.daily_training_notifier import (
     DailyTrainingNotifier,
 )
@@ -16,9 +17,13 @@ from app.application.review.readiness_notifier import ReadinessNotifier
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.core.clock import now_in, today_local, use_athlete_timezone
+from app.domain.value_objects.sports import is_run_sport
 from app.infrastructure.integrations.garmin.garmin_client import GarminClient
 from app.infrastructure.integrations.garmin.garmin_health_source import (
     GarminHealthSource,
+)
+from app.infrastructure.persistence.activity_archive_repository import (
+    ActivityArchiveRepository,
 )
 from app.infrastructure.persistence.dispatch_guard import DispatchGuard
 from app.infrastructure.persistence.garmin_health_repository import (
@@ -35,14 +40,22 @@ WINDOW_START = time(4, 30)
 WINDOW_END = time(11, 30)
 
 # Rede das 06h — só pra quem NÃO tem relógio: não há dado da noite pra esperar,
-# então manda furo + treino cedo. Ninguém sem "bom dia".
-FALLBACK_HOUR = 6
+# então manda furo + treino cedo (ou antes, se ele costuma treinar mais cedo).
+FALLBACK = time(6, 0)
 
-# Última rede — só pra quem TEM Garmin: o coach SEGURA o briefing inteiro
-# esperando o dado da noite sincronizar (pra nunca separar o corpo do resto).
-# Se até aqui não chegou (não dormiu com o relógio, não sincronizou), desiste
-# e manda furo + treino SEM o corpo — falha nunca vira silêncio.
-LAST_RESORT_HOUR = 11
+# Teto da espera pelo sono — só pra quem TEM Garmin e NÃO treina de manhã: o
+# treino está longe, então dá pra segurar o briefing inteiro até o dado da
+# noite sincronizar. Passou daqui, desiste e manda sem o corpo.
+LAST_RESORT = time(11, 0)
+
+# Prazo de quem ainda não tem histórico de corrida (não sabemos a hora do
+# treino): cedo o bastante pra chegar antes de um treino de manhã.
+NO_HISTORY_DEADLINE = time(7, 0)
+
+# Intervalo do job (weekly_plan_scheduler). O prazo é o limite MÁXIMO: decide no
+# último tick ANTES dele — senão o envio escorregava até um tick inteiro depois
+# (prazo 04h57 saindo 05h12, pra quem corre 05h17).
+TICK = timedelta(minutes=15)
 
 
 class MorningBriefingNotifier:
@@ -56,9 +69,13 @@ class MorningBriefingNotifier:
       3) treino de HOJE (suprimido quando a proposta já o descreve).
 
     Blocos independentes: cada um só entra se tiver o que dizer. Quem TEM Garmin
-    segura o briefing inteiro até o dado da noite sincronizar (última rede às 11h,
-    aí sem o bloco de corpo). Quem NÃO tem relógio recebe furo + treino na rede das
-    06h. Uma voz de manhã, não três. Ver [[project_analise_corpo_garmin]]."""
+    segura o briefing inteiro até o SONO da noite sincronizar — mas o treino não
+    espera o sync: o PRAZO é pessoal (BriefingDeadline — 20 min antes do horário
+    em que ele costuma treinar naquele dia da semana; teto 11h pra quem treina à
+    tarde/noite). Estourou o prazo, sai furo + treino sem o corpo, e o corpo vem
+    como COMPLEMENTO quando o sono chegar (se ainda não treinou e se houver o que
+    dizer). Quem NÃO tem relógio recebe furo + treino na rede das 06h (ou antes,
+    pelo mesmo prazo). Ver [[project_analise_corpo_garmin]]."""
 
     @staticmethod
     async def notify_all() -> None:
@@ -104,22 +121,35 @@ class MorningBriefingNotifier:
 
         period = local.date().isoformat()
 
-        # já mandou o 'bom dia' de hoje
-        if DispatchGuard.already_sent("briefing", profile, period):
-
-            return
-
         has_garmin = (
             GarminClient.is_connected(profile)
             and GarminClient.analysis_enabled(profile)
         )
 
+        # já mandou o 'bom dia' de hoje — resta só o complemento do corpo, se o
+        # briefing saiu sem o sono (estourou o prazo antes do sync)
+        if DispatchGuard.already_sent("briefing", profile, period):
+
+            if has_garmin:
+
+                await MorningBriefingNotifier._body_followup(
+                    runner, profile, period, local.date()
+                )
+
+            return
+
         # Quando enviar?
         #  • COM Garmin: SEGURA o briefing inteiro (furo + corpo + treino) até o
-        #    dado da noite chegar — pra nunca soltar o "bom dia" sem o corpo de
-        #    quem tem como medir. Só desiste na última rede das 11h, aí manda sem
-        #    o corpo (não dormiu com o relógio / não sincronizou).
-        #  • SEM relógio: não há dado pra esperar — rede das 06h (furo + treino).
+        #    SONO da noite chegar — pra não soltar o "bom dia" sem o corpo de
+        #    quem tem como medir. Mas só até o PRAZO pessoal (antes do horário
+        #    habitual de treino dele): aí manda sem o corpo, que vem depois.
+        #  • SEM relógio: não há dado pra esperar — rede das 06h (ou o prazo
+        #    pessoal, se ele treina mais cedo que isso).
+        deadline = MorningBriefingNotifier._deadline(profile, local.date())
+
+        # último tick que ainda chega antes do prazo
+        send_by = (datetime.combine(local.date(), deadline) - TICK).time()
+
         data_ready = False
 
         if has_garmin:
@@ -129,18 +159,23 @@ class MorningBriefingNotifier:
                 MorningBriefingNotifier._night_data_ready, profile, local.date()
             )
 
-            if not data_ready and local.hour < LAST_RESORT_HOUR:
+            if not data_ready and local.time() < send_by:
 
                 return
 
-        elif local.hour < FALLBACK_HOUR:
+        elif local.time() < min(FALLBACK, send_by):
 
             return
 
-        # commit da decisão do dia: o dado chegou (despertar), ou passou a última
-        # rede das 11h (Garmin), ou a rede das 06h (sem relógio). Marca já pra não
+        # commit da decisão do dia: o sono chegou (despertar), ou estourou o
+        # prazo (Garmin), ou a rede das 06h (sem relógio). Marca já pra não
         # reprocessar a cada tick.
         DispatchGuard.mark("briefing", profile, period)
+
+        # saiu sem o sono de quem tem relógio: o corpo fica devendo (complemento)
+        if has_garmin and not data_ready:
+
+            DispatchGuard.mark("briefing_body_due", profile, period)
 
         parts: list[str] = []
 
@@ -151,10 +186,7 @@ class MorningBriefingNotifier:
 
             parts.append(missed[1])
 
-        # 2) corpo de HOJE — só quando o dado da noite chegou. É UM bloco:
-        #    prontidão (CAUTION/GREEN, atrás da flag) OU, se o corpo está em
-        #    SOBRECARGA, a PROPOSTA de aliviar o treino de hoje. Nunca os dois
-        #    (STRAINED cala a prontidão), então nunca infla.
+        # 2) corpo de HOJE — só quando o dado da noite chegou (ver _body_part).
         proposal = None
 
         # a leitura de corpo (ReadinessNotifier.block) sempre abre com "Bom
@@ -163,20 +195,19 @@ class MorningBriefingNotifier:
 
         if data_ready:
 
-            block = await ReadinessNotifier.block(profile)
+            body, is_proposal = await MorningBriefingNotifier._body_part(profile)
 
-            if block:
+            if body:
 
-                parts.append(block)
-                greeted = True
+                parts.append(body)
 
-            else:
+                if is_proposal:
 
-                proposal = await BodyConductProposer.for_briefing(profile)
+                    proposal = body
 
-                if proposal:
+                else:
 
-                    parts.append(proposal)
+                    greeted = True
 
         # 3) treino de HOJE (descanso volta None) — MAS se a proposta STRAINED
         #    já falou do treino de hoje, não repete (ela já o descreve). Só
@@ -204,6 +235,109 @@ class MorningBriefingNotifier:
         await CoachOutbox.send(
             runner, "\n\n".join(parts), profile=profile, kind="morning_briefing",
         )
+
+    @staticmethod
+    async def _body_part(profile: str) -> tuple[str | None, bool]:
+        """O bloco de corpo de HOJE (com o sono da noite já ingerido). É UM
+        bloco: prontidão (CAUTION/GREEN, atrás da flag) OU, se o corpo está em
+        SOBRECARGA, a PROPOSTA de aliviar o treino de hoje. Nunca os dois
+        (STRAINED cala a prontidão), então nunca infla. Volta (texto, é_proposta);
+        (None, False) quando o corpo não tem o que dizer."""
+
+        block = await ReadinessNotifier.block(profile)
+
+        if block:
+
+            return block, False
+
+        proposal = await BodyConductProposer.for_briefing(profile)
+
+        if proposal:
+
+            return proposal, True
+
+        return None, False
+
+    @staticmethod
+    async def _body_followup(
+        runner, profile: str, period: str, day: date,
+    ) -> None:
+        """COMPLEMENTO do corpo: o briefing saiu no prazo SEM o sono (o sync
+        atrasou) e o sono chegou depois. Manda só o bloco de corpo — e só se
+        ele ainda não treinou (depois do treino, a análise já fala do dia) e se
+        o corpo tem o que dizer (mesmo gate do briefing: momento novo). Uma
+        decisão por dia."""
+
+        if not DispatchGuard.already_sent("briefing_body_due", profile, period):
+
+            return
+
+        if DispatchGuard.already_sent("briefing_body", profile, period):
+
+            return
+
+        data_ready = await asyncio.to_thread(
+            MorningBriefingNotifier._night_data_ready, profile, day
+        )
+
+        if not data_ready:
+
+            return
+
+        # commit: o sono chegou; decide agora, uma vez só
+        DispatchGuard.mark("briefing_body", profile, period)
+
+        if MorningBriefingNotifier._ran_today(profile, day):
+
+            return
+
+        body, _ = await MorningBriefingNotifier._body_part(profile)
+
+        if not body:
+
+            return
+
+        await CoachOutbox.send(runner, body, profile=profile, kind="morning_body")
+
+    @staticmethod
+    def _deadline(profile: str, day: date) -> time:
+        """Até quando esperar o sono hoje: 20 min antes do horário em que o
+        atleta costuma treinar neste dia da semana (ver BriefingDeadline).
+        Best-effort: falha ao ler o histórico cai no prazo sem histórico."""
+
+        try:
+
+            activities = ActivityArchiveRepository().load_activities(profile)
+
+        except Exception as e:
+
+            print(f"Prazo do briefing: histórico de '{profile}' falhou: {e}")
+
+            activities = []
+
+        return BriefingDeadline.compute(
+            activities,
+            day,
+            floor=WINDOW_START,
+            ceiling=LAST_RESORT,
+            default=NO_HISTORY_DEADLINE,
+        )
+
+    @staticmethod
+    def _ran_today(profile: str, day: date) -> bool:
+        """Já tem corrida de HOJE no arquivo? (o treino já foi — o complemento
+        do corpo chegaria tarde). Best-effort: na dúvida, não bloqueia."""
+
+        try:
+
+            return any(
+                is_run_sport(a.sport) and a.start_date.date() == day
+                for a in ActivityArchiveRepository().load_activities(profile)
+            )
+
+        except Exception:
+
+            return False
 
     @staticmethod
     def _is_race_day(runner) -> bool:
