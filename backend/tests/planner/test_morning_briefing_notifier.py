@@ -324,3 +324,85 @@ def test_is_race_day_true_only_on_the_race_date():
 
         build_goal.execute.side_effect = RuntimeError("boom")
         assert MorningBriefingNotifier._is_race_day(RUNNER) is False
+
+
+# --- _night_data_ready: o âncora é o SONO de hoje, não "existe registro" ---
+
+
+def _ready(existing, fetched=None, fetch_error=None):
+
+    from datetime import date
+
+    from app.domain.entities.daily_health import DailyHealth
+
+    with (
+        patch(f"{MODULE}.GarminClient") as garmin,
+        patch(f"{MODULE}.GarminHealthRepository") as repo_cls,
+        patch(f"{MODULE}.GarminHealthSource") as source,
+    ):
+
+        garmin.is_connected.return_value = True
+        garmin.analysis_enabled.return_value = True
+
+        repo = repo_cls.return_value
+        repo.get.return_value = (
+            DailyHealth(date="2026-09-29", **existing) if existing else None
+        )
+
+        if fetch_error:
+            source.fetch.side_effect = fetch_error
+        else:
+            source.fetch.return_value = (
+                DailyHealth(date="2026-09-29", **fetched) if fetched else None
+            )
+
+        ready = MorningBriefingNotifier._night_data_ready(
+            "renato2", date(2026, 9, 29)
+        )
+
+    return ready, repo, source
+
+
+def test_parcial_da_madrugada_sem_sono_nao_conta_como_acordou():
+    """Caso real 29/09: o poller gravou hoje só com stress/SpO2 de madrugada;
+    o Garmin ainda não tem o sono. NÃO pode liberar o 'bom dia' às 04h30."""
+
+    ready, repo, source = _ready(
+        existing={"stress_avg": 35, "spo2_avg": 95},
+        fetched={"stress_avg": 36},
+    )
+
+    assert ready is False
+    source.fetch.assert_called_once()
+    repo.upsert.assert_not_called()
+
+
+def test_sono_ja_ingerido_libera_sem_bater_na_api():
+
+    ready, repo, source = _ready(existing={"sleep_hours": 7.6})
+
+    assert ready is True
+    source.fetch.assert_not_called()
+
+
+def test_sono_chega_e_mescla_sobre_o_parcial_sem_apagar():
+
+    ready, repo, _ = _ready(
+        existing={"stress_avg": 35, "spo2_avg": 95},
+        fetched={"sleep_hours": 7.65, "hrv_last_night": 44},
+    )
+
+    assert ready is True
+
+    saved = repo.upsert.call_args.args[1]
+
+    assert saved.sleep_hours == 7.65
+    assert saved.hrv_last_night == 44
+    assert saved.spo2_avg == 95  # o parcial da madrugada ficou
+
+
+def test_fetch_falha_segura_o_briefing():
+
+    ready, _, _ = _ready(existing=None, fetch_error=RuntimeError("429"))
+
+    assert ready is False

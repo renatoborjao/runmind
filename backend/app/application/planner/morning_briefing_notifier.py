@@ -1,9 +1,10 @@
+import asyncio
 from datetime import date, time
 
-import asyncio
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
+from app.application.garmin.garmin_health_poller import GarminHealthPoller
 from app.application.notifications.coach_outbox import (
     CoachOutbox,
 )
@@ -237,8 +238,14 @@ class MorningBriefingNotifier:
 
         today_iso = day.isoformat()
 
-        # já ingerimos o dado desta manhã num tick anterior
-        if repo.has_date(profile, today_iso):
+        # O âncora é o SONO de hoje, não "existe registro de hoje": o poller de
+        # recuperação (tick de 15 min) grava o dia corrente PARCIAL de madrugada
+        # (stress/SpO2/bateria, às vezes HRV) antes do sono fechar. Checar só a
+        # data fazia o "bom dia" sair no 1º tick da janela (~04h30), com o
+        # atleta dormindo e sem o sono da noite (queixa do Renato, 29/09).
+        existing = repo.get(profile, today_iso)
+
+        if existing is not None and existing.sleep_hours is not None:
 
             return True
 
@@ -258,6 +265,7 @@ class MorningBriefingNotifier:
 
             return False
 
-        repo.upsert(profile, health)
+        # mescla sobre o parcial da madrugada (não apaga o que o poller trouxe)
+        repo.upsert(profile, GarminHealthPoller._merge(existing, health))
 
         return True
