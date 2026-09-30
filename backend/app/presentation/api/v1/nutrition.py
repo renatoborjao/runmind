@@ -10,6 +10,7 @@ from app.application.nutrition.body_composition_reader import (
 )
 from app.application.nutrition.nutrition_plan_builder import (
     NutritionPlanBuilder,
+    eligibility,
     latest_reading,
 )
 from app.core.clock import today_local
@@ -68,6 +69,7 @@ async def nutrition_state(profile: str = Depends(current_profile)):
         "profile_weight": getattr(runner, "weight", None),
         "targets": NutritionPlanBuilder.targets(profile),
         "plan": data["plan"],
+        "plan_gate": eligibility(data, today_local()),
     }
 
 
@@ -180,6 +182,12 @@ async def generate_plan(profile: str = Depends(current_profile)):
             status_code=400,
             detail="Registre sua bioimpedância (ou ao menos o peso) primeiro.",
         )
+
+    gate = eligibility(NutritionRepository().load(profile), today_local())
+
+    if not gate["allowed"]:
+
+        raise HTTPException(status_code=429, detail=gate["reason"])
 
     plan = await NutritionPlanBuilder.generate(profile)
 

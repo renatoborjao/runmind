@@ -122,6 +122,18 @@ export default function NutricaoPage() {
     return true;
   }
 
+  async function onSaveOnly() {
+    setErr("");
+    setBusy("save");
+    try {
+      if (await saveReading()) { setEditing(false); await load(); }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Não consegui salvar.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function onGenerate() {
     setErr("");
     try {
@@ -165,6 +177,8 @@ export default function NutricaoPage() {
   const menuDay = plan?.menu.days[dayIdx];
   const tgtDay = plan?.targets.days[dayIdx];
   const planning = busy === "plan";
+  // editando medição nova pode liberar o plano (o servidor decide de verdade)
+  const gateOpen = st.plan_gate.allowed || (editing && !!plan && !st.plan_gate.next_date);
 
   return (
     <main className="stage">
@@ -246,9 +260,20 @@ export default function NutricaoPage() {
             <textarea className="nut-ta" rows={2} value={dislikes} onChange={(e) => setDislikes(e.target.value)} placeholder="Ex.: peixe, fígado, coentro" />
           </div>
           {err && <p className="nut-err">{err}</p>}
-          <button className="cta-btn" disabled={busy !== ""} onClick={onGenerate}>
-            {planning ? "Montando seu cardápio… (até 1 min)" : busy === "save" ? "Salvando…" : plan ? "Refazer meu plano" : "Gerar meu plano alimentar"}
-          </button>
+          {gateOpen ? (
+            <button className="cta-btn" disabled={busy !== ""} onClick={onGenerate}>
+              {planning ? "Montando seu cardápio… (até 1 min)" : busy === "save" ? "Salvando…" : plan ? "Gerar plano com a nova medição" : "Gerar meu plano alimentar"}
+            </button>
+          ) : (
+            <>
+              <p className="nut-note" style={{ marginTop: 14 }}>🔒 {st.plan_gate.reason}</p>
+              {editing && (
+                <button className="cta-btn" style={{ marginTop: 0 }} disabled={busy !== ""} onClick={onSaveOnly}>
+                  {busy === "save" ? "Salvando…" : "Salvar medição"}
+                </button>
+              )}
+            </>
+          )}
         </section>
 
         {/* PLANO */}

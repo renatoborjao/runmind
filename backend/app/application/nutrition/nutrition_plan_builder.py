@@ -5,7 +5,7 @@ dossiê completo do atleta como contexto ([[feedback_base_historico_sempre]]).""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from google.genai import types
 
@@ -185,6 +185,61 @@ def _parse(raw: str) -> dict | None:
     except (json.JSONDecodeError, TypeError, ValueError):
 
         return None
+
+
+# um plano por mês, e só com bioimpedância nova (senão gera a toa, e gasta IA)
+PLAN_COOLDOWN_DAYS = 30
+
+
+def eligibility(data: dict, today: date) -> dict:
+    """Pode gerar plano agora? {allowed, reason, next_date}. Libera se ainda
+    não há plano; depois só com leitura NOVA (mais recente que a do plano) e
+    30 dias desde o último plano."""
+
+    plan = data.get("plan")
+
+    if not plan:
+
+        return {"allowed": True, "reason": None, "next_date": None}
+
+    reading = latest_reading(data) or {}
+
+    last_reading = plan.get("reading_date")
+
+    try:
+
+        next_date = date.fromisoformat(plan["generated_on"]) + timedelta(
+            days=PLAN_COOLDOWN_DAYS
+        )
+
+    except (KeyError, ValueError, TypeError):
+
+        next_date = today
+
+    has_new = bool(
+        reading.get("date") and reading.get("date") != last_reading
+        and (not last_reading or reading["date"] > last_reading)
+    )
+
+    if not has_new:
+
+        return {
+            "allowed": False,
+            "reason": "Seu plano é feito em cima de uma bioimpedância. Registre "
+            "uma nova medição pra gerar o próximo.",
+            "next_date": next_date.isoformat() if today < next_date else None,
+        }
+
+    if today < next_date:
+
+        return {
+            "allowed": False,
+            "reason": "Um novo plano sai a cada 30 dias, com bioimpedância "
+            f"nova. Você libera em {next_date.strftime('%d/%m/%Y')}.",
+            "next_date": next_date.isoformat(),
+        }
+
+    return {"allowed": True, "reason": None, "next_date": None}
 
 
 def latest_reading(data: dict) -> dict | None:
@@ -427,6 +482,7 @@ class NutritionPlanBuilder:
         plan = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "generated_on": today_local().isoformat(),
+            "reading_date": (reading or {}).get("date"),
             "targets": targets,
             "menu": menu,
         }

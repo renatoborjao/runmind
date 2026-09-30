@@ -1272,6 +1272,7 @@ export interface NutritionState {
   profile_weight: number | null;
   targets: NutritionTargets | null;
   plan: NutritionPlan | null;
+  plan_gate: { allowed: boolean; reason: string | null; next_date: string | null };
 }
 
 async function nutritionError(r: Response, fallback: string): Promise<Error> {
