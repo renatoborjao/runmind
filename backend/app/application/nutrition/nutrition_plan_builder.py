@@ -94,7 +94,8 @@ porções × kcal da porção do grupo.
 2. Cada linha: "alimentos" (o item + alternativas equivalentes com "ou", \
 quantidade em medida caseira e gramas), "porcoes" (número, aceita 1/2), \
 "grupo" e "kcal". Salada e legumes cozidos: porcoes "à vontade", kcal 0.
-3. Alternativas de verdade no "ou" (frango ou carne magra ou tilápia; pão ou \
+3. A medida escrita tem que bater com as porções: "porcoes" × porção do grupo = a quantidade do alimento (3 porções de gorduras boas = 3 col. de azeite ou 9 castanhas, não "3 castanhas"). As alternativas do "ou" valem o MESMO nº de porções. Revise a ortografia dos alimentos.
+3b. Alternativas de verdade no "ou" (frango ou carne magra ou tilápia; pão ou \
 tapioca ou cuscuz) — é assim que ele varia durante a semana sem sair do \
 plano. Só combinações que um brasileiro de fato come.
 4. Pré-treino: leve, carbo de fácil digestão, pouca gordura e fibra; \
@@ -104,9 +105,7 @@ opções equivalentes (uma doce, uma salgada); as demais refeições têm 1 opç
 baseada no que você viu dele (treino, corpo, sono) — não genérica.
 6. "durante_treino": 1 a 2 frases com a conduta em cima da TABELA DO LONGÃO e \
 da duração do maior treino dele (cite quantidades: sachê/gel, fruta, água).
-7. "ajustes": "descanso" (o que tirar do dia-base, com kcal, e o que manter) \
-e "longao" (jantar da véspera com mais carbo — dê as quantidades — e o que \
-mudar na refeição pós-treino).
+7. "ajustes": "descanso" (o que tirar do dia-base pra chegar na meta do descanso: liste por refeição, em PORÇÕES da tabela e kcal, e a soma tem que bater com a diferença de kcal entre os tipos de dia) e "longao" (jantar da véspera com mais carbo — quantidades em porções e gramas — e o que mudar na refeição pós-treino).
 8. "orientacoes": 6 a 8 orientações gerais curtas e práticas (consistência, \
 hidratação, carbo não é vilão, fim de semana, ajuste se mudar a rotina).
 9. Respeite RIGOROSAMENTE restrições e o que ele não come.
