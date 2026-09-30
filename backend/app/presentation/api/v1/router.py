@@ -14,6 +14,7 @@ from app.presentation.api.v1 import history
 from app.presentation.api.v1 import home
 from app.presentation.api.v1 import insights
 from app.presentation.api.v1 import notifications
+from app.presentation.api.v1 import nutrition
 from app.presentation.api.v1 import onboarding
 from app.presentation.api.v1 import plan
 from app.presentation.api.v1 import profile as profile_route
@@ -73,6 +74,8 @@ router.include_router(recorded_runs.router)
 router.include_router(shoes.router)
 
 router.include_router(strength.router)
+
+router.include_router(nutrition.router)
 
 router.include_router(feed.router)
 

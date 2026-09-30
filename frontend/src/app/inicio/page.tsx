@@ -589,6 +589,16 @@ export default function InicioPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
         </section>
 
+        {/* NUTRIÇÃO — bioimpedância → metas por dia de treino → cardápio */}
+        <section className="card tap strength-entry" onClick={() => router.push("/nutricao")}>
+          <span className="se-ico" aria-hidden>🥗</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="se-t">Nutrição</div>
+            <div className="se-s">Plano alimentar e cardápio a partir da sua bioimpedância</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        </section>
+
         <p className="muted center" style={{ marginTop: 2 }}>Ritmind · {home.athlete.goal} · <b>{APP_BUILD}</b></p>
 
       </div>

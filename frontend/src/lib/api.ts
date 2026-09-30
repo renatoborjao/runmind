@@ -1195,3 +1195,118 @@ export async function getPeriodGoal(startIso: string, endIso: string): Promise<n
     return null;
   }
 }
+
+// ---- Nutrição (bioimpedância → metas → cardápio) ----
+
+export interface BodyReading {
+  date?: string | null;
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  fat_mass_kg: number | null;
+  lean_mass_kg: number | null;
+  muscle_mass_kg: number | null;
+  water_pct: number | null;
+  visceral_fat: number | null;
+  bmr_kcal: number | null;
+  metabolic_age: number | null;
+}
+
+export interface NutritionSettings {
+  goal?: string;
+  meals_per_day?: number;
+  restrictions?: string;
+  dislikes?: string;
+}
+
+export interface NutritionDayTarget {
+  day: string;
+  day_pt: string;
+  type: "rest" | "easy" | "quality" | "long";
+  type_pt: string;
+  workout: string | null;
+  kcal: number;
+  protein_g: number;
+  carb_g: number;
+  fat_g: number;
+  training_kcal: number;
+}
+
+export interface NutritionTargets {
+  goal: string;
+  goal_pt: string;
+  weight_kg: number;
+  bmr_kcal: number;
+  bmr_method: string;
+  days: NutritionDayTarget[];
+}
+
+export interface NutritionMeal {
+  name: string;
+  time: string;
+  tag: "pre_treino" | "pos_treino" | null;
+  items: { food: string; qty: string }[];
+  kcal: number;
+  protein_g: number;
+  carb_g: number;
+  fat_g: number;
+}
+
+export interface NutritionMenuDay {
+  day: string;
+  meals: NutritionMeal[];
+  note: string;
+  totals: { kcal: number; protein_g: number; carb_g: number; fat_g: number };
+}
+
+export interface NutritionPlan {
+  generated_on: string;
+  targets: NutritionTargets;
+  menu: { days: NutritionMenuDay[]; tips: string[] };
+}
+
+export interface NutritionState {
+  goals: Record<string, string>;
+  settings: NutritionSettings;
+  reading: BodyReading | null;
+  readings: BodyReading[];
+  profile_weight: number | null;
+  targets: NutritionTargets | null;
+  plan: NutritionPlan | null;
+}
+
+async function nutritionError(r: Response, fallback: string): Promise<Error> {
+  try {
+    const d = await r.json();
+    return new Error(typeof d?.detail === "string" ? d.detail : fallback);
+  } catch {
+    return new Error(fallback);
+  }
+}
+
+export async function getNutrition(): Promise<NutritionState | null> {
+  const r = await apiFetch("/nutrition");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+export async function readBodyPhoto(image: string): Promise<BodyReading> {
+  const r = await apiFetch("/nutrition/reading/photo", { method: "POST", body: JSON.stringify({ image }) });
+  if (!r.ok) throw await nutritionError(r, "Não consegui ler a foto.");
+  return r.json();
+}
+
+export async function saveBodyReading(reading: Partial<BodyReading>): Promise<void> {
+  const r = await apiFetch("/nutrition/reading", { method: "POST", body: JSON.stringify(reading) });
+  if (!r.ok) throw await nutritionError(r, "Não consegui salvar.");
+}
+
+export async function saveNutritionSettings(s: NutritionSettings): Promise<void> {
+  const r = await apiFetch("/nutrition/settings", { method: "PUT", body: JSON.stringify(s) });
+  if (!r.ok) throw await nutritionError(r, "Não consegui salvar.");
+}
+
+export async function generateNutritionPlan(): Promise<NutritionPlan> {
+  const r = await apiFetch("/nutrition/plan", { method: "POST" });
+  if (!r.ok) throw await nutritionError(r, "Não consegui montar o cardápio agora.");
+  return r.json();
+}
