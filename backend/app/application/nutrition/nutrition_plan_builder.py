@@ -10,10 +10,15 @@ from datetime import date, datetime, timedelta, timezone
 from google.genai import types
 
 from app.application.coach.context.athlete_dossier import (
+    CAPACITY,
     COACH_MIND,
     EVOLUTION,
+    PATTERNS,
+    PERCEPTION,
+    PLAN_WEEK,
     AthleteDossier,
 )
+from app.application.nutrition import training_profile
 from app.application.home.home_summary_builder import _kind, planned_km
 from app.application.nutrition import nutrition_targets as nt
 from app.core.clock import today_local, use_athlete_timezone
@@ -46,6 +51,9 @@ pão, aveia, iogurte, batata-doce etc.), porções em medidas caseiras + gramas.
 
 {dossier}
 
+▸ TREINO DO ATLETA (o que o plano manda + o que ele faz de verdade)
+{training}
+
 ▸ COMPOSIÇÃO CORPORAL (bioimpedância)
 {body}
 
@@ -61,6 +69,7 @@ Não gosta / não come: {dislikes}
 {targets}
 
 REGRAS:
+- Use o TREINO DO ATLETA pra encaixar a comida: horário e duração do treino definem o pré (1–3h antes) e o pós; treino longo (+1h15) pede carbo DURANTE (gel/fruta/isotônico) — cite a quantidade; véspera de longão/treino forte: jantar com mais carbo; dia sem corrida: sem pré/pós. Treinos curtos e leves (≤40 min) não precisam de refeição especial.
 - Cada dia segue a meta do SEU dia de treino. Dia de longão/treino forte: \
 carbo mais alto, refeição pré-treino (1–3h antes) e pós-treino (até 1h \
 depois, com proteína + carbo). Descanso: mais leve em carbo, mesma proteína.
@@ -69,8 +78,7 @@ depois, com proteína + carbo). Descanso: mais leve em carbo, mesma proteína.
 - Respeite RIGOROSAMENTE restrições e o que ele não come.
 - Varie os alimentos entre os dias (não repita o mesmo cardápio 7 vezes), \
 mas mantenha praticidade (sobras do jantar viram almoço etc.).
-- Some os macros de cada refeição com cuidado: o total do dia deve fechar com \
-a meta.
+- Dê kcal/proteína/carbo/gordura de CADA ITEM pela composição real do alimento nessa porção (tabela TACO/USDA) — NÃO ajuste números pra "fechar a conta": ajuste as PORÇÕES até o total do dia ficar perto da meta. Números honestos, porção é que se mexe.
 - "note": 1 frase curta do dia (ex.: "longão amanhã: jantar com mais carbo"). \
 "tips": 3 a 5 dicas gerais curtas (hidratação, sódio, gel no longão…), \
 personalizadas.
@@ -315,11 +323,9 @@ class NutritionPlanBuilder:
                 day_type=day_type,
             )
 
-            workout = (
-                (getattr(s, "objective", None) or getattr(s, "workout_type", None))
-                if s
-                else None
-            )
+            workout = getattr(s, "workout_type", None) if s else None
+
+            km, minutes = training_profile.session_load(s)
 
             days.append({
                 "day": day,
@@ -327,6 +333,8 @@ class NutritionPlanBuilder:
                 "type": day_type,
                 "type_pt": nt.DAY_LABELS[day_type],
                 "workout": workout,
+                "distance_km": km,
+                "duration_min": minutes,
                 **t,
             })
 
@@ -440,9 +448,18 @@ class NutritionPlanBuilder:
 
         runner = RunnerProfileRepository().load(profile)
 
+        # o dossiê entra só com o que serve à mesa (quem é, corpo/recuperação
+        # e o que o coach já sabe: lesões, restrições ditas no chat). O treino
+        # vai no bloco estruturado abaixo.
         dossier = AthleteDossier.render(
-            profile, runner=runner, exclude=(EVOLUTION, COACH_MIND)
+            profile,
+            runner=runner,
+            exclude=(CAPACITY, EVOLUTION, PERCEPTION, PATTERNS, PLAN_WEEK),
         )
+
+        training = training_profile.build(
+            profile, runner, WeeklyPlanRepository().load(profile)
+        ) or "Sem plano de treino definido."
 
         body = (
             "\n".join(
@@ -455,7 +472,8 @@ class NutritionPlanBuilder:
 
         tgt = "\n".join(
             f"- {d['day']} ({d['day_pt']}, {d['type_pt']}"
-            f"{', ' + d['workout'] if d['workout'] else ''}): "
+            f"{', ' + d['workout'] if d['workout'] and d['workout'] != d['type_pt'] else ''}"
+            f"{', ~' + str(d['duration_min']) + ' min' if d['duration_min'] else ''}): "
             f"{d['kcal']} kcal | P {d['protein_g']} g | C {d['carb_g']} g | "
             f"G {d['fat_g']} g"
             for d in targets["days"]
@@ -463,6 +481,7 @@ class NutritionPlanBuilder:
 
         prompt = PROMPT.format(
             dossier=dossier,
+            training=training,
             body=body,
             goal=targets["goal_pt"],
             target=(

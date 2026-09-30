@@ -1225,6 +1225,8 @@ export interface NutritionDayTarget {
   type: "rest" | "easy" | "quality" | "long";
   type_pt: string;
   workout: string | null;
+  distance_km: number | null;
+  duration_min: number | null;
   kcal: number;
   protein_g: number;
   carb_g: number;

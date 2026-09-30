@@ -327,7 +327,7 @@ export default function NutricaoPage() {
                 <div><b>{tgtDay.carb_g}</b><span>carb g</span></div>
                 <div><b>{tgtDay.fat_g}</b><span>gord g</span></div>
               </div>
-              {tgtDay.workout && <p className="nut-note">🏃 {tgtDay.workout}{tgtDay.training_kcal ? ` · ~${tgtDay.training_kcal} kcal no treino` : ""}</p>}
+              {tgtDay.workout && <p className="nut-note">🏃 {tgtDay.workout}{tgtDay.distance_km ? ` · ${tgtDay.distance_km} km` : ""}{tgtDay.duration_min ? ` · ~${tgtDay.duration_min} min` : ""}{tgtDay.training_kcal ? ` · ~${tgtDay.training_kcal} kcal gastas` : ""}</p>}
               {menuDay.note && <p className="nut-note">💡 {menuDay.note}</p>}
               {menuDay.meals.map((m, i) => (
                 <div className="nut-meal" key={i}>
