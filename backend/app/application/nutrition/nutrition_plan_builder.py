@@ -1,6 +1,11 @@
-"""Monta o PLANO ALIMENTAR do atleta: metas por dia (determinístico, a partir da
-bioimpedância + plano de treino real) + cardápio de 7 dias feito pela IA com o
-dossiê completo do atleta como contexto ([[feedback_base_historico_sempre]])."""
+"""Monta o PLANO ALIMENTAR do atleta no molde de um plano de nutricionista:
+UM dia-base em kcal, repartido por refeição (alimentos × porções × grupo ×
+kcal, com alternativas "ou"), mais ajustes pra descanso/longão e orientações.
+
+Metas e estrutura são determinísticas (nutrition_targets/nutrition_structure,
+a partir da bioimpedância + plano de treino real); a IA preenche comida e
+porção com o dossiê do atleta como contexto ([[feedback_base_historico_sempre]])
+e nunca decide número."""
 
 from __future__ import annotations
 
@@ -11,16 +16,16 @@ from google.genai import types
 
 from app.application.coach.context.athlete_dossier import (
     CAPACITY,
-    COACH_MIND,
     EVOLUTION,
     PATTERNS,
     PERCEPTION,
     PLAN_WEEK,
     AthleteDossier,
 )
-from app.application.nutrition import training_profile
 from app.application.home.home_summary_builder import _kind, planned_km
+from app.application.nutrition import nutrition_structure as ns
 from app.application.nutrition import nutrition_targets as nt
+from app.application.nutrition import training_profile
 from app.core.clock import today_local, use_athlete_timezone
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import (
@@ -37,17 +42,20 @@ from app.infrastructure.persistence.weekly_plan_repository import (
     WeeklyPlanRepository,
 )
 
-MAX_OUTPUT_TOKENS = 16000
+MAX_OUTPUT_TOKENS = 8000
 
-_MACROS = ("kcal", "protein_g", "carb_g", "fat_g")
+# desvio aceito do total do dia vs o dia-base antes de pedir nova passada
+MAX_DEVIATION = 0.10
 
-# desvio aceito do total do dia vs a meta de kcal antes da passada de ajuste
-MAX_DEVIATION = 0.08
+# um plano por mês, e só com bioimpedância nova (senão gera à toa, e gasta IA)
+PLAN_COOLDOWN_DAYS = 30
 
 PROMPT = """Você é o nutricionista esportivo do Ritmind, o app de corrida. \
-Monte o CARDÁPIO de 7 dias deste atleta, em português do Brasil, com comida \
-brasileira comum e acessível (arroz, feijão, ovo, frango, tapioca, frutas, \
-pão, aveia, iogurte, batata-doce etc.), porções em medidas caseiras + gramas.
+Monte o PLANO ALIMENTAR deste atleta no formato de um plano de nutricionista: \
+"Distribuição de porções diárias para {base_kcal} kcal" — UM dia-base dividido \
+em refeições; cada refeição é uma tabela de alimentos com nº de porções, grupo \
+alimentar e kcal, com alternativas ("ou") pra ele escolher. Português do \
+Brasil, comida brasileira comum e acessível, medidas caseiras + gramas.
 
 {dossier}
 
@@ -60,35 +68,55 @@ pão, aveia, iogurte, batata-doce etc.), porções em medidas caseiras + gramas.
 ▸ PREFERÊNCIAS
 Objetivo(s): {goal}
 Peso-alvo: {target}
-Refeições por dia: {meals}
 Restrições/alergias/intolerâncias: {restrictions}
 Não gosta / não come: {dislikes}
 
-▸ METAS POR DIA (já calculadas — o cardápio de cada dia deve bater nelas, \
-±5%)
-{targets}
+▸ METAS (já calculadas — você preenche comida e porção, não decide número)
+Dia-base (dia de treino): {base_kcal} kcal | P {base_p} g | C {base_c} g | \
+G {base_f} g
+Alvo por refeição (kcal | proteína):
+{meals}
+Outros tipos de dia (o dia-base se adapta a eles nos "ajustes"):
+{tiers}
 
-REGRAS:
-- Use o TREINO DO ATLETA pra encaixar a comida: horário e duração do treino definem o pré (1–3h antes) e o pós; treino longo (+1h15) pede carbo DURANTE (gel/fruta/isotônico) — cite a quantidade; véspera de longão/treino forte: jantar com mais carbo; dia sem corrida: sem pré/pós. Treinos curtos e leves (≤40 min) não precisam de refeição especial.
-- Cada dia segue a meta do SEU dia de treino. Dia de longão/treino forte: \
-carbo mais alto, refeição pré-treino (1–3h antes) e pós-treino (até 1h \
-depois, com proteína + carbo). Descanso: mais leve em carbo, mesma proteína.
-- Se houver treino no dia, marque a refeição pré e pós com "tag": \
-"pre_treino" / "pos_treino"; as demais "tag": null.
-- Respeite RIGOROSAMENTE restrições e o que ele não come.
-- Varie os alimentos entre os dias (não repita o mesmo cardápio 7 vezes), \
-mas mantenha praticidade (sobras do jantar viram almoço etc.).
-- Dê kcal/proteína/carbo/gordura de CADA ITEM pela composição real do alimento nessa porção (tabela TACO/USDA) — NÃO ajuste números pra "fechar a conta": ajuste as PORÇÕES até o total do dia ficar perto da meta. Números honestos, porção é que se mexe.
-- "note": 1 frase curta do dia (ex.: "longão amanhã: jantar com mais carbo"). \
-"tips": 3 a 5 dicas gerais curtas (hidratação, sódio, gel no longão…), \
-personalizadas.
+▸ TABELA DE PORÇÕES (kcal por porção — use ela pra somar)
+{portions}
+
+▸ TABELA DO LONGÃO (carbo durante o treino, por duração)
+{fueling}
+Maior treino planejado dele: ~{long_min} min.
+
+COMO TRABALHAR:
+1. A soma das kcal das refeições (uma opção de cada) fecha o dia-base ±5%, \
+cada refeição fica a ±10% do seu alvo, e a proteína do dia não passa da meta \
+(passar estoura as calorias). Faça a conta ao escrever: kcal da linha = \
+porções × kcal da porção do grupo.
+2. Cada linha: "alimentos" (o item + alternativas equivalentes com "ou", \
+quantidade em medida caseira e gramas), "porcoes" (número, aceita 1/2), \
+"grupo" e "kcal". Salada e legumes cozidos: porcoes "à vontade", kcal 0.
+3. Alternativas de verdade no "ou" (frango ou carne magra ou tilápia; pão ou \
+tapioca ou cuscuz) — é assim que ele varia durante a semana sem sair do \
+plano. Só combinações que um brasileiro de fato come.
+4. Pré-treino: leve, carbo de fácil digestão, pouca gordura e fibra; \
+"horario" "1 a 2 h antes do treino". Lanche da tarde (se existir) tem 2 \
+opções equivalentes (uma doce, uma salgada); as demais refeições têm 1 opção.
+5. "orientacao" de cada refeição: 2 a 3 frases, voz de nutricionista próxima, \
+baseada no que você viu dele (treino, corpo, sono) — não genérica.
+6. "durante_treino": 1 a 2 frases com a conduta em cima da TABELA DO LONGÃO e \
+da duração do maior treino dele (cite quantidades: sachê/gel, fruta, água).
+7. "ajustes": "descanso" (o que tirar do dia-base, com kcal, e o que manter) \
+e "longao" (jantar da véspera com mais carbo — dê as quantidades — e o que \
+mudar na refeição pós-treino).
+8. "orientacoes": 6 a 8 orientações gerais curtas e práticas (consistência, \
+hidratação, carbo não é vilão, fim de semana, ajuste se mudar a rotina).
+9. Respeite RIGOROSAMENTE restrições e o que ele não come.
 
 Responda APENAS com JSON:
-{{"days": [{{"day": "Monday", "meals": [{{"name": "Café da manhã", \
-"time": "07:00", "tag": null, "items": [{{"food": "Ovo mexido", \
-"qty": "2 unidades (100 g)"}}], "kcal": 0, "protein_g": 0, "carb_g": 0, \
-"fat_g": 0}}], "note": "..."}}], "tips": ["..."]}}
-Os 7 dias em ordem: Monday…Sunday."""
+{{"refeicoes": [{{"nome": "Pré-treino", "horario": "1 a 2 h antes do treino", \
+"opcoes": [{{"titulo": null, "linhas": [{{"alimentos": "1 banana (80 g)", \
+"porcoes": "1", "grupo": "Frutas", "kcal": 50}}], "substituicao": null}}], \
+"orientacao": "..."}}], "durante_treino": "...", "ajustes": {{"descanso": \
+"...", "longao": "..."}}, "orientacoes": ["..."]}}"""
 
 
 def _num(v) -> float | None:
@@ -102,87 +130,92 @@ def _num(v) -> float | None:
         return None
 
 
+def _text(v) -> str:
+
+    return str(v).strip() if v is not None else ""
+
+
 def _validate(data) -> dict | None:
-    """Estrutura mínima + totais recalculados pela soma das refeições (número
-    é soma, não o que o modelo disse)."""
+    """Estrutura mínima + kcal recalculados por SOMA das linhas (número é
+    soma, não o que o modelo disse)."""
 
     if not isinstance(data, dict):
 
         return None
 
-    days_in = data.get("days")
+    meals = []
 
-    if not isinstance(days_in, list) or len(days_in) < 7:
+    for m in data.get("refeicoes") or []:
 
-        return None
-
-    by_day: dict[str, dict] = {}
-
-    for d in days_in:
-
-        if not isinstance(d, dict) or d.get("day") not in nt.WEEKDAYS:
+        if not isinstance(m, dict) or not _text(m.get("nome")):
 
             continue
 
-        meals = []
+        options = []
 
-        for m in d.get("meals") or []:
+        for o in m.get("opcoes") or []:
 
-            if not isinstance(m, dict) or not m.get("items"):
+            if not isinstance(o, dict):
 
                 continue
 
-            items = []
+            rows = []
 
-            for i in m["items"]:
+            for r in o.get("linhas") or []:
 
-                if not isinstance(i, dict) or not str(i.get("food", "")).strip():
+                if not isinstance(r, dict) or not _text(r.get("alimentos")):
 
                     continue
 
-                items.append({
-                    "food": str(i.get("food", "")).strip(),
-                    "qty": str(i.get("qty", "")).strip(),
-                    "kcal": round(_num(i.get("kcal")) or 0),
-                    "protein_g": round(_num(i.get("protein_g")) or 0),
-                    "carb_g": round(_num(i.get("carb_g")) or 0),
-                    "fat_g": round(_num(i.get("fat_g")) or 0),
+                rows.append({
+                    "alimentos": _text(r.get("alimentos")),
+                    "porcoes": _text(r.get("porcoes")) or "—",
+                    "grupo": _text(r.get("grupo")),
+                    "kcal": round(_num(r.get("kcal")) or 0),
                 })
 
-            if not items:
+            if len(rows) < 1:
 
                 continue
 
-            meals.append({
-                "name": str(m.get("name", "Refeição")).strip(),
-                "time": str(m.get("time") or "").strip(),
-                "tag": m.get("tag")
-                if m.get("tag") in ("pre_treino", "pos_treino")
-                else None,
-                "items": items,
-                **{k: sum(i[k] for i in items) for k in _MACROS},
+            options.append({
+                "titulo": _text(o.get("titulo")) or None,
+                "linhas": rows,
+                "substituicao": _text(o.get("substituicao")) or None,
+                "kcal": sum(r["kcal"] for r in rows),
             })
 
-        if len(meals) < 3:
+        if not options:
 
-            return None
+            continue
 
-        by_day[d["day"]] = {
-            "day": d["day"],
-            "meals": meals,
-            "note": str(d.get("note") or "").strip(),
-            "totals": {
-                k: sum(m[k] for m in meals) for k in _MACROS
-            },
-        }
+        meals.append({
+            "nome": _text(m.get("nome")),
+            "horario": _text(m.get("horario")),
+            "opcoes": options,
+            "orientacao": _text(m.get("orientacao")),
+            # o total do dia conta UMA opção por refeição (a média delas)
+            "kcal": round(sum(o["kcal"] for o in options) / len(options)),
+        })
 
-    if len(by_day) < 7:
+    if len(meals) < 4:
 
         return None
 
-    tips = [str(t).strip() for t in (data.get("tips") or []) if str(t).strip()]
+    adj = data.get("ajustes") if isinstance(data.get("ajustes"), dict) else {}
 
-    return {"days": [by_day[d] for d in nt.WEEKDAYS], "tips": tips[:6]}
+    return {
+        "refeicoes": meals,
+        "durante_treino": _text(data.get("durante_treino")),
+        "ajustes": {
+            "descanso": _text(adj.get("descanso")),
+            "longao": _text(adj.get("longao")),
+        },
+        "orientacoes": [
+            _text(t) for t in (data.get("orientacoes") or []) if _text(t)
+        ][:10],
+        "total_kcal": sum(m["kcal"] for m in meals),
+    }
 
 
 def _parse(raw: str) -> dict | None:
@@ -196,8 +229,23 @@ def _parse(raw: str) -> dict | None:
         return None
 
 
-# um plano por mês, e só com bioimpedância nova (senão gera a toa, e gasta IA)
-PLAN_COOLDOWN_DAYS = 30
+def settings_goals(settings: dict) -> list[str]:
+    """Objetivos escolhidos (lista); aceita o formato antigo (`goal`)."""
+
+    goals = settings.get("goals") or (
+        [settings["goal"]] if settings.get("goal") else []
+    )
+
+    goals = [g for g in goals if g in nt.GOALS]
+
+    return goals or ["performance"]
+
+
+def latest_reading(data: dict) -> dict | None:
+
+    readings = data.get("readings") or []
+
+    return readings[-1] if readings else None
 
 
 def eligibility(data: dict, today: date) -> dict:
@@ -251,30 +299,12 @@ def eligibility(data: dict, today: date) -> dict:
     return {"allowed": True, "reason": None, "next_date": None}
 
 
-def settings_goals(settings: dict) -> list[str]:
-    """Objetivos escolhidos (lista); aceita o formato antigo (`goal`)."""
-
-    goals = settings.get("goals") or (
-        [settings["goal"]] if settings.get("goal") else []
-    )
-
-    goals = [g for g in goals if g in nt.GOALS]
-
-    return goals or ["performance"]
-
-
-def latest_reading(data: dict) -> dict | None:
-
-    readings = data.get("readings") or []
-
-    return readings[-1] if readings else None
-
-
 class NutritionPlanBuilder:
 
     @staticmethod
     def targets(profile: str) -> dict | None:
-        """Metas dos 7 dias (sem cardápio) — None se não há peso confiável."""
+        """Metas e estrutura (tipos de dia, dia-base, refeições) — None se não
+        há peso confiável."""
 
         repo = NutritionRepository().load(profile)
 
@@ -290,9 +320,11 @@ class NutritionPlanBuilder:
 
             return None
 
-        goals = settings_goals(repo["settings"])
+        settings = repo["settings"]
 
-        target_weight = repo["settings"].get("target_weight_kg") or None
+        goals = settings_goals(settings)
+
+        target_weight = settings.get("target_weight_kg") or None
 
         bmr, method = nt.compute_bmr(
             weight=weight,
@@ -323,8 +355,6 @@ class NutritionPlanBuilder:
                 day_type=day_type,
             )
 
-            workout = getattr(s, "workout_type", None) if s else None
-
             km, minutes = training_profile.session_load(s)
 
             days.append({
@@ -332,11 +362,17 @@ class NutritionPlanBuilder:
                 "day_pt": nt.DAY_PT[day],
                 "type": day_type,
                 "type_pt": nt.DAY_LABELS[day_type],
-                "workout": workout,
+                "workout": getattr(s, "workout_type", None) if s else None,
                 "distance_km": km,
                 "duration_min": minutes,
                 **t,
             })
+
+        tiers = ns.build_tiers(days)
+
+        base = ns.base_tier(tiers)
+
+        meals_per_day = int(settings.get("meals_per_day") or 4)
 
         return {
             "goals": goals,
@@ -347,100 +383,22 @@ class NutritionPlanBuilder:
             "bmr_kcal": round(bmr),
             "bmr_method": method,
             "days": days,
+            "tiers": tiers,
+            "base": {k: base[k] for k in ("key", "label", "kcal", "protein_g", "carb_g", "fat_g")},
+            "meals": ns.meals_for(base, meals_per_day),
+            "fueling": [
+                {k: r[k] for k in ("faixa", "carb_h", "nota")}
+                for r in ns.LONG_RUN_FUELING
+            ],
+            "hydration": ns.HYDRATION,
+            "long_minutes": max(
+                (t["duration_min"] for t in tiers if t["key"] == "long"),
+                default=0,
+            ),
         }
 
     @staticmethod
-    def _off_days(menu: dict, targets: dict) -> list[str]:
-        """Dias cujo total real (soma dos itens) foge da meta de kcal."""
-
-        out = []
-
-        for d, t in zip(menu["days"], targets["days"]):
-
-            gap = (d["totals"]["kcal"] - t["kcal"]) / t["kcal"]
-
-            if abs(gap) > MAX_DEVIATION:
-
-                out.append(
-                    f"{d['day']}: total {d['totals']['kcal']} kcal, meta "
-                    f"{t['kcal']} kcal ({gap * 100:+.0f}%)"
-                )
-
-        return out
-
-    @staticmethod
-    async def _adjust(menu: dict, targets: dict) -> dict:
-        """Uma passada de correção: manda os dias fora da meta de volta pra IA
-        mexer nas PORÇÕES (não nos números). Melhor esforço — se falhar ou
-        piorar, fica o cardápio original com os totais reais, honestos."""
-
-        off = NutritionPlanBuilder._off_days(menu, targets)
-
-        if not off:
-
-            return menu
-
-        nl = chr(10)
-
-        prompt = (
-            "Este cardápio de 7 dias tem dias fora da meta de calorias:" + nl
-            + nl.join(off)
-            + nl + nl + "Ajuste as PORÇÕES (gramas/medidas) dos itens desses "
-            "dias pra o total real ficar dentro de ±5% da meta, recalculando "
-            "kcal/proteína/carbo/gordura de CADA ITEM pela composição real. "
-            "Não fabrique número pra fechar conta. Devolva o JSON COMPLETO "
-            "dos 7 dias, mesmo formato, dias já corretos inalterados." + nl + nl
-            + json.dumps(
-                {"days": [
-                    {"day": d["day"], "note": d["note"], "meals": d["meals"]}
-                    for d in menu["days"]
-                ], "tips": menu["tips"]},
-                ensure_ascii=False,
-            )
-        )
-
-        try:
-
-            fixed = await generate_json(
-                model=get_settings().gemini_coach_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    max_output_tokens=MAX_OUTPUT_TOKENS,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-                parse=_parse,
-                attempts=2,
-            )
-
-        except Exception as e:
-
-            print(f"Ajuste de porções do cardápio falhou: {e}")
-
-            return menu
-
-        if fixed is None:
-
-            return menu
-
-        before = len(off)
-
-        after = len(NutritionPlanBuilder._off_days(fixed, targets))
-
-        return fixed if after <= before else menu
-
-    @staticmethod
-    async def generate(profile: str) -> dict | None:
-        """Gera e PERSISTE o plano (metas + cardápio). None se não há base
-        (sem peso) ou a IA falhou — quem chama avisa o atleta."""
-
-        targets = NutritionPlanBuilder.targets(profile)
-
-        if targets is None:
-
-            return None
-
-        data = NutritionRepository().load(profile)
+    def _prompt(profile: str, targets: dict, data: dict, feedback: str) -> str:
 
         settings = data["settings"]
 
@@ -450,7 +408,7 @@ class NutritionPlanBuilder:
 
         # o dossiê entra só com o que serve à mesa (quem é, corpo/recuperação
         # e o que o coach já sabe: lesões, restrições ditas no chat). O treino
-        # vai no bloco estruturado abaixo.
+        # vai no bloco estruturado.
         dossier = AthleteDossier.render(
             profile,
             runner=runner,
@@ -470,14 +428,9 @@ class NutritionPlanBuilder:
             or f"Sem bioimpedância — só peso {targets['weight_kg']} kg."
         )
 
-        tgt = "\n".join(
-            f"- {d['day']} ({d['day_pt']}, {d['type_pt']}"
-            f"{', ' + d['workout'] if d['workout'] and d['workout'] != d['type_pt'] else ''}"
-            f"{', ~' + str(d['duration_min']) + ' min' if d['duration_min'] else ''}): "
-            f"{d['kcal']} kcal | P {d['protein_g']} g | C {d['carb_g']} g | "
-            f"G {d['fat_g']} g"
-            for d in targets["days"]
-        )
+        long_min = targets["long_minutes"] or 75
+
+        base = targets["base"]
 
         prompt = PROMPT.format(
             dossier=dossier,
@@ -490,43 +443,112 @@ class NutritionPlanBuilder:
                 if targets.get("target_weight_kg") and targets.get("weeks_estimate")
                 else "não definido"
             ),
-            meals=settings.get("meals_per_day") or 5,
             restrictions=settings.get("restrictions") or "nenhuma informada",
             dislikes=settings.get("dislikes") or "nenhum informado",
-            targets=tgt,
+            base_kcal=base["kcal"],
+            base_p=base["protein_g"],
+            base_c=base["carb_g"],
+            base_f=base["fat_g"],
+            meals="\n".join(
+                f"- {m['name']}: {m['kcal']} kcal | P {m['protein_g']} g"
+                for m in targets["meals"]
+            ),
+            tiers="\n".join(
+                f"- {t['label']} ({', '.join(t['days_pt'])}"
+                f"{', ~' + str(t['duration_min']) + ' min' if t['duration_min'] else ''}"
+                f"): {t['kcal']} kcal | P {t['protein_g']} g | C {t['carb_g']} g"
+                for t in targets["tiers"]
+            ),
+            portions="\n".join(
+                f"- {g}: {k} kcal/porção (ex.: {ex})" for g, k, ex in ns.PORTIONS
+            ),
+            fueling="\n".join(
+                f"- {r['faixa']}: {r['carb_h']} — {r['nota']}"
+                for r in ns.LONG_RUN_FUELING
+            ) + f"\nHidratação: {ns.HYDRATION}",
+            long_min=long_min,
         )
 
-        try:
+        return prompt + (f"\n\n{feedback}" if feedback else "")
 
-            menu = await generate_json(
-                model=get_settings().gemini_coach_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    max_output_tokens=MAX_OUTPUT_TOKENS,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-                parse=_parse,
-            )
+    @staticmethod
+    async def generate(profile: str) -> dict | None:
+        """Gera e PERSISTE o plano. None se não há base (sem peso) ou a IA
+        falhou — quem chama avisa o atleta. Se a soma do dia foge do dia-base,
+        pede UMA nova passada ajustando porções e fica com a mais próxima."""
 
-        except Exception as e:
+        targets = NutritionPlanBuilder.targets(profile)
 
-            print(f"Falha ao gerar cardápio de '{profile}': {e}")
+        if targets is None:
 
             return None
 
-        if menu is None:
+        data = NutritionRepository().load(profile)
+
+        base_kcal = targets["base"]["kcal"]
+
+        best: dict | None = None
+
+        feedback = ""
+
+        for _ in range(2):
+
+            try:
+
+                menu = await generate_json(
+                    model=get_settings().gemini_coach_model,
+                    contents=NutritionPlanBuilder._prompt(
+                        profile, targets, data, feedback
+                    ),
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        max_output_tokens=MAX_OUTPUT_TOKENS,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                    parse=_parse,
+                )
+
+            except Exception as e:
+
+                print(f"Falha ao gerar plano alimentar de '{profile}': {e}")
+
+                menu = None
+
+            if menu is not None and (
+                best is None
+                or abs(menu["total_kcal"] - base_kcal)
+                < abs(best["total_kcal"] - base_kcal)
+            ):
+
+                best = menu
+
+            if best is not None and (
+                abs(best["total_kcal"] - base_kcal) / base_kcal <= MAX_DEVIATION
+            ):
+
+                break
+
+            if best is not None:
+
+                feedback = (
+                    f"ATENÇÃO: na tentativa anterior a soma do dia deu "
+                    f"{best['total_kcal']} kcal, mas o dia-base é {base_kcal} "
+                    "kcal. Refaça ajustando as PORÇÕES (não os números) pra "
+                    "fechar o dia-base ±5%."
+                )
+
+        if best is None:
 
             return None
 
-        menu = await NutritionPlanBuilder._adjust(menu, targets)
+        reading = latest_reading(data) or {}
 
         plan = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "generated_on": today_local().isoformat(),
-            "reading_date": (reading or {}).get("date"),
+            "reading_date": reading.get("date"),
             "targets": targets,
-            "menu": menu,
+            "menu": best,
         }
 
         data["plan"] = plan

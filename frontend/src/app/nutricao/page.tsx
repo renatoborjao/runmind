@@ -74,7 +74,6 @@ export default function NutricaoPage() {
   const [dislikes, setDislikes] = useState("");
   const [busy, setBusy] = useState<"" | "photo" | "save" | "plan">("");
   const [err, setErr] = useState("");
-  const [dayIdx, setDayIdx] = useState(0);
 
   async function load() {
     try {
@@ -88,8 +87,6 @@ export default function NutricaoPage() {
       setDislikes(s.settings.dislikes ?? "");
       setForm(toForm(s.reading));
       setEditing(!s.reading);
-      // abre no dia de hoje (0 = segunda)
-      setDayIdx((new Date().getDay() + 6) % 7);
     } catch {
       setFailed(true);
     } finally {
@@ -186,8 +183,6 @@ export default function NutricaoPage() {
   }
 
   const plan = st.plan;
-  const menuDay = plan?.menu.days[dayIdx];
-  const tgtDay = plan?.targets.days[dayIdx];
   const planning = busy === "plan";
   const curWeight = num(form.weight_kg ?? "") ?? st.reading?.weight_kg ?? st.profile_weight;
   const tw = num(targetWeight);
@@ -307,54 +302,80 @@ export default function NutricaoPage() {
           )}
         </section>
 
-        {/* PLANO */}
-        {plan && menuDay && tgtDay && (
+        {/* PLANO — molde de plano de nutricionista */}
+        {plan && (
           <>
             <section className="card">
               <div className="card-head">
                 <span className="eyebrow">Seu plano · {plan.targets.goal_pt}{plan.targets.target_weight_kg ? ` → ${plan.targets.target_weight_kg} kg` : ""}</span>
               </div>
-              <div className="nut-days">
-                {plan.targets.days.map((d, i) => (
-                  <button key={d.day} className={`nut-day${i === dayIdx ? " on" : ""}`} onClick={() => setDayIdx(i)}>
-                    {d.day_pt.slice(0, 3)}<small>{d.type_pt}</small>
-                  </button>
-                ))}
+              <div className="auth-title" style={{ fontSize: 18, marginBottom: 10 }}>Distribuição de porções diárias para {plan.targets.base.kcal} kcal</div>
+              <div className="nut-macros" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                <div><b>{plan.targets.base.protein_g}</b><span>prot g</span></div>
+                <div><b>{plan.targets.base.carb_g}</b><span>carb g</span></div>
+                <div><b>{plan.targets.base.fat_g}</b><span>gord g</span></div>
               </div>
-              <div className="nut-macros">
-                <div><b>{tgtDay.kcal}</b><span>kcal</span></div>
-                <div><b>{tgtDay.protein_g}</b><span>prot g</span></div>
-                <div><b>{tgtDay.carb_g}</b><span>carb g</span></div>
-                <div><b>{tgtDay.fat_g}</b><span>gord g</span></div>
-              </div>
-              {tgtDay.workout && <p className="nut-note">🏃 {tgtDay.workout}{tgtDay.distance_km ? ` · ${tgtDay.distance_km} km` : ""}{tgtDay.duration_min ? ` · ~${tgtDay.duration_min} min` : ""}{tgtDay.training_kcal ? ` · ~${tgtDay.training_kcal} kcal gastas` : ""}</p>}
-              {menuDay.note && <p className="nut-note">💡 {menuDay.note}</p>}
-              {menuDay.meals.map((m, i) => (
-                <div className="nut-meal" key={i}>
-                  <div className="nut-meal-h">
-                    <span className="nut-meal-n">
-                      {m.name}
-                      {m.tag && <span className="nut-tag">{m.tag === "pre_treino" ? "pré-treino" : "pós-treino"}</span>}
-                    </span>
-                    <span className="nut-meal-t">{m.time}</span>
+              <p className="nut-meal-m">Dia-base: {plan.targets.base.label.toLowerCase()}. Somando uma opção de cada refeição: {plan.menu.total_kcal} kcal.</p>
+              <div className="nut-tiers">
+                {plan.targets.tiers.map((t) => (
+                  <div key={t.key} className="nut-tier">
+                    <b>{t.kcal}</b><span>kcal</span>
+                    <div>{t.label}</div>
+                    <small>{t.days_pt.join(", ")}{t.duration_min ? ` · ~${t.duration_min} min` : ""}</small>
                   </div>
-                  <ul className="nut-items">
-                    {m.items.map((it, j) => <li key={j}>{it.food} — {it.qty}</li>)}
-                  </ul>
-                  <div className="nut-meal-m">{m.kcal} kcal · P {m.protein_g} · C {m.carb_g} · G {m.fat_g}</div>
-                </div>
-              ))}
-              <div className="nut-meal-m" style={{ marginTop: 10 }}>
-                Total do dia: {menuDay.totals.kcal} kcal · P {menuDay.totals.protein_g} · C {menuDay.totals.carb_g} · G {menuDay.totals.fat_g}
+                ))}
               </div>
             </section>
 
-            {plan.menu.tips.length > 0 && (
+            {plan.menu.refeicoes.map((m, i) => (
+              <section className="card" key={i}>
+                <div className="nut-meal-h">
+                  <span className="nut-meal-n">{m.nome}</span>
+                  <span className="nut-meal-t">{m.horario} · {m.kcal} kcal</span>
+                </div>
+                {m.opcoes.map((o, j) => (
+                  <div key={j} className="nut-opt">
+                    {(o.titulo || m.opcoes.length > 1) && <div className="nut-opt-t">{o.titulo || `Opção ${j + 1}`}</div>}
+                    {o.linhas.map((r, k) => (
+                      <div className="nut-row" key={k}>
+                        <div className="nut-row-f">{r.alimentos}</div>
+                        <div className="nut-row-m">{r.porcoes} porç. · {r.grupo}{r.kcal ? ` · ${r.kcal} kcal` : ""}</div>
+                      </div>
+                    ))}
+                    {o.substituicao && <p className="nut-subst"><b>Substituição:</b> {o.substituicao}</p>}
+                  </div>
+                ))}
+                {m.orientacao && <p className="nut-note" style={{ marginTop: 12 }}>{m.orientacao}</p>}
+              </section>
+            ))}
+
+            <section className="card">
+              <div className="card-head"><span className="eyebrow">Treinos longos</span></div>
+              {plan.menu.durante_treino && <p className="nut-note">🏃 {plan.menu.durante_treino}</p>}
+              <div className="nut-fuel">
+                {plan.targets.fueling.map((f) => (
+                  <div key={f.faixa} className="nut-fuel-r">
+                    <b>{f.faixa}</b><span>{f.carb_h}</span><small>{f.nota}</small>
+                  </div>
+                ))}
+              </div>
+              <p className="nut-meal-m" style={{ marginTop: 8 }}>Hidratação: {plan.targets.hydration}</p>
+            </section>
+
+            {(plan.menu.ajustes.descanso || plan.menu.ajustes.longao) && (
               <section className="card">
-                <div className="card-head"><span className="eyebrow">Dicas do coach</span></div>
-                <ul className="nut-tips">{plan.menu.tips.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                <div className="card-head"><span className="eyebrow">Ajustes por tipo de dia</span></div>
+                {plan.menu.ajustes.descanso && <p className="nut-note"><b>Dia de descanso:</b> {plan.menu.ajustes.descanso}</p>}
+                {plan.menu.ajustes.longao && <p className="nut-note"><b>Véspera e dia de longão:</b> {plan.menu.ajustes.longao}</p>}
+              </section>
+            )}
+
+            {plan.menu.orientacoes.length > 0 && (
+              <section className="card">
+                <div className="card-head"><span className="eyebrow">Orientações gerais</span></div>
+                <ul className="nut-tips">{plan.menu.orientacoes.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="nut-meal-m" style={{ marginTop: 12 }}>
-                  Metabolismo basal {plan.targets.bmr_kcal} kcal ({plan.targets.bmr_method}). As metas acompanham o seu plano de treino: se a semana mudar, refaça o plano.
+                  Metabolismo basal {plan.targets.bmr_kcal} kcal ({plan.targets.bmr_method}). Orientação baseada na sua bioimpedância e no seu plano de treino; o plano é refeito a cada 30 dias com uma nova medição.
                 </p>
               </section>
             )}

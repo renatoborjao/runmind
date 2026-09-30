@@ -1234,6 +1234,19 @@ export interface NutritionDayTarget {
   training_kcal: number;
 }
 
+export interface NutritionTier {
+  key: "rest" | "training" | "long";
+  label: string;
+  days_pt: string[];
+  workouts: string[];
+  distance_km: number;
+  duration_min: number;
+  kcal: number;
+  protein_g: number;
+  carb_g: number;
+  fat_g: number;
+}
+
 export interface NutritionTargets {
   goals: string[];
   goal_pt: string;
@@ -1243,30 +1256,46 @@ export interface NutritionTargets {
   bmr_kcal: number;
   bmr_method: string;
   days: NutritionDayTarget[];
+  tiers: NutritionTier[];
+  base: { key: string; label: string; kcal: number; protein_g: number; carb_g: number; fat_g: number };
+  meals: { name: string; time: string; kcal: number; protein_g: number; carb_g: number; fat_g: number }[];
+  fueling: { faixa: string; carb_h: string; nota: string }[];
+  hydration: string;
+  long_minutes: number;
 }
 
-export interface NutritionMeal {
-  name: string;
-  time: string;
-  tag: "pre_treino" | "pos_treino" | null;
-  items: { food: string; qty: string }[];
+export interface NutritionRow {
+  alimentos: string;
+  porcoes: string;
+  grupo: string;
   kcal: number;
-  protein_g: number;
-  carb_g: number;
-  fat_g: number;
 }
 
-export interface NutritionMenuDay {
-  day: string;
-  meals: NutritionMeal[];
-  note: string;
-  totals: { kcal: number; protein_g: number; carb_g: number; fat_g: number };
+export interface NutritionOption {
+  titulo: string | null;
+  linhas: NutritionRow[];
+  substituicao: string | null;
+  kcal: number;
+}
+
+export interface NutritionMealPlan {
+  nome: string;
+  horario: string;
+  opcoes: NutritionOption[];
+  orientacao: string;
+  kcal: number;
 }
 
 export interface NutritionPlan {
   generated_on: string;
   targets: NutritionTargets;
-  menu: { days: NutritionMenuDay[]; tips: string[] };
+  menu: {
+    refeicoes: NutritionMealPlan[];
+    durante_treino: string;
+    ajustes: { descanso: string; longao: string };
+    orientacoes: string[];
+    total_kcal: number;
+  };
 }
 
 export interface NutritionState {
