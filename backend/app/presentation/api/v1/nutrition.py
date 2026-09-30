@@ -46,7 +46,8 @@ class ReadingIn(BaseModel):
 
 
 class SettingsIn(BaseModel):
-    goal: str | None = None
+    goals: list[str] | None = None
+    target_weight_kg: float | None = None   # 0 = limpar
     meals_per_day: int | None = None
     restrictions: str | None = None
     dislikes: str | None = None
@@ -147,13 +148,38 @@ async def save_settings(body: SettingsIn, profile: str = Depends(current_profile
 
     s = data["settings"]
 
-    if body.goal is not None:
+    if body.goals is not None:
 
-        if body.goal not in nt.GOALS:
+        goals = [g for g in dict.fromkeys(body.goals) if g in nt.GOALS]
 
-            raise HTTPException(status_code=400, detail="Objetivo inválido")
+        if not goals:
 
-        s["goal"] = body.goal
+            raise HTTPException(status_code=400, detail="Escolha um objetivo")
+
+        # "manter" não combina com mudar de corpo
+        if len(goals) > 1 and "maintain" in goals:
+
+            goals.remove("maintain")
+
+        s["goals"] = goals[:3]
+
+        s.pop("goal", None)
+
+    if body.target_weight_kg is not None:
+
+        tw = body.target_weight_kg
+
+        if tw == 0:
+
+            s.pop("target_weight_kg", None)
+
+        elif 30 <= tw <= 200:
+
+            s["target_weight_kg"] = round(tw, 1)
+
+        else:
+
+            raise HTTPException(status_code=400, detail="Peso-alvo inválido")
 
     if body.meals_per_day is not None:
 

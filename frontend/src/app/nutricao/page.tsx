@@ -67,7 +67,8 @@ export default function NutricaoPage() {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Form>(toForm(null));
-  const [goal, setGoal] = useState("performance");
+  const [goals, setGoals] = useState<string[]>(["performance"]);
+  const [targetWeight, setTargetWeight] = useState("");
   const [meals, setMeals] = useState(5);
   const [restrictions, setRestrictions] = useState("");
   const [dislikes, setDislikes] = useState("");
@@ -80,7 +81,8 @@ export default function NutricaoPage() {
       const s = await getNutrition();
       if (!s) { setFailed(true); return; }
       setSt(s);
-      setGoal(s.settings.goal ?? "performance");
+      setGoals(s.settings.goals?.length ? s.settings.goals : ["performance"]);
+      setTargetWeight(s.settings.target_weight_kg ? String(s.settings.target_weight_kg) : "");
       setMeals(s.settings.meals_per_day ?? 5);
       setRestrictions(s.settings.restrictions ?? "");
       setDislikes(s.settings.dislikes ?? "");
@@ -122,6 +124,16 @@ export default function NutricaoPage() {
     return true;
   }
 
+  function toggleGoal(k: string) {
+    setGoals((cur) => {
+      if (cur.includes(k)) return cur.length > 1 ? cur.filter((g) => g !== k) : cur;
+      // "manter o peso" não combina com mudar de corpo
+      if (k === "maintain") return ["maintain"];
+      const next = [...cur.filter((g) => g !== "maintain"), k];
+      return next.slice(-3);
+    });
+  }
+
   async function onSaveOnly() {
     setErr("");
     setBusy("save");
@@ -141,7 +153,7 @@ export default function NutricaoPage() {
         setBusy("save");
         if (!(await saveReading())) { setBusy(""); return; }
       }
-      await saveNutritionSettings({ goal, meals_per_day: meals, restrictions, dislikes });
+      await saveNutritionSettings({ goals, target_weight_kg: num(targetWeight) ?? 0, meals_per_day: meals, restrictions, dislikes });
       setBusy("plan");
       await generateNutritionPlan();
       setEditing(false);
@@ -177,6 +189,14 @@ export default function NutricaoPage() {
   const menuDay = plan?.menu.days[dayIdx];
   const tgtDay = plan?.targets.days[dayIdx];
   const planning = busy === "plan";
+  const curWeight = num(form.weight_kg ?? "") ?? st.reading?.weight_kg ?? st.profile_weight;
+  const tw = num(targetWeight);
+  const weeksPreview = (() => {
+    if (!tw || !curWeight || Math.abs(tw - curWeight) < 0.5) return "";
+    const diff = tw - curWeight;
+    const weeks = Math.max(1, Math.round(Math.abs(diff) / (diff < 0 ? 0.5 : 0.25)));
+    return `${diff < 0 ? "Perder" : "Ganhar"} ${Math.abs(diff).toFixed(1).replace(".", ",")} kg em ritmo saudável: cerca de ${weeks} semanas.`;
+  })();
   // editando medição nova pode liberar o plano (o servidor decide de verdade)
   const gateOpen = st.plan_gate.allowed || (editing && !!plan && !st.plan_gate.next_date);
 
@@ -240,11 +260,22 @@ export default function NutricaoPage() {
         {/* OBJETIVO E PREFERÊNCIAS */}
         <section className="card">
           <div className="card-head"><span className="eyebrow">Objetivo e preferências</span></div>
-          <div className="chips" style={{ marginBottom: 14 }}>
+          <div className="field"><label>O que você quer (escolha até 3)</label></div>
+          <div className="chips" style={{ marginBottom: 10 }}>
             {Object.entries(st.goals).map(([k, label]) => (
-              <button key={k} className={`chip-btn${goal === k ? " on" : ""}`} onClick={() => setGoal(k)}>{label}</button>
+              <button key={k} className={`chip-btn${goals.includes(k) ? " on" : ""}`} onClick={() => toggleGoal(k)}>{label}</button>
             ))}
           </div>
+          {goals.includes("lose_fat") && goals.includes("gain_muscle") && (
+            <p className="nut-note">Perder gordura e ganhar massa juntos é recomposição corporal: déficit leve e proteína alta, com o treino sustentando o músculo. Progresso mais lento, porém mais certeiro.</p>
+          )}
+          {(goals.includes("lose_fat") || goals.includes("gain_muscle")) && (
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>Peso que você quer atingir (kg)</label>
+              <input inputMode="decimal" value={targetWeight} onChange={(e) => setTargetWeight(e.target.value)} placeholder={curWeight ? `Hoje: ${curWeight} kg` : "Ex.: 72"} />
+              {weeksPreview && <p className="auth-sub" style={{ margin: "8px 0 0", fontSize: 12.5 }}>{weeksPreview}</p>}
+            </div>
+          )}
           <div className="field">
             <label>Refeições por dia</label>
             <div className="seg">
@@ -281,7 +312,7 @@ export default function NutricaoPage() {
           <>
             <section className="card">
               <div className="card-head">
-                <span className="eyebrow">Seu plano · {plan.targets.goal_pt}</span>
+                <span className="eyebrow">Seu plano · {plan.targets.goal_pt}{plan.targets.target_weight_kg ? ` → ${plan.targets.target_weight_kg} kg` : ""}</span>
               </div>
               <div className="nut-days">
                 {plan.targets.days.map((d, i) => (

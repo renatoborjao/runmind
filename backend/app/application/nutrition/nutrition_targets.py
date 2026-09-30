@@ -54,6 +54,43 @@ DAY_PT = {
 }
 
 
+def blend_goals(goals: list[str]) -> tuple[float, float]:
+    """(ajuste calórico, proteína g/kg) de UM OU MAIS objetivos juntos.
+    Perder gordura + ganhar massa = recomposição: déficit leve e proteína alta
+    (déficit cheio come o músculo que ele quer ganhar). Senão, média dos
+    ajustes e a maior proteína."""
+
+    goals = [g for g in goals if g in GOAL_ADJUST] or ["performance"]
+
+    protein = max(PROTEIN_G_KG[g] for g in goals)
+
+    if "lose_fat" in goals and "gain_muscle" in goals:
+
+        return -0.05, max(protein, 2.1)
+
+    adjust = sum(GOAL_ADJUST[g] for g in goals) / len(goals)
+
+    # perder gordura é o que manda quando combinado (nunca sobra calorias)
+    if "lose_fat" in goals:
+
+        adjust = min(adjust, -0.10)
+
+    return adjust, protein
+
+
+def weeks_to_target(current: float, target: float | None) -> int | None:
+    """Estimativa de semanas pro peso-alvo em ritmo saudável (perder ~0,5
+    kg/sem; ganhar ~0,25 kg/sem). None sem alvo ou já no peso."""
+
+    if not target or abs(target - current) < 0.5:
+
+        return None
+
+    rate = 0.5 if target < current else 0.25
+
+    return max(1, round(abs(target - current) / rate))
+
+
 def compute_bmr(
     *, weight: float, height_cm: float, age: int, sex: str | None,
     bmr_device: float | None = None, lean_mass: float | None = None,
@@ -115,17 +152,19 @@ def training_kcal(session, weight: float, km_fn) -> float:
 
 
 def day_targets(
-    *, goal: str, weight: float, bmr: float, train_kcal: float, day_type: str,
+    *, goals: list[str], weight: float, bmr: float, train_kcal: float, day_type: str,
 ) -> dict:
 
     tdee = bmr * BASE_ACTIVITY + train_kcal
 
-    kcal = tdee * (1 + GOAL_ADJUST.get(goal, 0.0))
+    adjust, protein_kg = blend_goals(goals)
+
+    kcal = tdee * (1 + adjust)
 
     # piso: nunca abaixo do metabolismo basal
     kcal = max(kcal, bmr)
 
-    protein = PROTEIN_G_KG.get(goal, 1.6) * weight
+    protein = protein_kg * weight
 
     fat = (1.0 if day_type == "rest" else 0.9) * weight
 

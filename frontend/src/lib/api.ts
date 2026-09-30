@@ -1212,7 +1212,8 @@ export interface BodyReading {
 }
 
 export interface NutritionSettings {
-  goal?: string;
+  goals?: string[];
+  target_weight_kg?: number;
   meals_per_day?: number;
   restrictions?: string;
   dislikes?: string;
@@ -1232,9 +1233,11 @@ export interface NutritionDayTarget {
 }
 
 export interface NutritionTargets {
-  goal: string;
+  goals: string[];
   goal_pt: string;
   weight_kg: number;
+  target_weight_kg: number | null;
+  weeks_estimate: number | null;
   bmr_kcal: number;
   bmr_method: string;
   days: NutritionDayTarget[];

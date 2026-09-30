@@ -50,7 +50,8 @@ pão, aveia, iogurte, batata-doce etc.), porções em medidas caseiras + gramas.
 {body}
 
 ▸ PREFERÊNCIAS
-Objetivo: {goal}
+Objetivo(s): {goal}
+Peso-alvo: {target}
 Refeições por dia: {meals}
 Restrições/alergias/intolerâncias: {restrictions}
 Não gosta / não come: {dislikes}
@@ -242,6 +243,18 @@ def eligibility(data: dict, today: date) -> dict:
     return {"allowed": True, "reason": None, "next_date": None}
 
 
+def settings_goals(settings: dict) -> list[str]:
+    """Objetivos escolhidos (lista); aceita o formato antigo (`goal`)."""
+
+    goals = settings.get("goals") or (
+        [settings["goal"]] if settings.get("goal") else []
+    )
+
+    goals = [g for g in goals if g in nt.GOALS]
+
+    return goals or ["performance"]
+
+
 def latest_reading(data: dict) -> dict | None:
 
     readings = data.get("readings") or []
@@ -269,7 +282,9 @@ class NutritionPlanBuilder:
 
             return None
 
-        goal = repo["settings"].get("goal") or "performance"
+        goals = settings_goals(repo["settings"])
+
+        target_weight = repo["settings"].get("target_weight_kg") or None
 
         bmr, method = nt.compute_bmr(
             weight=weight,
@@ -293,7 +308,7 @@ class NutritionPlanBuilder:
             day_type = nt.classify_day(s, _kind)
 
             t = nt.day_targets(
-                goal=goal,
+                goals=goals,
                 weight=weight,
                 bmr=bmr,
                 train_kcal=nt.training_kcal(s, weight, planned_km),
@@ -316,9 +331,11 @@ class NutritionPlanBuilder:
             })
 
         return {
-            "goal": goal,
-            "goal_pt": nt.GOALS.get(goal, goal),
+            "goals": goals,
+            "goal_pt": " + ".join(nt.GOALS[g] for g in goals),
             "weight_kg": round(weight, 1),
+            "target_weight_kg": target_weight,
+            "weeks_estimate": nt.weeks_to_target(weight, target_weight),
             "bmr_kcal": round(bmr),
             "bmr_method": method,
             "days": days,
@@ -448,6 +465,12 @@ class NutritionPlanBuilder:
             dossier=dossier,
             body=body,
             goal=targets["goal_pt"],
+            target=(
+                f"{targets['target_weight_kg']} kg (hoje {targets['weight_kg']}"
+                f" kg, ~{targets['weeks_estimate']} semanas em ritmo saudável)"
+                if targets.get("target_weight_kg") and targets.get("weeks_estimate")
+                else "não definido"
+            ),
             meals=settings.get("meals_per_day") or 5,
             restrictions=settings.get("restrictions") or "nenhuma informada",
             dislikes=settings.get("dislikes") or "nenhum informado",
