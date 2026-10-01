@@ -14,6 +14,49 @@ const AI_NOTE =
   "Os cálculos e o cardápio são gerados por inteligência artificial a partir da sua bioimpedância e do seu plano de treino. " +
   "São estimativas e não substituem um nutricionista: em caso de dúvida, condição de saúde ou necessidade específica, procure um profissional.";
 
+// Marca no cabeçalho: ícone do app + "ritmind" (o wordmark oficial é branco com
+// transparência, pintado aqui de grafite pro papel branco). Qualquer falha
+// (imagem fora do ar, sem canvas) devolve null e o PDF sai igual, sem logo.
+async function loadLogo(): Promise<{ icon: string; word: string; ratio: number } | null> {
+  if (typeof document === "undefined") return null;
+  try {
+    const load = (src: string) =>
+      new Promise<HTMLImageElement>((res, rej) => {
+        const im = new Image();
+        im.onload = () => res(im);
+        im.onerror = () => rej(new Error(src));
+        im.src = src;
+      });
+    const [icon, word] = await Promise.all([load("/icons/icon-192.png"), load("/brand/ritmind-wordmark.png")]);
+    const toUrl = (im: HTMLImageElement, tint?: string) => {
+      const w = im.naturalWidth;
+      const h = im.naturalHeight;
+      const layer = document.createElement("canvas");
+      layer.width = w;
+      layer.height = h;
+      const lx = layer.getContext("2d");
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ox = out.getContext("2d");
+      if (!lx || !ox) throw new Error("canvas");
+      lx.drawImage(im, 0, 0);
+      if (tint) {
+        lx.globalCompositeOperation = "source-in";
+        lx.fillStyle = tint;
+        lx.fillRect(0, 0, w, h);
+      }
+      ox.fillStyle = "#ffffff";
+      ox.fillRect(0, 0, w, h);
+      ox.drawImage(layer, 0, 0);
+      return out.toDataURL("image/jpeg", 0.92);
+    };
+    return { icon: toUrl(icon), word: toUrl(word, "#1E2128"), ratio: word.naturalWidth / word.naturalHeight };
+  } catch {
+    return null;
+  }
+}
+
 function fmtDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return y && m && d ? `${d}/${m}/${y}` : iso;
@@ -104,12 +147,19 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
     ensure(Math.min(need, BOTTOM - TOP));
     doc.setFont("helvetica", "bold").setFontSize(size).setTextColor(...ACCENT);
     doc.text(clean(title), MARGIN, y);
-    y += size * 0.5 + 3;
+    y += size * 0.42 + 1.5;
     parts.forEach(drawPart);
     y += 2;
   };
 
   // ---- cabeçalho ----
+  const logo = await loadLogo();
+  if (logo) {
+    doc.addImage(logo.icon, "JPEG", MARGIN, y, 10, 10);
+    const wh = 6.5;
+    doc.addImage(logo.word, "JPEG", MARGIN + 12.5, y + 1.75, wh * logo.ratio, wh);
+    y += 21;
+  }
   doc.setFont("helvetica", "bold").setFontSize(18).setTextColor(...INK);
   doc.text("Plano alimentar", MARGIN, y);
   y += 7;
