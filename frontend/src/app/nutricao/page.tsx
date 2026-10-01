@@ -74,6 +74,7 @@ export default function NutricaoPage() {
   const [dislikes, setDislikes] = useState("");
   const [busy, setBusy] = useState<"" | "photo" | "save" | "plan">("");
   const [err, setErr] = useState("");
+  const [tab, setTab] = useState<"plano" | "dados" | null>(null);
 
   async function load() {
     try {
@@ -154,6 +155,7 @@ export default function NutricaoPage() {
       setBusy("plan");
       await generateNutritionPlan();
       setEditing(false);
+      setTab("plano");
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Algo deu errado.");
@@ -184,6 +186,8 @@ export default function NutricaoPage() {
 
   const plan = st.plan;
   const planning = busy === "plan";
+  // com plano: abre nele; sem plano: abre nos dados (onde se gera)
+  const view = plan ? (tab ?? "plano") : "dados";
   const curWeight = num(form.weight_kg ?? "") ?? st.reading?.weight_kg ?? st.profile_weight;
   const tw = num(targetWeight);
   const weeksPreview = (() => {
@@ -206,6 +210,14 @@ export default function NutricaoPage() {
           <span style={{ width: 34 }} />
         </header>
 
+        {plan && (
+          <div className="seg" style={{ marginBottom: 2 }}>
+            <button className={view === "plano" ? "on" : ""} onClick={() => setTab("plano")}>Meu plano</button>
+            <button className={view === "dados" ? "on" : ""} onClick={() => setTab("dados")}>Meus dados</button>
+          </div>
+        )}
+
+        {view === "dados" && (<>
         {/* BIOIMPEDÂNCIA */}
         <section className="card">
           <div className="card-head">
@@ -302,8 +314,10 @@ export default function NutricaoPage() {
           )}
         </section>
 
+        </>)}
+
         {/* PLANO — molde de plano de nutricionista */}
-        {plan && (
+        {plan && view === "plano" && (
           <>
             <section className="card">
               <div className="card-head">
@@ -315,7 +329,7 @@ export default function NutricaoPage() {
                 <div><b>{plan.targets.base.carb_g}</b><span>carb g</span></div>
                 <div><b>{plan.targets.base.fat_g}</b><span>gord g</span></div>
               </div>
-              <p className="nut-meal-m">Dia-base: {plan.targets.base.label.toLowerCase()}. Somando uma opção de cada refeição: {plan.menu.total_kcal} kcal.</p>
+              <p className="nut-meal-m">Toque numa refeição pra ver as opções. Dia-base: {plan.targets.base.label.toLowerCase()}.</p>
               <div className="nut-tiers">
                 {plan.targets.tiers.map((t) => (
                   <div key={t.key} className="nut-tier">
@@ -328,11 +342,11 @@ export default function NutricaoPage() {
             </section>
 
             {plan.menu.refeicoes.map((m, i) => (
-              <section className="card" key={i}>
-                <div className="nut-meal-h">
+              <details className="card nut-acc" key={i}>
+                <summary>
                   <span className="nut-meal-n">{m.nome}</span>
                   <span className="nut-meal-t">{m.horario} · {m.kcal} kcal</span>
-                </div>
+                </summary>
                 {m.opcoes.map((o, j) => (
                   <div key={j} className="nut-opt">
                     {(o.titulo || m.opcoes.length > 1) && <div className="nut-opt-t">{o.titulo || `Opção ${j + 1}`}</div>}
@@ -346,11 +360,11 @@ export default function NutricaoPage() {
                   </div>
                 ))}
                 {m.orientacao && <p className="nut-note" style={{ marginTop: 12 }}>{m.orientacao}</p>}
-              </section>
+              </details>
             ))}
 
-            <section className="card">
-              <div className="card-head"><span className="eyebrow">Treinos longos</span></div>
+            <details className="card nut-acc">
+              <summary><span className="eyebrow">Treinos longos</span></summary>
               {plan.menu.durante_treino && <p className="nut-note">🏃 {plan.menu.durante_treino}</p>}
               <div className="nut-fuel">
                 {plan.targets.fueling.map((f) => (
@@ -360,24 +374,24 @@ export default function NutricaoPage() {
                 ))}
               </div>
               <p className="nut-meal-m" style={{ marginTop: 8 }}>Hidratação: {plan.targets.hydration}</p>
-            </section>
+            </details>
 
             {(plan.menu.ajustes.descanso || plan.menu.ajustes.longao) && (
-              <section className="card">
-                <div className="card-head"><span className="eyebrow">Ajustes por tipo de dia</span></div>
+              <details className="card nut-acc">
+                <summary><span className="eyebrow">Ajustes por tipo de dia</span></summary>
                 {plan.menu.ajustes.descanso && <p className="nut-note"><b>Dia de descanso:</b> {plan.menu.ajustes.descanso}</p>}
                 {plan.menu.ajustes.longao && <p className="nut-note"><b>Véspera e dia de longão:</b> {plan.menu.ajustes.longao}</p>}
-              </section>
+              </details>
             )}
 
             {plan.menu.orientacoes.length > 0 && (
-              <section className="card">
-                <div className="card-head"><span className="eyebrow">Orientações gerais</span></div>
+              <details className="card nut-acc">
+                <summary><span className="eyebrow">Orientações gerais</span></summary>
                 <ul className="nut-tips">{plan.menu.orientacoes.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="nut-meal-m" style={{ marginTop: 12 }}>
                   Metabolismo basal {plan.targets.bmr_kcal} kcal ({plan.targets.bmr_method}). Orientação baseada na sua bioimpedância e no seu plano de treino; o plano é refeito a cada 30 dias com uma nova medição.
                 </p>
-              </section>
+              </details>
             )}
           </>
         )}

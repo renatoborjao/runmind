@@ -958,3 +958,11 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .nut-fuel-r:first-child { border-top: none; }
 .nut-fuel-r span { font-weight: 700; color: var(--accent-ink); }
 .nut-fuel-r small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; }
+
+.nut-acc { padding: 14px 18px; }
+.nut-acc > summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.nut-acc > summary::-webkit-details-marker { display: none; }
+.nut-acc > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s ease; flex: 0 0 auto; margin-left: 4px; }
+.nut-acc[open] > summary::after { transform: rotate(-135deg); }
+.nut-acc[open] > summary { margin-bottom: 10px; }
+.nut-acc > summary .nut-meal-t { margin-left: auto; }
