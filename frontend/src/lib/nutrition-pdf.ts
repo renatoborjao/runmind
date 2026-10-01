@@ -10,6 +10,10 @@ const INK: [number, number, number] = [30, 33, 40];
 const MUTED: [number, number, number] = [110, 116, 128];
 const MARGIN = 14;
 
+const AI_NOTE =
+  "Os cálculos e o cardápio são gerados por inteligência artificial a partir da sua bioimpedância e do seu plano de treino. " +
+  "São estimativas e não substituem um nutricionista: em caso de dúvida, condição de saúde ou necessidade específica, procure um profissional.";
+
 function fmtDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return y && m && d ? `${d}/${m}/${y}` : iso;
@@ -111,7 +115,9 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
   y += 7;
   doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...MUTED);
   doc.text(clean(`${athleteName ? athleteName + " · " : ""}gerado em ${fmtDate(plan.generated_on)} · Ritmind`), MARGIN, y);
-  y += 8;
+  y += 6;
+  drawPart({ p: AI_NOTE, size: 8.5, color: MUTED });
+  y += 2;
 
   section(
     `Distribuição de porções diárias para ${tg.base.kcal} kcal`,
@@ -182,7 +188,7 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
     doc.setPage(i);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...MUTED);
     doc.text(
-      clean("Plano gerado a partir da sua bioimpedância e do seu plano de treino; atualiza 1 vez por mês."),
+      clean("Estimativa gerada por IA, não substitui um nutricionista. Atualiza 1 vez por mês."),
       MARGIN,
       H - 8,
     );

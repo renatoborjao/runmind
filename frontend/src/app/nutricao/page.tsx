@@ -43,6 +43,17 @@ function brDate(iso: string): string {
   return iso.split("-").reverse().join("/");
 }
 
+// data (dd/mm/aaaa) daqui a 30 dias — quando a próxima atualização libera se for usada hoje
+function in30Days(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toLocaleDateString("pt-BR");
+}
+
+const AI_NOTE =
+  "Os cálculos e o cardápio são gerados por inteligência artificial a partir da sua bioimpedância e do seu plano de treino. " +
+  "São estimativas e não substituem um nutricionista: em caso de dúvida, condição de saúde ou necessidade específica, procure um profissional.";
+
 // reduz a foto (lado maior ≤ 1600px, JPEG) antes de enviar
 function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -196,6 +207,11 @@ export default function NutricaoPage() {
     return `${diff < 0 ? "Perder" : "Ganhar"} ${Math.abs(diff).toFixed(1).replace(".", ",")} kg em ritmo saudável: cerca de ${weeks} semanas.`;
   })();
   const planning = busy === "plan";
+  const renewalLine = !plan
+    ? `Gerando seu primeiro plano hoje, a próxima atualização libera em ${in30Days()}.`
+    : open
+      ? `Sua atualização deste mês está liberada. Usando hoje, a próxima libera em ${in30Days()}.`
+      : `Sua próxima atualização libera em ${nextDate}.`;
 
   return (
     <main className="stage">
@@ -222,6 +238,10 @@ export default function NutricaoPage() {
               📅 Sua bioimpedância e seu plano alimentar atualizam <b>1 vez por mês</b>, seja por foto do laudo ou com os dados digitados.
               Ao registrar a nova medição, o plano é refeito na hora, e você revisa seu objetivo e peso-alvo junto.
             </p>
+            <p className="nut-note" style={{ borderLeft: "3px solid var(--accent)" }}>
+              🗓️ <b>{renewalLine}</b>
+            </p>
+            <p className="nut-meal-m">ℹ️ {AI_NOTE}</p>
 
             {open ? (
               <>
@@ -317,7 +337,7 @@ export default function NutricaoPage() {
                   </div>
                   {st.settings.target_weight_kg && <p className="nut-meal-m">Peso-alvo: {st.settings.target_weight_kg} kg</p>}
                   <p className="nut-meal-m">{meals} refeições por dia{restrictions ? ` · Restrições: ${restrictions}` : ""}{dislikes ? ` · Não come: ${dislikes}` : ""}</p>
-                  <p className="nut-note" style={{ marginTop: 12 }}>🔒 Próxima atualização (medição, objetivo e plano) libera em {nextDate}.</p>
+                  <p className="nut-note" style={{ marginTop: 12 }}>🔒 Medição, objetivo e plano ficam bloqueados até a próxima atualização (a data está no topo).</p>
                 </section>
               </>
             )}
@@ -352,6 +372,7 @@ export default function NutricaoPage() {
                   </div>
                 ))}
               </div>
+              <p className="nut-meal-m" style={{ marginTop: 12 }}>ℹ️ {AI_NOTE}</p>
             </section>
 
             {plan.menu.refeicoes.map((m, i) => (

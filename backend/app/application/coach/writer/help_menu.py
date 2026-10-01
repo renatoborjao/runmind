@@ -72,6 +72,16 @@ class HelpMenu:
                 "E te aviso quando um par estiver gasto, pra pensar no rodízio "
                 "antes de virar dor.",
                 "",
+                "🥗 Nutrição (no app)",
+                "• Registre sua bioimpedância (foto do laudo ou digitando) e "
+                "seu objetivo, e o app monta seu plano alimentar: metas de "
+                "kcal por tipo de dia (descanso, treino, longão), cardápio com "
+                "porções e opções, e o que comer nos treinos longos. Dá pra "
+                "baixar em PDF.",
+                "• Atualiza 1 vez por mês, com a nova medição. É uma "
+                "estimativa feita por inteligência artificial — não substitui "
+                "um nutricionista.",
+                "",
                 "🎙️ Pode me mandar áudio",
                 "Grave uma nota de voz que eu te entendo (te respondo por "
                 "escrito) — aqui ou no app. E eu te falo em áudio nos "
@@ -127,6 +137,10 @@ class HelpMenu:
         '💡 Você sabia? No app, depois que você fecha o treino do dia, é só '
         'tocar em "ver como foi" pra abrir a corrida — com mapa, parciais e a '
         "minha análise daquele treino ali dentro.",
+        "💡 Você sabia? No app tem a aba Nutrição: com sua bioimpedância e seu "
+        "objetivo ele monta um plano alimentar — kcal por tipo de dia, "
+        "cardápio e o que comer nos treinos longos. Atualiza 1 vez por mês "
+        "(é uma estimativa feita por IA, não substitui um nutricionista).",
     ]
 
     @staticmethod
