@@ -20,6 +20,11 @@ function clean(t: string): string {
   return t.replace(/[→➜➔]/g, "->").replace(/[^\u0000-ÿ–—•]/g, "");
 }
 
+type Rgb = [number, number, number];
+type Part =
+  | { p: string; size?: number; color?: Rgb }
+  | { t: { head: string[]; body: string[][]; widths?: number[] } };
+
 export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?: string | null): Promise<void> {
   const [{ jsPDF }, autoTableMod] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
   const autoTable = autoTableMod.default;
@@ -27,46 +32,77 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
+  const BOTTOM = H - 18;
+  const TOP = 16;
   const tg = plan.targets;
   const menu = plan.menu;
-  let y = 16;
+  let y = TOP;
+
+  const lastY = (d: unknown) => (d as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+  const tableOpts = (t: { head: string[]; body: string[][]; widths?: number[] }) => ({
+    head: [t.head],
+    body: t.body,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: "grid" as const,
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 2, textColor: INK, lineColor: [215, 219, 226] as Rgb },
+    headStyles: { fillColor: ACCENT, textColor: 255, fontStyle: "bold" as const },
+    alternateRowStyles: { fillColor: [247, 249, 248] as Rgb },
+    columnStyles: t.widths ? Object.fromEntries(t.widths.map((w, i) => [i, { cellWidth: w }])) : undefined,
+  });
+
+  // ---- medição: altura exata de cada peça ANTES de desenhar ----
+  const HEADING_H = 12;
+
+  const paraLines = (text: string, size: number) => {
+    doc.setFont("helvetica", "normal").setFontSize(size);
+    return doc.splitTextToSize(clean(text), W - MARGIN * 2) as string[];
+  };
+  const paraHeight = (text: string, size = 9.5) => paraLines(text, size).length * (size * 0.42) + 3;
+
+  const tableHeight = (t: { head: string[]; body: string[][]; widths?: number[] }) => {
+    const scratch = new jsPDF({ unit: "mm", format: "a4" });
+    autoTable(scratch, { ...tableOpts(t), startY: 0, margin: { left: MARGIN, right: MARGIN, top: 0, bottom: 0 } });
+    return lastY(scratch) + 4;
+  };
+
+  const partHeight = (part: Part) => ("p" in part ? paraHeight(part.p, part.size) : tableHeight(part.t));
 
   const ensure = (need: number) => {
-    if (y + need > H - 18) {
+    if (y + need > BOTTOM) {
       doc.addPage();
-      y = 16;
+      y = TOP;
     }
   };
 
-  const heading = (text: string, size = 12) => {
-    ensure(14);
+  const drawPart = (part: Part) => {
+    if ("p" in part) {
+      const size = part.size ?? 9.5;
+      const lines = paraLines(part.p, size);
+      const h = lines.length * (size * 0.42) + 3;
+      ensure(h);
+      doc.setFont("helvetica", "normal").setFontSize(size).setTextColor(...(part.color ?? INK));
+      doc.text(lines, MARGIN, y);
+      y += h;
+    } else {
+      autoTable(doc, { ...tableOpts(part.t), startY: y, margin: { left: MARGIN, right: MARGIN, top: TOP, bottom: 18 } });
+      y = lastY(doc) + 4;
+    }
+  };
+
+  // Uma SEÇÃO: título + conteúdo. O título nunca fica sozinho no fim da folha:
+  // reserva a altura do título + das primeiras `keep` peças (todas, por padrão);
+  // se não cabe, a seção inteira começa na página seguinte.
+  const section = (title: string, parts: Part[], opts: { size?: number; keep?: number } = {}) => {
+    const size = opts.size ?? 12;
+    const keep = opts.keep ?? parts.length;
+    const need = HEADING_H + parts.slice(0, keep).reduce((sum, part) => sum + partHeight(part), 0);
+    ensure(Math.min(need, BOTTOM - TOP));
     doc.setFont("helvetica", "bold").setFontSize(size).setTextColor(...ACCENT);
-    doc.text(clean(text), MARGIN, y);
-    y += size * 0.5 + 2;
-  };
-
-  const paragraph = (text: string, size = 9.5, color: [number, number, number] = INK) => {
-    if (!text) return;
-    doc.setFont("helvetica", "normal").setFontSize(size).setTextColor(...color);
-    const lines = doc.splitTextToSize(clean(text), W - MARGIN * 2) as string[];
-    ensure(lines.length * (size * 0.42) + 3);
-    doc.text(lines, MARGIN, y);
-    y += lines.length * (size * 0.42) + 3;
-  };
-
-  const table = (head: string[], body: string[][], widths?: number[]) => {
-    autoTable(doc, {
-      startY: y,
-      head: [head],
-      body,
-      margin: { left: MARGIN, right: MARGIN },
-      theme: "grid",
-      styles: { font: "helvetica", fontSize: 9, cellPadding: 2, textColor: INK, lineColor: [215, 219, 226] },
-      headStyles: { fillColor: ACCENT, textColor: 255, fontStyle: "bold" },
-      alternateRowStyles: { fillColor: [247, 249, 248] },
-      columnStyles: widths ? Object.fromEntries(widths.map((w, i) => [i, { cellWidth: w }])) : undefined,
-    });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+    doc.text(clean(title), MARGIN, y);
+    y += size * 0.5 + 3;
+    parts.forEach(drawPart);
+    y += 2;
   };
 
   // ---- cabeçalho ----
@@ -77,55 +113,67 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
   doc.text(clean(`${athleteName ? athleteName + " · " : ""}gerado em ${fmtDate(plan.generated_on)} · Ritmind`), MARGIN, y);
   y += 8;
 
-  heading(`Distribuição de porções diárias para ${tg.base.kcal} kcal`, 13);
-  paragraph(
-    `Objetivo: ${tg.goal_pt}${tg.target_weight_kg ? ` -> ${tg.target_weight_kg} kg` : ""}. ` +
-      `Proteína ${tg.base.protein_g} g · Carboidrato ${tg.base.carb_g} g · Gordura ${tg.base.fat_g} g (dia-base: ${tg.base.label.toLowerCase()}).`,
-  );
-  table(
-    ["Tipo de dia", "Dias", "Kcal", "Prot (g)", "Carb (g)"],
-    tg.tiers.map((t) => [t.label, t.days_pt.join(", "), String(t.kcal), String(t.protein_g), String(t.carb_g)].map(clean)),
-    [40, 64, 20, 24, 24],
+  section(
+    `Distribuição de porções diárias para ${tg.base.kcal} kcal`,
+    [
+      {
+        p:
+          `Objetivo: ${tg.goal_pt}${tg.target_weight_kg ? ` -> ${tg.target_weight_kg} kg` : ""}. ` +
+          `Proteína ${tg.base.protein_g} g · Carboidrato ${tg.base.carb_g} g · Gordura ${tg.base.fat_g} g (dia-base: ${tg.base.label.toLowerCase()}).`,
+      },
+      {
+        t: {
+          head: ["Tipo de dia", "Dias", "Kcal", "Prot (g)", "Carb (g)"],
+          body: tg.tiers.map((t) => [t.label, t.days_pt.join(", "), String(t.kcal), String(t.protein_g), String(t.carb_g)].map(clean)),
+          widths: [40, 64, 20, 24, 24],
+        },
+      },
+    ],
+    { size: 13 },
   );
 
-  // ---- refeições ----
+  // ---- refeições: cada uma inteira na mesma folha ----
   for (const m of menu.refeicoes) {
-    ensure(30);
-    heading(`${m.nome}${m.horario ? "  ·  " + m.horario : ""}`);
+    const parts: Part[] = [];
     m.opcoes.forEach((o, j) => {
-      if (m.opcoes.length > 1 || o.titulo) paragraph(o.titulo || `Opção ${j + 1}`, 9, MUTED);
-      table(
-        ["Alimentos", "Porções", "Grupo alimentar", "Kcal"],
-        o.linhas.map((r) => [clean(r.alimentos), clean(r.porcoes), clean(r.grupo), r.kcal ? String(r.kcal) : "-"]),
-        [84, 18, 56, 18],
-      );
-      if (o.substituicao) paragraph(`Substituição: ${o.substituicao}`, 9, MUTED);
+      if (m.opcoes.length > 1 || o.titulo) parts.push({ p: o.titulo || `Opção ${j + 1}`, size: 9, color: MUTED });
+      parts.push({
+        t: {
+          head: ["Alimentos", "Porções", "Grupo alimentar", "Kcal"],
+          body: o.linhas.map((r) => [clean(r.alimentos), clean(r.porcoes), clean(r.grupo), r.kcal ? String(r.kcal) : "-"]),
+          widths: [84, 18, 56, 18],
+        },
+      });
+      if (o.substituicao) parts.push({ p: `Substituição: ${o.substituicao}`, size: 9, color: MUTED });
     });
-    paragraph(m.orientacao);
-    y += 1;
+    if (m.orientacao) parts.push({ p: m.orientacao });
+    section(`${m.nome}${m.horario ? "  ·  " + m.horario : ""}`, parts);
   }
 
-  // ---- treinos longos ----
-  heading("Treinos longos");
-  paragraph(menu.durante_treino);
-  table(
-    ["Duração do treino", "Carboidrato durante", "Observação"],
-    tg.fueling.map((f) => [f.faixa, f.carb_h, f.nota].map(clean)),
-    [40, 40, 96],
-  );
-  paragraph(`Hidratação: ${tg.hydration}`, 9, MUTED);
+  // ---- treinos longos: título, conduta e tabela sempre juntos ----
+  const longParts: Part[] = [];
+  if (menu.durante_treino) longParts.push({ p: menu.durante_treino });
+  longParts.push({
+    t: {
+      head: ["Duração do treino", "Carboidrato durante", "Observação"],
+      body: tg.fueling.map((f) => [f.faixa, f.carb_h, f.nota].map(clean)),
+      widths: [40, 40, 96],
+    },
+  });
+  longParts.push({ p: `Hidratação: ${tg.hydration}`, size: 9, color: MUTED });
+  section("Treinos longos", longParts);
 
   // ---- ajustes ----
   if (menu.ajustes.descanso || menu.ajustes.longao) {
-    heading("Ajustes por tipo de dia");
-    if (menu.ajustes.descanso) paragraph(`Dia de descanso: ${menu.ajustes.descanso}`);
-    if (menu.ajustes.longao) paragraph(`Véspera e dia de longão: ${menu.ajustes.longao}`);
+    const parts: Part[] = [];
+    if (menu.ajustes.descanso) parts.push({ p: `Dia de descanso: ${menu.ajustes.descanso}` });
+    if (menu.ajustes.longao) parts.push({ p: `Véspera e dia de longão: ${menu.ajustes.longao}` });
+    section("Ajustes por tipo de dia", parts);
   }
 
-  // ---- orientações ----
+  // ---- orientações: o título acompanha pelo menos as 2 primeiras ----
   if (menu.orientacoes.length) {
-    heading("Orientações gerais");
-    menu.orientacoes.forEach((t) => paragraph(`• ${t}`));
+    section("Orientações gerais", menu.orientacoes.map((t) => ({ p: `• ${t}` })), { keep: 2 });
   }
 
   // ---- rodapé em todas as páginas ----
