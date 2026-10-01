@@ -2,7 +2,7 @@
 //  - /api/* NUNCA é cacheado (dado do atleta vem sempre da rede).
 //  - assets do Next (/_next/static, hasheados) = cache-first (imutáveis).
 //  - navegação = network-first, cai pra casca cacheada quando offline.
-const CACHE = "ritmind-v80";
+const CACHE = "ritmind-v81";
 const SHELL = [
   "/inicio/",
   "/entrar/",
@@ -53,6 +53,11 @@ self.addEventListener("fetch", (e) => {
     );
     return;
   }
+
+  // payload de navegação do Next (RSC, `?_rsc=` / header RSC): NUNCA do cache.
+  // Era cacheado como "resto same-origin" e uma versão velha, servida no lugar
+  // da tela, aparecia como a tela cheia de código (nutrição, 2026-10-01).
+  if (url.searchParams.has("_rsc") || req.headers.get("RSC") || url.pathname.endsWith(".txt")) return;
 
   // navegação: rede primeiro, casca cacheada como reserva offline
   if (req.mode === "navigate") {

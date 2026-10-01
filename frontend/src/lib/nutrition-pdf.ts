@@ -141,5 +141,34 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
     doc.text(`${i}/${pages}`, W - MARGIN, H - 8, { align: "right" });
   }
 
-  doc.save(`plano-alimentar-${plan.generated_on}.pdf`);
+  await deliver(doc.output("blob"), `plano-alimentar-${plan.generated_on}.pdf`);
+}
+
+// Entrega o arquivo SEM tirar o atleta da tela: no celular abre a folha de
+// compartilhar (salvar em Arquivos, WhatsApp, e-mail); no desktop, baixa. O
+// doc.save() do jsPDF em PWA instalado pode navegar a janela pro blob.
+async function deliver(blob: Blob, name: string): Promise<void> {
+  const file = new File([blob], name, { type: "application/pdf" });
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+  const touch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+
+  if (touch && nav.canShare?.({ files: [file] }) && nav.share) {
+    try {
+      await nav.share({ files: [file], title: "Plano alimentar" });
+      return;
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return; // o atleta fechou a folha
+      // qualquer outra falha cai no download normal
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

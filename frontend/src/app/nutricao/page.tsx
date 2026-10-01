@@ -366,7 +366,7 @@ export default function NutricaoPage() {
                     {o.linhas.map((r, k) => (
                       <div className="nut-row" key={k}>
                         <div className="nut-row-f">{r.alimentos}</div>
-                        <div className="nut-row-m">{r.porcoes} porç. · {r.grupo}{r.kcal ? ` · ${r.kcal} kcal` : ""}</div>
+                        <div className="nut-row-m">{/\d/.test(r.porcoes) ? `${r.porcoes} porç.` : r.porcoes} · {r.grupo}{r.kcal ? ` · ${r.kcal} kcal` : ""}</div>
                       </div>
                     ))}
                     {o.substituicao && <p className="nut-subst"><b>Substituição:</b> {o.substituicao}</p>}
