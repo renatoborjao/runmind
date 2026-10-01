@@ -66,8 +66,7 @@ export async function downloadNutritionPlanPdf(plan: NutritionPlan, athleteName?
       alternateRowStyles: { fillColor: [247, 249, 248] },
       columnStyles: widths ? Object.fromEntries(widths.map((w, i) => [i, { cellWidth: w }])) : undefined,
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    y = (doc as any).lastAutoTable.finalY + 4;
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
   };
 
   // ---- cabeçalho ----
