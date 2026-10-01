@@ -131,18 +131,55 @@ export function drawBrand(ctx: CanvasRenderingContext2D, x: number, baseY: numbe
   return drawBrandIcone13(ctx, x, baseY, size, center);
 }
 
-function drawBrandClassico(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean): number {
+// cores da marca: nos cards (fundo escuro) "Rit" teal + "mind" branco; no papel
+// branco (PDF) o "mind" vira grafite e o teal escurece pra ter contraste
+export type BrandColors = { rit: string; mind: string; pulse: string };
+const BRAND_ON_DARK: BrandColors = { rit: "#34E3C8", mind: "#FFFFFF", pulse: "#34E3C8" };
+const BRAND_ON_PAPER: BrandColors = { rit: "#12B89F", mind: "#1E2128", pulse: "#12B89F" };
+
+function drawBrandClassico(ctx: CanvasRenderingContext2D, x: number, baseY: number, size: number, center: boolean, c: BrandColors = BRAND_ON_DARK): number {
   const s = Math.round(size * 1.15);
   ctx.font = `700 ${s}px ${BRAND_FONT}`;
   const wRit = ctx.measureText("Rit").width, wMind = ctx.measureText("mind").width;
   const w = wRit + wMind;
   const left = center ? x - w / 2 : x;
   ctx.textAlign = "left";
-  ctx.fillStyle = "#34E3C8"; ctx.fillText("Rit", left, baseY);
-  ctx.fillStyle = "#FFFFFF"; ctx.fillText("mind", left + wRit, baseY);
+  ctx.fillStyle = c.rit; ctx.fillText("Rit", left, baseY);
+  ctx.fillStyle = c.mind; ctx.fillText("mind", left + wRit, baseY);
   const lw = Math.max(3, s * 0.06);
-  drawPulse(ctx, left, baseY + s * 0.3, w / 20, "#34E3C8", lw, s * 0.022);
+  drawPulse(ctx, left, baseY + s * 0.3, w / 20, c.pulse, lw, s * 0.022);
   return baseY + s * 0.3 + 8 * s * 0.022 + lw / 2; // pico de baixo do pulso
+}
+
+// A MESMA marca dos cards ("Rit"+"mind" em Space Grotesk + pulso sublinhando),
+// desenhada sobre fundo branco pra documentos (PDF). null fora do navegador ou
+// se algo falhar — quem chama simplesmente segue sem logo.
+export async function renderBrandForPaper(): Promise<{ url: string; ratio: number } | null> {
+  if (typeof document === "undefined") return null;
+  try {
+    refreshCanvasFont();
+    const brandFam = BRAND_FONT.split(",")[0].trim();
+    if (document.fonts && brandFam) await document.fonts.load(`700 120px ${brandFam}`);
+    const size = 100;
+    const s = Math.round(size * 1.15);
+    const probe = document.createElement("canvas").getContext("2d");
+    if (!probe) return null;
+    probe.font = `700 ${s}px ${BRAND_FONT}`;
+    const w = probe.measureText("Rit").width + probe.measureText("mind").width;
+    const pad = Math.round(s * 0.12);
+    const baseY = pad + Math.round(s * 0.85);
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(w + pad * 2);
+    c.height = Math.ceil(baseY + s * 0.55 + pad);
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, c.width, c.height);
+    drawBrandClassico(ctx, pad, baseY, size, false, BRAND_ON_PAPER);
+    return { url: c.toDataURL("image/jpeg", 0.95), ratio: c.width / c.height };
+  } catch {
+    return null;
+  }
 }
 
 // opção 4: "ritmind" branco (Space Grotesk) + ponto teal + pulso teal fininho
