@@ -1,0 +1,28 @@
+runmind.duckdns.org {
+	# API + webhooks (Telegram/Strava/health) -> backend FastAPI
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# App do atleta (Ritmind) -> arquivos estÃ¡ticos do export do Next
+	handle {
+		root * /var/www/ritmind
+
+		@manifest path *.webmanifest
+		header @manifest Content-Type application/manifest+json
+
+		# Navegacao (pagina) que cai num payload interno do Next (index.txt): acontece
+		# quando sai deploy novo e o app do atleta ainda roda o JS da versao velha; o
+		# Next faz navegacao "dura" pro index.txt e o celular mostrava o codigo cru.
+		# Quem pede como pagina (Accept: text/html) recebe a tela HTML da mesma rota;
+		# o fetch interno do Next (Accept */*) continua recebendo o .txt.
+		@rscdoc {
+			path_regexp rsc ^(.*/)index\.txt$
+			header_regexp accept Accept text/html
+		}
+		redir @rscdoc {re.rsc.1} 302
+
+		try_files {path} {path}/index.html /index.html
+		file_server
+	}
+}
