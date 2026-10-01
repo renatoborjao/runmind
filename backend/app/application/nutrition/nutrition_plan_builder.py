@@ -47,7 +47,7 @@ MAX_OUTPUT_TOKENS = 8000
 # desvio aceito do total do dia vs o dia-base antes de pedir nova passada
 MAX_DEVIATION = 0.10
 
-# um plano por mês, e só com bioimpedância nova (senão gera à toa, e gasta IA)
+# uma atualização (medição + plano) por mês — a IA custa e o corpo não muda em dias
 PLAN_COOLDOWN_DAYS = 30
 
 PROMPT = """Você é o nutricionista esportivo do Ritmind, o app de corrida. \
@@ -248,19 +248,17 @@ def latest_reading(data: dict) -> dict | None:
 
 
 def eligibility(data: dict, today: date) -> dict:
-    """Pode gerar plano agora? {allowed, reason, next_date}. Libera se ainda
-    não há plano; depois só com leitura NOVA (mais recente que a do plano) e
-    30 dias desde o último plano."""
+    """Pode registrar medição / gerar plano agora? {allowed, reason,
+    next_date}. UMA atualização a cada 30 dias, sempre — vale igual pra foto e
+    pra dados manuais (registrar a medição é o que atualiza o plano). Sem plano
+    ainda: liberado. Se a geração falhou depois de salvar a medição, o plano
+    segue sem existir e dá pra tentar de novo."""
 
     plan = data.get("plan")
 
     if not plan:
 
         return {"allowed": True, "reason": None, "next_date": None}
-
-    reading = latest_reading(data) or {}
-
-    last_reading = plan.get("reading_date")
 
     try:
 
@@ -270,28 +268,15 @@ def eligibility(data: dict, today: date) -> dict:
 
     except (KeyError, ValueError, TypeError):
 
-        next_date = today
-
-    has_new = bool(
-        reading.get("date") and reading.get("date") != last_reading
-        and (not last_reading or reading["date"] > last_reading)
-    )
-
-    if not has_new:
-
-        return {
-            "allowed": False,
-            "reason": "Seu plano é feito em cima de uma bioimpedância. Registre "
-            "uma nova medição pra gerar o próximo.",
-            "next_date": next_date.isoformat() if today < next_date else None,
-        }
+        return {"allowed": True, "reason": None, "next_date": None}
 
     if today < next_date:
 
         return {
             "allowed": False,
-            "reason": "Um novo plano sai a cada 30 dias, com bioimpedância "
-            f"nova. Você libera em {next_date.strftime('%d/%m/%Y')}.",
+            "reason": "A bioimpedância e o plano alimentar atualizam 1 vez por "
+            f"mês. Sua próxima atualização libera em "
+            f"{next_date.strftime('%d/%m/%Y')}.",
             "next_date": next_date.isoformat(),
         }
 

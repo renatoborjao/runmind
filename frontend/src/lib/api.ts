@@ -1299,6 +1299,7 @@ export interface NutritionPlan {
 }
 
 export interface NutritionState {
+  athlete_name: string | null;
   goals: Record<string, string>;
   settings: NutritionSettings;
   reading: BodyReading | null;

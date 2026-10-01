@@ -53,6 +53,16 @@ class SettingsIn(BaseModel):
     dislikes: str | None = None
 
 
+def _require_open_gate(profile: str) -> None:
+    """429 se o atleta já atualizou (medição + plano) neste mês."""
+
+    gate = eligibility(NutritionRepository().load(profile), today_local())
+
+    if not gate["allowed"]:
+
+        raise HTTPException(status_code=429, detail=gate["reason"])
+
+
 @router.get("")
 async def nutrition_state(profile: str = Depends(current_profile)):
     """Tudo da aba Nutrição: leitura atual + histórico, preferências, metas dos
@@ -63,6 +73,7 @@ async def nutrition_state(profile: str = Depends(current_profile)):
     runner = RunnerProfileRepository().load(profile)
 
     return {
+        "athlete_name": getattr(runner, "name", None),
         "goals": nt.GOALS,
         "settings": data["settings"],
         "reading": latest_reading(data),
@@ -76,7 +87,10 @@ async def nutrition_state(profile: str = Depends(current_profile)):
 
 @router.post("/reading/photo")
 async def read_photo(body: PhotoIn, profile: str = Depends(current_profile)):
-    """Lê a foto do laudo e DEVOLVE os campos pro atleta conferir — não salva."""
+    """Lê a foto do laudo e DEVOLVE os campos pro atleta conferir — não salva.
+    Também respeita o limite mensal (a leitura por visão custa IA)."""
+
+    _require_open_gate(profile)
 
     head, _, b64 = body.image.partition(",")
 
@@ -113,6 +127,8 @@ async def read_photo(body: PhotoIn, profile: str = Depends(current_profile)):
 
 @router.post("/reading")
 async def save_reading(body: ReadingIn, profile: str = Depends(current_profile)):
+
+    _require_open_gate(profile)
 
     clean = clean_reading(body.model_dump())
 
@@ -209,11 +225,7 @@ async def generate_plan(profile: str = Depends(current_profile)):
             detail="Registre sua bioimpedância (ou ao menos o peso) primeiro.",
         )
 
-    gate = eligibility(NutritionRepository().load(profile), today_local())
-
-    if not gate["allowed"]:
-
-        raise HTTPException(status_code=429, detail=gate["reason"])
+    _require_open_gate(profile)
 
     plan = await NutritionPlanBuilder.generate(profile)
 

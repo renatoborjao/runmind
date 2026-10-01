@@ -12,7 +12,7 @@ import {
   type NutritionState,
 } from "@/lib/api";
 
-const FIELDS: { key: keyof BodyReading; label: string; step?: string }[] = [
+const FIELDS: { key: keyof BodyReading; label: string }[] = [
   { key: "weight_kg", label: "Peso (kg)" },
   { key: "body_fat_pct", label: "Gordura (%)" },
   { key: "lean_mass_kg", label: "Massa magra (kg)" },
@@ -37,6 +37,10 @@ function toForm(r: Partial<BodyReading> | null): Form {
 function num(v: string): number | null {
   const n = parseFloat(v.replace(",", "."));
   return Number.isFinite(n) ? n : null;
+}
+
+function brDate(iso: string): string {
+  return iso.split("-").reverse().join("/");
 }
 
 // reduz a foto (lado maior ≤ 1600px, JPEG) antes de enviar
@@ -65,14 +69,13 @@ export default function NutricaoPage() {
   const [st, setSt] = useState<NutritionState | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Form>(toForm(null));
   const [goals, setGoals] = useState<string[]>(["performance"]);
   const [targetWeight, setTargetWeight] = useState("");
-  const [meals, setMeals] = useState(5);
+  const [meals, setMeals] = useState(4);
   const [restrictions, setRestrictions] = useState("");
   const [dislikes, setDislikes] = useState("");
-  const [busy, setBusy] = useState<"" | "photo" | "save" | "plan">("");
+  const [busy, setBusy] = useState<"" | "photo" | "plan" | "pdf">("");
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<"plano" | "dados" | null>(null);
 
@@ -83,11 +86,11 @@ export default function NutricaoPage() {
       setSt(s);
       setGoals(s.settings.goals?.length ? s.settings.goals : ["performance"]);
       setTargetWeight(s.settings.target_weight_kg ? String(s.settings.target_weight_kg) : "");
-      setMeals(s.settings.meals_per_day ?? 5);
+      setMeals(s.settings.meals_per_day ?? 4);
       setRestrictions(s.settings.restrictions ?? "");
       setDislikes(s.settings.dislikes ?? "");
-      setForm(toForm(s.reading));
-      setEditing(!s.reading);
+      // nova medição começa em branco (a anterior aparece só como dica)
+      setForm(toForm(null));
     } catch {
       setFailed(true);
     } finally {
@@ -113,15 +116,6 @@ export default function NutricaoPage() {
     }
   }
 
-  async function saveReading(): Promise<boolean> {
-    const body: Record<string, number | null | string> = {};
-    for (const { key } of FIELDS) body[key] = num(form[key]);
-    if (body.weight_kg === null) { setErr("Informe ao menos o peso."); return false; }
-    body.source = "app";
-    await saveBodyReading(body as Partial<BodyReading>);
-    return true;
-  }
-
   function toggleGoal(k: string) {
     setGoals((cur) => {
       if (cur.includes(k)) return cur.length > 1 ? cur.filter((g) => g !== k) : cur;
@@ -132,33 +126,36 @@ export default function NutricaoPage() {
     });
   }
 
-  async function onSaveOnly() {
+  // registrar a medição É o que atualiza o plano: salva a bio, os objetivos e gera
+  async function onUpdate() {
     setErr("");
-    setBusy("save");
+    const body: Record<string, number | null | string> = {};
+    for (const { key } of FIELDS) body[key] = num(form[key]);
+    if (body.weight_kg === null) { setErr("Informe ao menos o peso (ou leia de uma foto do laudo)."); return; }
+    body.source = "app";
     try {
-      if (await saveReading()) { setEditing(false); await load(); }
+      setBusy("plan");
+      await saveBodyReading(body as Partial<BodyReading>);
+      await saveNutritionSettings({ goals, target_weight_kg: num(targetWeight) ?? 0, meals_per_day: meals, restrictions, dislikes });
+      await generateNutritionPlan();
+      setTab("plano");
+      await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Não consegui salvar.");
+      setErr(e instanceof Error ? e.message : "Algo deu errado.");
     } finally {
       setBusy("");
     }
   }
 
-  async function onGenerate() {
+  async function onPdf() {
+    if (!st?.plan) return;
     setErr("");
+    setBusy("pdf");
     try {
-      if (editing) {
-        setBusy("save");
-        if (!(await saveReading())) { setBusy(""); return; }
-      }
-      await saveNutritionSettings({ goals, target_weight_kg: num(targetWeight) ?? 0, meals_per_day: meals, restrictions, dislikes });
-      setBusy("plan");
-      await generateNutritionPlan();
-      setEditing(false);
-      setTab("plano");
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Algo deu errado.");
+      const { downloadNutritionPlanPdf } = await import("@/lib/nutrition-pdf");
+      await downloadNutritionPlanPdf(st.plan, st.athlete_name);
+    } catch {
+      setErr("Não consegui gerar o PDF agora. Tente de novo.");
     } finally {
       setBusy("");
     }
@@ -185,10 +182,12 @@ export default function NutricaoPage() {
   }
 
   const plan = st.plan;
-  const planning = busy === "plan";
+  const open = st.plan_gate.allowed;
+  const nextDate = st.plan_gate.next_date ? brDate(st.plan_gate.next_date) : null;
   // com plano: abre nele; sem plano: abre nos dados (onde se gera)
   const view = plan ? (tab ?? "plano") : "dados";
-  const curWeight = num(form.weight_kg ?? "") ?? st.reading?.weight_kg ?? st.profile_weight;
+  const last = st.reading;
+  const curWeight = num(form.weight_kg ?? "") ?? last?.weight_kg ?? st.profile_weight;
   const tw = num(targetWeight);
   const weeksPreview = (() => {
     if (!tw || !curWeight || Math.abs(tw - curWeight) < 0.5) return "";
@@ -196,8 +195,7 @@ export default function NutricaoPage() {
     const weeks = Math.max(1, Math.round(Math.abs(diff) / (diff < 0 ? 0.5 : 0.25)));
     return `${diff < 0 ? "Perder" : "Ganhar"} ${Math.abs(diff).toFixed(1).replace(".", ",")} kg em ritmo saudável: cerca de ${weeks} semanas.`;
   })();
-  // editando medição nova pode liberar o plano (o servidor decide de verdade)
-  const gateOpen = st.plan_gate.allowed || (editing && !!plan && !st.plan_gate.next_date);
+  const planning = busy === "plan";
 
   return (
     <main className="stage">
@@ -217,108 +215,123 @@ export default function NutricaoPage() {
           </div>
         )}
 
-        {view === "dados" && (<>
-        {/* BIOIMPEDÂNCIA */}
-        <section className="card">
-          <div className="card-head">
-            <span className="eyebrow">Sua bioimpedância</span>
-            {st.reading && !editing && <a className="link" onClick={() => setEditing(true)}>Atualizar</a>}
-          </div>
+        {/* ===================== MEUS DADOS ===================== */}
+        {view === "dados" && (
+          <>
+            <p className="nut-note">
+              📅 Sua bioimpedância e seu plano alimentar atualizam <b>1 vez por mês</b>, seja por foto do laudo ou com os dados digitados.
+              Ao registrar a nova medição, o plano é refeito na hora, e você revisa seu objetivo e peso-alvo junto.
+            </p>
 
-          {editing ? (
-            <>
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
-              <button className="cta-btn" style={{ marginTop: 0, marginBottom: 14 }} disabled={busy !== ""} onClick={() => fileRef.current?.click()}>
-                {busy === "photo" ? "Lendo a foto…" : "📷 Ler de uma foto do laudo"}
-              </button>
-              <div className="nut-grid">
-                {FIELDS.map(({ key, label }) => (
-                  <div className="field" key={key}>
-                    <label>{label}</label>
-                    <input inputMode="decimal" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
-                  </div>
-                ))}
-              </div>
-              <p className="auth-sub" style={{ margin: "10px 0 0", fontSize: 12.5 }}>Confira os números lidos. Só o peso é obrigatório; quanto mais dados, mais certeira a meta.</p>
-            </>
-          ) : (
-            st.reading && (
+            {open ? (
               <>
-                <div className="nut-macros" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-                  <div><b>{st.reading.weight_kg ?? "–"}</b><span>kg</span></div>
-                  <div><b>{st.reading.body_fat_pct ?? "–"}{st.reading.body_fat_pct ? "%" : ""}</b><span>gordura</span></div>
-                  <div><b>{st.reading.lean_mass_kg ?? st.reading.muscle_mass_kg ?? "–"}</b><span>{st.reading.lean_mass_kg ? "massa magra" : "músculo"}</span></div>
-                </div>
-                {st.readings.length > 1 && (
-                  <div>
-                    {[...st.readings].reverse().slice(0, 5).map((r, i) => (
-                      <div className="nut-hist" key={i}>
-                        <span>{r.date ? r.date.split("-").reverse().join("/") : ""}</span>
-                        <span>{r.weight_kg ?? "–"} kg · {r.body_fat_pct ?? "–"}% gord.</span>
+                <section className="card">
+                  <div className="card-head">
+                    <span className="eyebrow">{plan ? "Nova medição" : "Sua bioimpedância"}</span>
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
+                  <button className="cta-btn" style={{ marginTop: 0, marginBottom: 14 }} disabled={busy !== ""} onClick={() => fileRef.current?.click()}>
+                    {busy === "photo" ? "Lendo a foto…" : "📷 Ler de uma foto do laudo"}
+                  </button>
+                  <div className="nut-grid">
+                    {FIELDS.map(({ key, label }) => (
+                      <div className="field" key={key}>
+                        <label>{label}</label>
+                        <input
+                          inputMode="decimal"
+                          value={form[key]}
+                          placeholder={last?.[key] != null ? `antes: ${last[key]}` : ""}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                        />
                       </div>
                     ))}
                   </div>
-                )}
+                  <p className="auth-sub" style={{ margin: "10px 0 0", fontSize: 12.5 }}>Confira os números lidos. Só o peso é obrigatório; quanto mais dados, mais certeira a meta.</p>
+                </section>
+
+                <section className="card">
+                  <div className="card-head"><span className="eyebrow">Objetivo e preferências</span></div>
+                  <div className="field"><label>O que você quer (escolha até 3)</label></div>
+                  <div className="chips" style={{ marginBottom: 10 }}>
+                    {Object.entries(st.goals).map(([k, label]) => (
+                      <button key={k} className={`chip-btn${goals.includes(k) ? " on" : ""}`} onClick={() => toggleGoal(k)}>{label}</button>
+                    ))}
+                  </div>
+                  {goals.includes("lose_fat") && goals.includes("gain_muscle") && (
+                    <p className="nut-note">Perder gordura e ganhar massa juntos é recomposição corporal: déficit leve e proteína alta, com o treino sustentando o músculo. Progresso mais lento, porém mais certeiro.</p>
+                  )}
+                  {(goals.includes("lose_fat") || goals.includes("gain_muscle")) && (
+                    <div className="field" style={{ marginBottom: 14 }}>
+                      <label>Peso que você quer atingir (kg)</label>
+                      <input inputMode="decimal" value={targetWeight} onChange={(e) => setTargetWeight(e.target.value)} placeholder={curWeight ? `Hoje: ${curWeight} kg` : "Ex.: 72"} />
+                      {weeksPreview && <p className="auth-sub" style={{ margin: "8px 0 0", fontSize: 12.5 }}>{weeksPreview}</p>}
+                    </div>
+                  )}
+                  <div className="field">
+                    <label>Refeições por dia</label>
+                    <div className="seg">
+                      {[3, 4, 5, 6].map((n) => <button key={n} className={meals === n ? "on" : ""} onClick={() => setMeals(n)}>{n}</button>)}
+                    </div>
+                  </div>
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label>Restrições / alergias</label>
+                    <textarea className="nut-ta" rows={2} value={restrictions} onChange={(e) => setRestrictions(e.target.value)} placeholder="Ex.: intolerância a lactose, vegetariano" />
+                  </div>
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label>O que você não come</label>
+                    <textarea className="nut-ta" rows={2} value={dislikes} onChange={(e) => setDislikes(e.target.value)} placeholder="Ex.: peixe, fígado, coentro" />
+                  </div>
+                  {err && <p className="nut-err">{err}</p>}
+                  <button className="cta-btn" disabled={busy !== ""} onClick={onUpdate}>
+                    {planning ? "Montando seu plano… (alguns segundos)" : plan ? "Registrar medição e atualizar meu plano" : "Gerar meu plano alimentar"}
+                  </button>
+                </section>
               </>
-            )
-          )}
-        </section>
+            ) : (
+              <>
+                <section className="card">
+                  <div className="card-head"><span className="eyebrow">Última medição{last?.date ? ` · ${brDate(last.date)}` : ""}</span></div>
+                  {last && (
+                    <div className="nut-macros" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                      <div><b>{last.weight_kg ?? "–"}</b><span>kg</span></div>
+                      <div><b>{last.body_fat_pct ?? "–"}{last.body_fat_pct ? "%" : ""}</b><span>gordura</span></div>
+                      <div><b>{last.lean_mass_kg ?? last.muscle_mass_kg ?? "–"}</b><span>{last.lean_mass_kg ? "massa magra" : "músculo"}</span></div>
+                    </div>
+                  )}
+                  {st.readings.length > 1 && (
+                    <div>
+                      {[...st.readings].reverse().slice(0, 5).map((r, i) => (
+                        <div className="nut-hist" key={i}>
+                          <span>{r.date ? brDate(r.date) : ""}</span>
+                          <span>{r.weight_kg ?? "–"} kg · {r.body_fat_pct ?? "–"}% gord.</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
 
-        {/* OBJETIVO E PREFERÊNCIAS */}
-        <section className="card">
-          <div className="card-head"><span className="eyebrow">Objetivo e preferências</span></div>
-          <div className="field"><label>O que você quer (escolha até 3)</label></div>
-          <div className="chips" style={{ marginBottom: 10 }}>
-            {Object.entries(st.goals).map(([k, label]) => (
-              <button key={k} className={`chip-btn${goals.includes(k) ? " on" : ""}`} onClick={() => toggleGoal(k)}>{label}</button>
-            ))}
-          </div>
-          {goals.includes("lose_fat") && goals.includes("gain_muscle") && (
-            <p className="nut-note">Perder gordura e ganhar massa juntos é recomposição corporal: déficit leve e proteína alta, com o treino sustentando o músculo. Progresso mais lento, porém mais certeiro.</p>
-          )}
-          {(goals.includes("lose_fat") || goals.includes("gain_muscle")) && (
-            <div className="field" style={{ marginBottom: 14 }}>
-              <label>Peso que você quer atingir (kg)</label>
-              <input inputMode="decimal" value={targetWeight} onChange={(e) => setTargetWeight(e.target.value)} placeholder={curWeight ? `Hoje: ${curWeight} kg` : "Ex.: 72"} />
-              {weeksPreview && <p className="auth-sub" style={{ margin: "8px 0 0", fontSize: 12.5 }}>{weeksPreview}</p>}
-            </div>
-          )}
-          <div className="field">
-            <label>Refeições por dia</label>
-            <div className="seg">
-              {[3, 4, 5, 6].map((n) => <button key={n} className={meals === n ? "on" : ""} onClick={() => setMeals(n)}>{n}</button>)}
-            </div>
-          </div>
-          <div className="field" style={{ marginTop: 12 }}>
-            <label>Restrições / alergias</label>
-            <textarea className="nut-ta" rows={2} value={restrictions} onChange={(e) => setRestrictions(e.target.value)} placeholder="Ex.: intolerância a lactose, vegetariano" />
-          </div>
-          <div className="field" style={{ marginTop: 12 }}>
-            <label>O que você não come</label>
-            <textarea className="nut-ta" rows={2} value={dislikes} onChange={(e) => setDislikes(e.target.value)} placeholder="Ex.: peixe, fígado, coentro" />
-          </div>
-          {err && <p className="nut-err">{err}</p>}
-          {gateOpen ? (
-            <button className="cta-btn" disabled={busy !== ""} onClick={onGenerate}>
-              {planning ? "Montando seu cardápio… (até 1 min)" : busy === "save" ? "Salvando…" : plan ? "Gerar plano com a nova medição" : "Gerar meu plano alimentar"}
-            </button>
-          ) : (
-            <>
-              <p className="nut-note" style={{ marginTop: 14 }}>🔒 {st.plan_gate.reason}</p>
-              {editing && (
-                <button className="cta-btn" style={{ marginTop: 0 }} disabled={busy !== ""} onClick={onSaveOnly}>
-                  {busy === "save" ? "Salvando…" : "Salvar medição"}
-                </button>
-              )}
-            </>
-          )}
-        </section>
+                <section className="card">
+                  <div className="card-head"><span className="eyebrow">Seu objetivo</span></div>
+                  <div className="chips" style={{ marginBottom: 8 }}>
+                    {goals.map((g) => <span key={g} className="chip-btn on" style={{ cursor: "default" }}>{st.goals[g] ?? g}</span>)}
+                  </div>
+                  {st.settings.target_weight_kg && <p className="nut-meal-m">Peso-alvo: {st.settings.target_weight_kg} kg</p>}
+                  <p className="nut-meal-m">{meals} refeições por dia{restrictions ? ` · Restrições: ${restrictions}` : ""}{dislikes ? ` · Não come: ${dislikes}` : ""}</p>
+                  <p className="nut-note" style={{ marginTop: 12 }}>🔒 Próxima atualização (medição, objetivo e plano) libera em {nextDate}.</p>
+                </section>
+              </>
+            )}
+          </>
+        )}
 
-        </>)}
-
-        {/* PLANO — molde de plano de nutricionista */}
+        {/* ===================== MEU PLANO ===================== */}
         {plan && view === "plano" && (
           <>
+            <button className="cta-btn" style={{ marginTop: 0 }} disabled={busy !== ""} onClick={onPdf}>
+              {busy === "pdf" ? "Gerando PDF…" : "⬇️ Baixar meu plano em PDF"}
+            </button>
+            {err && <p className="nut-err">{err}</p>}
+
             <section className="card">
               <div className="card-head">
                 <span className="eyebrow">Seu plano · {plan.targets.goal_pt}{plan.targets.target_weight_kg ? ` → ${plan.targets.target_weight_kg} kg` : ""}</span>
@@ -389,10 +402,14 @@ export default function NutricaoPage() {
                 <summary><span className="eyebrow">Orientações gerais</span></summary>
                 <ul className="nut-tips">{plan.menu.orientacoes.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="nut-meal-m" style={{ marginTop: 12 }}>
-                  Metabolismo basal {plan.targets.bmr_kcal} kcal ({plan.targets.bmr_method}). Orientação baseada na sua bioimpedância e no seu plano de treino; o plano é refeito a cada 30 dias com uma nova medição.
+                  Metabolismo basal {plan.targets.bmr_kcal} kcal ({plan.targets.bmr_method}). Orientação baseada na sua bioimpedância e no seu plano de treino.
                 </p>
               </details>
             )}
+
+            <p className="nut-meal-m center" style={{ marginTop: 4 }}>
+              {open ? "Já dá pra atualizar: abra Meus dados." : `Próxima atualização do plano: ${nextDate}.`}
+            </p>
           </>
         )}
       </div>

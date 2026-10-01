@@ -35,16 +35,16 @@ def test_leitura_fora_do_plausivel_vira_none():
     assert r["weight_kg"] == 78.4 and r["body_fat_pct"] is None
 
 
-def test_limite_mensal_exige_bio_nova_e_30_dias():
-    base = {
-        "plan": {"generated_on": "2026-09-30", "reading_date": "2026-09-30"},
-        "readings": [{"date": "2026-09-30"}],
-    }
+def test_limite_mensal_vale_pra_qualquer_medicao():
+    com_plano = {"plan": {"generated_on": "2026-09-30"}, "readings": []}
     assert b.eligibility({"plan": None}, date(2026, 9, 30))["allowed"]
-    assert not b.eligibility(base, date(2026, 11, 5))["allowed"]
-    nova = dict(base, readings=[{"date": "2026-09-30"}, {"date": "2026-10-10"}])
-    assert not b.eligibility(nova, date(2026, 10, 12))["allowed"]
-    assert b.eligibility(nova, date(2026, 10, 30))["allowed"]
+    # dentro dos 30 dias: travado, mesmo com leitura nova (foto ou manual)
+    nova = dict(com_plano, readings=[{"date": "2026-10-10"}])
+    gate = b.eligibility(nova, date(2026, 10, 12))
+    assert not gate["allowed"] and gate["next_date"] == "2026-10-30"
+    assert "1 vez por mês" in gate["reason"]
+    # passou o mês: libera
+    assert b.eligibility(com_plano, date(2026, 10, 30))["allowed"]
 
 
 def _days():
