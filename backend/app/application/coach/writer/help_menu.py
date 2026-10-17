@@ -82,6 +82,20 @@ class HelpMenu:
                 "estimativa feita por inteligência artificial — não substitui "
                 "um nutricionista.",
                 "",
+                "🏁 Suas provas (no app)",
+                "• Em Perfil → Minhas provas você cadastra uma ou várias "
+                "provas: nome, data, tempo-alvo (opcional) e distância (eu "
+                'descubro pelo nome — "10 km", "meia maratona").',
+                "• Escolha o papel de cada uma: Principal (seu plano se "
+                "organiza rumo a ela), Preparatória (um marco no caminho, só "
+                "com mini-polimento) ou De treino (entra como treino, sem "
+                "polimento). Sem escolha eu sugiro e você confirma com um "
+                "toque.",
+                '• Também dá pra me contar na conversa — "a meia é minha '
+                'principal e a de 15 km é só um degrau", "adiaram a prova '
+                'pro dia 10/01", "cancelaram a prova" — que eu atualizo a '
+                "sua lista.",
+                "",
                 "🎙️ Pode me mandar áudio",
                 "Grave uma nota de voz que eu te entendo (te respondo por "
                 "escrito) — aqui ou no app. E eu te falo em áudio nos "
@@ -141,6 +155,10 @@ class HelpMenu:
         "objetivo ele monta um plano alimentar — kcal por tipo de dia, "
         "cardápio e o que comer nos treinos longos. Atualiza 1 vez por mês "
         "(é uma estimativa feita por IA, não substitui um nutricionista).",
+        "💡 Você sabia? Em Perfil → Minhas provas você cadastra todas as suas "
+        "provas e escolhe o papel de cada uma (principal, preparatória ou de "
+        "treino) — eu monto o ciclo olhando o calendário inteiro, não só a "
+        "prova mais próxima.",
     ]
 
     @staticmethod

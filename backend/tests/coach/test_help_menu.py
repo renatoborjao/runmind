@@ -34,3 +34,20 @@ def test_weekly_tip_always_flags_you_can_ask():
     for i in range(len(HelpMenu._TIPS)):
 
         assert HelpMenu.weekly_tip(i).startswith("💡")
+
+
+def test_card_explains_the_races_screen_and_roles():
+    """A tela de provas com papel A/B/C entra no cardápio (novidade do app)."""
+
+    card = HelpMenu.card("Renato")
+
+    assert "Perfil → Minhas provas" in card
+    assert "Principal" in card and "Preparatória" in card and "De treino" in card
+    assert "adiaram a prova" in card
+
+
+def test_a_tip_points_to_the_races_calendar():
+
+    tips = [HelpMenu.weekly_tip(i) for i in range(len(HelpMenu._TIPS))]
+
+    assert any("Minhas provas" in t and "calendário inteiro" in t for t in tips)
