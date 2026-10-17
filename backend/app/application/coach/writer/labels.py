@@ -58,12 +58,12 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
     só, sem drift. Ex.: 'Ritmind · Longão Aeróbico 13.0km' / 'Ritmind ·
     Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava.
 
-    `executed_km` (só o Strava passa, PÓS-corrida): se o atleta correu MENOS
-    que o planejado (na casa decimal do título), o nome sai SEM distância
-    ('Longão Progressivo') — nunca '14.5km' numa corrida de 13.5; o km real o
-    Strava já mostra. Correu igual ou mais → mantém o planejado
-    (o título é o do treino, não o do excedente). Sem `executed_km` (relógio,
-    PRÉ-corrida) o alvo planejado é o certo."""
+    `executed_km` (só o Strava passa, PÓS-corrida): se a distância corrida
+    DIFERE da planejada (na casa decimal do título) — pra menos OU pra mais —
+    o nome sai SEM distância ('Longão Progressivo'): nunca '12.0km' numa
+    corrida de 14, nem '14.5km' numa de 13.5; o km real o Strava já mostra.
+    Só a distância que bate com o planejado mantém o km no nome. Sem
+    `executed_km` (relógio, PRÉ-corrida) o alvo planejado é o certo."""
 
     label = plan_workout_label(
         getattr(session, "workout_type", "") or "",
@@ -77,7 +77,7 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
         return f"Ritmind · {label}"
 
     # compara na mesma precisão do título (0.1 km): 14.46 de 14.5 é "14.5"
-    if executed_km and round(executed_km, 1) < round(km, 1):
+    if executed_km and round(executed_km, 1) != round(km, 1):
 
         return f"Ritmind · {label}"
 

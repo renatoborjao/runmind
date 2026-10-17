@@ -360,16 +360,28 @@ def test_plan_name_drops_distance_when_athlete_fell_short():
     ) == "Ritmind · Longão Aeróbico"
 
 
-def test_plan_name_keeps_planned_when_completed_or_exceeded():
-    """Igual (na casa do título) ou MAIS que o planejado → nome padrão."""
+def test_plan_name_drops_distance_when_athlete_ran_more():
+    """Planejou 12, correu 14 → nome SEM distância (não mente '12.0km')."""
+
+    assert StravaActivityRenamer._plan_name(
+        _session("Longão Aeróbico", km=12.0), executed_km=14.03
+    ) == "Ritmind · Longão Aeróbico"
+
+    assert StravaActivityRenamer._plan_name(
+        _session("Longão Aeróbico", km=14.5), executed_km=16.2
+    ) == "Ritmind · Longão Aeróbico"
+
+
+def test_plan_name_keeps_planned_when_distance_matches():
+    """Igual na casa do título (0.1 km) → nome padrão, com a distância."""
 
     assert StravaActivityRenamer._plan_name(
         _session("Longão Aeróbico", km=14.5), executed_km=14.46
     ) == "Ritmind · Longão Aeróbico 14.5km"
 
     assert StravaActivityRenamer._plan_name(
-        _session("Longão Aeróbico", km=14.5), executed_km=16.2
-    ) == "Ritmind · Longão Aeróbico 14.5km"
+        _session("Longão Aeróbico", km=12.0), executed_km=12.04
+    ) == "Ritmind · Longão Aeróbico 12.0km"
 
 
 # ---- detecção de nome genérico --------------------------------------------
