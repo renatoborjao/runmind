@@ -58,16 +58,25 @@ class DeloadAnalyzer:
         weeks_to_race: int | None = None,
         acwr: float | None = None,
         weeks_since_race: int | None = None,
+        taper_zone_weeks: int | None = None,
     ) -> DeloadDecision:
         """Decide se a PRÓXIMA semana (a que estamos gerando) deve ser de
         descarga. Gatilho principal: tamanho do bloco de carga; a fadiga
         antecipa; o taper (perto da prova) e a janela PÓS-PROVA desligam; e o
-        ACWR trava — sem carga elevada, descarga só destreina."""
+        ACWR trava — sem carga elevada, descarga só destreina.
+
+        `taper_zone_weeks`: a zona de taper da PRÓXIMA prova pelo papel dela
+        (preparatória = mini-polimento curto; de treino = nenhuma). None = o
+        padrão, de prova principal."""
 
         streak = DeloadAnalyzer._consecutive_load_weeks(weekly_loads)
 
+        zone = (
+            _TAPER_ZONE_WEEKS if taper_zone_weeks is None else taper_zone_weeks
+        )
+
         # perto da prova o taper já alivia — não empilha descarga de bloco
-        if weeks_to_race is not None and weeks_to_race <= _TAPER_ZONE_WEEKS:
+        if weeks_to_race is not None and weeks_to_race <= zone:
 
             return DeloadDecision(False, streak, "taper cuida do recuo")
 

@@ -95,6 +95,8 @@ class _Inputs:
     drift: object = None
     ceiling: int | None = None
     zones: object = None
+    # lista de provas (papel e distância) — lida uma vez, sob demanda
+    races: list | None = None
 
 
 # nomes das atividades fora da corrida (Garmin) pro dossiê
@@ -399,6 +401,36 @@ class AthleteDossier:
         return (goal.race_date - data.today).days // 7
 
     @staticmethod
+    def _races(data: _Inputs) -> list:
+        """Provas do atleta (papel e distância), lidas UMA vez por dossiê."""
+
+        if data.races is None:
+
+            from app.application.races.race_service import RaceService
+
+            data.races = RaceService.list(data.profile)
+
+        return data.races
+
+    @staticmethod
+    def _taper_zone(data: _Inputs) -> int | None:
+        """Zona de taper pelo papel da próxima prova (None = padrão)."""
+
+        try:
+
+            from app.application.coach.planning.race_cycle import (
+                taper_zone_weeks,
+            )
+
+            return taper_zone_weeks(AthleteDossier._races(data), data.today)
+
+        except Exception as e:
+
+            print(f"Dossiê: zona de taper falhou p/ '{data.profile}': {e}")
+
+            return None
+
+    @staticmethod
     def _race_calendar(data: _Inputs) -> str:
         """Calendário de provas (todas as futuras, com papel e distância) — vazio
         sem calendário de verdade (uma prova só) ou se a leitura falhar."""
@@ -408,10 +440,9 @@ class AthleteDossier:
             from app.application.coach.planning.race_calendar_directive import (
                 race_calendar_directive,
             )
-            from app.application.races.race_service import RaceService
 
             return race_calendar_directive(
-                RaceService.list(data.profile), data.today
+                AthleteDossier._races(data), data.today
             )
 
         except Exception as e:
@@ -883,6 +914,9 @@ class AthleteDossier:
                             weeks_since_race=AIPlanService._weeks_since_race(
                                 data.profile, data.history, week_start,
                             ),
+                            # com várias provas, a zona de taper segue o papel da
+                            # próxima (preparatória = mini-polimento)
+                            taper_zone_weeks=AthleteDossier._taper_zone(data),
                         )
                     )
                 )

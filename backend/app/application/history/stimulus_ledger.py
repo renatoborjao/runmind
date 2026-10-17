@@ -259,9 +259,12 @@ class StimulusLedger:
         today: date,
         max_hr: int | None = None,
         resting_hr: int | None = None,
+        calendar: list[dict] | None = None,
     ) -> str:
         """Bloco pro coach: estímulos recebidos, intensidade real e LACUNAS
-        rumo à meta/fase. Vazio sem plano nenhum na janela."""
+        rumo à meta/fase. Vazio sem plano nenhum na janela. `calendar` (lista de
+        provas com papel): com várias provas, a fase segue a prova-FOCO e a
+        preparatória que vem antes aparece como marco no caminho."""
 
         stats = StimulusLedger.families(plans, activities, today)
 
@@ -318,7 +321,9 @@ class StimulusLedger:
                 "MÉDIA: tiro com pausa aparece mais leve do que foi."
             )
 
-        gaps = StimulusLedger._gaps(stats, goal, today)
+        phase_goal, waypoint = StimulusLedger._cycle_view(goal, calendar, today)
+
+        gaps = StimulusLedger._gaps(stats, phase_goal, today, waypoint)
 
         if gaps:
 
@@ -398,8 +403,11 @@ class StimulusLedger:
 
                 print(f"Zonas p/ balanço falharam p/ '{profile}': {e}")
 
+            from app.application.coach.planning.race_cycle import RaceCycle
+
             return StimulusLedger.render(
                 plans, activities, goal, today_local(), max_hr, resting_hr,
+                calendar=RaceCycle.races(profile),
             )
 
         except Exception as e:
@@ -411,10 +419,29 @@ class StimulusLedger:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _cycle_view(
+        goal: TrainingGoal | None, calendar: list[dict] | None, today: date
+    ) -> tuple[TrainingGoal | None, str]:
+        """(meta que serve de régua da fase, nota do marco no caminho). Sem
+        calendário: a própria meta e nada mais — igual a antes."""
+
+        if not calendar or goal is None:
+
+            return goal, ""
+
+        from app.application.coach.planning.race_cycle import (
+            focus_goal,
+            waypoint_note,
+        )
+
+        return focus_goal(calendar, today, goal), waypoint_note(calendar, today)
+
+    @staticmethod
     def _gaps(
         stats: dict[str, FamilyStat],
         goal: TrainingGoal | None,
         today: date,
+        waypoint: str = "",
     ) -> str:
         """O que falta rumo à meta: famílias-chave da distância sem estímulo
         recente (4+ semanas), + a ênfase da FASE pelas semanas até a prova."""
@@ -479,14 +506,21 @@ class StimulusLedger:
 
             phase = "semana da prova (POUPAR): só ativação curta no ritmo"
 
+        if waypoint:
+
+            phase += f" · {waypoint}"
+
         # a PROVA que ancora (distância/data reais) — o goal.name é o objetivo
         # de fundo ("correr 21 km...") e confundia o rótulo com a prova de 15k
         if goal and goal.race_date:
 
             target = f" em {goal.target_time}" if goal.target_time else ""
 
+            # 21.0975 -> "21.1" (nunca a distância oficial crua da meia)
+            km = f"{distance:.1f}".rstrip("0").rstrip(".")
+
             label = (
-                f"prova de {distance:g} km{target} em "
+                f"prova de {km} km{target} em "
                 f"{goal.race_date:%d/%m/%Y}"
             )
 

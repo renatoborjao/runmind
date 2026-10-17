@@ -586,3 +586,24 @@ def test_who_survives_a_calendar_failure():
         text = "\n".join(AthleteDossier._who(data))
 
     assert "Prova-âncora (periodize pra ela)" in text
+
+
+def test_taper_zone_follows_the_role_of_the_next_race_in_the_dossier():
+    """Renato: o 15 km (preparatória) é a próxima — a zona de taper da descarga
+    vira o mini-polimento (1 semana), não a de prova principal."""
+
+    data = _data()
+
+    races = [
+        _race("Villa-Lobos (15 km)", "2026-12-20", 15.0, suggested="B"),
+        _race("Meia Maratona SP", "2027-04-04", 21.0975, suggested="A"),
+    ]
+
+    with patch(RACES, return_value=races):
+
+        assert AthleteDossier._taper_zone(data) == 1
+
+    # uma prova só: padrão (None)
+    with patch(RACES, return_value=[_race("15 km", "2026-12-20", 15.0, suggested="A")]):
+
+        assert AthleteDossier._taper_zone(_data()) is None

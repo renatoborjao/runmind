@@ -96,7 +96,17 @@ class AIPlanService:
             # rede, não regra. Ver [[feedback_tudo_dinamico]].
             if plan.phase == "IA":
 
-                plan.phase = PhaseEngine.execute(goal, week_start)
+                # com várias provas, a fase de rede segue a prova-FOCO (a
+                # principal), não a preparatória que só está mais perto
+                from app.application.coach.planning.race_cycle import (
+                    RaceCycle,
+                    focus_goal,
+                )
+
+                plan.phase = PhaseEngine.execute(
+                    focus_goal(RaceCycle.races(profile), week_start, goal),
+                    week_start,
+                )
 
             # REFAZER NO MEIO DA SEMANA (o atleta mudou meta/dias e pediu o
             # plano novo): o que já passou — e o de hoje, se já foi feito — fica
