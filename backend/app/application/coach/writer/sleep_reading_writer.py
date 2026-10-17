@@ -6,8 +6,11 @@ Segue [[feedback_orientar_nao_mandar]]: aponta o custo com valor, sem cobrar —
 sono nem sempre é controlável. O elo sono->PERFORMANCE com os números dele é o
 coaching de sono (item #4, [[project_ideias_produto]]), construído por cima."""
 
+from app.application.history.sleep_performance_analyzer import (
+    SLEEP_HURTS,
+    SleepPerformanceReading,
+)
 from app.domain.entities.body_reading import FALLING, RISING
-from app.domain.entities.sleep_impact import SleepImpact
 from app.domain.entities.sleep_reading import (
     HEALTHY_FLOOR_HOURS,
     SleepReading,
@@ -20,11 +23,12 @@ class SleepReadingWriter:
     def write(
         reading: SleepReading,
         runner_name: str,
-        impact: SleepImpact | None = None,
+        impact: SleepPerformanceReading | None = None,
     ) -> str | None:
         """None quando não há noite medida (sem Garmin/sem sono) — o chamador
         cai no Gemini, que responde com naturalidade. `impact` (opcional) anexa
-        o custo REAL do sono curto no desempenho dele, quando há sinal."""
+        o CUSTO do sono curto na EXECUÇÃO dele, quando o histórico real mostra
+        que pesa."""
 
         if not reading.has_data or reading.avg_hours is None:
 
@@ -69,10 +73,12 @@ class SleepReadingWriter:
 
         lines.append("")
 
-        # o CUSTO real (números dele) vem antes do fecho, quando há sinal
-        if impact is not None and impact.has_finding:
+        # o veredito real (números dele) vem antes do fecho, quando há lastro
+        impact_line = SleepReadingWriter.impact_line(impact)
 
-            lines.append(SleepReadingWriter.impact_line(impact))
+        if impact_line:
+
+            lines.append(impact_line)
 
             lines.append("")
 
@@ -83,23 +89,32 @@ class SleepReadingWriter:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def impact_line(impact: SleepImpact) -> str:
-        """A frase do custo: 'nos dias que dormiu <7h, teu pace no mesmo esforço
-        caiu ~Xs/km'. Orienta com valor, não cobra ([[feedback_orientar_nao_mandar]])."""
+    def impact_line(impact: SleepPerformanceReading | None) -> str:
+        """O CUSTO do sono curto na execução DELE, em números dele: 'no mesmo
+        esforço o pace ficou ~Xs/km mais lento'. Só quando o histórico real
+        mostra que pesa — o 'não pesa' (SUSTAINS) fica com o coach, que não
+        trava a dose por sono, mas o cartão não o exalta (nunca soar como aval
+        a dormir pouco). Vazio sem lastro. Orienta com valor, não cobra
+        ([[feedback_orientar_nao_mandar]])."""
 
-        floor = int(impact.threshold_hours)
+        if impact is None or impact.direction != SLEEP_HURTS:
 
-        when = (
-            "depois das suas noites mais curtas (vs as mais longas)"
-            if impact.relative
-            else f"nos dias que você dormiu abaixo de {floor}h"
-        )
+            return ""
+
+        if impact.short_sleep_h is None or (impact.pace_delta_sec or 0) <= 0:
+
+            return ""
+
+        short = SleepReadingWriter._hours(impact.short_sleep_h)
+
+        rested = SleepReadingWriter._hours(impact.rested_sleep_h or 0.0)
 
         return (
-            f"📉 Reparei uma coisa nos seus números: {when}, no MESMO esforço "
-            f"seu pace ficou ~{impact.pace_cost_sec}s/km mais lento. O sono é o "
-            "que mais segura sua evolução — quando der, é o ganho mais barato "
-            "que existe."
+            "📉 Reparei uma coisa nos seus números: nas suas noites mais curtas "
+            f"(~{short}, contra ~{rested} nas mais longas), no MESMO esforço "
+            f"seu pace ficou ~{impact.pace_delta_sec}s/km mais lento. O sono é "
+            "o que mais segura sua evolução — quando der, é o ganho mais "
+            "barato que existe."
         )
 
     @staticmethod
