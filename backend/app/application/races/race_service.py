@@ -25,6 +25,11 @@ from app.infrastructure.persistence.runner_profile_repository import (
 # papel da prova no ciclo: define o quanto o plano se organiza em torno dela
 PRIORITIES = ("A", "B", "C")
 
+_MONTHS_PT = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+    "agosto", "setembro", "outubro", "novembro", "dezembro",
+]
+
 PRIORITY_LABELS = {
     "A": "principal",
     "B": "preparatória",
@@ -256,6 +261,9 @@ class RaceService:
                 return None
 
             repo.remove(profile, target["id"])
+
+            # esquece a memória dela (a âncora, quem chama ressincroniza)
+            RaceService._forget_race_memory(profile, target)
 
             return target
 
@@ -502,13 +510,121 @@ class RaceService:
 
         repo = RaceRepository()
 
+        record = next(
+            (r for r in repo.load(profile) if r.get("id") == race_id), None
+        )
+
         removed = repo.remove(profile, race_id)
 
         if removed:
 
-            RaceService._sync_anchor(profile, repo)
+            RaceService._after_removal(profile, repo, record)
 
         return removed
+
+    @staticmethod
+    def _after_removal(
+        profile: str, repo: RaceRepository, record: dict | None
+    ) -> None:
+        """Depois de tirar uma prova da lista (pelo app): o coach esquece o que a
+        memória dizia dela e a âncora do plano se ajusta. Lista VAZIA limpa a
+        âncora do perfil — sem isso a leitura seguinte reimportava a prova apagada
+        do perfil (prova zumbi)."""
+
+        if record is not None:
+
+            RaceService._forget_race_memory(profile, record)
+
+        if repo.load(profile):
+
+            RaceService._sync_anchor(profile, repo)
+
+            return
+
+        RunnerProfileRepository().update_fields(
+            profile,
+            {"target_race": None, "race_date": None, "target_time": None},
+        )
+
+    @staticmethod
+    def _date_forms(iso: str) -> tuple[list[str], list[str]]:
+        """Jeitos de a memória escrever a data de uma prova: FORTES (completas —
+        ISO, dd/mm/aaaa, "20 de dezembro de 2026") e FRACAS (sem o ano — dd/mm,
+        "20 de dezembro"; só valem com a palavra 'prova' no texto)."""
+
+        try:
+
+            year, month, day = (int(x) for x in iso.split("-"))
+
+            month_name = _MONTHS_PT[month - 1]
+
+        except (ValueError, IndexError):
+
+            return [], []
+
+        strong = [
+            iso,
+            f"{day:02d}/{month:02d}/{year}",
+            f"{day} de {month_name} de {year}",
+        ]
+
+        weak = [f"{day:02d}/{month:02d}", f"{day} de {month_name}"]
+
+        return strong, weak
+
+    @staticmethod
+    def _forget_race_memory(profile: str, race: dict) -> None:
+        """Arquiva da memória do coach as entradas de OBJETIVO que falam SÓ desta
+        prova ("Prova cadastrada pelo app: … em 2027-11-01", "Inscrito na prova …
+        em 20 de dezembro de 2026"). Achadas pela DATA dela. Entrada que cita
+        TAMBÉM a data de outra prova da lista (ex.: a estratégia "meia como norte,
+        15k como degrau") fica: continua valendo pra outra. Best-effort."""
+
+        try:
+
+            from app.infrastructure.persistence.runner_memory_repository import (
+                RunnerMemoryRepository,
+            )
+
+            strong, weak = RaceService._date_forms(race.get("date") or "")
+
+            if not strong:
+
+                return
+
+            other_forms = [
+                form
+                for other in RaceRepository().load(profile)
+                if other.get("id") != race.get("id") and other.get("date")
+                for group in RaceService._date_forms(other["date"])
+                for form in group
+            ]
+
+            memory = RunnerMemoryRepository()
+
+            ids = []
+
+            for entry in memory.active(profile):
+
+                text = entry.content or ""
+
+                if entry.category != "objetivo":
+
+                    continue
+
+                mentions = any(f in text for f in strong) or (
+                    "prova" in text.lower() and any(f in text for f in weak)
+                )
+
+                if mentions and not any(f in text for f in other_forms):
+
+                    ids.append(entry.id)
+
+            memory.archive(profile, ids)
+
+        except Exception as e:
+
+            print(f"Esquecer memória da prova de '{profile}' falhou: {e}")
 
     # ---- âncora do perfil ----
 
