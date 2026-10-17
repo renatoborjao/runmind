@@ -379,7 +379,15 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
         f"{plan.phase})" if plan is not None else "- plano vigente: nenhum"
     )
 
-    lines.append(f"- meta: {runner.goal} | alvo {goal.target_time} | dias {runner.preferred_running_days}")
+    # o tempo-alvo pertence à PROVA datada (checkpoint), não ao objetivo de fundo
+    race_txt = (
+        f"prova: {goal.race_label} em {goal.race_date:%d/%m} | alvo {goal.target_time or '—'}"
+        if goal.race_date else f"sem prova datada | alvo {goal.target_time or '—'}"
+    )
+
+    lines.append(
+        f"- objetivo de fundo: {runner.goal} | {race_txt} | dias {runner.preferred_running_days}"
+    )
 
     for f in findings:
 
