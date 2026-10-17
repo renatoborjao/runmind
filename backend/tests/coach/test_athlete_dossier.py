@@ -4,6 +4,8 @@ from contextlib import ExitStack
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.application.coach.context.athlete_dossier import (
     BODY,
     PLAN_WEEK,
@@ -19,6 +21,18 @@ from app.domain.entities.training_plan import TrainingPlan
 from tests.coach.factories import make_runner
 
 MODULE = "app.application.coach.context.athlete_dossier"
+
+RACES = "app.application.races.race_service.RaceService.list"
+
+
+@pytest.fixture(autouse=True)
+def _no_race_list_by_default():
+    """O dossiê lê a lista de provas do disco (e a reconcilia com o perfil): nos
+    testes, por padrão, atleta sem lista — nada de tocar no storage real."""
+
+    with patch(RACES, return_value=[]):
+
+        yield
 
 TODAY = date(2026, 9, 27)
 
@@ -494,3 +508,81 @@ def test_coach_voice_only_falls_back_to_raw_when_all_is_sheet():
     assert AthleteDossier._coach_voice_only(
         "🏃 Ritmind\n\n✅ Executado\n• 8 km"
     ).startswith("🏃 Ritmind")
+
+
+# ---- calendário de provas (papel e distância) --------------------------------
+
+
+def _race(name, when, km, priority=None, suggested=None, target="1:15:00"):
+
+    return {
+        "id": name, "name": name, "date": when, "distance_km": km,
+        "target_time": target, "priority": priority,
+        "priority_suggested": suggested,
+        "priority_effective": priority or suggested, "past": False,
+    }
+
+
+def test_who_shows_the_whole_race_calendar_with_roles():
+    """Renato: 15 km (dez) preparatória + meia (abr) principal. O dossiê lista as
+    duas com papel, e a mais próxima deixa de ser 'periodize pra ela'."""
+
+    data = _data()
+
+    races = [
+        _race("Villa-Lobos (15 km)", "2026-12-20", 15.0, suggested="B"),
+        _race("Meia Maratona SP", "2027-04-04", 21.0975, suggested="A",
+              target="1:59:59"),
+    ]
+
+    with patch(RACES, return_value=races), patch(
+        "app.application.races.race_intel_service.RaceIntelService"
+    ) as intel:
+
+        intel.render_context.return_value = ""
+
+        text = "\n".join(AthleteDossier._who(data))
+
+    assert "CALENDÁRIO DE PROVAS" in text
+    assert "Villa-Lobos (15 km)" in text and "PREPARATÓRIA (B), sugerido" in text
+    assert "Meia Maratona SP" in text and "PRINCIPAL (A), sugerido" in text
+    assert "Próxima prova:" in text
+    # a âncora deixa de mandar "periodize pra ela" (ela é só preparatória)
+    assert "periodize pra ela" not in text
+    # a hierarquia por texto não duplica o recado
+    assert "HIERARQUIA DE PROVAS" not in text
+
+
+def test_who_keeps_the_anchor_wording_with_a_single_race():
+    """Uma prova só (sem papel B/C escolhido): nada muda — âncora e hierarquia."""
+
+    data = _data()
+
+    with patch(
+        RACES, return_value=[_race("15 km", "2026-12-20", 15.0, suggested="A")]
+    ), patch(
+        "app.application.races.race_intel_service.RaceIntelService"
+    ) as intel:
+
+        intel.render_context.return_value = ""
+
+        text = "\n".join(AthleteDossier._who(data))
+
+    assert "CALENDÁRIO DE PROVAS" not in text
+    assert "Prova-âncora (periodize pra ela)" in text
+
+
+def test_who_survives_a_calendar_failure():
+    """Falha lendo a lista de provas nunca derruba o dossiê."""
+
+    data = _data()
+
+    with patch(RACES, side_effect=RuntimeError("disco")), patch(
+        "app.application.races.race_intel_service.RaceIntelService"
+    ) as intel:
+
+        intel.render_context.return_value = ""
+
+        text = "\n".join(AthleteDossier._who(data))
+
+    assert "Prova-âncora (periodize pra ela)" in text

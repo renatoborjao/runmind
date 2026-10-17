@@ -181,7 +181,10 @@ class PlanContextBuilder:
         goal: TrainingGoal,
         weeks_to_race: int | None,
         days_to_race: int | None = None,
+        anchor_label: str = "Prova-âncora (periodize pra ela)",
     ) -> str:
+        """`anchor_label` muda quando há CALENDÁRIO de provas: a mais próxima
+        pode ser só preparatória, e aí "periodize pra ela" mentiria."""
 
         if goal.race_date is None:
 
@@ -228,7 +231,7 @@ class PlanContextBuilder:
         # prova de 10k virava "meta de 21km em 2 semanas".
         return (
             f"Objetivo de fundo do atleta: {goal.name}.\n"
-            f"Prova-âncora (periodize pra ela): {goal.race_label} em "
+            f"{anchor_label}: {goal.race_label} em "
             f"{goal.race_date.strftime('%d/%m/%Y')}{target}{race}."
         )
 

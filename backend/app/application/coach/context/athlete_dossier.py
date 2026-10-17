@@ -398,6 +398,28 @@ class AthleteDossier:
 
         return (goal.race_date - data.today).days // 7
 
+    @staticmethod
+    def _race_calendar(data: _Inputs) -> str:
+        """Calendário de provas (todas as futuras, com papel e distância) — vazio
+        sem calendário de verdade (uma prova só) ou se a leitura falhar."""
+
+        try:
+
+            from app.application.coach.planning.race_calendar_directive import (
+                race_calendar_directive,
+            )
+            from app.application.races.race_service import RaceService
+
+            return race_calendar_directive(
+                RaceService.list(data.profile), data.today
+            )
+
+        except Exception as e:
+
+            print(f"Dossiê: calendário de provas falhou p/ '{data.profile}': {e}")
+
+            return ""
+
     # ------------------------------------------------------------------
     # seções
 
@@ -432,11 +454,22 @@ class AthleteDossier:
                 else None
             )
 
+            calendar = AthleteDossier._race_calendar(data)
+
             lines.append(
                 PlanContextBuilder._goal_line(
                     goal, AthleteDossier._weeks_to_race(data), days,
+                    # com calendário, a mais próxima pode ser só preparatória
+                    **(
+                        {"anchor_label": "Próxima prova"}
+                        if calendar else {}
+                    ),
                 )
             )
+
+            if calendar:
+
+                lines.append(calendar)
 
             weeks = AthleteDossier._weeks_to_race(data)
 
@@ -460,19 +493,25 @@ class AthleteDossier:
 
                     print(f"Dossiê: prova falhou p/ '{data.profile}': {e}")
 
-            try:
+            # com calendário de verdade, ele já diz o papel de cada prova; a
+            # hierarquia por TEXTO só entra quando não há (uma prova só)
+            if not calendar:
 
-                from app.application.coach.planning.race_hierarchy_directive import (
-                    race_hierarchy_directive,
-                )
+                try:
 
-                lines.append(
-                    race_hierarchy_directive(goal, getattr(runner, "goal", None))
-                )
+                    from app.application.coach.planning.race_hierarchy_directive import (
+                        race_hierarchy_directive,
+                    )
 
-            except Exception as e:
+                    lines.append(
+                        race_hierarchy_directive(
+                            goal, getattr(runner, "goal", None)
+                        )
+                    )
 
-                print(f"Dossiê: hierarquia falhou p/ '{data.profile}': {e}")
+                except Exception as e:
+
+                    print(f"Dossiê: hierarquia falhou p/ '{data.profile}': {e}")
 
         days = list(getattr(runner, "preferred_running_days", None) or [])
 
