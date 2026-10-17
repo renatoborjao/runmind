@@ -460,6 +460,9 @@ async def sleep(profile: str):
     """Sono como eixo próprio (média/tendência/regularidade/dívida) + o cartão.
     Janela de inspeção pra conferir a leitura antes de responder."""
 
+    from app.application.coach.intelligence.fitness_reading_service import (
+        FitnessReadingService,
+    )
     from app.application.coach.intelligence.sleep_reading_service import (
         SleepReadingService,
     )
@@ -469,21 +472,17 @@ async def sleep(profile: str):
     from app.application.history.sleep_performance_analyzer import (
         SleepPerformanceAnalyzer,
     )
-    from app.application.use_cases.load_training_history import (
-        LoadTrainingHistory,
-    )
-    from app.infrastructure.persistence.garmin_health_repository import (
-        GarminHealthRepository,
-    )
 
     try:
 
         reading = SleepReadingService.read(profile)
 
-        history = await LoadTrainingHistory.execute(profile=profile)
+        activities, series, resting_hr, max_hr = FitnessReadingService._load(
+            profile
+        )
 
-        impact = SleepPerformanceAnalyzer.analyze(
-            history.activities, GarminHealthRepository().load(profile)
+        impact = SleepPerformanceAnalyzer.assess(
+            activities, series, resting_hr, max_hr
         )
 
         return {

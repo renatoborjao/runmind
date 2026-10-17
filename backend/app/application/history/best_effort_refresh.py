@@ -5,6 +5,8 @@ precoce de risco de lesão. Pega as corridas recentes ainda não vistas por CADA
 sinal, baixa o detalhe e atualiza. Só corridas NOVAS (dedup por id) e com teto
 por rodada (rate limit). Best-effort. Ver [[project_modelo_pace_vdot]]."""
 
+import httpx
+
 from app.application.history.best_effort_vdot import BestEffortVdot
 from app.application.history.form_fatigue_analyzer import FormFatigueAnalyzer
 from app.application.history.pace_model_builder import gps_broken
@@ -113,6 +115,26 @@ class BestEffortRefresh:
             store.record(profile, activity_id, faded)
 
             return True
+
+        except httpx.HTTPStatusError as e:
+
+            if e.response.status_code == 404:
+
+                # o Strava não tem série pra essa corrida (lançada à mão, sem
+                # relógio): não há o que ler agora nem depois — dá por vista
+                # pra não repetir a chamada (e o erro) todo domingo.
+                store.mark_processed(profile, activity_id)
+
+                print(
+                    f"Forma-sob-fadiga ({activity_id}) p/ '{profile}': "
+                    "sem séries no Strava (treino manual) — ignorado"
+                )
+
+                return False
+
+            print(f"Forma-sob-fadiga ({activity_id}) falhou p/ '{profile}': {e}")
+
+            return False
 
         except Exception as e:
 

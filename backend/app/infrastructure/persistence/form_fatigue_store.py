@@ -52,6 +52,24 @@ class FormFatigueStore:
 
         return sum(1 for f in recent if f) >= _MIN_FADES
 
+    def mark_processed(self, profile: str, activity_id: int) -> None:
+        """Dá a corrida por vista SEM entrar na janela de fadiga — treino sem
+        stream (lançado à mão) não é dado de forma nem de ausência dela."""
+
+        data = self._load(profile)
+
+        processed = set(data.get("processed", []))
+
+        processed.add(int(activity_id))
+
+        self._file(profile).write_text(
+            json.dumps({
+                "recent": list(data.get("recent", [])),
+                "processed": sorted(processed),
+            }),
+            encoding="utf-8",
+        )
+
     def record(self, profile: str, activity_id: int, faded: bool) -> None:
 
         data = self._load(profile)

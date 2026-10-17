@@ -380,18 +380,21 @@ class OnDemandAnswers:
 
         try:
 
+            from app.application.coach.intelligence.fitness_reading_service import (
+                FitnessReadingService,
+            )
             from app.application.history.sleep_performance_analyzer import (
                 SleepPerformanceAnalyzer,
             )
-            from app.infrastructure.persistence.garmin_health_repository import (
-                GarminHealthRepository,
+
+            # mesma matéria-prima do dossiê (atividades + saúde + FC repouso/máx)
+            activities, series, resting_hr, max_hr = (
+                FitnessReadingService._load(profile)
             )
 
-            history = await LoadTrainingHistory.execute(profile=profile)
-
-            series = GarminHealthRepository().load(profile)
-
-            return SleepPerformanceAnalyzer.analyze(history.activities, series)
+            return SleepPerformanceAnalyzer.assess(
+                activities, series, resting_hr, max_hr
+            )
 
         except Exception as e:
 
