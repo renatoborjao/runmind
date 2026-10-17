@@ -53,18 +53,22 @@ def plan_workout_label(
     return workout_type_label(code)
 
 
+# quanto a corrida pode ficar ABAIXO do planejado e ainda levar o km no nome
+_SHORT_TOLERANCE_KM = 0.5
+
+
 def plan_session_title(session, executed_km: float | None = None) -> str:
     """Título do treino como vai pro RELÓGIO (Garmin) e pro STRAVA — uma fonte
     só, sem drift. Ex.: 'Ritmind · Longão Aeróbico 13.0km' / 'Ritmind ·
     Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava.
 
     `executed_km` (só o Strava passa, PÓS-corrida): o km só fica no nome se a
-    corrida CUMPRIU o planejado sem estourar o quilômetro inteiro dele —
-    planejado 12, correu de 12.0 a 12.9 → 'Longão 12.0km'. Correu MENOS que o
-    planejado (na casa de 0.1 km do título: nunca '14.5km' numa de 13.5) ou
-    passou pro km seguinte (13.0+ num de 12) → sai SEM distância ('Longão
-    Progressivo'); o km real o Strava já mostra. Sem `executed_km` (relógio,
-    PRÉ-corrida) o alvo planejado é o certo."""
+    corrida ficou na JANELA do planejado — de 0,5 km a menos até o fim do km
+    inteiro dele: planejado 12, correu de 11.5 a 12.9 → 'Longão 12.0km'.
+    Correu mais de 0,5 km a menos (nunca '14.5km' numa de 13.5) ou passou pro
+    km seguinte (13.0+ num de 12) → sai SEM distância ('Longão Progressivo');
+    o km real o Strava já mostra. Sem `executed_km` (relógio, PRÉ-corrida) o
+    alvo planejado é o certo."""
 
     label = plan_workout_label(
         getattr(session, "workout_type", "") or "",
@@ -79,9 +83,9 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
 
     if executed_km:
 
-        # menos que o planejado, na mesma precisão do título (0.1 km): 14.46
-        # de 14.5 é "14.5"
-        fell_short = round(executed_km, 1) < round(km, 1)
+        # ficou a mais de 0,5 km do planejado (11.5 de 12 ainda é "12"),
+        # comparado na precisão do título (0.1 km)
+        fell_short = round(executed_km, 1) < round(km - _SHORT_TOLERANCE_KM, 1)
 
         # estourou o km inteiro do planejado: 12.9 num de 12 ainda é "12";
         # 13.0 já não
