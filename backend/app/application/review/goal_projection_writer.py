@@ -68,6 +68,78 @@ class GoalProjectionWriter:
         return "\n".join(lines)
 
     @staticmethod
+    def section(
+        runner_name: str,
+        goal: TrainingGoal,
+        history: TrainingHistory,
+        weeks_to_race: int | None = None,
+        lean: bool = False,
+    ) -> tuple[str, dict] | None:
+        """O "rumo à meta" ENXUTO pra dentro do resumo de domingo (sem linhas em
+        branco no meio) + o SNAPSHOT da projeção, pra decidir se há novidade
+        ([[goal_projection_news]]). None quando não dá pra projetar (mesmos casos
+        do `write`). `lean`: o resumo JÁ mostra a previsão ("se a prova fosse
+        hoje") — aí vai só o VEREDITO (o que ninguém mais diz); sem veredito,
+        nada a acrescentar (None)."""
+
+        distance = goal.distance_km or 0.0
+
+        if distance <= 0:
+
+            return None
+
+        pred = RaceTimePredictor.predict_formatted(
+            history, distance, goal.target_time,
+        )
+
+        if pred is None:
+
+            return None
+
+        label = goal.race_label or f"{distance:.0f} km"
+
+        snapshot_pred = pred
+
+        if lean:
+
+            _, verdict = GoalProjectionWriter._gap_parts(goal, pred, weeks_to_race)
+
+            if not verdict:
+
+                return None
+
+            lines = [f"🎯 Rumo à meta ({label})", verdict]
+
+        else:
+
+            lines = [
+                f"🎯 Rumo à meta ({label})",
+                f"No teu nível atual, teu tempo seria ~*{pred['formatted']}*.",
+            ]
+
+            gap = GoalProjectionWriter._gap_line(goal, pred, weeks_to_race)
+
+            if gap:
+
+                lines.append(gap)
+
+            if weeks_to_race is not None:
+
+                lines.append(f"Faltam {weeks_to_race} semanas pra prova. 🗓️")
+
+        pred = snapshot_pred
+
+        snapshot = {
+            "seconds": pred.get("seconds"),
+            "target_time": goal.target_time,
+            "distance_km": goal.distance_km,
+            "race_date": goal.race_date.isoformat() if goal.race_date else None,
+            "weeks": weeks_to_race,
+        }
+
+        return "\n".join(lines), snapshot
+
+    @staticmethod
     def _gap_line(
         goal: TrainingGoal,
         pred: dict,
@@ -77,18 +149,37 @@ class GoalProjectionWriter:
         HONESTA sobre o tamanho do salto. Antes era sempre "Dá pra chegar"
         (8 min em 13 semanas = ~10%, bem acima do que se ganha num ciclo)."""
 
+        base, verdict = GoalProjectionWriter._gap_parts(goal, pred, weeks_to_race)
+
+        if base is None:
+
+            return verdict
+
+        return f"{base} {verdict}"
+
+    @staticmethod
+    def _gap_parts(
+        goal: TrainingGoal,
+        pred: dict,
+        weeks_to_race: int | None = None,
+    ) -> tuple[str | None, str | None]:
+        """(os NÚMEROS do gap, o VEREDITO sobre ele). Os números ("Tua meta é X —
+        faltam ~Y") o resumo de domingo já mostra na linha "se a prova fosse hoje";
+        o veredito é o que só o "rumo à meta" diz. (None, None) sem tempo-alvo;
+        (None, frase) quando já bateu a meta."""
+
         delta = pred.get("delta_seconds")
 
         if delta is None:  # sem tempo-alvo declarado
 
-            return None
+            return None, None
 
         target = goal.target_time
 
         # delta = previsto − alvo. Negativo = já mais rápido que a meta.
         if delta <= _ON_TARGET_SLACK:
 
-            return (
+            return None, (
                 f"E olha só: você JÁ está no ritmo da tua meta de {target} — "
                 "dá pra buscar até um pouco mais. 🚀"
             )
@@ -106,8 +197,8 @@ class GoalProjectionWriter:
 
         if not predicted or not weeks_to_race or weeks_to_race <= 0:
 
-            return (
-                f"{base} É o que os treinos vêm construindo — consistência nas "
+            return base, (
+                "É o que os treinos vêm construindo — consistência nas "
                 "sessões-chave e recuperação em dia fazem a diferença. 💪"
             )
 
@@ -117,22 +208,22 @@ class GoalProjectionWriter:
 
         if per_week <= _REALISTIC_PER_WEEK:
 
-            return (
-                f"{base} No prazo que temos, é um salto realista — é manter a "
+            return base, (
+                "No prazo que temos, é um salto realista — é manter a "
                 "consistência que você chega. 💪"
             )
 
         if per_week <= _AMBITIOUS_PER_WEEK:
 
-            return (
-                f"{base} É ambiciosa, mas possível: pede as sessões-chave "
+            return base, (
+                "É ambiciosa, mas possível: pede as sessões-chave "
                 "feitas E a recuperação em dia (sono) — sem isso não vem. 💪"
             )
 
         realistic = predicted * (1 - _REALISTIC_PER_WEEK * weeks_to_race)
 
-        return (
-            f"{base} Sendo franco: em {weeks_to_race} semanas isso é ~"
+        return base, (
+            f"Sendo franco: em {weeks_to_race} semanas isso é ~"
             f"{needed * 100:.0f}% mais rápido — bem acima do que se ganha num "
             "ciclo. Um alvo realista hoje seria ~*"
             f"{RaceTimeFormatter.format(realistic)}*. Dá pra manter a meta como "

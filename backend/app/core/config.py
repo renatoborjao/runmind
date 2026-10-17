@@ -323,6 +323,36 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # Domingo em 2 mensagens: o resumo da semana passa a levar, DENTRO dele, o
+    # retrato "como você está" (condensado) e o "rumo à meta" (só quando há
+    # novidade ou 1x/mês) — em vez de 3 mensagens no mesmo minuto. O plano das 20h
+    # segue separado. OFF = o comportamento de sempre (3 mensagens).
+    weekly_review_unified_enabled: bool = False
+
+    # Canário: quando não-vazio, vale SÓ nestes perfis (ex.: "renato2"), mesmo
+    # com a flag global ligada. Vazio = todos.
+    weekly_review_unified_profiles: str = ""
+
+    @property
+    def weekly_review_unified_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.weekly_review_unified_profiles.split(",")
+            if p.strip()
+        ]
+
+    def weekly_review_unified_active_for(self, profile: str) -> bool:
+        """O domingo unificado vale neste perfil? (flag global + canário)."""
+
+        if not self.weekly_review_unified_enabled:
+
+            return False
+
+        allow = self.weekly_review_unified_profile_list
+
+        return not allow or profile in allow
+
     # Conversas de RECONCILIAÇÃO do coach (perguntas que fecham lacunas): quando
     # o atleta treina em ROTINA além dos dias registrados, o coach pergunta se
     # quer oficializar mais um dia; e quando a META está vaga (sem prova/prazo),

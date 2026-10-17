@@ -34,10 +34,14 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.clock import now_in, use_athlete_timezone
+from app.core.config import get_settings
 from app.infrastructure.persistence.coach_learning_repository import (
     CoachLearningRepository,
 )
 from app.infrastructure.persistence.dispatch_guard import DispatchGuard
+from app.infrastructure.persistence.goal_projection_shown_store import (
+    GoalProjectionShownStore,
+)
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
@@ -134,25 +138,50 @@ class WeeklyReviewNotifier:
 
         # rodapé "💡 Você sabia?" rotativo — descoberta gradual do que dá pra
         # perguntar ao bot, uma dica por semana (rotaciona pelo nº da semana)
-        message = (
-            f"{message}\n\n{HelpMenu.weekly_tip(local.isocalendar()[1])}"
-        )
+        tip = HelpMenu.weekly_tip(local.isocalendar()[1])
 
-        await CoachOutbox.send(
-            runner,
-            message,
-            profile=profile,
-            kind="weekly_review",
-        )
+        if get_settings().weekly_review_unified_active_for(profile):
 
-        # logo depois, o RETRATO ÚNICO "como você está" (corpo & carga + forma
-        # cruzados) — mensagem separada pra não misturar o tom. O gate semanal
-        # acima já cobre o dedup.
-        await WeeklyReviewNotifier._send_state_portrait(profile, runner)
+            # DOMINGO EM 2 MENSAGENS: o retrato condensado e o "rumo à meta" (só
+            # com novidade ou 1x/mês) vão DENTRO do resumo; o plano das 20h segue
+            # separado. Em vez de 3 mensagens no mesmo minuto.
+            sections, shown = await WeeklyReviewNotifier._unified_sections(
+                profile, runner, history, local, message,
+            )
 
-        # e o NORTE: "rumo à meta" — no nível atual, quanto sairia a distância
-        # da meta e o que falta pro alvo (vale mesmo sem data de prova).
-        await WeeklyReviewNotifier._send_goal_projection(profile, runner, history)
+            await CoachOutbox.send(
+                runner,
+                f"{WeeklyReviewNotifier._place_sections(message, sections)}"
+                f"\n\n{tip}",
+                profile=profile,
+                kind="weekly_review",
+            )
+
+            if shown is not None:
+
+                GoalProjectionShownStore().save(
+                    profile, shown, local.date().isoformat()
+                )
+
+        else:
+
+            await CoachOutbox.send(
+                runner,
+                f"{message}\n\n{tip}",
+                profile=profile,
+                kind="weekly_review",
+            )
+
+            # logo depois, o RETRATO ÚNICO "como você está" (corpo & carga + forma
+            # cruzados) — mensagem separada pra não misturar o tom. O gate semanal
+            # acima já cobre o dedup.
+            await WeeklyReviewNotifier._send_state_portrait(profile, runner)
+
+            # e o NORTE: "rumo à meta" — no nível atual, quanto sairia a distância
+            # da meta e o que falta pro alvo (vale mesmo sem data de prova).
+            await WeeklyReviewNotifier._send_goal_projection(
+                profile, runner, history
+            )
 
         # atualiza a ÂNCORA CONTÍNUA do VDOT (best_efforts do Strava das corridas
         # novas) ANTES de checar o progresso de pace — pra o floor estar fresco.
@@ -279,6 +308,124 @@ class WeeklyReviewNotifier:
         except Exception as e:
 
             print(f"Falha ao destilar aprendizados de '{profile}': {e}")
+
+    # as frases com que o resumo se despede; as seções novas entram ANTES delas
+    _CLOSINGS = (
+        "Teu plano da próxima semana chega já já.",
+        "Segue firme na próxima",
+    )
+
+    @staticmethod
+    def _place_sections(message: str, sections: list[str]) -> str:
+        """Encaixa as seções do domingo unificado ANTES do fecho do resumo ("…
+        Bora! 💪"), pra a mensagem terminar no fecho (e na dica), não no meio.
+        Sem fecho reconhecível, vão ao final."""
+
+        if not sections:
+
+            return message
+
+        block = "\n\n".join(sections)
+
+        for closing in WeeklyReviewNotifier._CLOSINGS:
+
+            at = message.rfind(closing)
+
+            if at != -1:
+
+                return f"{message[:at]}{block}\n\n{message[at:]}"
+
+        return f"{message}\n\n{block}"
+
+    @staticmethod
+    async def _unified_sections(
+        profile: str, runner, history, local, review_text: str = "",
+    ) -> tuple[list[str], dict | None]:
+        """As seções que entram no resumo de domingo unificado: o retrato
+        condensado e, SÓ se houver novidade (ou 1x/mês), o "rumo à meta".
+        Devolve (seções, snapshot da projeção mostrada — pra gravar depois do
+        envio, ou None). Cada seção é best-effort: falhar numa nunca derruba o
+        resumo. `review_text`: o resumo já montado — se ele já traz a previsão
+        ("se a prova fosse hoje"), o "rumo à meta" leva só o VEREDITO (não repete
+        o número)."""
+
+        sections: list[str] = []
+
+        shown: dict | None = None
+
+        try:
+
+            # ler o retrato grava o snapshot canônico de domingo do corpo (o
+            # serviço persiste) — por isso roda mesmo se a seção sair vazia
+            reading, evolution = StatePortraitService.read(profile)
+
+            from app.application.history.training_patterns import (
+                TrainingPatterns,
+            )
+
+            drift = TrainingPatterns.drift_for_profile(profile)
+
+            portrait = StatePortraitWriter.write_compact(
+                reading, evolution,
+                worsening=drift.worsening if drift else None,
+            )
+
+            if portrait:
+
+                sections.append(portrait)
+
+        except Exception as e:
+
+            print(f"Retrato condensado falhou p/ '{profile}': {e}")
+
+        try:
+
+            from app.application.review.goal_projection_news import (
+                projection_is_news,
+            )
+            from app.application.review.goal_projection_writer import (
+                GoalProjectionWriter,
+            )
+            from app.application.use_cases.build_training_goal import (
+                BuildTrainingGoal,
+            )
+
+            today = local.date()
+
+            goal = BuildTrainingGoal.execute(runner)
+
+            weeks = None
+
+            if goal.race_date and goal.race_date > today:
+
+                weeks = (goal.race_date - today).days // 7
+
+            built = GoalProjectionWriter.section(
+                runner.name, goal, history, weeks_to_race=weeks,
+                lean="Se a prova fosse hoje" in review_text,
+            )
+
+            if built is not None:
+
+                text, snapshot = built
+
+                news, reason = projection_is_news(
+                    GoalProjectionShownStore().load(profile), snapshot, today,
+                )
+
+                print(f"Rumo à meta no resumo [{profile}]: {reason}")
+
+                if news:
+
+                    sections.append(text)
+
+                    shown = snapshot
+
+        except Exception as e:
+
+            print(f"Projeção de meta (resumo) falhou p/ '{profile}': {e}")
+
+        return sections, shown
 
     @staticmethod
     async def _send_goal_projection(profile: str, runner, history) -> None:

@@ -97,6 +97,54 @@ class StatePortraitWriter:
 
         return "\n".join(lines)
 
+    @staticmethod
+    def write_compact(
+        reading: BodyReading,
+        evolution: FitnessEvolution,
+        worsening: bool | None = None,
+    ) -> str | None:
+        """O retrato CONDENSADO pra dentro do resumo de domingo: a síntese + uma
+        linha do corpo (com o aviso do limitador, ex.: sono) + a forma. Sem o
+        painel de números de recuperação e sem a conduta (o plano das 20h já
+        traz o próximo passo) — o retrato completo segue em "como estou?" e na aba
+        Corpo do app. None quando nenhum eixo tem lastro."""
+
+        corpo_has = reading.recovery.has_data
+
+        forma_has = evolution.has_data or evolution.stale
+
+        if not corpo_has and not forma_has:
+
+            return None
+
+        state, _conduct = StatePortraitSynthesizer.synthesize(
+            reading, evolution, worsening,
+        )
+
+        lines = ["📷 Como você está", state]
+
+        if corpo_has:
+
+            oneliner = _BODY_ONELINER.get(
+                reading.body_state, "seguimos acompanhando"
+            )
+
+            limiter = _LIMITER_SHORT.get(reading.limiter or "")
+
+            if limiter:
+
+                oneliner += f" · atenção ao {limiter}"
+
+            lines.append(f"💪 Corpo: {oneliner}")
+
+        forma = StatePortraitWriter._forma_section(evolution)
+
+        if forma:
+
+            lines.extend(forma)
+
+        return "\n".join(lines)
+
     # ------------------------------------------------------------------
 
     @staticmethod
