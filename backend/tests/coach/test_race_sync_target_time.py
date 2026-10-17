@@ -17,6 +17,11 @@ def _sync(current, race):
 
     with (
         patch(f"{MODULE}.RunnerProfileRepository", return_value=repo),
+        # a lista de provas (reconciliação/âncora) também não toca o perfil real
+        patch(
+            "app.application.races.race_service.RunnerProfileRepository",
+            return_value=repo,
+        ),
         patch(
             "app.infrastructure.persistence.race_repository.RaceRepository"
         ),
@@ -24,7 +29,9 @@ def _sync(current, race):
 
         RunnerMemoryService._sync_race("mauricio", race)
 
-    return repo.update_fields.call_args.args[1]
+    # a PRIMEIRA escrita é a do perfil pela prova citada (o resto é a âncora
+    # recalculada a partir da lista)
+    return repo.update_fields.call_args_list[0].args[1]
 
 
 def test_new_race_without_target_clears_the_inherited_time():

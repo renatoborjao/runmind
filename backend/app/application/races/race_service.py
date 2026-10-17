@@ -10,6 +10,8 @@ coach setou por conversa (importa pra lista), pra os dois lados baterem."""
 
 from __future__ import annotations
 
+import re
+
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
@@ -220,6 +222,230 @@ class RaceService:
             print(f"Prova da conversa não entrou na lista de '{profile}': {e}")
 
             return None
+
+    # ---- cancelamento e remarcação vindos da conversa ----
+
+    @staticmethod
+    def cancel_from_conversation(
+        profile: str,
+        name: str | None = None,
+        date: str | None = None,
+    ) -> dict | None:
+        """O atleta disse que uma prova FOI CANCELADA: tira da lista a prova
+        certa. Quem é a certa: a data dita (exata, ou o único mês batendo), senão
+        o nome/distância dita (só se bater com UMA prova), senão — se nada foi
+        identificado — a âncora do plano. Disse qual e não achou, ou ficou
+        ambíguo: não remove nada (melhor que tirar a prova errada). Só provas
+        futuras (a que já passou é histórico). Devolve a removida ou None;
+        nunca levanta."""
+
+        try:
+
+            repo = RaceRepository()
+
+            future = RaceService._future(repo.load(profile))
+
+            if not future:
+
+                return None
+
+            target = RaceService._resolve(profile, future, name, date)
+
+            if target is None:
+
+                return None
+
+            repo.remove(profile, target["id"])
+
+            return target
+
+        except Exception as e:
+
+            print(f"Cancelar prova de '{profile}' falhou: {e}")
+
+            return None
+
+    @staticmethod
+    def reschedule_from_conversation(
+        profile: str,
+        name: str | None,
+        new_date: str | None,
+        target_time: str | None = None,
+        moved_from: str | None = None,
+    ) -> dict | None:
+        """A prova ADIOU/MUDOU DE DATA: muda a data da MESMA prova na lista em
+        vez de criar outra (e deixar a antiga como fantasma). A mesma prova é a da
+        data antiga dita (`moved_from`) ou, sem ela, a ÚNICA futura com nome
+        equivalente (e distância compatível). Já existe prova na data nova, ou
+        ficou ambíguo: None — quem chama registra como prova nova. Nunca levanta."""
+
+        try:
+
+            if not new_date or new_date < today_local().isoformat():
+
+                return None
+
+            repo = RaceRepository()
+
+            races = repo.load(profile)
+
+            if any(r.get("date") == new_date for r in races):
+
+                return None
+
+            future = RaceService._future(races)
+
+            if moved_from:
+
+                matches = [r for r in future if r.get("date") == moved_from]
+
+            else:
+
+                # sem a data antiga, só o NOME equivalente vale (distância sozinha
+                # juntaria duas provas diferentes de 15 km)
+                matches = [
+                    r for r in future
+                    if RaceService._same_race_name(name, r, by_distance=False)
+                ]
+
+            if len(matches) != 1:
+
+                return None
+
+            fields = {"date": new_date}
+
+            if target_time:
+
+                fields["target_time"] = target_time
+
+            return repo.update(profile, matches[0]["id"], fields)
+
+        except Exception as e:
+
+            print(f"Remarcar prova de '{profile}' falhou: {e}")
+
+            return None
+
+    @staticmethod
+    def resync_anchor(profile: str) -> bool:
+        """Recalcula a âncora do perfil (a prova futura mais próxima) depois de
+        a lista mudar. True se ainda há prova à frente (âncora redefinida);
+        False se não sobrou nenhuma (o chamador limpa a âncora)."""
+
+        repo = RaceRepository()
+
+        if not RaceService._future(repo.load(profile)):
+
+            return False
+
+        RaceService._sync_anchor(profile, repo)
+
+        return True
+
+    @staticmethod
+    def _future(races: list[dict]) -> list[dict]:
+
+        today = today_local().isoformat()
+
+        return [r for r in races if (r.get("date") or "") >= today]
+
+    @staticmethod
+    def _resolve(
+        profile: str,
+        future: list[dict],
+        name: str | None,
+        date: str | None,
+    ) -> dict | None:
+        """Qual prova futura o atleta quis dizer. Data > nome > âncora. Quando
+        ele identificou a prova e nada bate (ou bate mais de uma), None."""
+
+        if date:
+
+            exact = [r for r in future if r.get("date") == date]
+
+            if len(exact) == 1:
+
+                return exact[0]
+
+            # "a de dezembro": sem dia exato o dia 15 do mês — vale o único mês
+            same_month = [
+                r for r in future if (r.get("date") or "")[:7] == date[:7]
+            ]
+
+            return same_month[0] if len(same_month) == 1 else None
+
+        if name:
+
+            matches = [r for r in future if RaceService._same_race_name(name, r)]
+
+            return matches[0] if len(matches) == 1 else None
+
+        # nada identificado: a âncora do plano
+        try:
+
+            anchor_date = str(
+                getattr(RunnerProfileRepository().load(profile), "race_date", "")
+                or ""
+            )[:10]
+
+        except Exception:
+
+            return None
+
+        anchored = [r for r in future if r.get("date") == anchor_date]
+
+        return anchored[0] if len(anchored) == 1 else None
+
+    @staticmethod
+    def _name_core(name: str | None) -> str:
+        """O nome PRÓPRIO da prova, sem distância nem palavras genéricas:
+        'Santander … Villa-Lobos (15 km)' -> '... villa-lobos'; '15 km' -> ''."""
+
+        text = re.sub(
+            r"\d+(?:[.,]\d+)?\s*(?:km|k|quil[oô]metros?)\b", " ", (name or "").lower()
+        )
+
+        words = [
+            w.strip("()[]—-–,.:;")
+            for w in text.split()
+        ]
+
+        generic = {
+            "de", "da", "do", "das", "dos", "a", "o", "e", "em", "meia",
+            "maratona", "prova", "corrida", "km", "k", "",
+        }
+
+        return " ".join(w for w in words if w not in generic and not w.isdigit())
+
+    @staticmethod
+    def _same_race_name(
+        name: str | None, race: dict, by_distance: bool = True
+    ) -> bool:
+        """O nome dito é desta prova? Nome equivalente (um contém o outro) ou,
+        com `by_distance`, a distância dita ("a meia", "a 15k") bate com a dela
+        (quem chama exige que seja a ÚNICA que bate)."""
+
+        said = RaceService._name_core(name)
+
+        listed = RaceService._name_core(race.get("name"))
+
+        # só o NOME PRÓPRIO conta ("Villa-Lobos"); "15 km" / "meia maratona" não
+        # têm nome próprio — esses caem na distância
+        if len(said) >= 4 and len(listed) >= 4 and (said in listed or listed in said):
+
+            return True
+
+        if not by_distance:
+
+            return False
+
+        said_km = parse_race_distance(name)
+
+        listed_km = race.get("distance_km") or parse_race_distance(race.get("name"))
+
+        return bool(
+            said_km and listed_km and abs(said_km - listed_km) < 0.5
+        )
 
     @staticmethod
     def _demote_other_principals(

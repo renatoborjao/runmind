@@ -13,7 +13,11 @@ real, pra cada uma virar correção na raiz:
 - erros da IA/tracebacks no log do serviço;
 - dado absurdo: limiar muito mais rápido que o ritmo real (Hélio 4:07) ou
   ritmo-alvo mais rápido que o VO2 (Maurício 3:48);
-- perfil × memória: dias pedidos na conversa ≠ dias do perfil (João).
+- perfil × memória: dias pedidos na conversa ≠ dias do perfil (João);
+- ERROS ENGOLIDOS: o app trata falha de recurso como "best-effort" (loga
+  "... falhou p/ 'atleta': motivo" e segue). Era a classe que mais passava calada
+  (cartão de sono sem o custo por 7 semanas; streams 404 todo domingo) — agora a
+  auditoria agrupa por tipo, com contagem, atletas e motivo.
 
     .venv/bin/python /tmp/coach_audit.py [--days 7]
 (normalmente via ops/coach_audit.sh, que traz o relatório pro repo local)"""
@@ -563,6 +567,72 @@ def placar(profile: str, today: date, lines: list[str]) -> None:
     lines.extend(f"  {r}" for r in rows)
 
 
+# "Oct 11 22:01:55 host uvicorn[934994]: " — o prefixo do journalctl
+_LOG_PREFIX = re.compile(r"^[A-Z][a-z]{2}\s+\d+\s[\d:]+\s\S+\s\S+?:\s")
+
+_WHO = re.compile(r"'([^']+)'")
+
+
+def _squash(text: str) -> str:
+    """Tira o que varia de linha pra linha (ids, números, URLs) pra agrupar."""
+
+    text = re.sub(r"https?://\S+", "<url>", text)
+
+    return re.sub(r"\d+", "N", text).strip()
+
+
+def group_swallowed_failures(lines: list[str]) -> list[str]:
+    """Agrupa as falhas best-effort do log ("<o quê> falhou p/ 'atleta': motivo").
+    Devolve linhas "⚠️ ..." ordenadas por contagem. Ignora payload JSON do
+    Telegram e linhas sem a palavra 'falhou'/'Falha ao'."""
+
+    groups: dict[str, dict] = {}
+
+    for raw in lines:
+
+        line = _LOG_PREFIX.sub("", raw).strip()
+
+        if not line or line.startswith(("{", "[token")) or "update_id" in line:
+
+            continue
+
+        if " falhou" not in line and not line.startswith("Falha "):
+
+            continue
+
+        head, _, tail = line.partition(" falhou")
+
+        if not tail:
+
+            head, _, tail = line.partition(": ")
+
+        who = _WHO.findall(tail.split(":", 1)[0]) or _WHO.findall(head)
+
+        what = _squash(_WHO.sub("", head))
+
+        why = _squash(tail.split(":", 1)[1] if ":" in tail else tail)[:90]
+
+        key = f"{what}|{why}"
+
+        g = groups.setdefault(key, {"what": what, "why": why, "n": 0, "who": set()})
+
+        g["n"] += 1
+
+        g["who"].update(who[:1])
+
+    out = []
+
+    for g in sorted(groups.values(), key=lambda x: -x["n"])[:15]:
+
+        athletes = f" ({', '.join(sorted(g['who']))})" if g["who"] else ""
+
+        reason = f" — {g['why']}" if g["why"] else ""
+
+        out.append(f"⚠️ {g['what']} falhou: {g['n']}x{athletes}{reason}")
+
+    return out
+
+
 def service_errors(days: int) -> list[str]:
 
     try:
@@ -595,7 +665,9 @@ def service_errors(days: int) -> list[str]:
 
                 counts[label] += 1
 
-    return [f"{label}: {n}" for label, n in counts.most_common()]
+    summary = [f"⚠️ {label}: {n}" for label, n in counts.most_common()]
+
+    return summary + group_swallowed_failures(out.splitlines())
 
 
 def main() -> None:

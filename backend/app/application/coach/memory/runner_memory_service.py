@@ -263,13 +263,16 @@ class RunnerMemoryService:
 
             return
 
+        # a lista de provas do app é o calendário: antes de mexer na âncora do
+        # perfil, garante que a âncora ATUAL já está nela (senão uma prova nova
+        # a sobrescreveria sem deixar rastro)
+        RunnerMemoryService._reconcile_race_list(profile)
+
         if race.get("clear") is True:
 
-            updates = {
-                "target_race": None,
-                "race_date": None,
-                "target_time": None,
-            }
+            RunnerMemoryService._clear_race(profile, race)
+
+            return
 
         else:
 
@@ -297,24 +300,85 @@ class RunnerMemoryService:
 
         # espelha na LISTA de provas do app (fonte estruturada multi-prova), pra
         # a prova que o coach registrou também aparecer em /provas. Best-effort.
-        if race.get("clear") is not True and race.get("name") and race.get("date"):
+        # ADIOU/MUDOU DE DATA: move a MESMA prova (senão a data antiga ficava como
+        # prova fantasma ao lado da nova).
+        if race.get("name") and race.get("date"):
 
             try:
 
+                from app.application.races.race_service import RaceService
                 from app.infrastructure.persistence.race_repository import (
                     RaceRepository,
                 )
 
-                RaceRepository().upsert(
+                moved = RaceService.reschedule_from_conversation(
                     profile,
                     race["name"],
                     race["date"],
                     race.get("target_time"),
+                    race.get("moved_from"),
                 )
+
+                if moved is None:
+
+                    RaceRepository().upsert(
+                        profile,
+                        race["name"],
+                        race["date"],
+                        race.get("target_time"),
+                    )
+
+                # a âncora do plano é sempre a prova futura MAIS PRÓXIMA da lista
+                # (citar uma prova mais distante não atropela a que vem antes)
+                RaceService.resync_anchor(profile)
 
             except Exception as e:
 
                 print(f"[memory] espelhar prova em RaceRepository falhou: {e}")
+
+    @staticmethod
+    def _reconcile_race_list(profile: str) -> None:
+        """Importa a âncora atual do perfil pra lista de provas (best-effort)."""
+
+        try:
+
+            from app.application.races.race_service import RaceService
+
+            RaceService.list(profile)
+
+        except Exception as e:
+
+            print(f"[memory] reconciliar lista de provas falhou: {e}")
+
+    @staticmethod
+    def _clear_race(profile: str, race: dict) -> None:
+        """A prova foi CANCELADA ou JÁ ACONTECEU. Cancelada: sai da lista (a que o
+        atleta identificou por nome/data, senão a âncora). Em qualquer caso a
+        âncora do plano passa pra próxima prova futura da lista; sem nenhuma, o
+        perfil volta ao treino de base (como sempre foi)."""
+
+        still_has_race = False
+
+        try:
+
+            from app.application.races.race_service import RaceService
+
+            RaceService.cancel_from_conversation(
+                profile, race.get("name"), race.get("date"),
+            )
+
+            still_has_race = RaceService.resync_anchor(profile)
+
+        except Exception as e:
+
+            print(f"[memory] cancelar prova da lista falhou: {e}")
+
+        if not still_has_race:
+
+            RunnerProfileRepository().update_fields(
+                profile,
+                {"target_race": None, "race_date": None, "target_time": None},
+            )
 
     @staticmethod
     def _sync_injuries(

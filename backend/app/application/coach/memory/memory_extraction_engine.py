@@ -65,7 +65,12 @@ corredor (distância e/ou data), inclua também:
 "race": {{"name": "10 km", "date": "2026-08-15", "target_time": "00:50:00"}}
 — campos desconhecidos: null; sem dia exato, use o dia 15 do mês citado.
 Se disser que a prova foi cancelada ou já aconteceu:
-"race": {{"clear": true}}
+"race": {{"clear": true}} — se der pra saber QUAL prova (nome ou data), inclua:
+"race": {{"clear": true, "name": "meia maratona", "date": "2026-12-20"}}
+(campos desconhecidos: null; sem dia exato, o dia 15 do mês citado).
+Se a prova ADIOU ou MUDOU de data: "race" com a data NOVA e, se souber a data
+antiga, "moved_from": "AAAA-MM-DD" (ex.: {{"name": "15 km", "date": "2027-01-10",
+"moved_from": "2026-12-20"}}).
 
 REGRAS:
 - DIA DE QUALIDADE (NÃO engessar o tipo): a inteligência do treino é do COACH —
@@ -266,7 +271,20 @@ class MemoryExtractionEngine:
 
         if race.get("clear") is True:
 
-            return {"clear": True}
+            # qual prova (opcional): nome e/ou data — a lista resolve sem chutar
+            cleared: dict = {"clear": True}
+
+            if isinstance(race.get("name"), str) and race["name"].strip():
+
+                cleared["name"] = race["name"].strip()
+
+            cleared_date = MemoryExtractionEngine._iso_or_none(race.get("date"))
+
+            if cleared_date:
+
+                cleared["date"] = cleared_date
+
+            return cleared
 
         raw_date = race.get("date")
 
@@ -282,8 +300,34 @@ class MemoryExtractionEngine:
 
             return None
 
-        return {
+        parsed = {
             "name": race.get("name"),
             "date": raw_date,
             "target_time": race.get("target_time"),
         }
+
+        # remarcação: a data antiga (só se for uma data válida)
+        moved_from = MemoryExtractionEngine._iso_or_none(race.get("moved_from"))
+
+        if moved_from:
+
+            parsed["moved_from"] = moved_from
+
+        return parsed
+
+    @staticmethod
+    def _iso_or_none(value) -> str | None:
+
+        if not isinstance(value, str):
+
+            return None
+
+        try:
+
+            date.fromisoformat(value)
+
+        except ValueError:
+
+            return None
+
+        return value
