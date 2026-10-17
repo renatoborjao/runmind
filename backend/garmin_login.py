@@ -51,6 +51,25 @@ def main(profile: str) -> None:
     print("Histórico marcado. A partir de agora o Ritmind empurra treinos")
     print("pro seu Garmin e analisa pelos dados dele.")
 
+    # backfill do CORPO (sono/HRV/prontidão/VO₂máx) na hora — senão o app do
+    # atleta nasce sem anel de prontidão e sem leitura de recuperação até o
+    # poll horário acumular dia a dia. seed_history é paced e para sozinho
+    # após alguns dias vazios; best-effort (o token já está salvo, não pode
+    # derrubar o login se a saúde falhar).
+    from app.application.garmin.garmin_health_poller import GarminHealthPoller
+
+    try:
+
+        print("Puxando histórico de saúde (sono/HRV/prontidão)...", flush=True)
+
+        pulled = GarminHealthPoller.seed_history(profile)
+
+        print(f"Saúde: {pulled} dias gravados — o app já mostra teu corpo.")
+
+    except Exception as exc:  # noqa: BLE001 — login não pode cair por causa disso
+
+        print(f"⚠️ Saúde não semeada agora ({exc}); o poll horário preenche.")
+
 
 if __name__ == "__main__":
 
