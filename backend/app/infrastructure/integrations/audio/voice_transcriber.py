@@ -6,12 +6,16 @@ avulso, estratégia de prova...). Ver [[project_ideias_produto]]."""
 
 import asyncio
 import io
+import threading
 
 from app.core.config import get_settings
 
 # O modelo é carregado UMA vez (o primeiro uso baixa os pesos pro cache do
 # HuggingFace); recarregar a cada áudio seria caríssimo. None até o 1º uso.
 _model = None
+
+# o aquecimento do boot e o 1º áudio podem chegar juntos: só um carrega
+_model_lock = threading.Lock()
 
 
 class VoiceTranscriber:
@@ -43,22 +47,43 @@ class VoiceTranscriber:
         ).strip()
 
     @staticmethod
+    def warm_up() -> None:
+        """Carrega o modelo em segundo plano (chamado no boot). O `small` leva
+        ~20 s pra subir; sem isto, o 1º áudio depois de cada restart/deploy
+        esperaria esse tempo todo. Best-effort: falhar aqui só adia o carregamento
+        pro 1º áudio."""
+
+        def _load():
+
+            try:
+
+                VoiceTranscriber._get_model()
+
+            except Exception as e:
+
+                print(f"Aquecimento do whisper falhou (carrega no 1º áudio): {e}")
+
+        threading.Thread(target=_load, daemon=True, name="whisper-warmup").start()
+
+    @staticmethod
     def _get_model():
 
         global _model
 
-        if _model is None:
+        with _model_lock:
 
-            # import tardio: a lib é pesada e só interessa quando alguém de
-            # fato manda um áudio — não queremos pagar isso no boot
-            from faster_whisper import WhisperModel
+            if _model is None:
 
-            settings = get_settings()
+                # import tardio: a lib é pesada e só interessa quando alguém de
+                # fato manda um áudio — não queremos pagar isso no import
+                from faster_whisper import WhisperModel
 
-            _model = WhisperModel(
-                settings.whisper_model,
-                device="cpu",
-                compute_type="int8",
-            )
+                settings = get_settings()
+
+                _model = WhisperModel(
+                    settings.whisper_model,
+                    device="cpu",
+                    compute_type="int8",
+                )
 
         return _model

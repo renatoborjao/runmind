@@ -4,6 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.infrastructure.integrations.audio.voice_transcriber import (
+    VoiceTranscriber,
+)
 from app.infrastructure.scheduling.weekly_plan_scheduler import (
     start_weekly_plan_scheduler,
     stop_weekly_plan_scheduler,
@@ -14,6 +17,9 @@ from app.presentation.api.router import api_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_weekly_plan_scheduler()
+    # só em produção: dev/teste não pagam o carregamento (nem baixam o modelo)
+    if get_settings().app_env == "production":
+        VoiceTranscriber.warm_up()
     yield
     stop_weekly_plan_scheduler()
 
