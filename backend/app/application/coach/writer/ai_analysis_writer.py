@@ -21,6 +21,7 @@ from app.application.history.hr_zone_history import HrZoneHistory
 from app.application.planner.pace_formatter import PaceFormatter
 from app.core.clock import today_local
 from app.core.config import get_settings
+from app.domain.entities.workout_step import has_open_cooldown
 from app.domain.entities.workout_structure import WorkoutStructure
 from app.domain.value_objects.hr_zones import zone_share_label
 from app.infrastructure.integrations.gemini.client import (
@@ -306,7 +307,13 @@ class AIAnalysisWriter:
 
         if planned.planned_distance_km:
 
-            parts.append(f"{planned.planned_distance_km:.1f} km")
+            km = f"{planned.planned_distance_km:.1f} km"
+
+            if has_open_cooldown(getattr(planned, "steps", None) or []):
+
+                km += " + desaquecimento livre"
+
+            parts.append(km)
 
         elif planned.planned_duration_minutes:
 
@@ -376,6 +383,18 @@ class AIAnalysisWriter:
                 planned_line += f" — {target}"
 
             lines.append(f"Planejado: {planned_line}")
+
+            # desaquecimento LIVRE (sem distância no plano): os km dele são extras
+            # legítimos, não volume acima do planejado — sem esta nota a IA
+            # comparava 14 km executados com os 12 declarados e acusava estouro
+            if has_open_cooldown(getattr(planned, "steps", None) or []):
+
+                lines.append(
+                    "Desaquecimento LIVRE: o plano não fixou distância pra ele — "
+                    "os km que o atleta soltou no fim NÃO contam como volume "
+                    "acima do planejado. Compare a distância só até o bloco "
+                    "principal e julgue o ritmo/FC dos blocos prescritos."
+                )
 
             # prescrição (blocos/séries) pra IA comparar a execução com o que
             # foi pedido, não só distância crua. Treinador externo guarda a

@@ -134,6 +134,25 @@ def total_distance_km(steps: list[WorkoutStep]) -> float | None:
     return round(total / 1000, 1)
 
 
+def has_open_cooldown(steps: list[WorkoutStep]) -> bool:
+    """O treino tem desaquecimento ABERTO — sem distância nem duração, termina
+    no botão lap? Aí o plano não fixou quanto o atleta solta no fim: a distância
+    declarada da sessão cobre só o que vem ANTES, e os km do desaquecimento são
+    extras legítimos (não estouro de volume)."""
+
+    for step in steps or []:
+
+        if step.kind == COOLDOWN and not step.distance_m and not step.duration_sec:
+
+            return True
+
+        if step.kind == REPEAT and has_open_cooldown(step.steps):
+
+            return True
+
+    return False
+
+
 def parse_steps(raw) -> list[WorkoutStep]:
     """Lê a lista de passos que a IA emitiu (tolerante a lixo). Passo
     inválido é descartado; nunca levanta."""

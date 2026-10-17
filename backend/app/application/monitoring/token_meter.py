@@ -7,6 +7,7 @@ precisar threadar `profile` por toda chamada. Best-effort: NUNCA derruba a
 chamada ao Gemini. Ver [[project_consumo_tokens]]."""
 
 import contextlib
+import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
 
@@ -17,6 +18,67 @@ from app.infrastructure.persistence.token_usage_repository import (
 _DEFAULT = {"profile": "unknown", "label": "unknown"}
 
 _scope: ContextVar[dict] = ContextVar("gemini_usage_scope", default=_DEFAULT)
+
+# módulos que NÃO contam como "quem chamou" ao inferir o dono de uma chamada
+# sem escopo: o próprio cliente do Gemini e o medidor
+_INFRA_MODULES = (
+    "app.infrastructure.integrations.gemini",
+    "app.application.monitoring",
+)
+
+# quantos frames da pilha olhar procurando o chamador e o atleta
+_MAX_STACK_DEPTH = 30
+
+
+def _infer_scope() -> dict:
+    """Ninguém marcou o escopo (`scope`/`set_current`): infere pela PILHA de quem
+    chamou. O RÓTULO é o módulo do chamador mais próximo ("auto:weekly_review_
+    narrative_writer") e o ATLETA é a variável `profile` (texto) do frame mais
+    próximo que tiver uma. Best-effort: sem pista, devolve o padrão. Assim uma
+    chamada nova que esqueceu o escopo já nasce atribuída em vez de cair no balde
+    "unknown" que escondia 2/3 do consumo."""
+
+    label = None
+
+    profile = None
+
+    try:
+
+        frame = sys._getframe(2)
+
+        depth = 0
+
+        while frame is not None and depth < _MAX_STACK_DEPTH:
+
+            module = frame.f_globals.get("__name__", "")
+
+            if module.startswith("app.") and not module.startswith(_INFRA_MODULES):
+
+                if label is None:
+
+                    label = "auto:" + module.rsplit(".", 1)[-1]
+
+                if profile is None:
+
+                    candidate = frame.f_locals.get("profile")
+
+                    if (
+                        isinstance(candidate, str)
+                        and 0 < len(candidate) <= 40
+                        and candidate.replace("_", "").isalnum()
+                    ):
+
+                        profile = candidate
+
+            frame = frame.f_back
+
+            depth += 1
+
+    except Exception:  # noqa: BLE001 — inferência nunca derruba o registro
+
+        pass
+
+    return {"profile": profile or "unknown", "label": label or "unknown"}
 
 
 class TokenMeter:
@@ -72,6 +134,11 @@ class TokenMeter:
             )
 
             scope = _scope.get()
+
+            # ninguém marcou: infere o chamador/atleta pela pilha
+            if scope is _DEFAULT:
+
+                scope = _infer_scope()
 
             record = {
                 "ts": datetime.now(UTC).isoformat(timespec="seconds"),
