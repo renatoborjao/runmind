@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.application.races.race_intel_service import RaceIntelService
-from app.application.races.race_service import RaceService
+from app.application.races.race_service import PRIORITIES, RaceService
 from app.presentation.api.deps import current_profile
 
 router = APIRouter(prefix="/races", tags=["Races"])
@@ -23,6 +23,38 @@ class RaceIn(BaseModel):
     name: str
     date: str  # ISO YYYY-MM-DD
     target_time: str | None = None
+    # opcionais: sem distância o nome entrega ("15 km", "meia maratona"); sem
+    # papel a tela sugere (A principal · B preparatória · C de treino)
+    distance_km: float | None = None
+    priority: str | None = None
+
+
+def _valid_distance(value: float | None) -> float | None:
+
+    if value is None:
+
+        return None
+
+    if not (0.4 <= value <= 500):
+
+        raise HTTPException(status_code=422, detail="Distância fora do intervalo (0,4 a 500 km).")
+
+    return round(float(value), 3)
+
+
+def _valid_priority(value: str | None) -> str | None:
+
+    if value is None or value == "":
+
+        return None
+
+    value = value.strip().upper()
+
+    if value not in PRIORITIES:
+
+        raise HTTPException(status_code=422, detail="Papel inválido (use A, B ou C).")
+
+    return value
 
 
 @router.post("")
@@ -62,7 +94,11 @@ async def add_race(
 
         raise HTTPException(status_code=422, detail="Tempo-alvo inválido (ex.: 0:50:00).")
 
-    record = RaceService.add(profile, name, d.isoformat(), target_time)
+    record = RaceService.add(
+        profile, name, d.isoformat(), target_time,
+        distance_km=_valid_distance(body.distance_km),
+        priority=_valid_priority(body.priority),
+    )
 
     # pesquisa a prova na web em segundo plano (dossiê de percurso/clima pro
     # coach) — não atrasa a resposta; genérica ("10 km") é ignorada
@@ -83,3 +119,37 @@ async def delete_race(race_id: str, profile: str = Depends(current_profile)):
         raise HTTPException(status_code=404, detail="Prova não encontrada.")
 
     return {"ok": True}
+
+
+class RacePatch(BaseModel):
+
+    priority: str | None = None
+    distance_km: float | None = None
+
+
+@router.patch("/{race_id}")
+async def update_race(
+    race_id: str,
+    body: RacePatch,
+    profile: str = Depends(current_profile),
+):
+    """Muda o papel (A principal · B preparatória · C de treino) e/ou a
+    distância de uma prova. Não mexe na âncora do plano (essa segue a data)."""
+
+    priority = _valid_priority(body.priority)
+
+    distance = _valid_distance(body.distance_km)
+
+    if priority is None and distance is None:
+
+        raise HTTPException(status_code=422, detail="Nada pra atualizar.")
+
+    record = RaceService.update(
+        profile, race_id, priority=priority, distance_km=distance
+    )
+
+    if record is None:
+
+        raise HTTPException(status_code=404, detail="Prova não encontrada.")
+
+    return {"ok": True, "race": record}

@@ -14,10 +14,20 @@ from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
 from app.core.clock import today_local
+from app.domain.value_objects.race_distance import parse_race_distance
 from app.infrastructure.persistence.race_repository import RaceRepository
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+
+# papel da prova no ciclo: define o quanto o plano se organiza em torno dela
+PRIORITIES = ("A", "B", "C")
+
+PRIORITY_LABELS = {
+    "A": "principal",
+    "B": "preparatória",
+    "C": "de treino",
+}
 
 
 class RaceService:
@@ -54,7 +64,52 @@ class RaceService:
 
             r["past"] = bool(r.get("date") and r["date"] < today)
 
+            # distância: a guardada ou a que o nome entrega (nunca grava na leitura)
+            stored_km = r.get("distance_km")
+
+            r["distance_inferred"] = not stored_km
+
+            # forma estável da API: prova antiga ainda não tem o campo
+            r.setdefault("priority", None)
+
+            r["distance_km"] = stored_km or parse_race_distance(r.get("name"))
+
+        suggested = RaceService._suggest_priorities(out, today)
+
+        for r in out:
+
+            r["priority_suggested"] = suggested.get(r.get("id"))
+
+            # papel EFETIVO = o que o atleta escolheu, senão o sugerido
+            r["priority_effective"] = r.get("priority") or r["priority_suggested"]
+
         return out
+
+    @staticmethod
+    def _suggest_priorities(races: list[dict], today: str) -> dict[str, str]:
+        """Sugestão de papel pra quem ainda não escolheu (o atleta confirma ou
+        troca na tela): prova única à frente = principal; com várias, a MAIS
+        LONGA é a principal e as demais, preparatórias. Só sugere pra prova futura
+        e com distância conhecida — sem pista, não chuta."""
+
+        future = [r for r in races if r.get("date") and r["date"] >= today]
+
+        if len(future) == 1:
+
+            return {future[0]["id"]: "A"}
+
+        known = [r for r in future if r.get("distance_km")]
+
+        if not known:
+
+            return {}
+
+        # empate de distância: a mais tarde (o objetivo costuma vir por último)
+        main = max(known, key=lambda r: (r["distance_km"], r["date"]))
+
+        return {
+            r["id"]: ("A" if r is main else "B") for r in known
+        }
 
     @staticmethod
     def add(
@@ -62,11 +117,16 @@ class RaceService:
         name: str,
         date: str,
         target_time: str | None = None,
+        distance_km: float | None = None,
+        priority: str | None = None,
     ) -> dict:
 
         repo = RaceRepository()
 
-        record = repo.add(profile, name, date, target_time)
+        record = repo.add(
+            profile, name, date, target_time,
+            distance_km=distance_km, priority=priority,
+        )
 
         # o coach passa a saber da prova (equilibra no plano)
         desc = f"Prova cadastrada pelo app: {name} em {date}"
@@ -74,6 +134,10 @@ class RaceService:
         if target_time:
 
             desc += f" (alvo {target_time})"
+
+        if priority in PRIORITIES:
+
+            desc += f" — prova {PRIORITY_LABELS[priority]} ({priority})"
 
         try:
 
@@ -88,6 +152,37 @@ class RaceService:
         RaceService._sync_anchor(profile, repo)
 
         return record
+
+    @staticmethod
+    def update(
+        profile: str,
+        race_id: str,
+        priority: str | None = None,
+        distance_km: float | None = None,
+    ) -> dict | None:
+        """Muda o papel (A/B/C) e/ou a distância de uma prova. Não mexe na
+        âncora (essa depende da data). None se a prova não existe; ValueError
+        pra papel inválido."""
+
+        fields: dict = {}
+
+        if priority is not None:
+
+            if priority not in PRIORITIES:
+
+                raise ValueError("Papel inválido (use A, B ou C).")
+
+            fields["priority"] = priority
+
+        if distance_km is not None:
+
+            fields["distance_km"] = distance_km
+
+        if not fields:
+
+            return None
+
+        return RaceRepository().update(profile, race_id, fields)
 
     @staticmethod
     def remove(profile: str, race_id: str) -> bool:

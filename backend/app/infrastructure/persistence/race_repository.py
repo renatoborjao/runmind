@@ -5,12 +5,16 @@ import uuid
 from pathlib import Path
 
 from app.core.clock import now_local
+from app.domain.value_objects.race_distance import parse_race_distance
 
 
 class RaceRepository:
     """Lista ESTRUTURADA de provas do atleta (uma ou várias), pra o app cadastrar/
     ver/remover. Um arquivo por atleta: storage/races/{profile}.json —
-    [{id, name, date(ISO), target_time, created_at}].
+    [{id, name, date(ISO), target_time, distance_km, priority, created_at}].
+    `priority` (A principal / B preparatória / C de treino) só é gravada quando o
+    atleta (ou o coach, a pedido dele) escolhe — sem escolha fica None e a
+    leitura sugere (ver RaceService.list).
 
     NÃO substitui a periodização: a prova datada MAIS PRÓXIMA continua ancorando
     o plano pelos campos do perfil (target_race/race_date/target_time). Este
@@ -62,6 +66,8 @@ class RaceRepository:
         name: str,
         date: str,
         target_time: str | None = None,
+        distance_km: float | None = None,
+        priority: str | None = None,
     ) -> dict:
 
         races = self.load(profile)
@@ -71,6 +77,11 @@ class RaceRepository:
             "name": name,
             "date": date,
             "target_time": target_time,
+            # distância informada, ou a do nome ("(15 km)", "meia maratona")
+            "distance_km": (
+                distance_km if distance_km else parse_race_distance(name)
+            ),
+            "priority": priority,
             "created_at": now_local().isoformat(),
         }
 
@@ -108,6 +119,24 @@ class RaceRepository:
                 return r
 
         return self.add(profile, name, date, target_time)
+
+    def update(self, profile: str, race_id: str, fields: dict) -> dict | None:
+        """Atualiza campos de UMA prova (papel, distância, tempo-alvo). Devolve o
+        registro novo, ou None se a prova não existe."""
+
+        races = self.load(profile)
+
+        for r in races:
+
+            if r.get("id") == race_id:
+
+                r.update(fields)
+
+                self.save(profile, races)
+
+                return r
+
+        return None
 
     def remove(self, profile: str, race_id: str) -> bool:
 

@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b51 · PDF da nutrição com a marca dos cards";
+export const APP_BUILD = "b52 · provas: papel (A/B/C) e distância";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -1044,7 +1044,22 @@ export interface Race {
   target_time: string | null;
   is_anchor?: boolean;
   past?: boolean;
+  distance_km?: number | null;
+  distance_inferred?: boolean;
+  /** papel escolhido pelo atleta (null = ainda não escolheu) */
+  priority?: RacePriority | null;
+  priority_suggested?: RacePriority | null;
+  /** o que vale: o escolhido, senão o sugerido */
+  priority_effective?: RacePriority | null;
 }
+
+export type RacePriority = "A" | "B" | "C";
+
+export const RACE_PRIORITY_LABEL: Record<RacePriority, string> = {
+  A: "Principal",
+  B: "Preparatória",
+  C: "De treino",
+};
 
 export async function getRaces(): Promise<Race[] | null> {
   const r = await apiFetch("/races");
@@ -1053,11 +1068,27 @@ export async function getRaces(): Promise<Race[] | null> {
   return data.races ?? [];
 }
 
-export async function addRace(body: { name: string; date: string; target_time?: string | null }): Promise<{ ok: boolean; race?: Race; message?: string }> {
+export async function addRace(body: {
+  name: string;
+  date: string;
+  target_time?: string | null;
+  distance_km?: number | null;
+  priority?: RacePriority | null;
+}): Promise<{ ok: boolean; race?: Race; message?: string }> {
   const r = await apiFetch("/races", { method: "POST", body: JSON.stringify(body) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return { ok: false, message: data.detail || "Não consegui cadastrar." };
   return { ok: true, race: data.race };
+}
+
+export async function updateRace(
+  id: string,
+  body: { priority?: RacePriority; distance_km?: number },
+): Promise<{ ok: boolean; message?: string }> {
+  const r = await apiFetch(`/races/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  if (r.ok) return { ok: true };
+  const data = await r.json().catch(() => ({}));
+  return { ok: false, message: data.detail || "Não consegui atualizar." };
 }
 
 export async function deleteRace(id: string): Promise<boolean> {
