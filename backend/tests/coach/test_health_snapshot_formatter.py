@@ -176,3 +176,33 @@ def test_life_load_line():
     panel = HealthSnapshotFormatter.panel(rec)
 
     assert "Movimento do dia: ~8.500 passos/dia · 25 min intensos/dia" in panel
+
+
+def _readiness_line(score, level=None):
+
+    rec = RecoveryTrend(
+        hrv_recent=50.0, hrv_direction=STABLE, sleep_avg_hours=6.5,
+        nights_counted=7, readiness_score=score, readiness_level=level,
+        days_covered=14,
+    )
+
+    panel = HealthSnapshotFormatter.panel(rec)
+
+    return next(ln for ln in panel.splitlines() if "Prontidão (Garmin)" in ln)
+
+
+def test_readiness_icon_follows_the_garmin_band_not_a_fixed_check():
+    """1/100 nunca leva ✅ (o João recebia 'Prontidão 1/100' com check verde)."""
+
+    assert _readiness_line(1, "POOR").startswith("• 🔴")
+    assert _readiness_line(28, "LOW").startswith("• 🟠")
+    assert _readiness_line(61, "MODERATE").startswith("• 🟡")
+    assert _readiness_line(85, "HIGH").startswith("• ✅")
+
+
+def test_readiness_icon_falls_back_to_score_bands_without_level():
+
+    assert _readiness_line(2).startswith("• 🔴")
+    assert _readiness_line(40).startswith("• 🟠")
+    assert _readiness_line(74).startswith("• 🟡")
+    assert _readiness_line(90).startswith("• ✅")

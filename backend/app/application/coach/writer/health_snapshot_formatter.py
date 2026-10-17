@@ -33,6 +33,31 @@ _HRV_STATUS = {
 class HealthSnapshotFormatter:
 
     @staticmethod
+    def _readiness_icon(level: str | None, score: int | None) -> str:
+        """Ícone da prontidão pela FAIXA do próprio Garmin (POOR/LOW/MODERATE/
+        HIGH/PRIME) — nunca um ✅ fixo ao lado de um 1/100. Sem a faixa, cai nos
+        cortes de pontuação do Garmin."""
+
+        key = (level or "").upper()
+
+        if not key and score is not None:
+
+            key = (
+                "PRIME" if score >= 76
+                else "MODERATE" if score >= 51
+                else "LOW" if score >= 26
+                else "POOR"
+            )
+
+        return {
+            "PRIME": "✅",
+            "HIGH": "✅",
+            "MODERATE": "🟡",
+            "LOW": "🟠",
+            "POOR": "🔴",
+        }.get(key, "📊")
+
+    @staticmethod
     def panel(recovery: RecoveryTrend) -> str | None:
         """Painel compacto dos números de recuperação. None quando não há
         dado do Garmin (o chamador simplesmente não anexa nada). Quando o
@@ -48,8 +73,12 @@ class HealthSnapshotFormatter:
         # números que a própria Garmin calcula vêm primeiro (mandam quando há)
         if recovery.readiness_score is not None:
 
+            icon = HealthSnapshotFormatter._readiness_icon(
+                recovery.readiness_level, recovery.readiness_score
+            )
+
             lines.append(
-                f"• ✅ Prontidão (Garmin): {recovery.readiness_score}/100"
+                f"• {icon} Prontidão (Garmin): {recovery.readiness_score}/100"
             )
 
         status = _TRAINING_STATUS.get(recovery.training_status or "")
