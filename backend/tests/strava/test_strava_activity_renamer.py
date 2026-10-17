@@ -360,28 +360,43 @@ def test_plan_name_drops_distance_when_athlete_fell_short():
     ) == "Ritmind · Longão Aeróbico"
 
 
-def test_plan_name_drops_distance_when_athlete_ran_more():
-    """Planejou 12, correu 14 → nome SEM distância (não mente '12.0km')."""
+def test_plan_name_drops_distance_when_athlete_passed_next_km():
+    """Planejou 12, correu 13+ → nome SEM distância (não mente '12.0km')."""
 
     assert StravaActivityRenamer._plan_name(
         _session("Longão Aeróbico", km=12.0), executed_km=14.03
     ) == "Ritmind · Longão Aeróbico"
 
     assert StravaActivityRenamer._plan_name(
+        _session("Longão Aeróbico", km=12.0), executed_km=13.0
+    ) == "Ritmind · Longão Aeróbico"
+
+    assert StravaActivityRenamer._plan_name(
         _session("Longão Aeróbico", km=14.5), executed_km=16.2
     ) == "Ritmind · Longão Aeróbico"
 
+    # 14.5 planejado: 15.0 já é o km seguinte ao 14
+    assert StravaActivityRenamer._plan_name(
+        _session("Longão Aeróbico", km=14.5), executed_km=15.0
+    ) == "Ritmind · Longão Aeróbico"
 
-def test_plan_name_keeps_planned_when_distance_matches():
-    """Igual na casa do título (0.1 km) → nome padrão, com a distância."""
+
+def test_plan_name_keeps_planned_up_to_the_same_whole_km():
+    """Planejou 12, correu 12.0 a 12.9 → ainda é o 'Longão 12.0km'."""
+
+    for ran in (12.0, 12.04, 12.5, 12.99):
+
+        assert StravaActivityRenamer._plan_name(
+            _session("Longão Aeróbico", km=12.0), executed_km=ran
+        ) == "Ritmind · Longão Aeróbico 12.0km", ran
 
     assert StravaActivityRenamer._plan_name(
         _session("Longão Aeróbico", km=14.5), executed_km=14.46
     ) == "Ritmind · Longão Aeróbico 14.5km"
 
     assert StravaActivityRenamer._plan_name(
-        _session("Longão Aeróbico", km=12.0), executed_km=12.04
-    ) == "Ritmind · Longão Aeróbico 12.0km"
+        _session("Longão Aeróbico", km=14.5), executed_km=14.9
+    ) == "Ritmind · Longão Aeróbico 14.5km"
 
 
 # ---- detecção de nome genérico --------------------------------------------

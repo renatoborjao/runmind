@@ -58,12 +58,13 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
     só, sem drift. Ex.: 'Ritmind · Longão Aeróbico 13.0km' / 'Ritmind ·
     Rodagem por Tempo'. Reusado por garmin_push e pelo renomeador do Strava.
 
-    `executed_km` (só o Strava passa, PÓS-corrida): se a distância corrida
-    DIFERE da planejada (na casa decimal do título) — pra menos OU pra mais —
-    o nome sai SEM distância ('Longão Progressivo'): nunca '12.0km' numa
-    corrida de 14, nem '14.5km' numa de 13.5; o km real o Strava já mostra.
-    Só a distância que bate com o planejado mantém o km no nome. Sem
-    `executed_km` (relógio, PRÉ-corrida) o alvo planejado é o certo."""
+    `executed_km` (só o Strava passa, PÓS-corrida): o km só fica no nome se a
+    corrida CUMPRIU o planejado sem estourar o quilômetro inteiro dele —
+    planejado 12, correu de 12.0 a 12.9 → 'Longão 12.0km'. Correu MENOS que o
+    planejado (na casa de 0.1 km do título: nunca '14.5km' numa de 13.5) ou
+    passou pro km seguinte (13.0+ num de 12) → sai SEM distância ('Longão
+    Progressivo'); o km real o Strava já mostra. Sem `executed_km` (relógio,
+    PRÉ-corrida) o alvo planejado é o certo."""
 
     label = plan_workout_label(
         getattr(session, "workout_type", "") or "",
@@ -76,10 +77,19 @@ def plan_session_title(session, executed_km: float | None = None) -> str:
 
         return f"Ritmind · {label}"
 
-    # compara na mesma precisão do título (0.1 km): 14.46 de 14.5 é "14.5"
-    if executed_km and round(executed_km, 1) != round(km, 1):
+    if executed_km:
 
-        return f"Ritmind · {label}"
+        # menos que o planejado, na mesma precisão do título (0.1 km): 14.46
+        # de 14.5 é "14.5"
+        fell_short = round(executed_km, 1) < round(km, 1)
+
+        # estourou o km inteiro do planejado: 12.9 num de 12 ainda é "12";
+        # 13.0 já não
+        overshot = executed_km >= int(round(km, 1)) + 1
+
+        if fell_short or overshot:
+
+            return f"Ritmind · {label}"
 
     return f"Ritmind · {label} {km:.1f}km"
 
