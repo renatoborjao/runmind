@@ -10,6 +10,7 @@ False) — aqui a gente preenche de verdade e marca como completo.
 from __future__ import annotations
 
 from app.application.onboarding.initial_plan import ensure_initial_plan
+from app.application.races.race_service import RaceService
 from app.core.weekdays import WEEKDAYS
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
@@ -192,6 +193,14 @@ class AppOnboardingService:
                 "notifications": True,
                 "onboarding_complete": True,
             },
+        )
+
+        # a prova do cadastro já nasce na lista estruturada (distância pelo nome)
+        RaceService.record_from_conversation(
+            slug,
+            data.get("target_race"),
+            data.get("race_date"),
+            target_time=data.get("target_time"),
         )
 
         # ------- plano inicial (mesmo miolo do bot) -------

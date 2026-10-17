@@ -104,6 +104,12 @@ class RaceService:
 
             return {}
 
+        # o atleta já escolheu a principal: as outras sem escolha são
+        # preparatórias — a sugestão nunca cria uma 2ª principal
+        if any(r.get("priority") == "A" for r in future):
+
+            return {r["id"]: "B" for r in known}
+
         # empate de distância: a mais tarde (o objetivo costuma vir por último)
         main = max(known, key=lambda r: (r["distance_km"], r["date"]))
 
@@ -152,6 +158,87 @@ class RaceService:
         RaceService._sync_anchor(profile, repo)
 
         return record
+
+    @staticmethod
+    def record_from_conversation(
+        profile: str,
+        name: str | None,
+        date: str | None,
+        target_time: str | None = None,
+        distance_km: float | None = None,
+        priority: str | None = None,
+    ) -> dict | None:
+        """Registra na LISTA estruturada uma prova que veio da CONVERSA (cérebro
+        do coach, fluxo antigo de meta) ou do cadastro: nome, data, distância,
+        tempo-alvo e — quando o atleta deixou claro — o papel (A/B/C). Sem efeito
+        colateral no perfil nem na memória (quem chama já cuida da âncora e do
+        que o coach lembra): só a lista, que é o calendário que o coach lê.
+
+        Só provas FUTURAS entram (a passada é histórico, não calendário). Dedup
+        por data + nome; completa distância/tempo/papel que faltavam. Um papel A
+        novo rebaixa a outra principal ESCOLHIDA pro papel B. Best-effort: devolve
+        None sem data/sem nome utilizável, nunca levanta."""
+
+        try:
+
+            if not date or date < today_local().isoformat():
+
+                return None
+
+            label = (name or "").strip() or (
+                f"{distance_km:g} km" if distance_km else "Prova"
+            )
+
+            repo = RaceRepository()
+
+            record = repo.upsert(profile, label, date, target_time)
+
+            fields: dict = {}
+
+            # a distância dita na conversa manda (o nome só dá a aproximada:
+            # "(21 km)" é a meia de 21,0975)
+            if distance_km and record.get("distance_km") != distance_km:
+
+                fields["distance_km"] = distance_km
+
+            if priority in PRIORITIES and record.get("priority") != priority:
+
+                fields["priority"] = priority
+
+            if fields:
+
+                record = repo.update(profile, record["id"], fields) or record
+
+            if priority == "A":
+
+                RaceService._demote_other_principals(profile, repo, record["id"])
+
+            return record
+
+        except Exception as e:
+
+            print(f"Prova da conversa não entrou na lista de '{profile}': {e}")
+
+            return None
+
+    @staticmethod
+    def _demote_other_principals(
+        profile: str, repo: RaceRepository, keep_id: str
+    ) -> None:
+        """Uma nova principal (A) escolhida: a outra A escolhida (prova futura)
+        vira preparatória (B). O atleta reverte na tela de provas."""
+
+        today = today_local().isoformat()
+
+        for race in repo.load(profile):
+
+            if (
+                race.get("id") != keep_id
+                and race.get("priority") == "A"
+                and (race.get("date") or "") >= today
+            ):
+
+                repo.update(profile, race["id"], {"priority": "B"})
 
     @staticmethod
     def update(
@@ -264,11 +351,8 @@ class RaceService:
 
             return
 
-        already = any(
-            r.get("date") == date and (r.get("name") or "").strip().lower()
-            == name.strip().lower()
-            for r in races
-        )
+        # mesma data = mesmo evento (o nome muda de boca em boca)
+        already = any(r.get("date") == date for r in races)
 
         if not already:
 

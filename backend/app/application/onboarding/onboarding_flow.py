@@ -15,7 +15,7 @@ from app.application.onboarding.onboarding_answer_parser import (
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
-from app.application.planner.weekly_plan_service import WeeklyPlanService
+from app.application.races.race_service import RaceService
 from app.core.clock import today_local
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS, weekday_label
@@ -1004,6 +1004,14 @@ class OnboardingFlow:
                 "timezone": "America/Sao_Paulo",
                 "language": "pt-BR",
             },
+        )
+
+        # a prova do cadastro já nasce na lista estruturada (distância pelo nome)
+        RaceService.record_from_conversation(
+            slug,
+            answers.get("target_race"),
+            answers.get("race_date"),
+            target_time=answers.get("target_time"),
         )
 
         # Com treinador: registra o plano do treinador e conclui.

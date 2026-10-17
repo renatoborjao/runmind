@@ -27,11 +27,21 @@ from app.application.planner.current_plan_provider import CurrentPlanProvider
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
+from app.application.races.race_service import RaceService
 from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
 )
+
+# papel da prova na LISTA estruturada, pela relação que o cérebro classificou:
+# norte (primary) e troca (replace) = principal; degrau = preparatória; soma
+# (additional) fica sem papel — o app sugere e o atleta confirma
+_ROLE_BY_RELATIONSHIP = {
+    "primary": "A",
+    "replace": "A",
+    "stepping_stone": "B",
+}
 
 # nota de hierarquia por relação — a inteligência que o gerador de plano lê pra
 # periodizar (afiar o degrau sem largar o norte).
@@ -160,6 +170,20 @@ class GoalActionExecutor:
 
         # 1) memória evolutiva — SEMPRE (nada se perde)
         GoalActionExecutor._remember(profile, action, relationship, goal_text)
+
+        # 1b) calendário ESTRUTURADO (lista de provas do app): a prova entra com
+        # distância e papel — sem isto só a âncora virava prova e as demais
+        # ficavam como texto na memória
+        if has_race:
+
+            RaceService.record_from_conversation(
+                profile,
+                GoalActionExecutor._race_label(action),
+                action.race_date,
+                target_time=action.target_time,
+                distance_km=action.distance_km,
+                priority=_ROLE_BY_RELATIONSHIP.get(relationship),
+            )
 
         # 2) âncora: prova datada mais próxima (nunca atropelada por mais longe)
         anchor_changed = GoalActionExecutor._maybe_set_anchor(
@@ -350,7 +374,8 @@ class GoalActionExecutor:
 
         if action.distance_km:
 
-            km = f"{action.distance_km:g} km"
+            # 21.0975 -> "21.1 km" (o rótulo vai pro perfil e pra lista de provas)
+            km = f"{round(action.distance_km, 1):g} km"
 
             return f"{name} ({km})" if name else km
 

@@ -7,6 +7,7 @@ from app.application.coach.memory.runner_memory_service import (
 from app.application.onboarding.onboarding_answer_parser import (
     OnboardingAnswerParser,
 )
+from app.application.races.race_service import RaceService
 from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.persistence.pending_goal_repository import (
     PendingGoalRepository,
@@ -193,6 +194,14 @@ class GoalChangeApplier:
 
         RunnerProfileRepository().update_fields(profile, updates)
 
+        # a prova somada entra no calendário estruturado (sem papel: o app sugere)
+        RaceService.record_from_conversation(
+            profile,
+            extracted.get("target_race"),
+            extracted.get("race_date"),
+            target_time=extracted.get("target_time"),
+        )
+
         if runner.external_coach:
 
             return f"Anotado! Somei mais um objetivo aos seus: {goal}. 🎯"
@@ -283,6 +292,14 @@ class GoalChangeApplier:
             updates["race_date"] = extracted["race_date"]
 
         RunnerProfileRepository().update_fields(profile, updates)
+
+        # a prova da meta entra no calendário estruturado (sem papel)
+        RaceService.record_from_conversation(
+            profile,
+            extracted.get("target_race"),
+            extracted.get("race_date"),
+            target_time=extracted.get("target_time"),
+        )
 
         # treinador humano: Ritmind só acompanha o plano dele, não gera
         if runner.external_coach:

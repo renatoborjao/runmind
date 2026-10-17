@@ -98,18 +98,18 @@ class RaceRepository:
         date: str,
         target_time: str | None = None,
     ) -> dict:
-        """Adiciona a prova se ainda não existe (dedup por data + nome
-        normalizado); se existir, completa o tempo-alvo que faltava. Usado pra
+        """Adiciona a prova se ainda não existe; se existir, completa o
+        tempo-alvo que faltava. MESMA DATA = mesmo evento (ninguém corre duas
+        provas no mesmo dia): o app, a memória do coach e a conversa chamam a
+        mesma prova de jeitos diferentes ("Santander … Villa-Lobos (15 km)",
+        "Villa-Lobos (15 km)", "15 km") e a dedup por nome duplicava. Usado pra
         espelhar a prova que o coach registrou por conversa na LISTA do app."""
-
-        def _norm(s: str) -> str:
-            return " ".join((s or "").lower().split())
 
         races = self.load(profile)
 
         for r in races:
 
-            if r.get("date") == date and _norm(r.get("name")) == _norm(name):
+            if r.get("date") == date:
 
                 if target_time and not r.get("target_time"):
 

@@ -1114,3 +1114,35 @@ def test_finish_without_strava_skips_mark_and_reminds():
 
     srs.mark.assert_not_called()
     assert "conectar seu Strava" in reply
+
+
+def test_onboarding_race_lands_in_the_structured_race_list(tmp_path):
+    """A prova dita no cadastro já nasce na lista de provas (distância pelo nome),
+    sem depender de a tela de provas ser aberta um dia."""
+
+    from app.application.races.race_service import RaceService
+
+    conversation = list(FULL_CONVERSATION[:-2]) + [
+        (
+            "quero correr a Corrida da Cidade (10 km) em maio",
+            {
+                "goal": "10 km em 55 minutos",
+                "target_race": "Corrida da Cidade (10 km)",
+                "target_time": "00:55:00",
+                "race_date": "2030-05-01",
+            },
+        ),
+        ("sim, pode montar", {"confirmed": True}),
+    ]
+
+    _run_conversation(tmp_path, conversation)
+
+    races = RaceService.list("fulano")
+
+    assert [r["name"] for r in races] == ["Corrida da Cidade (10 km)"]
+    assert races[0]["date"] == "2030-05-01"
+    assert races[0]["distance_km"] == 10.0
+    assert races[0]["target_time"] == "00:55:00"
+    # prova única: o app sugere principal (nada gravado de papel)
+    assert races[0]["priority"] is None
+    assert races[0]["priority_effective"] == "A"
