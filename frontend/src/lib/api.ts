@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b53 · plano da semana na aba Treino";
+export const APP_BUILD = "b54 · aba Treino numa tela só (calendário + plano da semana)";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -346,6 +346,7 @@ export interface WeekPlanSession {
   structure: string;
   notes: string;
   distance_km: number | null;
+  estimated_km?: number | null;
   duration_min: number | null;
   pace_min: string | null;
   pace_max: string | null;
@@ -353,6 +354,10 @@ export interface WeekPlanSession {
   adjustment_reason: string | null;
   is_oneoff: boolean;
   steps: WorkoutStep[];
+  /** o detalhe do treino linha a linha, igual ao do chat (passos, dica, foco) */
+  detail: string[];
+  /** sugestão de tênis do coach (só pra treino que ainda vem) */
+  shoe: string;
 }
 
 export type WeekDayStatus = "done" | "today" | "upcoming" | "missed" | "rest";

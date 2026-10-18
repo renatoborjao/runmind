@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
-import { getCalendar, type CalendarMonth } from "@/lib/api";
-import WeekView from "./week-view";
+import { getCalendar, type CalendarMonth, type WeekPlan } from "@/lib/api";
+import WeekPlanSection from "./week-plan";
+
+// UMA tela só: o calendário do mês em cima e, logo abaixo, o plano da semana com o
+// detalhe de cada treino (o mesmo que o coach manda no chat). Tocar num dia do
+// calendário seleciona a semana dele e leva até o treino daquele dia.
 
 // Status por cor (não por tipo): verde = feito, amarelo = a realizar.
-// A diferença de tipo (tiro/rodagem/longão) fica no DETALHE do treino.
 const DONE_COLOR = "var(--accent)";
 const PLANNED_COLOR = "#F5A623";
 
@@ -22,6 +25,23 @@ function Mark() {
   );
 }
 
+function isoOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return isoOf(d);
+}
+
+// segunda-feira da semana de uma data (o plano é sempre de segunda a domingo)
+function mondayOf(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return isoOf(d);
+}
+
 export default function TreinoPage() {
   const router = useRouter();
   const today = new Date();
@@ -29,22 +49,15 @@ export default function TreinoPage() {
   const [cal, setCal] = useState<CalendarMonth | null>(null);
   const [loading, setLoading] = useState(true);
   const [authFail, setAuthFail] = useState(false);
-  // "Semana" (o plano que o coach manda no chat) é a visão padrão; "Mês" é o calendário
-  const [view, setView] = useState<"week" | "month">("week");
+
+  // semana selecionada (segunda, ISO). undefined = a do plano atual.
+  const [weekStart, setWeekStart] = useState<string | undefined>(undefined);
+  // a semana que o plano carregado cobre — pinta a faixa no calendário
+  const [week, setWeek] = useState<{ start: string; end: string } | null>(null);
+  // dia tocado no calendário: o plano rola até ele (tick refaz o scroll no mesmo dia)
+  const [focus, setFocus] = useState<{ iso: string; tick: number } | null>(null);
 
   useEffect(() => {
-    try {
-      if (localStorage.getItem("treino_view") === "month") setView("month");
-    } catch { /* sem storage: fica na semana */ }
-  }, []);
-
-  function chooseView(v: "week" | "month") {
-    setView(v);
-    try { localStorage.setItem("treino_view", v); } catch { /* ignora */ }
-  }
-
-  useEffect(() => {
-    if (view !== "month") return;
     setLoading(true);
     (async () => {
       const data = await getCalendar(ym.y, ym.m);
@@ -55,7 +68,7 @@ export default function TreinoPage() {
       setCal(data);
       setLoading(false);
     })();
-  }, [ym, view]);
+  }, [ym]);
 
   useEffect(() => {
     if (authFail) router.replace("/entrar");
@@ -80,8 +93,30 @@ export default function TreinoPage() {
     });
   }
 
+  // toque num dia: seleciona a semana dele (se for outra) e leva até o treino do dia
+  function pickDay(iso: string) {
+    setFocus({ iso, tick: Date.now() });
+    if (!week || iso < week.start || iso > week.end) setWeekStart(mondayOf(iso));
+  }
+
+  // setas do plano: troca de semana e acompanha com o mês do calendário
+  function goToWeek(startIso: string) {
+    setFocus(null);
+    setWeekStart(startIso);
+    const mid = new Date(addDays(startIso, 3) + "T00:00:00");
+    setYm({ y: mid.getFullYear(), m: mid.getMonth() + 1 });
+  }
+
+  function onLoaded(plan: WeekPlan, requested: string | undefined) {
+    if (plan.has_plan && plan.week_start && plan.week_end) {
+      setWeek({ start: plan.week_start, end: plan.week_end });
+    } else if (requested) {
+      setWeek({ start: requested, end: addDays(requested, 6) });
+    }
+  }
+
   const { y, m } = ym;
-  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayIso = isoOf(today);
   const firstWeekday = new Date(y, m - 1, 1).getDay();
   const daysInMonth = new Date(y, m, 0).getDate();
   const raceIso = cal?.race?.date_iso ?? null;
@@ -106,8 +141,7 @@ export default function TreinoPage() {
   }, [cal]);
 
   function openDay(iso: string, done: boolean, dayEn?: string) {
-    // Treino FEITO abre a atividade RICA (mapa, parciais, análise do coach) —
-    // igual ao "Ver como foi" do treino de hoje, não o resumo fraco antigo.
+    // Treino FEITO abre a atividade RICA (mapa, parciais, análise do coach).
     // Full load (window.location) porque no PWA a query não chega no client-nav.
     if (done) window.location.assign(`/atividades?date=${iso}`);
     else if (dayEn) router.push(`/treino/detalhe?day=${dayEn}`);
@@ -125,24 +159,6 @@ export default function TreinoPage() {
           <h1>Treinos</h1>
         </div>
 
-        <div className="seg" role="tablist" aria-label="Visão dos treinos" style={{ marginBottom: 14 }}>
-          <button role="tab" aria-selected={view === "week"} className={view === "week" ? "on" : ""} onClick={() => chooseView("week")}>Semana</button>
-          <button role="tab" aria-selected={view === "month"} className={view === "month" ? "on" : ""} onClick={() => chooseView("month")}>Mês</button>
-        </div>
-
-        {view === "week" ? <WeekView /> : (<>
-
-        {/* navegação de mês */}
-        <div className="month-nav">
-          <button className="icon-btn" aria-label="Mês anterior" onClick={() => shift(-1)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <span className="mlabel" style={{ textTransform: "capitalize" }}>{MONTHS[m - 1]} {y}</span>
-          <button className="icon-btn" aria-label="Próximo mês" onClick={() => shift(1)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-          </button>
-        </div>
-
         {cal?.race && (
           <section className="card">
             <div className="race">
@@ -158,7 +174,18 @@ export default function TreinoPage() {
           </section>
         )}
 
+        {/* CALENDÁRIO do mês — toque num dia pra ver o plano daquela semana logo abaixo */}
         <section className="card">
+          <div className="month-nav" style={{ marginBottom: 10 }}>
+            <button className="icon-btn" aria-label="Mês anterior" onClick={() => shift(-1)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <span className="mlabel" style={{ textTransform: "capitalize" }}>{MONTHS[m - 1]} {y}</span>
+            <button className="icon-btn" aria-label="Próximo mês" onClick={() => shift(1)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
+          </div>
+
           {loading ? (
             <p className="auth-sub center" style={{ margin: 0 }}>Carregando…</p>
           ) : (
@@ -172,12 +199,12 @@ export default function TreinoPage() {
                   const pl = planByDate.get(iso);
                   const isToday = iso === todayIso;
                   const isRace = iso === raceIso;
-                  const clickable = !!ex || !!pl;
+                  const inWeek = !!week && iso >= week.start && iso <= week.end;
                   return (
                     <div
                       key={i}
-                      className={`cal-cell${clickable ? " has" : ""}${isToday ? " today" : ""}`}
-                      onClick={clickable ? () => openDay(iso, !!ex, pl?.day_en) : undefined}
+                      className={`cal-cell${ex || pl ? " has" : ""}${isToday ? " today" : ""}${inWeek ? " inweek" : ""}${focus?.iso === iso ? " sel" : ""}`}
+                      onClick={() => pickDay(iso)}
                     >
                       {isRace && <span className="flag">🏁</span>}
                       {ex ? (
@@ -194,12 +221,22 @@ export default function TreinoPage() {
               <div className="legend">
                 <span><i style={{ background: DONE_COLOR, borderRadius: "50%", width: 12, height: 12 }} />Feito</span>
                 <span><i style={{ background: PLANNED_COLOR, borderRadius: "50%", width: 12, height: 12 }} />A realizar</span>
+                <span><i style={{ background: "var(--accent-wash)", borderRadius: 4, width: 12, height: 12, border: "1px solid var(--accent)" }} />Semana aberta abaixo</span>
               </div>
             </>
           )}
         </section>
 
-        {/* lista do mês */}
+        {/* PLANO DA SEMANA — o detalhe de cada treino, aberto */}
+        <WeekPlanSection
+          weekStart={weekStart}
+          focusIso={focus?.iso ?? null}
+          focusTick={focus?.tick ?? 0}
+          onLoaded={onLoaded}
+          onNavigate={goToWeek}
+        />
+
+        {/* histórico do mês */}
         <section className="card">
           <div className="card-head"><span className="eyebrow">Treinos do mês</span></div>
           {list.length > 0 ? (
@@ -211,7 +248,7 @@ export default function TreinoPage() {
                 </div>
                 <span className="kdot" style={{ background: it.done ? DONE_COLOR : PLANNED_COLOR }} />
                 <div className="info">
-                  <div className="wt">{it.title}{it.done ? "" : ""}</div>
+                  <div className="wt">{it.title}</div>
                   <div className="wd">{it.sub}</div>
                 </div>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
@@ -221,8 +258,6 @@ export default function TreinoPage() {
             <p className="muted" style={{ margin: 0 }}>Sem treinos neste mês.</p>
           )}
         </section>
-
-        </>)}
 
       </div>
       <BottomNav />
