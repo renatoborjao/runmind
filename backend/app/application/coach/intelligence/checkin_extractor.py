@@ -75,11 +75,12 @@ ESCALAS (1-5):
 - energy: 1=exausto/sem energia, 3=normal, 5=cheio de energia/disposto
 - sleep_quality: 1=dormiu muito mal, 3=ok, 5=dormiu ótimo
 - soreness: 1=nenhuma dor, 3=leve, 5=muita dor/desconforto (MAIOR = pior)
-- illness: true SÓ se o atleta diz estar DOENTE AGORA (no presente) — gripe, \
-resfriado, febre, virose, dor de garganta com mal-estar, enjoo/náusea de \
-doença. Uma dor muscular/articular de treino NÃO é doença (isso é soreness). \
-Doença que ele diz que JÁ PASSOU ("voltando da gripe", "recuperado", "já \
-passou") NÃO é illness. Senão false.
+- illness: true se o atleta está DOENTE — diz que está, que PEGOU/está com \
+gripe, resfriado, febre, virose, dor de garganta com mal-estar, enjoo/náusea \
+de doença, ou que não estava/não está 100% por doença ("peguei uma gripe", \
+"tô gripado"). Uma dor muscular/articular de treino NÃO é doença (isso é \
+soreness). Só NÃO é illness quando ele diz que a doença JÁ PASSOU ("voltando \
+da gripe e me sentindo bem", "recuperado", "já passou"). Senão false.
 - recovered: true SÓ se ele diz que a doença PASSOU / que está recuperado \
 ("tô recuperado da gripe", "não tem mais infecção", "já sarei", "voltando da \
 gripe e me senti inteiro"). illness e recovered nunca são true juntos. Senão \
