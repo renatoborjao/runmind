@@ -218,6 +218,13 @@ class WeekPlanBuilder:
             "structure": getattr(s, "structure", "") or "",
             "notes": getattr(s, "notes", "") or "",
             "distance_km": planned_km(s),
+            # km ESTIMADO de uma sessão por tempo (duração ÷ pace) — entra no volume
+            # planejado da semana; None quando a sessão é por distância
+            "estimated_km": (
+                s.effective_distance_km
+                if planned_km(s) is None
+                else None
+            ),
             "duration_min": s.planned_duration_minutes,
             "pace_min": s.target_pace_min,
             "pace_max": s.target_pace_max,
@@ -247,7 +254,7 @@ class WeekPlanBuilder:
 
                 sessions += 1
 
-                planned_km_total += s["distance_km"] or 0
+                planned_km_total += s["distance_km"] or s["estimated_km"] or 0
 
                 if d["status"] == "done":
 

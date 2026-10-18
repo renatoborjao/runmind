@@ -231,3 +231,21 @@ def test_the_race_countdown_travels_with_the_week():
     }
 
     assert _build(_plan(MONDAY, [_session("Tuesday")]))["race"] is None
+
+
+def test_time_based_session_counts_its_estimated_km_in_the_planned_volume():
+    """'Retorno de pausa/lesão' é por tempo (sem km): o volume planejado conta o km
+    ESTIMADO (duração ÷ pace), pra não aparecer '21 de 12 km' (caso real do renato2)."""
+
+    by_time = PlannedSession(
+        day="Monday", workout_type="Retorno de pausa/lesão", objective="voltar",
+        planned_distance_km=None, planned_duration_minutes=45,
+        target_pace_min="6:30", target_pace_max="7:00", estimated_distance_km=6.5,
+    )
+
+    out = _build(_plan(MONDAY, [by_time, _session("Saturday", km=12.0)]))
+
+    mon = next(d for d in out["days"] if d["day_en"] == "Monday")["session"]
+
+    assert mon["distance_km"] is None and mon["estimated_km"] == 6.5
+    assert out["totals"]["planned_km"] == 18.5

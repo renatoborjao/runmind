@@ -101,7 +101,7 @@ function DayRow({
 
   const title = s
     ? `${s.workout_type}${s.distance_km ? ` · ${kmText(s.distance_km)}` : s.duration_min ? ` · ${s.duration_min} min` : ""}`
-    : "Corrida livre";
+    : "Treino extra";
 
   const pace = s ? paceText(s.pace_min, s.pace_max) : null;
 
