@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import { getCalendar, type CalendarMonth } from "@/lib/api";
+import WeekView from "./week-view";
 
 // Status por cor (não por tipo): verde = feito, amarelo = a realizar.
 // A diferença de tipo (tiro/rodagem/longão) fica no DETALHE do treino.
@@ -28,8 +29,22 @@ export default function TreinoPage() {
   const [cal, setCal] = useState<CalendarMonth | null>(null);
   const [loading, setLoading] = useState(true);
   const [authFail, setAuthFail] = useState(false);
+  // "Semana" (o plano que o coach manda no chat) é a visão padrão; "Mês" é o calendário
+  const [view, setView] = useState<"week" | "month">("week");
 
   useEffect(() => {
+    try {
+      if (localStorage.getItem("treino_view") === "month") setView("month");
+    } catch { /* sem storage: fica na semana */ }
+  }, []);
+
+  function chooseView(v: "week" | "month") {
+    setView(v);
+    try { localStorage.setItem("treino_view", v); } catch { /* ignora */ }
+  }
+
+  useEffect(() => {
+    if (view !== "month") return;
     setLoading(true);
     (async () => {
       const data = await getCalendar(ym.y, ym.m);
@@ -40,7 +55,7 @@ export default function TreinoPage() {
       setCal(data);
       setLoading(false);
     })();
-  }, [ym]);
+  }, [ym, view]);
 
   useEffect(() => {
     if (authFail) router.replace("/entrar");
@@ -109,6 +124,13 @@ export default function TreinoPage() {
         <div className="greet">
           <h1>Treinos</h1>
         </div>
+
+        <div className="seg" role="tablist" aria-label="Visão dos treinos" style={{ marginBottom: 14 }}>
+          <button role="tab" aria-selected={view === "week"} className={view === "week" ? "on" : ""} onClick={() => chooseView("week")}>Semana</button>
+          <button role="tab" aria-selected={view === "month"} className={view === "month" ? "on" : ""} onClick={() => chooseView("month")}>Mês</button>
+        </div>
+
+        {view === "week" ? <WeekView /> : (<>
 
         {/* navegação de mês */}
         <div className="month-nav">
@@ -199,6 +221,8 @@ export default function TreinoPage() {
             <p className="muted" style={{ margin: 0 }}>Sem treinos neste mês.</p>
           )}
         </section>
+
+        </>)}
 
       </div>
       <BottomNav />

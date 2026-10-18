@@ -483,7 +483,7 @@ export default function InicioPage() {
         <section className="card">
           <div className="card-head">
             <span className="eyebrow">Sua semana</span>
-            <a className="link" onClick={() => router.push("/treino")}>Calendário</a>
+            <a className="link" onClick={() => router.push("/treino")}>Plano da semana</a>
           </div>
 
           <div className="week">

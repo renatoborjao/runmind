@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b52 · provas: papel (A/B/C) e distância";
+export const APP_BUILD = "b53 · plano da semana na aba Treino";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -332,6 +332,65 @@ export interface WorkoutsResponse {
 
 export async function getWorkouts(): Promise<WorkoutsResponse | null> {
   const r = await apiFetch("/workouts");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---- Plano da semana (o do chat com o coach, navegável) ----
+
+export interface WeekPlanSession {
+  workout_type: string;
+  kind: string;
+  objective: string;
+  purpose: string;
+  structure: string;
+  notes: string;
+  distance_km: number | null;
+  duration_min: number | null;
+  pace_min: string | null;
+  pace_max: string | null;
+  adjusted: boolean;
+  adjustment_reason: string | null;
+  is_oneoff: boolean;
+  steps: WorkoutStep[];
+}
+
+export type WeekDayStatus = "done" | "today" | "upcoming" | "missed" | "rest";
+
+export interface WeekPlanDay {
+  day_en: string;
+  day_pt: string;
+  date_iso: string;
+  date_num: number;
+  is_today: boolean;
+  is_past: boolean;
+  status: WeekDayStatus;
+  session: WeekPlanSession | null;
+  executed: { km: number; pace: string | null; duration_min: number; runs: number } | null;
+}
+
+export interface WeekPlan {
+  has_plan: boolean;
+  week_start?: string;
+  week_end?: string;
+  is_current?: boolean;
+  source?: string;
+  phase?: string;
+  phase_label?: string | null;
+  objective?: string;
+  block_label?: string | null;
+  extra_day_note?: string | null;
+  is_deload?: boolean;
+  totals?: { planned_km: number; done_km: number; sessions: number; done_sessions: number };
+  days?: WeekPlanDay[];
+  race?: RaceInfo | null;
+  prev_week_start: string | null;
+  next_week_start: string | null;
+}
+
+export async function getWeekPlan(weekStart?: string): Promise<WeekPlan | null> {
+  const q = weekStart ? `?week_start=${encodeURIComponent(weekStart)}` : "";
+  const r = await apiFetch(`/workouts/week${q}`);
   if (!r.ok) return null;
   return r.json();
 }
