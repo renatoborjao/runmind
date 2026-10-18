@@ -318,3 +318,36 @@ def test_open_illness_overrides_the_fresh_body_reading():
 
     assert "DOENÇA EM ABERTO" in text and "22/09" in text
     assert "não é folga pra puxar" in text
+
+
+def test_recovered_athlete_is_not_told_he_is_sick_and_coach_is_told_to_accept_it():
+    """'Estou recuperado' (renato2, 11-18/10): sem doença em aberto, o dossiê traz
+    o fato de que ELE disse que passou — o coach aceita e não inventa sintoma."""
+
+    from app.application.coach.context.athlete_dossier import AthleteDossier
+    from app.domain.entities.daily_checkin import DailyCheckin
+
+    healed = DailyCheckin(
+        day="2026-10-18", at="2026-10-18T09:00:00", recovered=True,
+        note="não tem mais infecção",
+    )
+
+    data = SimpleNamespace(
+        reading=None, profile="renato2", activities=[], today=date(2026, 10, 18),
+        trajectory=None, drift=None, ceiling=None,
+    )
+
+    with (
+        patch.object(AthleteDossier, "_open_illness", return_value=None),
+        patch.object(AthleteDossier, "_recovered_illness", return_value=healed),
+        patch(
+            "app.application.coach.planning.body_directive.body_plan_directive",
+            return_value="",
+        ),
+    ):
+
+        text = "\n".join(l for l in AthleteDossier._body(data) if l)
+
+    assert "DOENÇA EM ABERTO" not in text
+    assert "RECUPERADO DA DOENÇA" in text and "18/10" in text
+    assert "invente sintoma" in text

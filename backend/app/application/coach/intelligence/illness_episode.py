@@ -43,6 +43,17 @@ class IllnessEpisode:
         return None if ran_since else ill
 
     @staticmethod
+    def recovered(profile: str, today: date) -> DailyCheckin | None:
+        """O contrário: o atleta DISSE que a doença passou (e não voltou a
+        adoecer). É palavra dele sobre o próprio corpo — o coach não o trata de
+        doente nem inventa sintoma (caso renato2, 11-18/10: 'estou recuperado'
+        e o coach seguia falando de infecção)."""
+
+        return CheckinRepository().recent_recovery(
+            profile, today.isoformat(), WINDOW_DAYS,
+        )
+
+    @staticmethod
     def reminder_line(ill: DailyCheckin) -> str:
         """Linha do lembrete do dia com a doença em aberto: orienta, o atleta
         decide (nunca cobra)."""

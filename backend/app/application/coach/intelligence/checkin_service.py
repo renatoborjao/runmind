@@ -69,6 +69,13 @@ class CheckinService:
 
             parts.append("relatou estar DOENTE (gripe/resfriado/febre)")
 
+        elif checkin.recovered:
+
+            parts.append(
+                "disse que a doença PASSOU (está recuperado — é palavra dele; "
+                "não trate como doente)"
+            )
+
         if checkin.energy is not None:
 
             parts.append(f"energia {_ENERGY.get(checkin.energy, checkin.energy)}")

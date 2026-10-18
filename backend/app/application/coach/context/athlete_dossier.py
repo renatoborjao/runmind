@@ -332,6 +332,24 @@ class AthleteDossier:
             return None
 
     @staticmethod
+    def _recovered_illness(data: _Inputs):
+        """Ele disse que a doença passou (e não voltou a adoecer). Best-effort."""
+
+        try:
+
+            from app.application.coach.intelligence.illness_episode import (
+                IllnessEpisode,
+            )
+
+            return IllnessEpisode.recovered(data.profile, data.today)
+
+        except Exception as e:
+
+            print(f"Dossiê: recuperação falhou p/ '{data.profile}': {e}")
+
+            return None
+
+    @staticmethod
     def _live_drift(profile: str, data: _Inputs):
         """A deriva de recuperação com a leitura de HOJE no fim da série (os
         snapshots gravados podem ainda não ter o de hoje) — senão o estado
@@ -795,6 +813,20 @@ class AthleteDossier:
                 "retorno leve e curto; se ainda estiver doente, descanso."
             )
 
+        else:
+
+            healed = AthleteDossier._recovered_illness(data)
+
+            if healed is not None:
+
+                lines.append(
+                    f"RECUPERADO DA DOENÇA: ele disse em {healed.day[8:10]}/"
+                    f"{healed.day[5:7]} que a gripe/doença PASSOU. É palavra dele "
+                    "sobre o próprio corpo — aceite; não o trate como doente nem "
+                    "invente sintoma. Quem dá a dose agora é a carga, o sono e o "
+                    "corpo medido, não uma doença que ele diz ter acabado."
+                )
+
         if reading is not None:
 
             lines.append(
@@ -1043,6 +1075,10 @@ class AthleteDossier:
             if getattr(c, "illness", False):
 
                 bits.append("doente")
+
+            elif getattr(c, "recovered", False):
+
+                bits.append("disse que a doença passou (recuperado)")
 
             if getattr(c, "note", None):
 

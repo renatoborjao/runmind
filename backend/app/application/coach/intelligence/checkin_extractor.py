@@ -31,6 +31,10 @@ _STATE_HINTS = (
     # doença: gripe/resfriado/febre/virose/mal-estar
     "gripe", "gripad", "resfriad", "febre", "febril", "doente", "doenca",
     "virose", "viral", "mal estar", "mal-estar", "indispost", "enjoo", "nausea",
+    "infec",
+    # recuperação: dizer que a doença PASSOU também é relato (fecha o episódio) —
+    # o "não tem mais infecção" de 18/10 nem chegou ao extrator
+    "recuperad", "recuperei", "curad", "sarei", "sarou",
 )
 
 
@@ -65,15 +69,21 @@ MENSAGEM: {incoming_text}
 
 Responda APENAS com JSON:
 {{"energy": 1-5 ou null, "sleep_quality": 1-5 ou null, "soreness": 1-5 ou null,
-  "illness": true/false, "note": "..."}}
+  "illness": true/false, "recovered": true/false, "note": "..."}}
 
 ESCALAS (1-5):
 - energy: 1=exausto/sem energia, 3=normal, 5=cheio de energia/disposto
 - sleep_quality: 1=dormiu muito mal, 3=ok, 5=dormiu ótimo
 - soreness: 1=nenhuma dor, 3=leve, 5=muita dor/desconforto (MAIOR = pior)
-- illness: true SÓ se o atleta diz estar DOENTE — gripe, resfriado, febre, \
-virose, dor de garganta com mal-estar, enjoo/náusea de doença. Uma dor \
-muscular/articular de treino NÃO é doença (isso é soreness). Senão false.
+- illness: true SÓ se o atleta diz estar DOENTE AGORA (no presente) — gripe, \
+resfriado, febre, virose, dor de garganta com mal-estar, enjoo/náusea de \
+doença. Uma dor muscular/articular de treino NÃO é doença (isso é soreness). \
+Doença que ele diz que JÁ PASSOU ("voltando da gripe", "recuperado", "já \
+passou") NÃO é illness. Senão false.
+- recovered: true SÓ se ele diz que a doença PASSOU / que está recuperado \
+("tô recuperado da gripe", "não tem mais infecção", "já sarei", "voltando da \
+gripe e me senti inteiro"). illness e recovered nunca são true juntos. Senão \
+false.
 - note: só se houver detalhe útil (ex.: "dor na panturrilha direita", "gripado \
 com dor de garganta"); senão ""
 
@@ -81,7 +91,9 @@ REGRAS:
 - Preencha SÓ o que a mensagem indicar; o resto é null/false. Não invente.
 - "dormi mal"→sleep_quality baixo; "tô detonado/zerado/acabado"→energy baixo; \
 "perna/joelho doendo"→soreness alto + note; "acordei inteiro/disposto"→energy alto; \
-"tô gripado/com febre/resfriado"→illness true + note.
+"tô gripado/com febre/resfriado"→illness true + note; "tô recuperado/não \
+tenho mais a infecção/mesmo voltando da gripe me senti bem"→recovered true \
+(illness false).
 - Se a mensagem NÃO fala de sono/energia/dor/doença/sensação, devolva tudo \
 null, illness false e note "".
 """
@@ -126,6 +138,7 @@ class CheckinExtractor:
             sleep_quality=data.get("sleep_quality"),
             soreness=data.get("soreness"),
             illness=data.get("illness", False),
+            recovered=data.get("recovered", False),
             note=data.get("note") or "",
         )
 
@@ -152,7 +165,12 @@ class CheckinExtractor:
             "energy": CheckinExtractor._scale(data.get("energy")),
             "sleep_quality": CheckinExtractor._scale(data.get("sleep_quality")),
             "soreness": CheckinExtractor._scale(data.get("soreness")),
-            "illness": data.get("illness") is True,
+            # 'passou' e 'doente' não convivem: a recuperação vence ("mesmo
+            # voltando da gripe me senti inteiro" virou 'doente' em 17/10)
+            "illness": (
+                data.get("illness") is True and data.get("recovered") is not True
+            ),
+            "recovered": data.get("recovered") is True,
             "note": data.get("note") if isinstance(data.get("note"), str) else "",
         }
 

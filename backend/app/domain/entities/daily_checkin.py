@@ -17,8 +17,12 @@ class DailyCheckin:
     energy: int | None = None
     sleep_quality: int | None = None
     soreness: int | None = None
-    illness: bool = False          # relatou estar doente (gripe/febre/resfriado)
+    illness: bool = False          # relatou estar doente AGORA (gripe/febre/resfriado)
     note: str = ""                 # ex.: "dor na panturrilha direita"
+    # disse que a doença PASSOU ("recuperado", "não tenho mais infecção", "voltando
+    # da gripe e inteiro"). É o fechamento do episódio: o relato mais recente vence
+    # (doente OU recuperado) — antes só a doença era gravada e ficava em aberto
+    recovered: bool = False
 
     @property
     def has_data(self) -> bool:
@@ -29,5 +33,6 @@ class DailyCheckin:
                 for v in (self.energy, self.sleep_quality, self.soreness)
             )
             or self.illness
+            or self.recovered
             or bool(self.note)
         )

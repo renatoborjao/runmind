@@ -167,3 +167,86 @@ def test_merge_keeps_illness_flag(tmp_path):
     assert len(stored) == 1
     assert stored[0].illness is True
     assert stored[0].sleep_quality == 2
+
+
+# ---- a gripe tem FIM: "recuperado" fecha o episódio (caso renato2, 11-18/10) ----
+# Antes só a doença era gravada: "recuperado da gripe" virava um check-in sem sinal
+# e o lembrete/bom-dia/pergunta de acompanhamento seguiam tratando de doente.
+
+
+def test_recovered_after_illness_closes_the_episode(tmp_path):
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY - timedelta(days=2), illness=True,
+                                   note="peguei uma gripe"))
+    repo.record("renato", _checkin(TODAY - timedelta(days=1), recovered=True,
+                                   note="Recuperado da gripe"))
+
+    assert repo.recent_illness("renato", TODAY.isoformat()) is None
+    assert repo.recent_concern("renato", TODAY.isoformat()) is None
+
+    healed = repo.recent_recovery("renato", TODAY.isoformat())
+
+    assert healed is not None and healed.recovered is True
+
+
+def test_getting_sick_again_reopens_after_recovery(tmp_path):
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY - timedelta(days=3), recovered=True))
+    repo.record("renato", _checkin(TODAY - timedelta(days=1), illness=True))
+
+    assert repo.recent_illness("renato", TODAY.isoformat()) is not None
+    assert repo.recent_recovery("renato", TODAY.isoformat()) is None
+
+
+def test_recovered_the_same_day_overrides_the_morning_illness(tmp_path):
+    """Gripado de manhã, 'já passou' à noite: o relato mais novo vence — e um
+    relato que não fala de saúde (sono) não apaga nenhum dos dois."""
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY, illness=True, note="gripado"))
+    repo.record("renato", _checkin(TODAY, recovered=True, note="já passou"))
+    repo.record("renato", _checkin(TODAY, sleep_quality=2))
+
+    stored = repo.load("renato")
+
+    assert len(stored) == 1
+    assert stored[0].illness is False and stored[0].recovered is True
+    assert stored[0].sleep_quality == 2
+
+
+def test_recovery_does_not_hide_a_pain_concern(tmp_path):
+    """Recuperado da gripe mas com a perna doendo: a dor segue a acompanhar."""
+
+    repo = _repo(tmp_path)
+
+    repo.record("renato", _checkin(TODAY - timedelta(days=1), recovered=True,
+                                   soreness=4, note="panturrilha"))
+
+    concern = repo.recent_concern("renato", TODAY.isoformat())
+
+    assert concern is not None and concern.note == "panturrilha"
+
+
+def test_old_records_without_the_recovered_field_still_load(tmp_path):
+    """Check-ins gravados antes do campo (storage de produção) continuam lendo."""
+
+    import json
+
+    (tmp_path / "renato.json").write_text(json.dumps([
+        {"day": "2026-07-24", "at": "2026-07-24T08:00:00", "energy": 3,
+         "sleep_quality": None, "soreness": None, "illness": True, "note": "gripe"},
+    ]), encoding="utf-8")
+
+    stored = _repo(tmp_path).load("renato")
+
+    assert stored[0].illness is True and stored[0].recovered is False
+
+
+def test_a_recovery_report_is_data_by_itself():
+
+    assert _checkin(TODAY, recovered=True).has_data is True

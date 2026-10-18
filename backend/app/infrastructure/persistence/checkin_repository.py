@@ -103,9 +103,17 @@ class CheckinRepository:
 
             return None
 
+        # do mais novo pro mais velho: um 'recuperado' fecha a doença dos relatos
+        # ANTERIORES (a dor é outra queixa — continua valendo)
+        illness_closed = False
+
         for checkin in reversed(self.load(profile)):
 
-            is_concern = checkin.illness or (
+            if checkin.recovered and not checkin.illness:
+
+                illness_closed = True
+
+            is_concern = (checkin.illness and not illness_closed) or (
                 checkin.soreness is not None
                 and checkin.soreness >= _CONCERN_SORENESS
             )
@@ -146,8 +154,19 @@ class CheckinRepository:
                 new.soreness if new.soreness is not None else old.soreness
             ),
             # doença é sinal "pega ou não pega" — uma vez sinalizado no dia,
-            # permanece (um segundo relato sem doença não apaga a gripe)
-            illness=new.illness or old.illness,
+            # permanece (um segundo relato que não fala de saúde não apaga a
+            # gripe). Mas o relato de saúde MAIS NOVO vence: "recuperado" depois
+            # de "gripado" fecha, e voltar a adoecer reabre.
+            illness=(
+                True if new.illness
+                else False if new.recovered
+                else old.illness
+            ),
+            recovered=(
+                False if new.illness
+                else True if new.recovered
+                else old.recovered
+            ),
             note=new.note or old.note,
         )
 
@@ -156,8 +175,10 @@ class CheckinRepository:
     ) -> DailyCheckin | None:
         """O relato de DOENÇA mais recente dentro dos últimos `within_days` —
         janela maior que a do estado geral (gripe/resfriado dura dias). None se
-        não há doença recente. É o que segura o 'pode puxar' de um atleta que
-        avisou que está doente."""
+        não há doença recente OU se o atleta já disse que PASSOU: o relato de
+        saúde mais novo decide (doente ou recuperado). É o que segura o 'pode
+        puxar' de um atleta que avisou que está doente — e o que o solta quando
+        ele diz que está bem."""
 
         from datetime import date, timedelta
 
@@ -171,9 +192,14 @@ class CheckinRepository:
 
         for checkin in reversed(self.load(profile)):
 
-            if not checkin.illness:
+            if not (checkin.illness or checkin.recovered):
 
                 continue
+
+            # o relato de saúde mais novo decide; 'recuperado' = episódio fechado
+            if checkin.recovered and not checkin.illness:
+
+                return None
 
             try:
 
@@ -183,7 +209,46 @@ class CheckinRepository:
 
             except ValueError:
 
+                pass
+
+            return None
+
+        return None
+
+    def recent_recovery(
+        self, profile: str, today: str, within_days: int = 10
+    ) -> DailyCheckin | None:
+        """O 'recuperado' mais recente — SÓ se ele é o relato de saúde mais novo
+        (um 'gripado' depois dele reabre a doença). É o fato que impede o coach
+        de tratar de doente quem disse que passou, ou de inventar sintoma."""
+
+        from datetime import date, timedelta
+
+        try:
+
+            cutoff = date.fromisoformat(today) - timedelta(days=within_days)
+
+        except ValueError:
+
+            return None
+
+        for checkin in reversed(self.load(profile)):
+
+            if not (checkin.illness or checkin.recovered):
+
                 continue
+
+            if checkin.illness or not checkin.recovered:
+
+                return None
+
+            try:
+
+                return checkin if date.fromisoformat(checkin.day) >= cutoff else None
+
+            except ValueError:
+
+                return None
 
         return None
 
