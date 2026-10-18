@@ -20,7 +20,10 @@ from app.application.home.home_summary_builder import (
 )
 from app.application.home.workouts_builder import WorkoutsBuilder
 from app.application.planner.pace_formatter import PaceFormatter
-from app.application.planner.weekly_plan_message_formatter import PHASE_LABELS
+from app.application.planner.weekly_plan_message_formatter import (
+    PHASE_LABELS,
+    WeeklyPlanMessageFormatter,
+)
 from app.core.clock import now_local
 from app.infrastructure.persistence.activity_archive_repository import (
     ActivityArchiveRepository,
@@ -74,7 +77,9 @@ class WeekPlanBuilder:
         runs = WeekPlanBuilder._runs_by_date(profile, monday)
 
         days = [
-            WeekPlanBuilder._day(plan, i, day_en, monday, now.date(), runs)
+            WeekPlanBuilder._day(
+                plan, i, day_en, monday, now.date(), runs, profile
+            )
             for i, day_en in enumerate(_WEEK_EN)
         ]
 
@@ -159,7 +164,10 @@ class WeekPlanBuilder:
         }
 
     @staticmethod
-    def _day(plan, i: int, day_en: str, monday: date, today: date, runs: dict) -> dict:
+    def _day(
+        plan, i: int, day_en: str, monday: date, today: date, runs: dict,
+        profile: str | None = None,
+    ) -> dict:
 
         day_date = monday + timedelta(days=i)
 
@@ -199,12 +207,50 @@ class WeekPlanBuilder:
             "is_today": day_date == today,
             "is_past": day_date < today,
             "status": status,
-            "session": WeekPlanBuilder._session(session),
+            "session": WeekPlanBuilder._session(
+                session, plan, profile, upcoming=day_date >= today
+            ),
             "executed": executed,
         }
 
     @staticmethod
-    def _session(s) -> dict | None:
+    def _detail(plan, s) -> list[str]:
+        """O DETALHE do treino, linha a linha, IGUAL ao que o coach manda no chat
+        (um passo por linha — aquecimento, série principal, recuperação, desaquecimento
+        —, a Dica e o Foco). Para QUALQUER sessão da semana (o chat só detalha as que
+        ainda vão acontecer; o app mostra o plano inteiro). [] se não houver."""
+
+        try:
+
+            return WeeklyPlanMessageFormatter._execution_detail(
+                s.workout_type, s
+            )
+
+        except Exception:
+
+            return []
+
+    @staticmethod
+    def _shoe(plan, s, profile: str | None, upcoming: bool) -> str:
+        """A sugestão de tênis do coach (só pra treino que ainda vem; vazio sem
+        armário cadastrado)."""
+
+        if not upcoming:
+
+            return ""
+
+        try:
+
+            return WeeklyPlanMessageFormatter._shoe_line(profile, plan, s) or ""
+
+        except Exception:
+
+            return ""
+
+    @staticmethod
+    def _session(
+        s, plan=None, profile: str | None = None, upcoming: bool = False
+    ) -> dict | None:
 
         if s is None:
 
@@ -232,6 +278,8 @@ class WeekPlanBuilder:
             "adjustment_reason": getattr(s, "adjustment_reason", None),
             "is_oneoff": getattr(s, "origin", "plan") == "oneoff",
             "steps": [HomeSummaryBuilder._step(st) for st in (s.steps or [])],
+            "detail": WeekPlanBuilder._detail(plan, s),
+            "shoe": WeekPlanBuilder._shoe(plan, s, profile, upcoming),
         }
 
     @staticmethod

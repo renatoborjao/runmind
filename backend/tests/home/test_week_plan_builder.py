@@ -6,6 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.application.home.week_plan_builder import WeekPlanBuilder
+from app.application.planner.weekly_plan_message_formatter import (
+    WeeklyPlanMessageFormatter,
+)
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
 from app.domain.entities.workout_step import COOLDOWN, RUN, WARMUP, WorkoutStep
@@ -249,3 +252,75 @@ def test_time_based_session_counts_its_estimated_km_in_the_planned_volume():
 
     assert mon["distance_km"] is None and mon["estimated_km"] == 6.5
     assert out["totals"]["planned_km"] == 18.5
+
+
+# ---- o DETALHE do chat, linha a linha, pra TODA sessão da semana ---------------
+
+_STRUCTURE = (
+    "Aquecimento: 2 km de rodagem leve (6:20 a 6:50/km).\n"
+    "Série Principal: 3x 1.5 km no ritmo-alvo (5:30 a 5:45/km).\n"
+    "Desaquecimento: 1 km soltando as pernas."
+)
+
+
+def test_detail_lines_are_the_same_the_chat_sends_one_step_per_line():
+
+    plan = _plan(
+        MONDAY,
+        [_session("Tuesday", kind="Limiar Intervalado", km=9.0,
+                  structure=_STRUCTURE, purpose="sentir o esforço do ritmo-alvo")],
+    )
+
+    sess = next(d for d in _build(plan)["days"] if d["day_en"] == "Tuesday")["session"]
+
+    assert sess["detail"][0] == "Aquecimento: 2 km de rodagem leve (6:20 a 6:50/km)."
+    assert any(line.startswith("Série Principal") for line in sess["detail"])
+    # o foco da sessão entra (como no chat) quando a prosa não o trouxe
+    assert sess["detail"][-1] == "Foco: sentir o esforço do ritmo-alvo"
+
+
+def test_detail_is_there_even_for_sessions_already_done():
+    """O chat só detalha o que ainda vem; o app mostra o plano INTEIRO da semana."""
+
+    plan = _plan(MONDAY, [_session("Tuesday", structure=_STRUCTURE)])
+
+    out = _build(plan, activities=[_run(date(2026, 10, 13), 6.1, 38)])
+
+    tue = next(d for d in out["days"] if d["day_en"] == "Tuesday")
+
+    assert tue["status"] == "done" and len(tue["session"]["detail"]) >= 3
+
+
+def test_shoe_suggestion_only_for_what_is_still_to_come():
+
+    plan = _plan(
+        MONDAY,
+        [
+            _session("Tuesday", structure=_STRUCTURE),
+            _session("Saturday", structure=_STRUCTURE),
+        ],
+    )
+
+    with patch.object(
+        WeeklyPlanMessageFormatter, "_shoe_line", return_value="👟 Novablast — rodagem leve"
+    ):
+
+        out = _build(plan)
+
+    by_day = {d["day_en"]: d["session"] for d in out["days"] if d["session"]}
+
+    assert by_day["Tuesday"]["shoe"] == ""                       # já passou
+    assert by_day["Saturday"]["shoe"] == "👟 Novablast — rodagem leve"
+
+
+def test_detail_failure_never_breaks_the_week():
+
+    plan = _plan(MONDAY, [_session("Tuesday")])
+
+    with patch.object(
+        WeeklyPlanMessageFormatter, "_execution_detail", side_effect=RuntimeError("x")
+    ):
+
+        out = _build(plan)
+
+    assert next(d for d in out["days"] if d["day_en"] == "Tuesday")["session"]["detail"] == []
