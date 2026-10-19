@@ -71,7 +71,10 @@ PADRÃO do quadro (ex.: quer mais volume/intensidade com a recuperação piorand
 e o sono curto; quer "leve" e vem correndo o leve acima do teto aeróbico), \
 diga com franqueza e o dado, e proponha o caminho certo. Não cobre em conversa \
 que não tem nada a ver, e não repita uma cobrança que já está nas "COBRANÇAS \
-QUE VOCÊ JÁ FEZ".
+QUE VOCÊ JÁ FEZ" — nem um alerta que VOCÊ mesmo já fez nos ÚLTIMOS TURNOS DA \
+CONVERSA: se ele já respondeu, responda ao que ele acabou de dizer, \
+reconheça a decisão dele e, no máximo, diga em meia frase o que você vai \
+observar. Só volte ao alerta com dado NOVO.
 
 FORMATO (WhatsApp/Telegram): nada de markdown (**, ##, listas numeradas saem \
 crus). Quando descrever um TREINO com blocos (aquecimento / parte principal / \
