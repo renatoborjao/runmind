@@ -615,3 +615,118 @@ def test_ensure_plan_forwards_the_correction_to_the_context():
         )
 
     assert captured["correction"] == "erro X"
+
+
+# ---- a descarga que o BLOCO planejou é condicional ----------------------------
+# Maurício: o bloco de 05/10 pôs a descarga em 26/10 (semana 4), depois de uma
+# semana já mais leve (37 km contra 43). Sem carga elevada, a descarga ali só
+# destreina — o papel escrito semanas antes não pode mandar sozinho.
+
+
+def test_the_blocks_deload_is_skipped_without_overload():
+
+    d = DeloadAnalyzer.assess(
+        [350, 260, 306, 290], _recovery(), acwr=0.93, block_deload_this_week=True,
+    )
+
+    assert d.due is False
+    assert d.block_skipped is True
+    assert "carga não está elevada" in d.reason
+
+    text = deload_directive(d)
+
+    assert "O BLOCO previa DESCARGA" in text
+    assert "DESTREINA" in text
+    assert "NÃO vale hoje" in text
+    assert 'REDEFINA "block"' in text
+
+
+def test_the_blocks_deload_holds_with_elevated_load():
+
+    d = DeloadAnalyzer.assess(
+        [300, 310], _recovery(), acwr=1.15, block_deload_this_week=True,
+    )
+
+    assert d.due is True
+    assert d.block_skipped is False
+    assert deload_directive(d).startswith("SINAL DE DESCARGA")
+
+
+def test_the_blocks_deload_holds_when_recovery_is_falling_even_at_low_load():
+    """A segunda perna da regra: recuperação caindo sustenta a descarga do bloco."""
+
+    d = DeloadAnalyzer.assess(
+        [300, 310], _recovery(hrv=FALLING), acwr=0.93, block_deload_this_week=True,
+    )
+
+    assert d.due is True
+    assert "recuperação está caindo" in d.reason
+    assert d.block_skipped is False
+
+
+def test_the_blocks_deload_without_acwr_data_keeps_legacy_behaviour():
+
+    d = DeloadAnalyzer.assess([300, 310], _recovery(), block_deload_this_week=True)
+
+    assert d.due is True
+
+
+def test_without_a_block_fatigue_still_does_not_beat_a_low_load():
+    """A guarda de setembro (ACWR 0.97 + FC de repouso caindo, sem bloco) segue."""
+
+    d = DeloadAnalyzer.assess(
+        [294, 151, 344, 252], _recovery(rhr=FALLING), acwr=0.97,
+    )
+
+    assert d.due is False
+    assert d.block_skipped is False
+    assert deload_directive(d) == ""
+
+
+def test_taper_and_post_race_still_win_over_the_block():
+
+    d = DeloadAnalyzer.assess(
+        [300, 310], _recovery(), acwr=1.3, weeks_to_race=2,
+        block_deload_this_week=True,
+    )
+
+    assert d.due is False
+    assert "taper" in d.reason
+
+
+def test_the_block_line_warns_when_the_weeks_role_is_a_deload():
+    """O coach lê o papel da semana no BLOCO EM ANDAMENTO: se é de descarga, a
+    linha diz que ele foi escrito sem saber como o atleta chegaria."""
+
+    block = {"weeks": 4, "focus": "Construir a resistência", "weeks_plan": BLOCK_ROLES,
+             "start": "2026-10-05"}
+
+    deload_week = AIPlanService._block_line((block, 4))
+
+    assert "ESTA semana: Semana 4: Semana de descarga" in deload_week
+    assert "ATENÇÃO" in deload_week
+    assert "só vale se o quadro mostrar carga elevada ou recuperação caindo" in deload_week
+    assert "descarga só destreina" in deload_week
+
+    build_week = AIPlanService._block_line((block, 3))
+
+    assert "ESTA semana: Semana 3: Inserção de simulado" in build_week
+    assert "ATENÇÃO" not in build_week
+
+
+def test_is_deload_role():
+
+    from app.application.history.deload_analyzer import is_deload_role
+
+    assert is_deload_role("Semana 4: Semana de descarga com redução de volume")
+    assert is_deload_role("alívio no fim do bloco")
+    assert not is_deload_role("Semana 3: simulado no ritmo-alvo")
+    assert not is_deload_role(None)
+
+
+def test_the_prompt_says_not_to_deload_without_overload_even_if_the_block_says_so():
+
+    from app.application.coach.planning.coach_plan_engine import PROMPT_TEMPLATE
+
+    assert "NÃO descarregue" in PROMPT_TEMPLATE
+    assert "semana leve sobre semana já leve só destreina" in PROMPT_TEMPLATE

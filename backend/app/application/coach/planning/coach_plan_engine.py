@@ -150,9 +150,12 @@ REGRAS:
   o corpo/vida pedir desvio (doença, sobrecarga, prova nova), desvie e
   REDEFINA o bloco em "block" — o novo começa ESTA semana.
 - SEMANA DE DESCARGA (mais leve de propósito): só quando o quadro mostra carga
-  elevada de verdade e o BLOCO não a põe em outra semana — o bloco que você
-  mesmo desenhou manda no calendário dela; antecipar ou adiar a descarga é
-  desvio: REDEFINA "block". Ao descarregar, marque "is_deload": true e escreva
+  elevada de verdade (ou a recuperação caindo) e o BLOCO não a põe em outra
+  semana — o bloco que você mesmo desenhou manda no calendário dela; antecipar
+  ou adiar a descarga é desvio: REDEFINA "block". Se o bloco põe a descarga
+  NESTA semana mas o quadro não mostra carga elevada nem recuperação caindo,
+  NÃO descarregue (semana leve sobre semana já leve só destreina): siga a
+  progressão e redefina o bloco. Ao descarregar, marque "is_deload": true e escreva
   "deload_why": 1-2 frases em português simples, COM OS NÚMEROS DELE (os km das
   últimas semanas, o que ele fez), dizendo por que ESTA semana é mais leve e o
   que ela prepara — sem jargão (nada de ACWR/carga aguda). O "weekly_objective"

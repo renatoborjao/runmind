@@ -58,6 +58,18 @@ class DeloadDecision:
     building_weeks: int          # semanas seguidas de carga sem recuo
     reason: str
 
+    # o BLOCO previa descarga nesta semana, mas o quadro não a sustenta (sem
+    # carga elevada e sem recuperação caindo): o coach precisa saber que o papel
+    # do bloco NÃO vale hoje (Maurício: o bloco de 05/10 pôs a descarga em 26/10,
+    # depois de uma semana já mais leve — descarga ali só destreina)
+    block_skipped: bool = False
+
+
+def is_deload_role(role: str | None) -> bool:
+    """O papel desta semana NO BLOCO é de descarga/alívio?"""
+
+    return bool(_DELOAD_ROLE.search(role or ""))
+
 
 def block_deload_position(
     weeks_plan: list[str] | None, index: int | None,
@@ -135,17 +147,37 @@ class DeloadAnalyzer:
                 False, streak, "pós-prova (o taper/prova já foi o recuo)"
             )
 
+        fatigued = (
+            recovery.hrv_direction == FALLING
+            or recovery.rhr_direction == FALLING
+        )
+
+        # A DESCARGA QUE O BLOCO PLANEJOU é condicional: o papel foi escrito
+        # semanas antes, sem saber como o atleta chegaria. Vale com carga ELEVADA
+        # ou com a recuperação CAINDO; sem isso o bloco não se aplica hoje (semana
+        # leve sobre semana já leve só destreina) e o coach segue a progressão.
+        if block_deload_this_week:
+
+            if fatigued or acwr is None or acwr >= _MIN_OVERLOAD_ACWR:
+
+                return DeloadDecision(
+                    True, streak,
+                    "o bloco planejado põe a descarga nesta semana"
+                    + (" e a recuperação está caindo" if fatigued else ""),
+                )
+
+            return DeloadDecision(
+                False, streak,
+                "o bloco previa a descarga, mas a carga não está elevada",
+                block_skipped=True,
+            )
+
         # SEM SOBRECARGA não se descarrega nada: com o ACWR mostrando carga aguda
         # <= crônica, uma semana leve à força só APAGA forma (o atleta reclama
         # que "não evolui"). Descarga é pra dissipar overload — exige overload.
         if acwr is not None and acwr < _MIN_OVERLOAD_ACWR:
 
             return DeloadDecision(False, streak, "carga não está elevada")
-
-        fatigued = (
-            recovery.hrv_direction == FALLING
-            or recovery.rhr_direction == FALLING
-        )
 
         # o bloco desenhado pelo coach manda no CALENDÁRIO da descarga: se ela já
         # está planejada pra daqui a N semanas, esta semana segue o papel dela
@@ -157,12 +189,6 @@ class DeloadAnalyzer:
                 False, streak,
                 f"o bloco já planeja a descarga daqui a {block_deload_in_weeks} "
                 f"semana{'s' if block_deload_in_weeks > 1 else ''}",
-            )
-
-        if not fatigued and block_deload_this_week:
-
-            return DeloadDecision(
-                True, streak, "o bloco planejado põe a descarga nesta semana",
             )
 
         threshold = _FATIGUE_BLOCK_WEEKS if fatigued else _BLOCK_WEEKS
@@ -216,6 +242,19 @@ def deload_directive(decision: DeloadDecision) -> str:
     """Sinal COACH-facing pro plano: o bloco de carga está no ponto de descarga.
     É CONHECIMENTO, não ordem — a IA pesa com o resto do quadro e decide
     (descarregar, segurar ou seguir). Vazio quando não é hora — sem ruído."""
+
+    if decision.block_skipped:
+
+        return (
+            "O BLOCO previa DESCARGA nesta semana, mas o quadro NÃO mostra "
+            "carga elevada nem recuperação caindo — e descarga sem sobrecarga só "
+            "DESTREINA (semana leve em cima de semana já leve). O papel de "
+            "descarga do bloco NÃO vale hoje: monte a semana pela progressão "
+            "(o que ela acrescenta à evolução dele) e REDEFINA \"block\" — a "
+            "descarga vai pra quando a carga pedir. Não escreva nada sobre "
+            "'descarga' na semana, a não ser que você mesmo decida aliviar por "
+            "outro motivo do quadro (aí marque \"is_deload\" e explique)."
+        )
 
     if not decision.due:
 
