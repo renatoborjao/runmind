@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.domain.entities.activity import Activity
+from app.domain.same_workout import is_same_workout
 
 
 class ActivityArchiveRepository:
@@ -152,23 +153,7 @@ class ActivityArchiveRepository:
     @staticmethod
     def _same_run(a: Activity, b: Activity) -> bool:
 
-        if a.id == b.id:
-
-            return True
-
-        if a.start_date.date() != b.start_date.date():
-
-            return False
-
-        biggest_dist = max(a.distance, b.distance, 1.0)
-
-        if abs(a.distance - b.distance) > 0.005 * biggest_dist:
-
-            return False
-
-        biggest_time = max(a.moving_time, b.moving_time, 1)
-
-        return abs(a.moving_time - b.moving_time) <= 0.02 * biggest_time
+        return is_same_workout(a, b)
 
     def upsert_many(
         self,

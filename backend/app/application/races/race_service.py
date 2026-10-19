@@ -10,13 +10,12 @@ coach setou por conversa (importa pra lista), pra os dois lados baterem."""
 
 from __future__ import annotations
 
-import re
-
 from app.application.coach.memory.runner_memory_service import (
     RunnerMemoryService,
 )
 from app.core.clock import today_local
 from app.domain.value_objects.race_distance import parse_race_distance
+from app.domain.value_objects.race_name import proper_core
 from app.infrastructure.persistence.race_repository import RaceRepository
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
@@ -409,21 +408,7 @@ class RaceService:
         """O nome PRÓPRIO da prova, sem distância nem palavras genéricas:
         'Santander … Villa-Lobos (15 km)' -> '... villa-lobos'; '15 km' -> ''."""
 
-        text = re.sub(
-            r"\d+(?:[.,]\d+)?\s*(?:km|k|quil[oô]metros?)\b", " ", (name or "").lower()
-        )
-
-        words = [
-            w.strip("()[]—-–,.:;")
-            for w in text.split()
-        ]
-
-        generic = {
-            "de", "da", "do", "das", "dos", "a", "o", "e", "em", "meia",
-            "maratona", "prova", "corrida", "km", "k", "",
-        }
-
-        return " ".join(w for w in words if w not in generic and not w.isdigit())
+        return proper_core(name)
 
     @staticmethod
     def _same_race_name(

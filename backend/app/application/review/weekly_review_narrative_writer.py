@@ -11,6 +11,9 @@ from google.genai import types
 
 from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.application.planner.pace_formatter import PaceFormatter
+from app.application.review.weekly_review_message_formatter import (
+    ADHERENCE_DISPLAY_WEEKS,
+)
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import (
     generate_json,
@@ -223,7 +226,26 @@ class WeeklyReviewNarrativeWriter:
 
             lines.append(f"Maior treino da semana: {review['longest_km']:.1f} km")
 
-        lines.append(f"Consistência recente: {review.get('consistency', 0):.0f}%")
+        # (sem "Consistência recente": conta diferente da aderência ao plano e
+        # sem a semana que fecha — a IA recebia 58% ao lado de 100% e escolhia)
+
+        history = review.get("adherence_history")
+
+        if history is not None and getattr(history, "has_series", False):
+
+            # a MESMA janela que o resumo mostra ("Últimas 4 semanas")
+            shown = history.weeks[-ADHERENCE_DISPLAY_WEEKS:]
+
+            planned = sum(week.planned for week in shown)
+
+            if planned:
+
+                done = sum(week.done for week in shown)
+
+                lines.append(
+                    f"Aderência nas últimas {len(shown)} semanas: {done} de "
+                    f"{planned} treinos do plano ({done / planned * 100:.0f}%)"
+                )
 
         # o DOSSIÊ do atleta — a MESMA base do plano, da análise e do chat
         # (evolução, corpo, percepção, padrões, plano, memória, o que já foi

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.core.clock import now_local
 from app.domain.value_objects.race_distance import parse_race_distance
+from app.domain.value_objects.race_name import refined_name
 
 
 class RaceRepository:
@@ -99,11 +100,13 @@ class RaceRepository:
         target_time: str | None = None,
     ) -> dict:
         """Adiciona a prova se ainda não existe; se existir, completa o
-        tempo-alvo que faltava. MESMA DATA = mesmo evento (ninguém corre duas
-        provas no mesmo dia): o app, a memória do coach e a conversa chamam a
-        mesma prova de jeitos diferentes ("Santander … Villa-Lobos (15 km)",
-        "Villa-Lobos (15 km)", "15 km") e a dedup por nome duplicava. Usado pra
-        espelhar a prova que o coach registrou por conversa na LISTA do app."""
+        tempo-alvo que faltava e REFINA o nome (um nome genérico cede a um mais
+        específico — ver [[refined_name]]). MESMA DATA = mesmo evento (ninguém
+        corre duas provas no mesmo dia): o app, a memória do coach e a conversa
+        chamam a mesma prova de jeitos diferentes ("Santander … Villa-Lobos
+        (15 km)", "Villa-Lobos (15 km)", "15 km") e a dedup por nome duplicava.
+        Usado pra espelhar a prova que o coach registrou por conversa na LISTA
+        do app."""
 
         races = self.load(profile)
 
@@ -111,9 +114,24 @@ class RaceRepository:
 
             if r.get("date") == date:
 
+                changed = False
+
                 if target_time and not r.get("target_time"):
 
                     r["target_time"] = target_time
+
+                    changed = True
+
+                better = refined_name(r.get("name"), name)
+
+                if better:
+
+                    r["name"] = better
+
+                    changed = True
+
+                if changed:
+
                     self.save(profile, races)
 
                 return r

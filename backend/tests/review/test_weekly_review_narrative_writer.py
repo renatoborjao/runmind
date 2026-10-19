@@ -128,7 +128,32 @@ def test_facts_carry_the_numbers():
     assert "Volume: 28.0 km" in facts
     assert "Aderência ao plano: 3 de 3" in facts
     assert "Maior treino da semana: 12.0 km" in facts
-    assert "Consistência recente: 85%" in facts
+    # a conta velha de "consistência" (outra métrica, sem a semana que fecha)
+    # não vai mais pra IA: ela contradizia a aderência ao plano (58% × 100%)
+    assert "Consistência" not in facts
+
+
+def test_facts_carry_the_adherence_series_the_message_shows():
+    """A IA recebe a MESMA série de aderência que o resumo mostra ("Últimas 4
+    semanas"), não uma métrica paralela."""
+
+    from types import SimpleNamespace
+
+    review = _review({"name": "saúde", "has_race": False})
+
+    review["adherence_history"] = SimpleNamespace(
+        has_series=True,
+        weeks=[
+            SimpleNamespace(done=3, planned=3),
+            SimpleNamespace(done=3, planned=3),
+            SimpleNamespace(done=3, planned=3),
+            SimpleNamespace(done=2, planned=2),
+        ],
+    )
+
+    facts = WeeklyReviewNarrativeWriter._facts("Renato", review)
+
+    assert "Aderência nas últimas 4 semanas: 11 de 11 treinos do plano (100%)" in facts
 
 
 def test_facts_highlight_race_of_the_week():

@@ -150,12 +150,10 @@ class WeeklyReviewMessageFormatter:
 
         lines.append("")
 
-        lines.append(
-            f"🔥 Consistência nas últimas semanas: "
-            f"{review['consistency']:.0f}%"
-        )
-
-        lines.append("")
+        # (sem a linha "Consistência N%": era OUTRA conta — dias treinados × dias
+        # do perfil nas 4 semanas ANTERIORES, sem a semana que fecha — e saía logo
+        # abaixo de "6 semanas seguidas, 100%" (58% × 100% no mesmo resumo, 5 de 5
+        # atletas em 18/10). A "Aderência ao plano" acima é a verdade única.)
 
         # o plano da próxima sai HOJE, logo depois do resumo (não "semana que
         # vem" — era a queixa do Renato, que recebeu isto no MESMO dia do plano)
@@ -239,10 +237,17 @@ class WeeklyReviewMessageFormatter:
 
         if adherence:
 
-            return (
+            line = (
                 f"• Treinos do plano: {adherence['done']} de "
-                f"{adherence['planned']} ✅"
+                f"{adherence['planned']}"
             )
+
+            # o ✅ é de quem cumpriu tudo (era fixo: "1 de 3 ✅" pro João)
+            if adherence["done"] >= adherence["planned"]:
+
+                line += " ✅"
+
+            return line
 
         return (
             f"• Treinos: {current['runs']} "

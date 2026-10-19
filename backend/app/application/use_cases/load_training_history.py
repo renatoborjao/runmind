@@ -2,6 +2,7 @@ from app.domain.entities.activity import Activity
 from app.domain.entities.training_history import (
     TrainingHistory,
 )
+from app.domain.same_workout import is_same_workout
 from app.domain.value_objects.sports import is_foot_sport
 from app.infrastructure.integrations.garmin.garmin_activity_source import (
     GarminActivitySource,
@@ -157,27 +158,7 @@ class LoadTrainingHistory:
         b: Activity,
     ) -> bool:
 
-        if a.id == b.id:
-
-            return True
-
-        if a.start_date.date() != b.start_date.date():
-
-            return False
-
-        biggest_dist = max(a.distance, b.distance, 1.0)
-
-        if abs(a.distance - b.distance) > 0.005 * biggest_dist:
-
-            return False
-
-        biggest_time = max(a.moving_time, b.moving_time, 1)
-
-        if abs(a.moving_time - b.moving_time) > 0.02 * biggest_time:
-
-            return False
-
-        return True
+        return is_same_workout(a, b)
 
     @staticmethod
     def _fill_hr_zones(profile: str, activity: Activity) -> None:

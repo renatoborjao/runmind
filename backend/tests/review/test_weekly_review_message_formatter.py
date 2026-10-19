@@ -60,7 +60,34 @@ def test_format_renders_full_message():
     assert "• Pace médio: 5:59 min/km (5:30 min/km na anterior)" in message
     assert "• Volume: caindo (-11.7%)" in message
     assert "• Pace: mais rápido (-7.2%)" in message
-    assert "Consistência nas últimas semanas: 67%" in message
+
+
+def test_format_has_no_second_consistency_number():
+    """18/10: o resumo trazia "Consistência 58%" (dias × perfil nas 4 semanas
+    ANTERIORES) logo abaixo de "6 semanas seguidas, 100%" — 5 de 5 atletas. A
+    aderência ao plano é a única conta do resumo."""
+
+    message = WeeklyReviewMessageFormatter.format("Renato", _review())
+
+    assert "Consistência" not in message
+    assert "67%" not in message
+
+
+def test_workouts_line_checks_only_a_fulfilled_week():
+    """O ✅ era fixo: "Treinos do plano: 1 de 3 ✅" (João, 18/10)."""
+
+    partial = WeeklyReviewMessageFormatter.format(
+        "João", _review(adherence={"planned": 3, "done": 1}),
+    )
+
+    assert "• Treinos do plano: 1 de 3\n" in partial
+    assert "1 de 3 ✅" not in partial
+
+    full = WeeklyReviewMessageFormatter.format(
+        "João", _review(adherence={"planned": 3, "done": 3}),
+    )
+
+    assert "• Treinos do plano: 3 de 3 ✅" in full
 
 
 def test_format_uses_ai_narrative_when_given():

@@ -8,6 +8,8 @@ real, pra cada uma virar correção na raiz:
 - cobrança de rotina/furo com o atleta relatando doença (Hélio 27/09);
 - mensagem proativa repetida;
 - cérebro do chat caindo no fallback;
+- atleta pede uma mudança e o coach responde "já está certo" SEM ação (Leonardo
+  18/10: o nome da prova na lista seguia errado);
 - percepção: quantas corridas têm relato (relógio/resposta/conversa);
 - plano da semana: gerado pela IA ou pelo fallback;
 - erros da IA/tracebacks no log do serviço;
@@ -60,6 +62,35 @@ NAG = re.compile(
     r"você fez \d+ de \d+|precisa caber na sua vida|cadê a constância)",
     re.I,
 )
+
+# o atleta PEDE uma mudança ("ajustar o nome da prova", "troca o treino"...)
+CHANGE_REQUEST = re.compile(
+    r"\b(ajust(a|ar|e|em)|corrig(e|ir|em)|mud(a|ar|e)|troc(a|ar|e)|alter(a|ar|e)|"
+    r"atualiz(a|ar|e)|renome(ia|ar|ie)|coloc(a|ar|ue)|tir(a|ar|e)|remov(e|er)|"
+    r"cancel(a|ar|e)|apag(a|ar|ue)|inclu(i|ir|a)|adicion(a|ar|e))\b",
+    re.I,
+)
+
+# o coach responde que a coisa JÁ está do jeito pedido
+CLAIMS_DONE = re.compile(
+    r"(já está|já foi|já deixei|já ajustei|já mudei|já atualizei|já registrei|"
+    r"já cadastrei|já anotei|tá certinh|está certinh|já tá certo|já está certo)",
+    re.I,
+)
+
+
+def claimed_done_without_action(incoming: str, say: str, actions: list) -> bool:
+    """O atleta pediu uma mudança e o coach disse que "já está certo" sem emitir
+    ação nenhuma — a afirmação não passou por nada que conferisse ou mudasse o
+    dado (Leonardo 18/10: pediu pra ajustar o nome da prova, o coach respondeu
+    "já está certinha no cadastro" e a lista seguia com o nome errado)."""
+
+    if any(a.get("type") for a in (actions or [])):
+
+        return False
+
+    return bool(CHANGE_REQUEST.search(incoming or "") and CLAIMS_DONE.search(say or ""))
+
 
 ILL = re.compile(r"(gripe|gripad|resfriad|doente|febre|virose|covid)", re.I)
 
@@ -121,7 +152,7 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
     from app.application.use_cases.build_training_goal import BuildTrainingGoal
     from app.application.use_cases.load_runner_profile import LoadRunnerProfile
     from app.domain.entities.training_history import TrainingHistory
-    from app.domain.value_objects.sports import is_foot_sport
+    from app.domain.value_objects.sports import is_foot_sport, is_run_sport
     from app.infrastructure.persistence.activity_archive_repository import (
         ActivityArchiveRepository,
     )
@@ -162,6 +193,16 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
                 f"RECLAMAÇÃO {e['ts'][:16]}: \"{str(e['incoming'])[:140]}\" → "
                 f"coach: \"{say[:120]}\" (ações: "
                 f"{sorted(t for t in types if t) or 'nenhuma'})"
+            )
+
+        if claimed_done_without_action(
+            str(e.get("incoming") or ""), say, e.get("actions") or [],
+        ):
+
+            findings.append(
+                f"DISSE \"JÁ ESTÁ\" SEM AÇÃO {e['ts'][:16]}: pedido "
+                f"\"{str(e['incoming'])[:140]}\" → coach: \"{say[:120]}\" — confira "
+                "se o dado está mesmo como ele pediu"
             )
 
         if e.get("fallback"):
@@ -278,9 +319,11 @@ def audit_profile(profile: str, since: date, lines: list[str]) -> list[str]:
     # ---------------------------------------------------------- percepção
     activities = ActivityArchiveRepository().load_activities(profile)
 
+    # CORRIDAS (caminhada fora): a mesma conta do resumo de domingo. As cópias
+    # Garmin+Strava do mesmo treino já vêm colapsadas pelo load_activities.
     runs = [
         a for a in activities
-        if is_foot_sport(a.sport) and activity_date(a) >= since
+        if is_run_sport(a.sport) and activity_date(a) >= since
     ]
 
     rpes = [
@@ -478,7 +521,7 @@ def placar(profile: str, today: date, lines: list[str]) -> None:
 
     from app.application.history.weekly_buckets import activity_date
     from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
-    from app.domain.value_objects.sports import is_foot_sport
+    from app.domain.value_objects.sports import is_run_sport
     from app.infrastructure.persistence.activity_archive_repository import (
         ActivityArchiveRepository,
     )
@@ -505,7 +548,7 @@ def placar(profile: str, today: date, lines: list[str]) -> None:
 
     runs = [
         a for a in ActivityArchiveRepository().load_activities(profile)
-        if is_foot_sport(a.sport)
+        if is_run_sport(a.sport)
     ]
 
     rpes = SessionRpeRepository().load_sessions(profile)
