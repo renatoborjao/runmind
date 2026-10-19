@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b54 · aba Treino numa tela só (calendário + plano da semana)";
+export const APP_BUILD = "b55 · semana mais leve explicada no plano (por que + números)";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -386,6 +386,7 @@ export interface WeekPlan {
   block_label?: string | null;
   extra_day_note?: string | null;
   is_deload?: boolean;
+  deload_why?: string | null;
   totals?: { planned_km: number; done_km: number; sessions: number; done_sessions: number };
   days?: WeekPlanDay[];
   race?: RaceInfo | null;

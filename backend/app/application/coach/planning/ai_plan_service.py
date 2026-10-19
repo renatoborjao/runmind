@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
 from app.application.coach.planning.executed_week_summary import (
@@ -38,6 +38,7 @@ class AIPlanService:
         reference_date: date | None = None,
         force: bool = False,
         request: str = "",
+        correction: str = "",
     ) -> TrainingPlan:
 
         reference_date = reference_date or today_local()
@@ -73,10 +74,20 @@ class AIPlanService:
 
         try:
 
+            # refazendo a semana em curso: os dias que FALTAM são os que o
+            # atleta já organizou (moveu sessões pelo app/chat) — refazer não
+            # desfaz a escolha dele
+            week_days = (
+                AIPlanService._remaining_days(existing, history)
+                if existing is not None and existing.week_start == week_start
+                else None
+            )
+
             context = AIPlanService._build_context(
                 profile, runner, metrics, goal, history,
                 repository, week_start, assessment.run_walk,
-                request=request,
+                request=request, week_days=week_days,
+                correction=correction,
             )
 
             # medidor: rotula a geração como "plano" (context manager reseta
@@ -144,6 +155,32 @@ class AIPlanService:
                 profile, runner, assessment, metrics, goal,
                 history, reference_date,
             )
+
+    @staticmethod
+    def _remaining_days(old: TrainingPlan, history) -> list[str]:
+        """Dias (inglês) das sessões do plano em curso que ainda vêm: de hoje em
+        diante, menos o de hoje se já foi cumprido. São os dias que o atleta
+        organizou — a base do que a IA refaz."""
+
+        from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
+
+        today = today_local()
+
+        done = {
+            day.lower()
+            for day in WeeklyPlanMatcher.fulfilled_days(old, history.activities)
+        }
+
+        days = [
+            s.day for s in sorted(old.sessions, key=old.session_date)
+            if s.kind in ("run", "walk", "run_walk")
+            and (
+                old.session_date(s) > today
+                or (old.session_date(s) == today and s.day.lower() not in done)
+            )
+        ]
+
+        return days
 
     @staticmethod
     def _keep_past_days(old: TrainingPlan, new: TrainingPlan, history) -> None:
@@ -224,6 +261,8 @@ class AIPlanService:
     def _build_context(
         profile, runner, metrics, goal, history,
         repository, week_start, run_walk, request: str = "",
+        week_days: list[str] | None = None,
+        correction: str = "",
     ) -> str:
 
         # "plano anterior" = o da SEMANA ANTERIOR (a que acabou), NÃO o da
@@ -243,6 +282,7 @@ class AIPlanService:
             repository,
             profile,
             week_start,
+            limit=6,
         )
 
         # dias EXATOS até a prova a partir da semana-alvo — perto dela, "1 vs 2
@@ -267,7 +307,7 @@ class AIPlanService:
         from app.application.coach.context.athlete_dossier import AthleteDossier
 
         dossier = AthleteDossier.render(
-            profile, runner=runner, history=history,
+            profile, runner=runner, history=history, week_start=week_start,
         )
 
         return PlanContextBuilder.build(
@@ -285,7 +325,35 @@ class AIPlanService:
                 AIPlanService._active_block(repository, profile, week_start),
             ),
             request=request,
+            week_days=week_days,
+            longest_runs=AIPlanService._longest_runs(history, recent_plans),
+            correction=correction,
         )
+
+    @staticmethod
+    def _longest_runs(history, plans) -> list[float]:
+        """Maior corrida FEITA (km) em cada uma das semanas dos planos recentes —
+        o lado "feito" da trajetória do longão."""
+
+        from app.application.history.weekly_buckets import activity_date
+        from app.domain.value_objects.sports import is_run_sport
+
+        out = []
+
+        for plan in plans:
+
+            end = plan.week_start + timedelta(days=6)
+
+            km = [
+                a.distance / 1000
+                for a in history.activities
+                if is_run_sport(a.sport)
+                and plan.week_start <= activity_date(a) <= end
+            ]
+
+            out.append(max(km) if km else 0.0)
+
+        return out
 
     @staticmethod
     def _active_block(repository, profile, week_start: date):
@@ -397,6 +465,11 @@ class AIPlanService:
             plan.block_label = (
                 f"semana {index} de {block['weeks']} — {block['focus']}"
             )
+
+            # semana de descarga não pode vir com rótulo só de "construir"
+            if plan.is_deload:
+
+                plan.block_label += " · semana de descarga"
 
         except Exception as e:
 

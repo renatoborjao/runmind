@@ -9,6 +9,7 @@ já deu errado): aqui nada deu errado, é recuperação planejada. Puro/determin
 vira diretriz pra IA montar a semana leve. Ver [[project_analise_corpo_garmin]] e
 [[injury_risk_analyzer]]."""
 
+import re
 from dataclasses import dataclass
 
 from app.domain.entities.body_reading import FALLING, RecoveryTrend
@@ -20,8 +21,17 @@ _BLOCK_WEEKS = 3
 _FATIGUE_BLOCK_WEEKS = 2
 
 # uma semana abaixo deste fração do pico recente é "recuo" (descarga anterior /
-# semana leve), não carga — reinicia a contagem do bloco
-_DIP_RATIO = 0.7
+# semana leve), não carga — reinicia a contagem do bloco. 0.8 (era 0.7): o
+# Maurício fez 47 km → 32 km (−33%) numa semana de recuo REAL, mas a CARGA caiu só
+# 24% (343 → 261, razão 0.76) e a contagem não reiniciou — o analisador leu 4
+# semanas seguidas, mandou descarga de 40% na 3ª semana de um bloco de 4 e o plano
+# perdeu o treino-chave dela (19/10). Semana 20% abaixo do pico já é semana leve.
+_DIP_RATIO = 0.8
+
+# o papel de uma semana NO BLOCO que o próprio coach desenhou é de descarga
+_DELOAD_ROLE = re.compile(
+    r"descarg|alivi|al[ií]vio|recupera|regenera|semana leve|deload", re.IGNORECASE
+)
 
 # dentro desta janela pra prova, quem cuida do recuo é o TAPER (não empilhar uma
 # descarga de bloco por cima da afiação)
@@ -49,6 +59,32 @@ class DeloadDecision:
     reason: str
 
 
+def block_deload_position(
+    weeks_plan: list[str] | None, index: int | None,
+) -> tuple[bool, int | None]:
+    """Onde a DESCARGA cai no bloco que o coach desenhou: (esta semana é a de
+    descarga?, daqui a quantas semanas ela vem). `weeks_plan` = o papel de cada
+    semana; `index` = a semana k (1-based) que estamos montando. Sem bloco:
+    (False, None)."""
+
+    if not weeks_plan or not index or not 1 <= index <= len(weeks_plan):
+
+        return False, None
+
+    this_week = bool(_DELOAD_ROLE.search(weeks_plan[index - 1] or ""))
+
+    ahead = next(
+        (
+            j + 1 - index
+            for j in range(index, len(weeks_plan))
+            if _DELOAD_ROLE.search(weeks_plan[j] or "")
+        ),
+        None,
+    )
+
+    return this_week, ahead
+
+
 class DeloadAnalyzer:
 
     @staticmethod
@@ -59,6 +95,8 @@ class DeloadAnalyzer:
         acwr: float | None = None,
         weeks_since_race: int | None = None,
         taper_zone_weeks: int | None = None,
+        block_deload_this_week: bool = False,
+        block_deload_in_weeks: int | None = None,
     ) -> DeloadDecision:
         """Decide se a PRÓXIMA semana (a que estamos gerando) deve ser de
         descarga. Gatilho principal: tamanho do bloco de carga; a fadiga
@@ -67,7 +105,12 @@ class DeloadAnalyzer:
 
         `taper_zone_weeks`: a zona de taper da PRÓXIMA prova pelo papel dela
         (preparatória = mini-polimento curto; de treino = nenhuma). None = o
-        padrão, de prova principal."""
+        padrão, de prova principal.
+
+        `block_deload_this_week` / `block_deload_in_weeks`: onde o BLOCO que o
+        próprio coach desenhou põe a descarga (ver `block_deload_position`). A
+        descarga é planejada no desenho do bloco; o sinal de carga não a antecipa
+        por conta própria — só a fadiga (recuperação caindo) antecipa."""
 
         streak = DeloadAnalyzer._consecutive_load_weeks(weekly_loads)
 
@@ -103,6 +146,24 @@ class DeloadAnalyzer:
             recovery.hrv_direction == FALLING
             or recovery.rhr_direction == FALLING
         )
+
+        # o bloco desenhado pelo coach manda no CALENDÁRIO da descarga: se ela já
+        # está planejada pra daqui a N semanas, esta semana segue o papel dela
+        # (Maurício 19/10: a semana 3 era o simulado no ritmo-alvo e a descarga
+        # era a 4 — o sinal de carga trocou uma pela outra)
+        if not fatigued and block_deload_in_weeks:
+
+            return DeloadDecision(
+                False, streak,
+                f"o bloco já planeja a descarga daqui a {block_deload_in_weeks} "
+                f"semana{'s' if block_deload_in_weeks > 1 else ''}",
+            )
+
+        if not fatigued and block_deload_this_week:
+
+            return DeloadDecision(
+                True, streak, "o bloco planejado põe a descarga nesta semana",
+            )
 
         threshold = _FATIGUE_BLOCK_WEEKS if fatigued else _BLOCK_WEEKS
 
@@ -166,8 +227,11 @@ def deload_directive(decision: DeloadDecision) -> str:
         "menor, sem tiros/limiar duro, no máximo um toque de ritmo, mesmos "
         "dias) — é quando a forma se CONSOLIDA (supercompensação). Pese com o "
         "resto do quadro (corpo, meta/fase, o que ele vem absorvendo) e DECIDA: "
-        "descarregar, só segurar ou seguir. Se descarregar, explique no "
-        "propósito das sessões pra ele não achar que é recuo."
+        "descarregar, só segurar ou seguir. Se descarregar, marque "
+        "\"is_deload\": true e escreva \"deload_why\": 1-2 frases em português "
+        "simples, COM OS NÚMEROS DELE (os km das últimas semanas — sem jargão, "
+        "nada de ACWR/carga aguda), dizendo por que esta semana é mais leve e "
+        "o que ela prepara. É o que ele lê pra não achar que é recuo."
     )
 
 

@@ -94,9 +94,15 @@ class WeeklyPlanMessageFormatter:
 
         if plan.is_deload:
 
+            why = (getattr(plan, "deload_why", None) or "").strip()
+
             lines.append(
-                "🔽 Semana de recuperação — volume reduzido de "
-                "propósito pra assimilar a carga."
+                f"🔽 Semana mais leve de propósito — {why}"
+                if why
+                else (
+                    "🔽 Semana de recuperação — volume reduzido de "
+                    "propósito pra assimilar a carga."
+                )
             )
 
         if lines:

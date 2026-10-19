@@ -47,6 +47,12 @@ class TrainingPlan:
     # semana de corte (deload) do ciclo 3:1 — volume reduzido pra assimilar
     is_deload: bool = False
 
+    # POR QUE esta semana é mais leve, nas palavras do coach e COM OS NÚMEROS do
+    # atleta ("fez 47, 32, 39 e 43 km..."). Fica guardado com o plano: o sinal de
+    # carga que motivou a descarga some no dia seguinte, e sem isto nem o atleta
+    # nem o chat sabem explicar (Maurício, 19/10: -40% sem explicação).
+    deload_why: str | None = None
+
     # a IA revisora já passou por este plano (marca alertas de realidade
     # nas sessões); evita reprocessar a mesma semana a cada entrega
     reviewed: bool = False

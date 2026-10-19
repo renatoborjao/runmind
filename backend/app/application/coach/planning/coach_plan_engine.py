@@ -149,6 +149,16 @@ REGRAS:
   andamento: monte a semana cumprindo o papel dela e devolva "block": null. Se
   o corpo/vida pedir desvio (doença, sobrecarga, prova nova), desvie e
   REDEFINA o bloco em "block" — o novo começa ESTA semana.
+- SEMANA DE DESCARGA (mais leve de propósito): só quando o quadro mostra carga
+  elevada de verdade e o BLOCO não a põe em outra semana — o bloco que você
+  mesmo desenhou manda no calendário dela; antecipar ou adiar a descarga é
+  desvio: REDEFINA "block". Ao descarregar, marque "is_deload": true e escreva
+  "deload_why": 1-2 frases em português simples, COM OS NÚMEROS DELE (os km das
+  últimas semanas, o que ele fez), dizendo por que ESTA semana é mais leve e o
+  que ela prepara — sem jargão (nada de ACWR/carga aguda). O "weekly_objective"
+  e o rótulo do bloco têm que dizer a MESMA coisa que a semana é (descarga não
+  pode vir com objetivo de "construir"). Semana normal: "is_deload": false e
+  "deload_why": null.
 - MAIS UM DIA DE TREINO? A frequência é escolha DELE: NUNCA adicione dia ao
   plano. Mas, pensando na EVOLUÇÃO rumo à meta, se um dia a mais faria
   diferença real (a meta pede mais volume do que os dias dele comportam, ele
@@ -192,6 +202,8 @@ Responda APENAS com JSON (o exemplo abaixo é só de FORMATO — NÃO é templat
 copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedade):
 {{"weekly_objective": "objetivo/foco curto da semana",
   "phase": "BUILD",
+  "is_deload": false | true,
+  "deload_why": null | "por que esta semana é mais leve, com os números dele",
   "block": null | {{"weeks": 4, "focus": "foco do bloco rumo à meta",
             "weeks_plan": ["sem 1: ...", "sem 2: ...", "sem 3: ...", "sem 4: ..."]}},
   "suggest_extra_day": null | "proposta curta de UM dia a mais (qual, o quê, por quê)",
@@ -359,12 +371,27 @@ class CoachPlanEngine:
             week_start=week_start,
             sessions=sessions,
             weekly_objective=str(data.get("weekly_objective", "")).strip(),
+            is_deload=data.get("is_deload") is True,
+            deload_why=CoachPlanEngine._deload_why(data),
             block=CoachPlanEngine._parse_block(data.get("block")),
             extra_day_note=(
                 str(data.get("suggest_extra_day")).strip()
                 if data.get("suggest_extra_day") else None
             ),
         )
+
+    @staticmethod
+    def _deload_why(data: dict) -> str | None:
+        """A razão da descarga — só existe se a IA marcou a semana como descarga
+        (razão solta numa semana normal é ruído)."""
+
+        if data.get("is_deload") is not True:
+
+            return None
+
+        why = str(data.get("deload_why") or "").strip()
+
+        return why if why and why.lower() not in ("null", "none") else None
 
     @staticmethod
     def _parse_block(raw) -> dict | None:

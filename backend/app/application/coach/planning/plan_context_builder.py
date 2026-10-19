@@ -33,6 +33,9 @@ class PlanContextBuilder:
         today: date | None = None,
         block: str = "",
         request: str = "",
+        week_days: list[str] | None = None,
+        longest_runs: list[float] | None = None,
+        correction: str = "",
     ) -> str:
 
         week_end = week_start + timedelta(days=6)
@@ -67,6 +70,23 @@ class PlanContextBuilder:
                 "ele não citou segue o seu critério."
             )
 
+        # CORREÇÃO: o plano anterior saiu ERRADO (não foi pedido do atleta) e o
+        # treinador manda refazer. O que o plano antigo disse — inclusive nas
+        # mensagens que o dossiê lembra — fica substituído por esta semana.
+        if correction.strip():
+
+            lines.append(
+                "CORREÇÃO DO PLANO — você está refazendo esta semana porque o "
+                "plano anterior saiu ERRADO (NÃO foi pedido do atleta): "
+                f"{correction.strip()} O que o plano antigo disse (inclusive nas "
+                "mensagens que você já mandou, no fim do dossiê) fica "
+                "SUBSTITUÍDO por esta semana — não o repita nem o defenda. O "
+                "atleta LÊ o plano: NÃO escreva sobre o erro, a correção nem a "
+                "descarga que saiu antes no weekly_objective, nas dicas ou nos "
+                "propósitos — descreva a semana como ela é; o aviso da mudança "
+                "vai numa mensagem separada."
+            )
+
         # REFAZENDO a semana que já começou (o atleta mudou meta/dias e pediu o
         # plano novo): os dias anteriores ficam como estão
         if today is not None and week_start < today <= week_end:
@@ -89,14 +109,31 @@ class PlanContextBuilder:
             weekday_label(day) for day in runner.preferred_running_days
         )
 
-        lines.append(
-            f"Dias de corrida dele: {days} "
-            f"({len(runner.preferred_running_days)}x/semana) — AGENDE as "
-            "sessões NESSES dias e mantenha ESSA quantidade (ver REGRAS: não "
-            "invente outros dias nem some/tire sessões; só mova o dia de uma "
-            "sessão por preferência dele — ex.: longão no domingo — ou por "
-            "padrão de furo, nunca por conta própria)."
-        )
+        if week_days:
+
+            # semana que JÁ está montada e o atleta reorganizou (moveu sessões
+            # pelo app/chat): refazer não desfaz a escolha dele. Maurício 19/10:
+            # moveu 4 sessões na segunda; os dias do perfil eram outros.
+            kept = ", ".join(weekday_label(day) for day in week_days)
+
+            lines.append(
+                f"Dias de corrida que ainda faltam NESTA semana: {kept} — o "
+                "atleta JÁ reorganizou a semana e esses são os dias dele agora "
+                f"(a rotina fixa é {days}, mas para esta semana valem estes). "
+                "AGENDE as sessões SÓ nesses dias, uma por dia, e não invente "
+                "outros."
+            )
+
+        else:
+
+            lines.append(
+                f"Dias de corrida dele: {days} "
+                f"({len(runner.preferred_running_days)}x/semana) — AGENDE as "
+                "sessões NESSES dias e mantenha ESSA quantidade (ver REGRAS: "
+                "não invente outros dias nem some/tire sessões; só mova o dia "
+                "de uma sessão por preferência dele — ex.: longão no domingo — "
+                "ou por padrão de furo, nunca por conta própria)."
+            )
 
         # a preferência de DIA do longão não é campo rígido: vive na memória
         # evolutiva (no dossiê) como qualquer outra preferência dinâmica. Ver
@@ -115,6 +152,16 @@ class PlanContextBuilder:
             if line:
 
                 lines.append(line)
+
+        # a TRAJETÓRIA de cada estímulo (km do longão, faixa de pace, volume):
+        # só os tipos não mostram um plano que parou de andar
+        trajectory = PlanContextBuilder._trajectory_line(
+            recent_plans or [], longest_runs or [], goal,
+        )
+
+        if trajectory:
+
+            lines.append(trajectory)
 
         # o VIVO: o que ele realmente executou (pace/distância por treino)
         if executed:
@@ -361,6 +408,162 @@ class PlanContextBuilder:
         )
 
         return f"Plano da semana passada: {sessions}."
+
+    # corridas de base/recuperação: não contam como "treino forte"
+    _EASY_WORDS = (
+        "leve", "regenera", "rodagem", "base", "recupera", "caminhada",
+        "aeróbic", "aerobic", "solta",
+    )
+
+    @staticmethod
+    def _band(session) -> str:
+
+        low, high = session.target_pace_min, session.target_pace_max
+
+        if low and high and low != high:
+
+            return f"{low}–{high}"
+
+        return low or high or "—"
+
+    @staticmethod
+    def _peak_long_run(distance_km: float) -> tuple[int, int]:
+        """Referência de treinador (não regra): até onde o MAIOR longão costuma
+        chegar na preparação de uma prova desta distância, ~3 semanas antes."""
+
+        if distance_km <= 5.5:
+
+            return 9, 12
+
+        if distance_km <= 10.5:
+
+            return 13, 16
+
+        if distance_km <= 16:
+
+            return 16, 19
+
+        if distance_km <= 22:
+
+            return 18, 22
+
+        return 30, 35
+
+    @staticmethod
+    def _trajectory_line(
+        recent_plans: list[TrainingPlan],
+        longest_runs: list[float],
+        goal: TrainingGoal | None,
+    ) -> str:
+        """A TRAJETÓRIA de cada estímulo, semana a semana (volume, longão, treino
+        forte): é o que mostra um plano que PAROU de andar — o mesmo longão com o
+        mesmo final progressivo, a mesma faixa de pace, o forte só trocando de
+        nome (Maurício 19/10: longão 12·12·13·12·14 km em 5 semanas, com 9 até a
+        prova de 15 km). Só números do plano e do feito; o coach decide."""
+
+        plans = [
+            p for p in recent_plans
+            if any(s.kind in _RUNNING_KINDS for s in p.sessions)
+        ]
+
+        if len(plans) < 3:
+
+            return ""
+
+        volumes, longs, strongs = [], [], []
+
+        for plan in plans:
+
+            runs = [s for s in plan.sessions if s.kind in _RUNNING_KINDS]
+
+            volumes.append(f"{plan.weekly_volume:.0f}")
+
+            with_km = [s for s in runs if s.planned_distance_km]
+
+            longest = max(
+                with_km, key=lambda s: s.planned_distance_km, default=None,
+            )
+
+            if longest is not None and len(runs) >= 2:
+
+                longs.append(
+                    f"{longest.planned_distance_km:.0f} km "
+                    f"({longest.workout_type}, "
+                    f"{PlanContextBuilder._band(longest)})"
+                )
+
+            for s in runs:
+
+                if s is longest or not s.workout_type:
+
+                    continue
+
+                kind = s.workout_type.lower()
+
+                if any(w in kind for w in PlanContextBuilder._EASY_WORDS):
+
+                    continue
+
+                strongs.append(
+                    f"{plan.week_start:%d/%m} {s.workout_type} "
+                    f"{(s.planned_distance_km or 0):.0f} km "
+                    f"@{PlanContextBuilder._band(s)}"
+                )
+
+        lines = [
+            "TRAJETÓRIA DOS ESTÍMULOS (plano das últimas "
+            f"{len(plans)} semanas, da mais antiga p/ a recente):",
+            f"- Volume planejado (km): {' · '.join(volumes)}",
+        ]
+
+        if longs:
+
+            lines.append(f"- Maior sessão da semana: {' · '.join(longs)}")
+
+        if strongs:
+
+            lines.append(f"- Treinos fortes: {' | '.join(strongs[-6:])}")
+
+        if longest_runs:
+
+            lines.append(
+                "- Maior corrida FEITA em cada semana (km): "
+                + " · ".join(f"{km:.0f}" for km in longest_runs)
+            )
+
+        if (
+            goal is not None
+            and goal.race_date
+            and goal.distance_km
+            and longest_runs
+        ):
+
+            low, high = PlanContextBuilder._peak_long_run(goal.distance_km)
+
+            best = max(longest_runs)
+
+            lines.append(
+                f"- Prova-âncora de {goal.distance_km:g} km: a maior corrida "
+                f"feita nestas semanas foi {best:.0f} km. Referência de "
+                "treinador (não é regra): numa preparação pra essa distância o "
+                f"maior longão costuma chegar a ~{low}–{high} km, umas 3 "
+                "semanas antes, subindo +1 a 2 km por vez com uma semana de "
+                "recuo no meio."
+            )
+
+        lines.append(
+            "LEIA A TRAJETÓRIA: se uma linha ficou PARADA (mesmo longão, mesma "
+            "faixa de pace, mesmo formato) enquanto ele cumpre o plano e o "
+            "corpo e a forma permitem, ESTA semana tem que mover pelo menos "
+            "UMA delas — o longão ganha km OU ganha qualidade (blocos no "
+            "ritmo-alvo, progressivo maior, fartlek longo), OU o forte "
+            "aproxima o pace do alvo / muda de formato. Repetir a semana "
+            "anterior sem motivo real (descarga, volta de doença/lesão, prova) "
+            "não é prudência, é parar. Ao falar de recorde ou de \"o maior até "
+            "aqui\", use SÓ os números destas linhas (a maior corrida FEITA)."
+        )
+
+        return "\n".join(lines)
 
     @staticmethod
     def _recent_types_line(recent_plans: list[TrainingPlan]) -> str:

@@ -260,11 +260,12 @@ export default function WeekPlanSection({
 
         <div className="wk-chips">
           {data.phase_label && <span className="badge"><span className="dot" />{data.phase_label}</span>}
-          {data.is_deload && <span className="wk-tag warn">semana de recuperação</span>}
+          {data.is_deload && <span className="wk-tag warn">semana mais leve</span>}
         </div>
 
         {data.block_label && <p className="wk-block">📦 {data.block_label}</p>}
         {data.objective && <p className="wk-obj">🎯 {data.objective}</p>}
+        {data.is_deload && data.deload_why && <p className="wk-note">🔽 {data.deload_why}</p>}
 
         {t && t.sessions > 0 && (
           <div className="wk-progress">

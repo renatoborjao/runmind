@@ -84,6 +84,10 @@ class _Inputs:
 
     profile: str
     today: date
+
+    # a semana que o PLANO está montando (None = a corrente): a descarga e o
+    # bloco olham a semana-alvo, não a de hoje (domingo à noite monta a próxima)
+    target_week: date | None = None
     runner: object = None
     history: object = None
     activities: list = field(default_factory=list)
@@ -133,6 +137,7 @@ class AthleteDossier:
         plan=None,
         today: date | None = None,
         exclude: tuple[str, ...] | frozenset = (),
+        week_start: date | None = None,
     ) -> str:
         """O dossiê pronto pra injetar no prompt. `runner`/`history`/`plan`
         opcionais: quem já os tem passa (mesmo objeto = mesma verdade); senão
@@ -142,6 +147,8 @@ class AthleteDossier:
         try:
 
             data = AthleteDossier._inputs(profile, runner, history, plan, today)
+
+            data.target_week = week_start
 
         except Exception as e:
 
@@ -934,7 +941,13 @@ class AthleteDossier:
                     deload_directive,
                 )
 
-                week_start = data.today - timedelta(days=data.today.weekday())
+                week_start = data.target_week or (
+                    data.today - timedelta(days=data.today.weekday())
+                )
+
+                block_this_week, block_ahead = AthleteDossier._block_deload(
+                    data, week_start,
+                )
 
                 lines.append(
                     deload_directive(
@@ -949,6 +962,9 @@ class AthleteDossier:
                             # com várias provas, a zona de taper segue o papel da
                             # próxima (preparatória = mini-polimento)
                             taper_zone_weeks=AthleteDossier._taper_zone(data),
+                            # onde o BLOCO que o coach desenhou põe a descarga
+                            block_deload_this_week=block_this_week,
+                            block_deload_in_weeks=block_ahead,
                         )
                     )
                 )
@@ -958,6 +974,42 @@ class AthleteDossier:
                 print(f"Dossiê: descarga falhou p/ '{data.profile}': {e}")
 
         return lines
+
+    @staticmethod
+    def _block_deload(data: _Inputs, week_start: date) -> tuple[bool, int | None]:
+        """Onde o bloco em andamento põe a descarga (esta semana? daqui a
+        quantas?). Best-effort: sem bloco/erro = (False, None) e o sinal de
+        carga decide como sempre."""
+
+        try:
+
+            from app.application.coach.planning.ai_plan_service import (
+                AIPlanService,
+            )
+            from app.application.history.deload_analyzer import (
+                block_deload_position,
+            )
+            from app.infrastructure.persistence.weekly_plan_repository import (
+                WeeklyPlanRepository,
+            )
+
+            active = AIPlanService._active_block(
+                WeeklyPlanRepository(), data.profile, week_start,
+            )
+
+            if active is None:
+
+                return False, None
+
+            block, index = active
+
+            return block_deload_position(block.get("weeks_plan"), index)
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Dossiê: bloco da descarga falhou p/ '{data.profile}': {e}")
+
+            return False, None
 
     @staticmethod
     def _prehab(data: _Inputs, risk) -> str:
@@ -991,10 +1043,10 @@ class AthleteDossier:
         ou conversa), sensação, check-ins (energia/sono/dor/doença). É a
         terceira perna (evolução × objetivo × PERCEPÇÃO)."""
 
+        from app.application.coach.conversation.rpe_flow import RpeFlow
         from app.application.coach.intelligence.checkin_service import (
             CheckinService,
         )
-        from app.application.coach.conversation.rpe_flow import RpeFlow
         from app.core.weekdays import weekday_label, weekday_name
         from app.infrastructure.persistence.checkin_repository import (
             CheckinRepository,
@@ -1208,6 +1260,19 @@ class AthleteDossier:
             )
 
         lines = [header]
+
+        # semana mais leve DE PROPÓSITO: a razão fica com o plano (o sinal de
+        # carga que a motivou some no dia seguinte — o coach precisa saber
+        # explicar quando o atleta perguntar "por que diminuiu?")
+        if getattr(plan, "is_deload", False) and not stale:
+
+            why = (getattr(plan, "deload_why", None) or "").strip()
+
+            lines.append(
+                "ESTA SEMANA É DE DESCARGA, de propósito"
+                + (f" — o motivo que o plano deu a ele: {why}" if why else "")
+                + ". Se ele perguntar por que diminuiu, explique com esses números."
+            )
 
         lines.extend(
             WeeklyPlanMessageFormatter.session_lines(

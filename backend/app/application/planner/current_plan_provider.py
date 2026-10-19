@@ -22,6 +22,7 @@ class CurrentPlanProvider:
         profile: str,
         force: bool = False,
         request: str = "",
+        correction: str = "",
     ) -> tuple[RunnerProfile, TrainingPlan]:
         """`request`: o pedido do atleta que motivou refazer a semana (as
         palavras dele + a leitura do coach) — sem ele a IA refazia no escuro."""
@@ -55,6 +56,7 @@ class CurrentPlanProvider:
             history=history,
             force=force,
             request=request,
+            correction=correction,
         )
 
         return runner, plan

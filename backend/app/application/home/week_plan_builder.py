@@ -95,6 +95,7 @@ class WeekPlanBuilder:
             "block_label": getattr(plan, "block_label", None),
             "extra_day_note": getattr(plan, "extra_day_note", None),
             "is_deload": bool(getattr(plan, "is_deload", False)),
+            "deload_why": getattr(plan, "deload_why", None),
             "totals": WeekPlanBuilder._totals(days),
             "days": days,
             "race": race,
