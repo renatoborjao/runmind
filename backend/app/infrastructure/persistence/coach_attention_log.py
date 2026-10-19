@@ -105,7 +105,11 @@ class CoachAttentionLog:
 
             return ""
 
-        label = {"analysis": "análise de treino", "weekly": "leitura da semana"}
+        label = {
+            "analysis": "análise de treino",
+            "weekly": "leitura da semana",
+            "chat": "conversa",
+        }
 
         lines = [
             f"- {date.fromisoformat(e['day']):%d/%m} "

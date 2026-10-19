@@ -104,6 +104,11 @@ resolvida pelo calendário | null>, "target_time": <SÓ em goal: tempo-alvo \
 additional|replace | null>,
                      "days": <SÓ em type=days: a lista COMPLETA dos dias de \
 corrida em inglês, ex. ["Monday","Thursday","Saturday"] | null>}}, ...],
+  "cobranca": null | "1 frase curta: o ALERTA ou a COBRANÇA que você fez a ele \
+neste turno — apontou um problema nos dados dele (ritmo/FC acima do plano, sono, \
+carga, risco) ou pediu pra ele mudar/segurar algo. Vira memória pra você não \
+repetir o mesmo alerta na próxima mensagem. Resposta pura, confirmação, ajuste de \
+plano e elogio NÃO são cobrança: null",
   "on_pending": null | <apply|reject|refine>,
   "perception": null | {{"day": "<aaaa-mm-dd do treino de que ele fala>", \
 "rpe": <0-10 | null>, "feel": "<as palavras dele, curto> | null"}}}}
@@ -364,6 +369,10 @@ class BrainDecision:
     # feel}) — o executor grava como percepção (fonte "conversa")
     perception: dict | None = None
 
+    # o que o coach COBROU/ALERTOU neste turno, em 1 frase (None = nada). Vai pro
+    # registro de cobranças pra a próxima mensagem não repetir o mesmo alerta
+    cobranca: str | None = None
+
     @property
     def all_actions(self) -> list[BrainAction]:
         """As ações a executar — a lista quando há; senão a única (compat)."""
@@ -490,12 +499,19 @@ class CoachBrain:
 
             return None
 
+        cobranca = str(data.get("cobranca") or "").strip()[:240]
+
+        if cobranca.lower() in ("null", "none"):
+
+            cobranca = ""
+
         return BrainDecision(
             say=say,
             answer_card=card,
             actions=actions,
             on_pending=on_pending,
             perception=perception,
+            cobranca=cobranca or None,
         )
 
     @staticmethod

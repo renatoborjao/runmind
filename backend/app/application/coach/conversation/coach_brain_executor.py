@@ -113,6 +113,26 @@ class CoachBrainExecutor:
 
             return None
 
+        # o que o coach COBROU/ALERTOU neste turno fica registrado: a próxima
+        # mensagem enxerga e não repete o mesmo alerta (Renato 17-18/10: três
+        # respostas seguidas com a mesma cautela). Best-effort.
+        if decision.cobranca:
+
+            try:
+
+                from app.core.clock import today_local
+                from app.infrastructure.persistence.coach_attention_log import (
+                    CoachAttentionLog,
+                )
+
+                CoachAttentionLog.record(
+                    profile, today_local(), decision.cobranca, "chat",
+                )
+
+            except Exception as e:  # noqa: BLE001
+
+                print(f"Cobrança do chat não registrada p/ '{profile}': {e}")
+
         # a PERCEPÇÃO que ele contou (como se sentiu num treino) vira dado — em
         # paralelo a qualquer resposta/ação. Best-effort. Ver PerceptionRecorder.
         if decision.perception:
