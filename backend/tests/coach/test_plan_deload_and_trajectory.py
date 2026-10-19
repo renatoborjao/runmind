@@ -347,6 +347,12 @@ def test_the_trajectory_shows_the_numbers_of_a_plan_that_stopped():
     assert "~16–19 km" in line
     assert "LEIA A TRAJETÓRIA" in line
     assert "é parar" in line
+    # evoluir é em CADA tipo de treino, não só no longão — e o leve segue leve
+    assert "não só o longão" in line
+    assert "CADA tipo de treino evolui na SUA dimensão" in line
+    assert "O forte aproxima o pace do alvo" in line
+    assert "o leve segue leve DE VERDADE" in line
+    assert "nunca vira mais um forte" in line
 
 
 def test_the_trajectory_needs_a_few_weeks_to_say_anything():
@@ -737,6 +743,9 @@ def test_the_prompt_tells_the_coach_to_push_and_keeps_only_the_ceiling_of_the_ju
     assert "PUXE" in PROMPT_TEMPLATE
     assert "ESPAÇO PRA PUXAR" in PROMPT_TEMPLATE
     assert "Conservador demais é desperdiçar" in PROMPT_TEMPLATE
+    # a qualidade sobe em TODOS os tipos de treino, não só no longão
+    assert "qualidade em TODOS os tipos de treino, não só no longão" in PROMPT_TEMPLATE
+    assert "o leve segue leve DE VERDADE" in PROMPT_TEMPLATE
     assert "o teto é o SALTO, não o passo" in PROMPT_TEMPLATE
     # o bloco não reserva mais a última semana pra aliviar
     assert "alívio só se o corpo pedir" in PROMPT_TEMPLATE

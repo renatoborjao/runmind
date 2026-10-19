@@ -554,13 +554,17 @@ class PlanContextBuilder:
         lines.append(
             "LEIA A TRAJETÓRIA: se uma linha ficou PARADA (mesmo longão, mesma "
             "faixa de pace, mesmo formato) enquanto ele cumpre o plano e o "
-            "corpo e a forma permitem, ESTA semana tem que mover pelo menos "
-            "UMA delas — o longão ganha km OU ganha qualidade (blocos no "
-            "ritmo-alvo, progressivo maior, fartlek longo), OU o forte "
-            "aproxima o pace do alvo / muda de formato. Repetir a semana "
-            "anterior sem motivo real (descarga, volta de doença/lesão, prova) "
-            "não é prudência, é parar. Ao falar de recorde ou de \"o maior até "
-            "aqui\", use SÓ os números destas linhas (a maior corrida FEITA)."
+            "corpo e a forma permitem, ESTA semana tem que mover o que parou — "
+            "não só o longão: CADA tipo de treino evolui na SUA dimensão, "
+            "sempre rumo à meta dele. O forte aproxima o pace do alvo, ganha "
+            "série/bloco maior ou muda de formato; o moderado (steady) alonga "
+            "o trecho; o longão ganha km OU qualidade (blocos no ritmo-alvo, "
+            "progressivo maior, fartlek longo); o leve segue leve DE VERDADE (a "
+            "qualidade dele é a FC abaixo do teto, acelerações, cadência — "
+            "nunca vira mais um forte). Repetir a semana anterior sem motivo "
+            "real (descarga, volta de doença/lesão, prova) não é prudência, é "
+            "parar. Ao falar de recorde ou de \"o maior até aqui\", use SÓ os "
+            "números destas linhas (a maior corrida FEITA)."
         )
 
         return "\n".join(lines)

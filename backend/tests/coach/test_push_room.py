@@ -144,6 +144,20 @@ def test_the_directive_states_the_facts_the_step_and_the_only_ceiling():
     assert "não pra repetir a semana anterior" in text
     # o passo parte do que o atleta CORREU (Maurício executa acima do plano)
     assert "REALMENTE correu" in text and "o plano que ficou baixo" in text
+
+
+def test_the_directive_asks_for_quality_in_every_kind_of_session_not_just_the_long_run():
+    """Renato: o foco não é só o longão — é subir a qualidade em TODOS os tipos de
+    treino, sempre rumo à meta; o leve continua leve."""
+
+    text = push_room_directive(PushRoom(True, "ok", 1.0, 2))
+
+    assert "TODOS os tipos de treino, não só no longão" in text
+    assert "o forte chega mais perto do ritmo-alvo" in text
+    assert "o moderado alonga" in text
+    assert "o leve continua leve DE VERDADE" in text
+    assert "nunca vira mais um forte" in text
+    assert "rumo à meta do atleta" in text
     # o único teto: o salto
     assert "SALTO" in text and "+25%" in text
     assert "A dose e a forma são suas" in text

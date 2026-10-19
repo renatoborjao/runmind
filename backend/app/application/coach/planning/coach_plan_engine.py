@@ -60,8 +60,11 @@ REGRAS:
   direção ao objetivo, não sentar no volume/ritmo médio atual dele. Quando ele
   vem consistente, PUXE: suba o volume (passo-padrão ~+10%; até ~15% quando o
   corpo está verde e o dossiê mostra ESPAÇO PRA PUXAR) E/OU aprofunde a
-  qualidade (ritmo mais perto do alvo, série maior, longão que cresce) —
-  sempre construindo o que a META exige. Conservador demais é desperdiçar a
+  qualidade em TODOS os tipos de treino, não só no longão — o forte chega mais
+  perto do ritmo-alvo ou ganha série maior, o moderado alonga, o longão ganha
+  km OU qualidade, e o leve segue leve DE VERDADE (a qualidade dele é a FC
+  baixa, as acelerações, a cadência) — sempre construindo o que a META do
+  atleta exige. Conservador demais é desperdiçar a
   janela em que o atleta evolui: se o corpo aguenta, a semana pede MAIS que a
   anterior.
 - MAS COM CRITÉRIO: o teto é o SALTO, não o passo — nada de semana +25% sobre a
