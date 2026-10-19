@@ -353,6 +353,35 @@ class Settings(BaseSettings):
 
         return not allow or profile in allow
 
+    # AVISO DO GEL DENTRO DO TREINO no relógio: o treino longo sobe pro Garmin com
+    # um passo curtinho (nota "GEL agora") no horário certo de repor. OFF = o treino
+    # sobe como sempre (a orientação de gel segue na descrição do treino e no plano).
+    garmin_fuel_cues_enabled: bool = False
+
+    # Canário: quando não-vazio, vale SÓ nestes perfis (ex.: "renato2"), mesmo com
+    # a flag global ligada. Vazio = todos.
+    garmin_fuel_cues_profiles: str = ""
+
+    @property
+    def garmin_fuel_cues_profile_list(self) -> list[str]:
+
+        return [
+            p.strip()
+            for p in self.garmin_fuel_cues_profiles.split(",")
+            if p.strip()
+        ]
+
+    def garmin_fuel_cues_active_for(self, profile: str) -> bool:
+        """O aviso de gel dentro do treino do relógio vale neste perfil?"""
+
+        if not self.garmin_fuel_cues_enabled:
+
+            return False
+
+        allow = self.garmin_fuel_cues_profile_list
+
+        return not allow or profile in allow
+
     # Conversas de RECONCILIAÇÃO do coach (perguntas que fecham lacunas): quando
     # o atleta treina em ROTINA além dos dias registrados, o coach pergunta se
     # quer oficializar mais um dia; e quando a META está vaga (sem prova/prazo),

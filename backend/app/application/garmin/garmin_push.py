@@ -21,10 +21,11 @@ def _workout_name(session: PlannedSession) -> str:
     return plan_session_title(session)
 
 
-def _description(session: PlannedSession) -> str:
+def _description(session: PlannedSession, profile: str | None = None) -> str:
     """Plano detalhado (passos da IA) vai na descrição do treino — o atleta
     vê no app/relógio, especialmente útil nos tiros (que a v1 não estrutura
-    passo a passo ainda)."""
+    passo a passo ainda). Treino longo leva também a orientação de GEL (mesmo
+    texto do plano)."""
 
     parts = []
 
@@ -36,7 +37,45 @@ def _description(session: PlannedSession) -> str:
 
         parts.append(session.structure)
 
+    try:
+
+        from app.application.planner.fueling_advisor import fueling_lines
+
+        parts.extend(fueling_lines(session, profile))
+
+    except Exception as e:  # noqa: BLE001 — a nutrição nunca derruba o envio
+
+        print(f"Nutrição na descrição do treino falhou p/ '{profile}': {e}")
+
     return "\n".join(parts)
+
+
+def _fuel_cues(profile: str, session: PlannedSession) -> dict | None:
+    """O aviso de gel DENTRO do treino (passo curto com nota no relógio), só se o
+    canário ligou pra este perfil e a sessão pede reposição. Best-effort."""
+
+    try:
+
+        from app.application.planner.fueling_advisor import fuel_plan
+        from app.core.config import get_settings
+
+        if not get_settings().garmin_fuel_cues_active_for(profile):
+
+            return None
+
+        plan = fuel_plan(session, profile)
+
+        if plan is None or plan["medical"] or not plan["times"]:
+
+            return None
+
+        return plan
+
+    except Exception as e:  # noqa: BLE001
+
+        print(f"Aviso de gel no relógio indisponível p/ '{profile}': {e}")
+
+        return None
 
 
 def push_session(
@@ -51,19 +90,39 @@ def push_session(
 
     garmin = garmin or GarminClient.connect(profile)
 
-    workout = GarminWorkoutBuilder.build(
-        session,
-        name=_workout_name(session),
-        description=_description(session),
-    )
+    fuel = _fuel_cues(profile, session)
 
-    if session.kind == "walk":
+    def upload(with_fuel: dict | None):
 
-        result = garmin.upload_walking_workout(workout)
+        workout = GarminWorkoutBuilder.build(
+            session,
+            name=_workout_name(session),
+            description=_description(session, profile),
+            fuel=with_fuel,
+        )
 
-    else:
+        if session.kind == "walk":
 
-        result = garmin.upload_running_workout(workout)
+            return garmin.upload_walking_workout(workout)
+
+        return garmin.upload_running_workout(workout)
+
+    try:
+
+        result = upload(fuel)
+
+    except Exception as e:  # noqa: BLE001
+
+        if fuel is None:
+
+            raise
+
+        # o Garmin recusou o treino COM os avisos de gel: sobe sem eles — o treino
+        # nunca deixa de chegar ao relógio por causa de um enfeite
+        print(f"Garmin recusou o treino com aviso de gel p/ '{profile}', "
+              f"subindo sem: {e}")
+
+        result = upload(None)
 
     workout_id = (
         result.get("workoutId")

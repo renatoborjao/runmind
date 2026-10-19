@@ -197,6 +197,13 @@ def _executable(step: WorkoutStep, order: int) -> ExecutableStep:
         **_target(step),
     }
 
+    # nota do passo (o relógio mostra na troca): só os avisos de gel levam
+    note = getattr(step, "note", None)
+
+    if note:
+
+        kwargs["description"] = note
+
     return ExecutableStep(**kwargs)
 
 
@@ -287,6 +294,27 @@ def _estimated_seconds(steps: list[WorkoutStep]) -> int:
     return sum(leaf_seconds(s) for s in steps)
 
 
+def _session_pace(session: PlannedSession) -> float | None:
+    """Pace médio (min/km) do alvo da sessão — o que os passos sem pace próprio
+    assumem."""
+
+    values = []
+
+    for raw in (session.target_pace_min, session.target_pace_max):
+
+        try:
+
+            minutes, seconds = str(raw).strip().split(":")[:2]
+
+            values.append(int(minutes) + int(seconds) / 60)
+
+        except (ValueError, TypeError, AttributeError):
+
+            continue
+
+    return sum(values) / len(values) if values else None
+
+
 class GarminWorkoutBuilder:
 
     @staticmethod
@@ -294,9 +322,24 @@ class GarminWorkoutBuilder:
         session: PlannedSession,
         name: str,
         description: str = "",
+        fuel: dict | None = None,
     ) -> RunningWorkout | WalkingWorkout:
+        """`fuel`: {"times", "optional", "no_gel"} do FuelingAdvisor — com ele o
+        treino leva o aviso do gel nos minutos certos ([[fuel_cues]])."""
 
         steps = session.steps or _fallback_steps(session)
+
+        if fuel and fuel.get("times"):
+
+            from app.application.garmin.fuel_cues import insert_fuel_cues
+
+            steps = insert_fuel_cues(
+                steps,
+                fuel["times"],
+                optional=bool(fuel.get("optional")),
+                no_gel=bool(fuel.get("no_gel")),
+                session_pace=_session_pace(session),
+            )
 
         segment = WorkoutSegment(
             segmentOrder=1,
