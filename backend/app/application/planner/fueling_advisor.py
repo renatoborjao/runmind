@@ -182,42 +182,23 @@ def _restrictions_text(profile: str | None) -> str:
         return ""
 
 
-def fuel_plan(session, profile: str | None = None) -> dict | None:
-    """A decisão de nutrição da sessão, uma só pra o TEXTO e pro AVISO no relógio:
-    {"times": [min, ...], "optional": bool, "no_gel": bool, "medical": bool} ou
-    None quando não se aplica (sessão curta, caminhada)."""
+def fueling_lines(session, profile: str | None = None) -> list[str]:
+    """As linhas de nutrição do treino ([] quando não se aplica). Entram no detalhe
+    da sessão — a mensagem do plano e o app leem o MESMO texto."""
 
     if getattr(session, "kind", "run") not in ("run", None):
 
-        return None
+        return []
 
     minutes = estimated_minutes(session)
 
     if not minutes or minutes < MIN_MINUTES:
 
-        return None
+        return []
 
     text = _restrictions_text(profile)
 
-    return {
-        "times": schedule(minutes),
-        "optional": minutes < SCHEDULE_FROM_MINUTES,
-        "no_gel": bool(_NO_GEL.search(text)),
-        "medical": bool(_MEDICAL.search(text)),
-    }
-
-
-def fueling_lines(session, profile: str | None = None) -> list[str]:
-    """As linhas de nutrição do treino ([] quando não se aplica). Entram no detalhe
-    da sessão — a mensagem do plano e o app leem o MESMO texto."""
-
-    plan = fuel_plan(session, profile)
-
-    if plan is None:
-
-        return []
-
-    if plan["medical"]:
+    if _MEDICAL.search(text):
 
         return [
             "Nutrição: nos treinos longos, combine com seu médico ou nutricionista "
@@ -225,11 +206,11 @@ def fueling_lines(session, profile: str | None = None) -> list[str]:
             "essa condição"
         ]
 
-    times = plan["times"]
+    times = schedule(minutes)
 
-    optional = plan["optional"]
+    optional = minutes < SCHEDULE_FROM_MINUTES
 
-    if plan["no_gel"]:
+    if _NO_GEL.search(text):
 
         first = (
             f"Nutrição{' (opcional)' if optional else ''}: ~{GEL_CARBS_G} g de "
