@@ -101,6 +101,9 @@ class _Inputs:
     zones: object = None
     # lista de provas (papel e distância) — lida uma vez, sob demanda
     races: list | None = None
+    # a forma (evoluindo/estagnou/recuou) — lida uma vez, sob demanda: a seção de
+    # evolução, a descarga e o sinal de puxar leem o MESMO veredito
+    evolution: object = None
 
 
 # nomes das atividades fora da corrida (Garmin) pro dossiê
@@ -673,6 +676,41 @@ class AthleteDossier:
             return None
 
     @staticmethod
+    def _form_of(data: _Inputs):
+        """O veredito da forma, lido UMA vez por dossiê."""
+
+        if data.evolution is None:
+
+            from app.application.coach.intelligence.fitness_reading_service import (
+                FitnessReadingService,
+            )
+
+            data.evolution = FitnessReadingService.read_evolution(data.profile)
+
+        return data.evolution
+
+    @staticmethod
+    def _form_direction(data: _Inputs) -> str | None:
+        """A direção da forma só quando há lastro e o dado não está velho — foto
+        antiga não decide descarga nem folga. Best-effort: falhou = None."""
+
+        try:
+
+            evolution = AthleteDossier._form_of(data)
+
+            if evolution is None or evolution.stale or not evolution.has_data:
+
+                return None
+
+            return evolution.direction
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Dossiê: forma p/ descarga falhou p/ '{data.profile}': {e}")
+
+            return None
+
+    @staticmethod
     def _evolution(data: _Inputs) -> list[str]:
 
         lines = []
@@ -725,9 +763,6 @@ class AthleteDossier:
 
         try:
 
-            from app.application.coach.intelligence.fitness_reading_service import (
-                FitnessReadingService,
-            )
             from app.application.coach.planning.fitness_directive import (
                 fitness_plan_directive,
             )
@@ -735,7 +770,7 @@ class AthleteDossier:
                 FitnessEvolutionWriter,
             )
 
-            evolution = FitnessReadingService.read_evolution(data.profile)
+            evolution = AthleteDossier._form_of(data)
 
             line = FitnessEvolutionWriter.line(evolution)
 
@@ -930,6 +965,8 @@ class AthleteDossier:
 
             return lines
 
+        risk = None
+
         try:
 
             from app.application.history.injury_risk_analyzer import (
@@ -973,27 +1010,46 @@ class AthleteDossier:
                     data.today - timedelta(days=data.today.weekday())
                 )
 
-                block_this_week, block_ahead = AthleteDossier._block_deload(
+                block_this_week, _ = AthleteDossier._block_deload(
                     data, week_start,
                 )
+
+                acwr = getattr(reading.load, "acwr", None)
+
+                weeks_to_race = AthleteDossier._weeks_to_race(data)
+
+                weeks_since_race = AIPlanService._weeks_since_race(
+                    data.profile, data.history, week_start,
+                )
+
+                # com várias provas, a zona de taper segue o papel da próxima
+                # (preparatória = mini-polimento)
+                taper_zone = AthleteDossier._taper_zone(data)
+
+                form = AthleteDossier._form_direction(data)
 
                 lines.append(
                     deload_directive(
                         DeloadAnalyzer.assess(
                             reading.load.weekly_loads,
                             reading.recovery,
-                            weeks_to_race=AthleteDossier._weeks_to_race(data),
-                            acwr=getattr(reading.load, "acwr", None),
-                            weeks_since_race=AIPlanService._weeks_since_race(
-                                data.profile, data.history, week_start,
-                            ),
-                            # com várias provas, a zona de taper segue o papel da
-                            # próxima (preparatória = mini-polimento)
-                            taper_zone_weeks=AthleteDossier._taper_zone(data),
-                            # onde o BLOCO que o coach desenhou põe a descarga
+                            weeks_to_race=weeks_to_race,
+                            acwr=acwr,
+                            weeks_since_race=weeks_since_race,
+                            taper_zone_weeks=taper_zone,
+                            # o BLOCO que o coach desenhou pôs a descarga aqui?
+                            # (hipótese escrita semanas antes: o corpo confirma?)
                             block_deload_this_week=block_this_week,
-                            block_deload_in_weeks=block_ahead,
+                            body_state=reading.body_state,
+                            form=form,
                         )
+                    )
+                )
+
+                lines.append(
+                    AthleteDossier._push_room(
+                        data, week_start, weeks_to_race, weeks_since_race,
+                        taper_zone, acwr, form, risk,
                     )
                 )
 
@@ -1002,6 +1058,110 @@ class AthleteDossier:
                 print(f"Dossiê: descarga falhou p/ '{data.profile}': {e}")
 
         return lines
+
+    @staticmethod
+    def _push_numbers(data: _Inputs, week_start: date, base) -> str:
+        """Os km REAIS que ancoram o passo: as 3 últimas semanas FECHADAS (antes
+        da semana que o plano monta — a corrente, em andamento, entraria pela
+        metade e puxaria a média pra baixo), a melhor semana e o maior treino."""
+
+        from app.application.history.weekly_buckets import (
+            activity_date,
+            week_stats,
+        )
+
+        closed = []
+
+        for back in (3, 2, 1):
+
+            monday = week_start - timedelta(days=7 * back)
+
+            runs = [
+                a for a in data.history.activities
+                if monday <= activity_date(a) < monday + timedelta(days=7)
+            ]
+
+            closed.append(round(week_stats(runs)["distance_km"]))
+
+        parts = []
+
+        if any(closed):
+
+            parts.append(
+                f"nas últimas 3 semanas fechadas correu {closed[0]}, {closed[1]} "
+                f"e {closed[2]} km"
+            )
+
+        parts.append(f"melhor semana ~{base.max_week_km:.0f} km")
+
+        parts.append(f"maior treino recente ~{base.longest_km:.0f} km")
+
+        return " Números reais: " + "; ".join(parts) + "."
+
+    @staticmethod
+    def _push_room(
+        data: _Inputs,
+        week_start: date,
+        weeks_to_race,
+        weeks_since_race,
+        taper_zone,
+        acwr,
+        form,
+        risk,
+    ) -> str:
+        """O espelho da descarga: há FOLGA pra puxar? Acende com o plano
+        cumprido, a recuperação firme e a carga sob controle — e traz os km
+        reais pra IA dosar o passo. Vazio sem folga. Best-effort."""
+
+        try:
+
+            from app.application.history.push_room import (
+                PushRoomAnalyzer,
+                push_room_directive,
+            )
+            from app.application.history.runner_baseline_builder import (
+                RunnerBaselineBuilder,
+            )
+            from app.application.planner.weekly_plan_service import (
+                WeeklyPlanService,
+            )
+            from app.domain.entities.injury_risk import RISK_LOW
+            from app.infrastructure.persistence.weekly_plan_repository import (
+                WeeklyPlanRepository,
+            )
+
+            adherence = WeeklyPlanService._recent_adherence(
+                data.profile, WeeklyPlanRepository(), data.history, week_start,
+            )
+
+            room = PushRoomAnalyzer.assess(
+                adherence,
+                data.reading.recovery,
+                data.reading.body_state,
+                form,
+                acwr,
+                weeks_to_race=weeks_to_race,
+                weeks_since_race=weeks_since_race,
+                taper_zone_weeks=taper_zone,
+                injury_risk=risk is not None and risk.level != RISK_LOW,
+                ill=AthleteDossier._open_illness(data) is not None,
+            )
+
+            if not room.open:
+
+                return ""
+
+            base = RunnerBaselineBuilder.build(data.history, data.runner)
+
+            return push_room_directive(
+                room, AthleteDossier._push_numbers(data, week_start, base),
+            )
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Dossiê: espaço pra puxar falhou p/ '{data.profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _block_deload(data: _Inputs, week_start: date) -> tuple[bool, int | None]:

@@ -66,11 +66,13 @@ def test_a_week_20_percent_below_the_peak_is_a_recovery_week():
 
 
 def test_a_normal_fluctuation_does_not_reset_the_block():
+    """A contagem segue lendo 4 semanas seguidas — mas é só informação: com o corpo
+    firme, nada de descarga."""
 
     d = DeloadAnalyzer.assess([300, 270, 310, 320], _recovery(), acwr=1.2)
 
     assert d.building_weeks == 4
-    assert d.due is True
+    assert d.due is False
 
 
 def test_block_position_finds_where_the_deload_falls():
@@ -83,51 +85,21 @@ def test_block_position_finds_where_the_deload_falls():
     assert block_deload_position([], None) == (False, None)
 
 
-def test_the_block_designed_by_the_coach_keeps_the_deload_calendar():
-    """Mesmo com 3+ semanas de carga e carga elevada, a descarga que o bloco
-    planejou pra semana que vem não é antecipada pelo sinal."""
+def test_the_block_that_plans_a_future_deload_does_not_hold_back_a_tired_body():
+    """O corpo cansado antecipa a descarga mesmo que o bloco a ponha só daqui a 2
+    semanas — o bloco é hipótese, o corpo é fato."""
 
-    d = DeloadAnalyzer.assess(
-        [300, 310, 320, 330], _recovery(), acwr=1.2, block_deload_in_weeks=1,
-    )
-
-    assert d.due is False
-    assert "daqui a 1 semana" in d.reason
-
-
-def test_the_block_week_of_deload_is_due_when_the_load_is_elevated():
-
-    d = DeloadAnalyzer.assess(
-        [300, 310], _recovery(), acwr=1.2, block_deload_this_week=True,
-    )
-
-    assert d.due is True
-    assert "bloco" in d.reason
-
-
-def test_the_block_never_forces_a_deload_without_overload():
-    """A guarda do ACWR continua: sem carga elevada, descarga só destreina."""
-
-    d = DeloadAnalyzer.assess(
-        [300, 310], _recovery(), acwr=0.9, block_deload_this_week=True,
-    )
-
-    assert d.due is False
-
-
-def test_falling_recovery_still_anticipates_over_the_block():
     d = DeloadAnalyzer.assess(
         [300, 310, 320], _recovery(hrv=FALLING), acwr=1.2,
-        block_deload_in_weeks=2,
     )
 
     assert d.due is True
-    assert "recuperação caindo" in d.reason
+    assert "recuperação está caindo" in d.reason
 
 
 def test_the_directive_asks_for_the_why_with_the_athletes_numbers():
 
-    d = DeloadAnalyzer.assess([300, 310, 320, 330], _recovery(), acwr=1.2)
+    d = DeloadAnalyzer.assess([300, 310, 320, 330], _recovery(hrv=FALLING), acwr=1.2)
 
     text = deload_directive(d)
 
@@ -623,7 +595,9 @@ def test_ensure_plan_forwards_the_correction_to_the_context():
 # destreina — o papel escrito semanas antes não pode mandar sozinho.
 
 
-def test_the_blocks_deload_is_skipped_without_overload():
+def test_the_blocks_deload_is_skipped_when_the_body_does_not_ask():
+    """Maurício 25/10: o papel de descarga do bloco (escrito em 05/10) não vale com o
+    corpo firme — o coach é avisado e segue a progressão."""
 
     d = DeloadAnalyzer.assess(
         [350, 260, 306, 290], _recovery(), acwr=0.93, block_deload_this_week=True,
@@ -631,7 +605,7 @@ def test_the_blocks_deload_is_skipped_without_overload():
 
     assert d.due is False
     assert d.block_skipped is True
-    assert "carga não está elevada" in d.reason
+    assert "o corpo não a pede" in d.reason
 
     text = deload_directive(d)
 
@@ -639,36 +613,56 @@ def test_the_blocks_deload_is_skipped_without_overload():
     assert "DESTREINA" in text
     assert "NÃO vale hoje" in text
     assert 'REDEFINA "block"' in text
+    assert "ESPAÇO PRA PUXAR" in text
 
 
-def test_the_blocks_deload_holds_with_elevated_load():
+def test_the_blocks_deload_is_skipped_even_with_elevated_load_if_the_body_is_fine():
+    """Carga em alta com HRV estável é o atleta subindo — o bloco não decide."""
 
     d = DeloadAnalyzer.assess(
         [300, 310], _recovery(), acwr=1.15, block_deload_this_week=True,
     )
 
+    assert d.due is False
+    assert d.block_skipped is True
+
+
+def test_the_blocks_deload_holds_when_the_body_confirms_it():
+    """O bloco previa a descarga E a recuperação está caindo com carga em alta."""
+
+    d = DeloadAnalyzer.assess(
+        [300, 310], _recovery(hrv=FALLING), acwr=1.15, block_deload_this_week=True,
+    )
+
     assert d.due is True
     assert d.block_skipped is False
+    assert "o corpo confirma" in d.reason
     assert deload_directive(d).startswith("SINAL DE DESCARGA")
 
 
-def test_the_blocks_deload_holds_when_recovery_is_falling_even_at_low_load():
-    """A segunda perna da regra: recuperação caindo sustenta a descarga do bloco."""
+def test_the_blocks_deload_is_not_forced_by_a_low_load_recovery_dip():
+    """Recuperação caindo com a carga BAIXA não é carga: o bloco não ganha a
+    descarga por causa disso."""
 
     d = DeloadAnalyzer.assess(
         [300, 310], _recovery(hrv=FALLING), acwr=0.93, block_deload_this_week=True,
     )
 
-    assert d.due is True
-    assert "recuperação está caindo" in d.reason
-    assert d.block_skipped is False
+    assert d.due is False
+    assert d.block_skipped is True
 
 
-def test_the_blocks_deload_without_acwr_data_keeps_legacy_behaviour():
+def test_the_blocks_deload_without_acwr_data_still_needs_the_body():
 
-    d = DeloadAnalyzer.assess([300, 310], _recovery(), block_deload_this_week=True)
+    skipped = DeloadAnalyzer.assess([300, 310], _recovery(), block_deload_this_week=True)
 
-    assert d.due is True
+    assert skipped.due is False and skipped.block_skipped is True
+
+    held = DeloadAnalyzer.assess(
+        [300, 310], _recovery(rhr=FALLING), block_deload_this_week=True,
+    )
+
+    assert held.due is True
 
 
 def test_without_a_block_fatigue_still_does_not_beat_a_low_load():
@@ -705,8 +699,10 @@ def test_the_block_line_warns_when_the_weeks_role_is_a_deload():
 
     assert "ESTA semana: Semana 4: Semana de descarga" in deload_week
     assert "ATENÇÃO" in deload_week
-    assert "só vale se o quadro mostrar carga elevada ou recuperação caindo" in deload_week
+    assert "descarga NÃO é calendário" in deload_week
+    assert "só vale se o corpo pedir" in deload_week
     assert "descarga só destreina" in deload_week
+    assert "ESPAÇO PRA PUXAR" in deload_week
 
     build_week = AIPlanService._block_line((block, 3))
 
@@ -724,9 +720,31 @@ def test_is_deload_role():
     assert not is_deload_role(None)
 
 
-def test_the_prompt_says_not_to_deload_without_overload_even_if_the_block_says_so():
+def test_the_prompt_says_not_to_deload_without_a_tired_body_even_if_the_block_says_so():
 
     from app.application.coach.planning.coach_plan_engine import PROMPT_TEMPLATE
 
     assert "NÃO descarregue" in PROMPT_TEMPLATE
     assert "semana leve sobre semana já leve só destreina" in PROMPT_TEMPLATE
+    assert "Descarga NÃO é calendário" in PROMPT_TEMPLATE
+    assert "segue EVOLUINDO" in PROMPT_TEMPLATE
+
+
+def test_the_prompt_tells_the_coach_to_push_and_keeps_only_the_ceiling_of_the_jump():
+
+    from app.application.coach.planning.coach_plan_engine import PROMPT_TEMPLATE
+
+    assert "PUXE" in PROMPT_TEMPLATE
+    assert "ESPAÇO PRA PUXAR" in PROMPT_TEMPLATE
+    assert "Conservador demais é desperdiçar" in PROMPT_TEMPLATE
+    assert "o teto é o SALTO, não o passo" in PROMPT_TEMPLATE
+    # o bloco não reserva mais a última semana pra aliviar
+    assert "alívio só se o corpo pedir" in PROMPT_TEMPLATE
+
+
+def test_a_new_block_is_not_told_to_reserve_a_deload_week():
+
+    text = AIPlanService._block_line(None)
+
+    assert "Descarga NÃO é item de calendário" in text
+    assert "consolidando/testando" in text

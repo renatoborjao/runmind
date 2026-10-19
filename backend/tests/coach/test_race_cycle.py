@@ -14,7 +14,7 @@ from app.application.coach.planning.race_cycle import (
 from app.application.history.deload_analyzer import DeloadAnalyzer
 from app.application.history.stimulus_ledger import StimulusLedger
 from app.application.planner.engines.phase_engine import PhaseEngine
-from app.domain.entities.body_reading import STABLE, RecoveryTrend
+from app.domain.entities.body_reading import FALLING, STABLE, RecoveryTrend
 from app.domain.entities.training_goal import TrainingGoal
 
 
@@ -119,22 +119,23 @@ def test_taper_zone_follows_the_role_of_the_next_race():
 
 
 def _recovery():
+    """Um corpo CANSADO (recuperação caindo) — o único que a descarga atende."""
 
-    return RecoveryTrend(hrv_direction=STABLE, rhr_direction=STABLE, days_covered=7)
+    return RecoveryTrend(hrv_direction=FALLING, rhr_direction=STABLE, days_covered=7)
 
 
 def test_deload_is_not_swallowed_by_a_preparatory_race_two_weeks_away():
     """2 semanas pro 15 km (B): o padrão (zona de 3) calaria a descarga; com o
-    papel B a zona é 1 — a descarga de um bloco longo segue valendo."""
+    papel B a zona é 1 — o corpo cansado segue sendo atendido."""
 
     loads = [80, 90, 100]
 
-    legacy = DeloadAnalyzer.assess(loads, _recovery(), weeks_to_race=2)
+    legacy = DeloadAnalyzer.assess(loads, _recovery(), acwr=1.2, weeks_to_race=2)
 
     assert legacy.due is False and "taper" in legacy.reason
 
     role_aware = DeloadAnalyzer.assess(
-        loads, _recovery(), weeks_to_race=2, taper_zone_weeks=1
+        loads, _recovery(), acwr=1.2, weeks_to_race=2, taper_zone_weeks=1
     )
 
     assert role_aware.due is True
@@ -143,7 +144,7 @@ def test_deload_is_not_swallowed_by_a_preparatory_race_two_weeks_away():
 def test_deload_still_yields_to_the_mini_taper_in_the_last_week():
 
     d = DeloadAnalyzer.assess(
-        [80, 90, 100], _recovery(), weeks_to_race=1, taper_zone_weeks=1
+        [80, 90, 100], _recovery(), acwr=1.2, weeks_to_race=1, taper_zone_weeks=1
     )
 
     assert d.due is False and "taper" in d.reason
@@ -152,7 +153,7 @@ def test_deload_still_yields_to_the_mini_taper_in_the_last_week():
 def test_training_race_never_silences_the_deload():
 
     d = DeloadAnalyzer.assess(
-        [80, 90, 100], _recovery(), weeks_to_race=0, taper_zone_weeks=-1
+        [80, 90, 100], _recovery(), acwr=1.2, weeks_to_race=0, taper_zone_weeks=-1
     )
 
     assert d.due is True
@@ -161,7 +162,7 @@ def test_training_race_never_silences_the_deload():
 def test_deload_default_is_unchanged_without_the_new_argument():
 
     assert DeloadAnalyzer.assess(
-        [80, 90, 100], _recovery(), weeks_to_race=3
+        [80, 90, 100], _recovery(), acwr=1.2, weeks_to_race=3
     ).due is False
 
 

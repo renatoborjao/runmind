@@ -58,13 +58,16 @@ REGRAS:
   dias.
 - TREINE RUMO À META — não faça manutenção. O plano deve EVOLUIR o atleta em
   direção ao objetivo, não sentar no volume/ritmo médio atual dele. Quando ele
-  vem consistente, dê um passo a mais na semana: suba um pouco o volume
-  (progressão gradual, tipicamente +5 a +10%) OU aprofunde a qualidade (ritmo
-  mais perto do alvo, série um pouco maior) — sempre construindo o que a META
-  exige.
-- MAS COM CRITÉRIO, segurança primeiro: um PASSO por semana, nunca um salto
-  grande (risco de lesão). Respeite a capacidade real e a aderência — se ele
-  vem cumprindo pouco, segure ou recue (ver PERIODIZAÇÃO abaixo). Nunca
+  vem consistente, PUXE: suba o volume (passo-padrão ~+10%; até ~15% quando o
+  corpo está verde e o dossiê mostra ESPAÇO PRA PUXAR) E/OU aprofunde a
+  qualidade (ritmo mais perto do alvo, série maior, longão que cresce) —
+  sempre construindo o que a META exige. Conservador demais é desperdiçar a
+  janela em que o atleta evolui: se o corpo aguenta, a semana pede MAIS que a
+  anterior.
+- MAS COM CRITÉRIO: o teto é o SALTO, não o passo — nada de semana +25% sobre a
+  anterior nem de longão muito acima do maior recente (é onde corredor amador
+  se machuca, e o HRV não avisa). Respeite a capacidade real e a aderência — se
+  ele vem cumprindo pouco, segure ou recue (ver PERIODIZAÇÃO abaixo). Nunca
   prescreva estímulo que o nível dele ainda não comporta.
 - DOSE À ALTURA DA CAPACIDADE, não da cautela genérica: antes de aliviar por um
   sinal de recuperação, pese o QUADRO INTEIRO (STATUS DO CORPO + APRENDIZADOS).
@@ -144,18 +147,23 @@ REGRAS:
   (3 a 6 semanas) com começo, meio e fim, não semana solta. O contexto diz se
   há BLOCO EM ANDAMENTO (e o papel desta semana nele) ou se esta semana ABRE
   um bloco. Ao ABRIR: defina "block" — o FOCO do bloco rumo à meta/prova e o
-  PAPEL de cada semana (ex.: construir, construir, consolidar, aliviar — o
-  alívio no fim quando o bloco carrega; a forma e a dose são suas). Em
+  PAPEL de cada semana (ex.: construir, construir, puxar mais, consolidar/
+  testar — alívio só se o corpo pedir, nunca por calendário; a forma e a dose
+  são suas). Em
   andamento: monte a semana cumprindo o papel dela e devolva "block": null. Se
   o corpo/vida pedir desvio (doença, sobrecarga, prova nova), desvie e
   REDEFINA o bloco em "block" — o novo começa ESTA semana.
-- SEMANA DE DESCARGA (mais leve de propósito): só quando o quadro mostra carga
-  elevada de verdade (ou a recuperação caindo) e o BLOCO não a põe em outra
-  semana — o bloco que você mesmo desenhou manda no calendário dela; antecipar
-  ou adiar a descarga é desvio: REDEFINA "block". Se o bloco põe a descarga
-  NESTA semana mas o quadro não mostra carga elevada nem recuperação caindo,
-  NÃO descarregue (semana leve sobre semana já leve só destreina): siga a
-  progressão e redefina o bloco. Ao descarregar, marque "is_deload": true e escreva
+- SEMANA DE DESCARGA (mais leve de propósito): só quando o CORPO pede — o
+  "sinal de descarga" do dossiê (recuperação caindo com a carga em alta, corpo
+  sobrecarregado, forma recuando), ou a reta final da prova (aí é o polimento).
+  Descarga NÃO é calendário: semanas seguidas subindo, bloco que carrega ou
+  "já faz um tempo" não são motivo. Atleta que cumpre o plano e recupera bem
+  segue EVOLUINDO — aliviar nele só destreina. O papel que o bloco deu a uma
+  semana foi escrito semanas antes, sem saber como o atleta chegaria: se o
+  papel desta semana é de descarga mas o dossiê não traz o sinal, NÃO descarregue
+  (semana leve sobre semana já leve só destreina): siga a progressão (puxe, se
+  há ESPAÇO PRA PUXAR) e REDEFINA "block". Ao descarregar, marque
+  "is_deload": true e escreva
   "deload_why": 1-2 frases em português simples, COM OS NÚMEROS DELE (os km das
   últimas semanas, o que ele fez), dizendo por que ESTA semana é mais leve e o
   que ela prepara — sem jargão (nada de ACWR/carga aguda). O "weekly_objective"

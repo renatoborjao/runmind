@@ -418,7 +418,10 @@ class AIPlanService:
             return (
                 "BLOCO: nenhum em andamento — esta semana ABRE um bloco novo: "
                 "defina \"block\" (foco rumo à meta/prova e o papel de cada "
-                "semana)."
+                "semana). Descarga NÃO é item de calendário: não reserve a "
+                "última semana pra aliviar — feche o bloco consolidando/testando "
+                "(ex.: longão de referência, simulado, ritmo-alvo) e só planeje "
+                "alívio quando o corpo pedir."
             )
 
         block, index = active
@@ -428,16 +431,17 @@ class AIPlanService:
         role = block["weeks_plan"][index - 1]
 
         # o papel de DESCARGA foi escrito semanas antes, sem saber como o atleta
-        # chegaria: só vale com carga elevada ou recuperação caindo (o dossiê traz
-        # o veredito); sem isso descarga só destreina
+        # chegaria: só vale se o CORPO pedir (o dossiê traz o veredito — sinal de
+        # descarga); sem isso descarga só destreina e o atleta para de evoluir
         from app.application.history.deload_analyzer import is_deload_role
 
         caution = (
             " ATENÇÃO: o papel desta semana é de DESCARGA, e ele foi escrito "
-            "antes de saber como o atleta chegaria — só vale se o quadro mostrar "
-            "carga elevada ou recuperação caindo (veja o sinal de descarga no "
-            "dossiê). Sem isso, descarga só destreina: siga a progressão e "
-            "redefina \"block\"."
+            "antes de saber como o atleta chegaria — descarga NÃO é calendário, "
+            "só vale se o corpo pedir (veja o sinal de descarga no dossiê: "
+            "recuperação caindo, corpo sobrecarregado, forma recuando). Sem "
+            "isso, descarga só destreina: siga a progressão (puxe, se o dossiê "
+            "mostra ESPAÇO PRA PUXAR) e redefina \"block\"."
             if is_deload_role(role)
             else ""
         )

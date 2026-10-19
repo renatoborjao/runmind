@@ -118,7 +118,10 @@ class DayContextReader:
                 parts.append(f"corpo {state}")
 
             decision = DeloadAnalyzer.assess(
-                reading.load.weekly_loads, reading.recovery
+                reading.load.weekly_loads,
+                reading.recovery,
+                acwr=getattr(reading.load, "acwr", None),
+                body_state=reading.body_state,
             )
 
             if decision.due:
