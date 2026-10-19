@@ -215,7 +215,7 @@ class WeekPlanBuilder:
         }
 
     @staticmethod
-    def _detail(plan, s) -> list[str]:
+    def _detail(plan, s, profile: str | None = None) -> list[str]:
         """O DETALHE do treino, linha a linha, IGUAL ao que o coach manda no chat
         (um passo por linha — aquecimento, série principal, recuperação, desaquecimento
         —, a Dica e o Foco). Para QUALQUER sessão da semana (o chat só detalha as que
@@ -224,7 +224,7 @@ class WeekPlanBuilder:
         try:
 
             return WeeklyPlanMessageFormatter._execution_detail(
-                s.workout_type, s
+                s.workout_type, s, profile
             )
 
         except Exception:
@@ -279,7 +279,7 @@ class WeekPlanBuilder:
             "adjustment_reason": getattr(s, "adjustment_reason", None),
             "is_oneoff": getattr(s, "origin", "plan") == "oneoff",
             "steps": [HomeSummaryBuilder._step(st) for st in (s.steps or [])],
-            "detail": WeekPlanBuilder._detail(plan, s),
+            "detail": WeekPlanBuilder._detail(plan, s, profile),
             "shoe": WeekPlanBuilder._shoe(plan, s, profile, upcoming),
         }
 

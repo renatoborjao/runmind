@@ -175,6 +175,10 @@ REGRAS:
   chame de rodagem/base. O longão só aparece quando o volume evolui e existe
   uma corrida realmente mais longa. NUNCA dê o nome "Longão" a uma distância
   igual (ou menor) à rodagem comum do atleta.
+- NUTRIÇÃO NO TREINO LONGO (gel, carboidrato, isotônico): o sistema anexa SOZINHO
+  a cada sessão longa o horário certo de repor (por duração). NÃO escreva
+  horários, doses ou marcas de gel/carboidrato em dicas, estrutura ou propósito —
+  senão o atleta lê duas orientações diferentes.
 - NÃO recomende nem cite marcas/modelos de TÊNIS em lugar nenhum (structure,
   dica, purpose). O app tem um recomendador PRÓPRIO de calçado (sabe km de cada
   par, rodízio e desgaste) que anexa a sugestão de tênis em cada treino — se

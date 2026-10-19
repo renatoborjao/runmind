@@ -440,6 +440,7 @@ class WeeklyPlanMessageFormatter:
         detail = WeeklyPlanMessageFormatter._execution_detail(
             code,
             session,
+            profile,
         )
 
         block = [header]
@@ -464,6 +465,29 @@ class WeeklyPlanMessageFormatter:
 
     @staticmethod
     def _execution_detail(
+        code: str,
+        session,
+        profile: str | None = None,
+    ) -> list[str]:
+        """O detalhe do treino + a NUTRIÇÃO quando a sessão é longa (quando tomar
+        gel/derivados). A mensagem do plano e o app leem este mesmo texto."""
+
+        detail = WeeklyPlanMessageFormatter._core_detail(code, session)
+
+        try:
+
+            from app.application.planner.fueling_advisor import fueling_lines
+
+            return list(detail) + fueling_lines(session, profile)
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Nutrição no longão falhou: {e}")
+
+            return detail
+
+    @staticmethod
+    def _core_detail(
         code: str,
         session,
     ) -> list[str]:
