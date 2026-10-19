@@ -256,7 +256,9 @@ class OnDemandAnswers:
 
             # NORTE primeiro: projeção "rumo à meta" (no nível atual + gap),
             # depois a estratégia de pace. Cada um é opcional.
-            projection = GoalProjectionWriter.write(runner.name, goal, history)
+            projection = GoalProjectionWriter.write(
+                runner.name, goal, history, profile=profile,
+            )
 
             strategy = RaceStrategyEngine.build(runner.name, goal, metrics)
 

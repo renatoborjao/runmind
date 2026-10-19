@@ -54,12 +54,18 @@ class RaceJourneyBuilder:
             "days_trained": days_trained,
             "longest_km": round(longest_km, 1),
             "target_time": goal.target_time,
-            "predicted_time": RaceJourneyBuilder._predicted(goal, history),
+            "predicted_time": RaceJourneyBuilder._predicted(
+                goal, history, runner.id,
+            ),
             "fitness": RaceJourneyBuilder._fitness(runner.id),
         }
 
     @staticmethod
-    def _predicted(goal: TrainingGoal, history: TrainingHistory) -> dict | None:
+    def _predicted(
+        goal: TrainingGoal,
+        history: TrainingHistory,
+        profile: str | None = None,
+    ) -> dict | None:
         """Previsão de tempo pra prova (forma atual × distância-alvo). Só quando
         há prova de verdade — que é o caso aqui (build já exigiu race_date)."""
 
@@ -70,7 +76,7 @@ class RaceJourneyBuilder:
                 return None
 
             return RaceTimePredictor.predict_formatted(
-                history, goal.distance_km, goal.target_time,
+                history, goal.distance_km, goal.target_time, profile=profile,
             )
 
         except Exception as e:

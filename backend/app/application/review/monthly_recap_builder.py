@@ -75,6 +75,7 @@ class MonthlyRecapBuilder:
                 goal,
                 history,
                 month_start,
+                runner.id,
             ),
             "fitness": MonthlyRecapBuilder._fitness(runner.id, month_start),
         }
@@ -110,6 +111,7 @@ class MonthlyRecapBuilder:
         goal,
         history: TrainingHistory,
         month_start: date,
+        profile: str | None = None,
     ) -> dict | None:
         """Previsão de tempo de prova — usa o histórico COMPLETO recebido
         (não só as atividades do mês: a forma atual não deve ficar presa à
@@ -126,7 +128,7 @@ class MonthlyRecapBuilder:
             return None
 
         return RaceTimePredictor.predict_formatted(
-            history, goal.distance_km, goal.target_time,
+            history, goal.distance_km, goal.target_time, profile=profile,
         )
 
     @staticmethod

@@ -403,6 +403,7 @@ class WeeklyReviewNotifier:
             built = GoalProjectionWriter.section(
                 runner.name, goal, history, weeks_to_race=weeks,
                 lean="Se a prova fosse hoje" in review_text,
+                profile=profile,
             )
 
             if built is not None:
@@ -452,7 +453,7 @@ class WeeklyReviewNotifier:
                 weeks = (goal.race_date - today_local()).days // 7
 
             message = GoalProjectionWriter.write(
-                runner.name, goal, history, weeks_to_race=weeks,
+                runner.name, goal, history, weeks_to_race=weeks, profile=profile,
             )
 
             if message is None:

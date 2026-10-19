@@ -119,7 +119,7 @@ class WeeklyReviewBuilder:
         # treino sem competição nenhuma no horizonte
         predicted_time = (
             RaceTimePredictor.predict_formatted(
-                history, goal.distance_km, goal.target_time,
+                history, goal.distance_km, goal.target_time, profile=runner.id,
             )
             if has_race
             else None

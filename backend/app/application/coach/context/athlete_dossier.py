@@ -635,6 +635,7 @@ class AthleteDossier:
             lines.append(
                 race_projection_directive(
                     RacePredictionRepository().load(data.profile), data.goal,
+                    history_seconds=AthleteDossier._history_forecast(data),
                 )
             )
 
@@ -643,6 +644,33 @@ class AthleteDossier:
             print(f"Dossiê: projeção falhou p/ '{data.profile}': {e}")
 
         return lines
+
+    @staticmethod
+    def _history_forecast(data: _Inputs) -> float | None:
+        """Quanto o HISTÓRICO real dele diz que ele faz a distância da meta hoje
+        (Riegel do melhor esforço). None sem distância/âncora. Best-effort."""
+
+        try:
+
+            from app.application.history.race_time_predictor import (
+                RaceTimePredictor,
+            )
+
+            distance = getattr(data.goal, "distance_km", None)
+
+            if not distance:
+
+                return None
+
+            prediction = RaceTimePredictor.predict(data.history, distance)
+
+            return prediction["predicted_seconds"] if prediction else None
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Dossiê: previsão do histórico falhou p/ '{data.profile}': {e}")
+
+            return None
 
     @staticmethod
     def _evolution(data: _Inputs) -> list[str]:

@@ -7,6 +7,7 @@ saber se está no rumo. Determinístico (a matemática do tempo é exata). None
 quando não há distância-meta ou não há esforço-âncora pra prever (silêncio, não
 invenção). Ver [[project_modelo_pace_vdot]] e [[project_multiplos_objetivos]]."""
 
+from app.application.history.race_forecast import range_sentence
 from app.application.history.race_time_predictor import RaceTimePredictor
 from app.application.planner.race_time_formatter import RaceTimeFormatter
 from app.domain.entities.training_goal import TrainingGoal
@@ -30,8 +31,10 @@ class GoalProjectionWriter:
         goal: TrainingGoal,
         history: TrainingHistory,
         weeks_to_race: int | None = None,
+        profile: str | None = None,
     ) -> str | None:
-        """Bloco 'rumo à meta' pro atleta, ou None se não dá pra projetar."""
+        """Bloco 'rumo à meta' pro atleta, ou None se não dá pra projetar.
+        `profile`: com ele, histórico e Garmin viram FAIXA quando discordam."""
 
         distance = goal.distance_km or 0.0
 
@@ -40,7 +43,7 @@ class GoalProjectionWriter:
             return None
 
         pred = RaceTimePredictor.predict_formatted(
-            history, distance, goal.target_time,
+            history, distance, goal.target_time, profile=profile,
         )
 
         if pred is None:
@@ -52,7 +55,7 @@ class GoalProjectionWriter:
         lines = [
             f"🎯 Rumo à sua meta ({label})",
             "",
-            f"No teu nível atual, teu tempo seria ~*{pred['formatted']}*.",
+            GoalProjectionWriter._level_line(pred),
         ]
 
         gap = GoalProjectionWriter._gap_line(goal, pred, weeks_to_race)
@@ -74,6 +77,7 @@ class GoalProjectionWriter:
         history: TrainingHistory,
         weeks_to_race: int | None = None,
         lean: bool = False,
+        profile: str | None = None,
     ) -> tuple[str, dict] | None:
         """O "rumo à meta" ENXUTO pra dentro do resumo de domingo (sem linhas em
         branco no meio) + o SNAPSHOT da projeção, pra decidir se há novidade
@@ -89,7 +93,7 @@ class GoalProjectionWriter:
             return None
 
         pred = RaceTimePredictor.predict_formatted(
-            history, distance, goal.target_time,
+            history, distance, goal.target_time, profile=profile,
         )
 
         if pred is None:
@@ -114,7 +118,7 @@ class GoalProjectionWriter:
 
             lines = [
                 f"🎯 Rumo à meta ({label})",
-                f"No teu nível atual, teu tempo seria ~*{pred['formatted']}*.",
+                GoalProjectionWriter._level_line(pred),
             ]
 
             gap = GoalProjectionWriter._gap_line(goal, pred, weeks_to_race)
@@ -138,6 +142,22 @@ class GoalProjectionWriter:
         }
 
         return "\n".join(lines), snapshot
+
+    @staticmethod
+    def _level_line(pred: dict) -> str:
+        """Onde ele está HOJE: um número do histórico, ou a FAIXA histórico ×
+        Garmin quando as duas fontes discordam."""
+
+        forecast = pred.get("range")
+
+        if forecast:
+
+            return (
+                f"Hoje, teu tempo fica {range_sentence(forecast)} — o Garmin "
+                "estima pelo teu VO₂máx; os treinos mostram o que você já sustentou."
+            )
+
+        return f"No teu nível atual, teu tempo seria ~*{pred['formatted']}*."
 
     @staticmethod
     def _gap_line(
@@ -175,6 +195,37 @@ class GoalProjectionWriter:
             return None, None
 
         target = goal.target_time
+
+        # FAIXA (histórico × Garmin): o veredito parte de onde a meta cai nela
+        forecast = pred.get("range")
+
+        if forecast:
+
+            position = forecast.get("position")
+
+            if position == "beaten":
+
+                return None, (
+                    f"E olha só: pelas duas medidas você JÁ está no ritmo da tua "
+                    f"meta de {target} — dá pra buscar até um pouco mais. 🚀"
+                )
+
+            if position == "inside":
+
+                return None, (
+                    f"Tua meta de {target} cabe na faixa: o Garmin já te vê "
+                    "lá, e os treinos ainda precisam mostrar isso — manter a "
+                    "consistência (sessões-chave e sono em dia) é o caminho. 💪"
+                )
+
+            # meta mais rápida que a faixa toda: o gap parte do cenário mais rápido
+            target_seconds = pred["seconds"] - delta
+
+            fast = forecast["low_seconds"]
+
+            pred = {**pred, "seconds": fast, "delta_seconds": fast - target_seconds}
+
+            delta = pred["delta_seconds"]
 
         # delta = previsto − alvo. Negativo = já mais rápido que a meta.
         if delta <= _ON_TARGET_SLACK:

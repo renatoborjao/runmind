@@ -9,6 +9,7 @@ partir de um esforço de 3km), a extrapolação de Riegel é conhecidamente
 pouco confiável -> corta, também None."""
 
 from app.application.history.pace_model_builder import gps_broken
+from app.application.history.race_forecast import build_range, garmin_seconds_for
 from app.application.history.runner_metrics import WALK_PACE_CUTOFF
 from app.application.planner.race_time_formatter import RaceTimeFormatter
 from app.domain.entities.training_history import TrainingHistory
@@ -32,10 +33,15 @@ class RaceTimePredictor:
         history: TrainingHistory,
         goal_distance_km: float,
         target_time: str | None,
+        profile: str | None = None,
     ) -> dict | None:
         """Previsão já formatada pra exibição + delta vs. a meta declarada
         (se houver) — usado igual pelo resumo semanal e pelo recap mensal,
-        pra não duplicar a lógica de formatação/delta em cada um."""
+        pra não duplicar a lógica de formatação/delta em cada um.
+
+        `profile`: com ele, a previsão do GARMIN entra e, quando as duas fontes
+        discordam, o dict traz `range` (a FAIXA entre o histórico e o Garmin —
+        ver [[race_forecast]]). Sem ele, o número do histórico, como sempre."""
 
         prediction = RaceTimePredictor.predict(history, goal_distance_km)
 
@@ -53,7 +59,7 @@ class RaceTimePredictor:
             else None
         )
 
-        return {
+        result = {
             "formatted": RaceTimeFormatter.format(predicted_seconds),
             "seconds": predicted_seconds,
             "delta_seconds": delta_seconds,
@@ -63,6 +69,60 @@ class RaceTimePredictor:
                 else None
             ),
         }
+
+        if profile:
+
+            forecast = RaceTimePredictor._range(
+                profile, goal_distance_km, predicted_seconds, target_seconds,
+            )
+
+            if forecast:
+
+                result["range"] = forecast
+
+        return result
+
+    @staticmethod
+    def _range(
+        profile: str,
+        distance_km: float,
+        history_seconds: float,
+        target_seconds: int | None,
+    ) -> dict | None:
+        """A faixa histórico × Garmin, ou None (sem Garmin, sem projeção pra esta
+        distância ou fontes que concordam). Best-effort: nunca derruba a previsão."""
+
+        try:
+
+            from app.infrastructure.persistence.race_prediction_repository import (
+                RacePredictionRepository,
+            )
+
+            garmin = garmin_seconds_for(
+                RacePredictionRepository().load(profile), distance_km,
+            )
+
+            forecast = build_range(history_seconds, garmin)
+
+            if forecast is None or not forecast.is_range:
+
+                return None
+
+            data = forecast.to_dict()
+
+            data["position"] = (
+                forecast.position_of(target_seconds)
+                if target_seconds is not None
+                else None
+            )
+
+            return data
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Faixa da previsão de prova falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def predict(
