@@ -182,6 +182,39 @@ def _restrictions_text(profile: str | None) -> str:
         return ""
 
 
+def _alert_tip(times: list[int], no_gel: bool) -> str:
+    """Como NÃO esquecer: um alerta de tempo recorrente no relógio (recurso nativo do
+    Garmin, configurado uma vez nas opções da atividade) — sem mexer nos passos do
+    treino enviado ao relógio (isso foi tentado e desfeito: muda as voltas que a
+    análise pareia com o plano)."""
+
+    moment = "de repor" if no_gel else "do gel"
+
+    # o cronograma tem primeiro == intervalo (35, 35 / 30, 30): um alerta que repete
+    # a cada N min apita exatamente nos horários
+    if len(times) > 1 and times[1] - times[0] == times[0]:
+
+        return (
+            f"Dica: programe no relógio um alerta de tempo que repita a cada "
+            f"{times[0]} min (nos alertas da atividade, opção Tempo) — ele apita "
+            f"na hora {moment}"
+        )
+
+    what = "repor" if no_gel else "tomar o gel"
+
+    if len(times) > 1:
+
+        return (
+            f"Dica: programe no relógio alertas de tempo aos {_join(times)} min "
+            f"pra lembrar de {what}"
+        )
+
+    return (
+        f"Dica: programe no relógio um alerta de tempo aos {times[0]} min pra "
+        f"lembrar de {what}"
+    )
+
+
 def fueling_lines(session, profile: str | None = None) -> list[str]:
     """As linhas de nutrição do treino ([] quando não se aplica). Entram no detalhe
     da sessão — a mensagem do plano e o app leem o MESMO texto."""
@@ -234,6 +267,8 @@ def fueling_lines(session, profile: str | None = None) -> list[str]:
             f"Sem gel: {_ALTERNATIVES} no lugar de cada um; teste nos treinos, "
             "nunca estreie na prova",
         ]
+
+    lines.append(_alert_tip(times, bool(_NO_GEL.search(text))))
 
     if _REHEARSAL.search(getattr(session, "workout_type", "") or ""):
 

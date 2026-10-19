@@ -120,8 +120,9 @@ def test_the_maurício_simulado_gets_a_schedule_and_the_race_rehearsal_note():
     assert lines[0] == "Nutrição: gel (~25 g de carboidrato) aos 35 e 70 min, com água"
     assert "Sem gel: 2 balas de goma, 1 banana ou isotônico" in lines[1]
     assert "nunca estreie na prova" in lines[1]
-    assert "ensaio da prova" in lines[2]
-    assert "MESMO gel" in lines[2]
+    assert lines[2].startswith("Dica: programe no relógio um alerta de tempo")
+    assert "ensaio da prova" in lines[3]
+    assert "MESMO gel" in lines[3]
 
 
 def test_a_regular_long_run_has_no_rehearsal_note():
@@ -269,3 +270,95 @@ def test_the_plan_ai_is_told_not_to_write_its_own_gel_advice():
 
     assert "NUTRIÇÃO NO TREINO LONGO" in PROMPT_TEMPLATE
     assert "o sistema anexa SOZINHO" in PROMPT_TEMPLATE
+
+
+# ---- a dica do alerta de tempo no relógio ---------------------------------------------
+# O Renato queria o ponto do gel "no treino"; esclareceu que NÃO precisa ir no treino
+# enviado ao relógio — o plano de domingo e a aba Treino bastam. A dica ensina o recurso
+# nativo do Garmin (alerta de tempo recorrente) sem mexer nos passos do treino.
+
+
+def test_the_tip_teaches_a_recurring_time_alert_that_matches_the_schedule():
+
+    with _no_restrictions():
+
+        lines = fueling_lines(_simulado_16k(), "mauricio")
+
+    tip = next(line for line in lines if line.startswith("Dica:"))
+
+    assert tip == (
+        "Dica: programe no relógio um alerta de tempo que repita a cada 35 min "
+        "(nos alertas da atividade, opção Tempo) — ele apita na hora do gel"
+    )
+
+
+def test_a_very_long_run_alert_repeats_every_30_minutes():
+
+    steps = [WorkoutStep(kind=RUN, distance_m=24000, pace_min="6:30", pace_max="6:50")]
+
+    with _no_restrictions():
+
+        lines = fueling_lines(_session(km=24.0, steps=steps), "p")
+
+    tip = next(line for line in lines if line.startswith("Dica:"))
+
+    assert "a cada 30 min" in tip
+
+
+def test_the_optional_single_gel_gets_a_one_time_alert():
+
+    with _no_restrictions():
+
+        lines = fueling_lines(_session(km=12.5, low="6:20", high="6:40"), "p")
+
+    assert (
+        "Dica: programe no relógio um alerta de tempo aos 40 min pra lembrar de "
+        "tomar o gel"
+    ) in lines
+
+
+def test_someone_who_skips_gel_gets_the_alert_for_replenishing():
+
+    with patch(REPO, return_value={"settings": {"dislikes": "não curto gel"}}):
+
+        lines = fueling_lines(_simulado_16k(), "p")
+
+    tip = next(line for line in lines if line.startswith("Dica:"))
+
+    assert tip.endswith("ele apita na hora de repor")
+
+
+def test_diabetes_and_short_sessions_get_no_tip():
+
+    with patch(REPO, return_value={"settings": {"restrictions": "diabetes"}}):
+
+        lines = fueling_lines(_simulado_16k(), "p")
+
+    assert all(not line.startswith("Dica:") for line in lines)
+
+    with _no_restrictions():
+
+        assert fueling_lines(_session(km=8.0, kind="Rodagem Leve"), "p") == []
+
+
+def test_the_workout_sent_to_the_watch_is_untouched_by_the_nutrition_text():
+    """Revertido de propósito (nº 62): o treino que sobe pro Garmin segue sem aviso de
+    gel nos passos e sem as linhas de nutrição na descrição."""
+
+    from app.application.garmin import garmin_push
+    from app.application.garmin.garmin_workout_builder import GarminWorkoutBuilder
+
+    session = _simulado_16k()
+
+    session.structure = "Base 7 km\nBloco 6 km"
+
+    with _no_restrictions():
+
+        description = garmin_push._description(session)
+
+    assert "Nutrição" not in description and "gel" not in description.lower()
+
+    steps = GarminWorkoutBuilder.build(session, "x").workoutSegments[0].workoutSteps
+
+    assert len(steps) == 3
+    assert all(s.model_dump().get("description") is None for s in steps)
