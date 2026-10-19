@@ -86,6 +86,8 @@ Branch: `fix/avulso-ajuste-sem-loop`. "Stamp" = backup na VM tirado **antes** da
 | Quando | O quê | Como desfazer |
 |---|---|---|
 | 26/09 | `storage/profiles/renato2.json` → `hr_zones` 130/142/155/167/180 (máx 192, repouso 67, garmin:HR_RESERVE) + linha em `hr_zones_history` | copiar `renato2.json.bak-hrzones-20260926` por cima (atenção: a sincronização do Garmin pode regravar as zonas do relógio) |
+| 19/10 | `storage/plans/mauricio.json` (+ `history/`) — semana de 19/10 refeita sem a descarga errada (37 km; mantida a segunda feita). Mensagem enviada com a oferta do relógio | copiar `plans-mauricio.json.bak-20261019-descarga-errada` e `plans-history-mauricio.json.bak-20261019-descarga-errada` (de `~/rollback_points/coach-2026-10-19/data/`) por cima; o relógio dele só muda se ele responder "sim" |
+| 19/10 | `storage/plans/fernanda.json` (+ `history/`) — semana de 19/10 refeita como ABSORÇÃO de 25 km (o plano era descarga de 19 km apoiada em volume duplicado pela dedup). Nada enviado a ela ainda | copiar `plans-fernanda.json.bak-20261019-descarga-inflada` e `plans-history-fernanda.json.bak-20261019-descarga-inflada` por cima |
 | 26/09 → | `coach_attention/{perfil}.json` (o que o coach já cobrou) | nada a fazer: código antigo ignora |
 | 26/09 → | `hr_histogram` nas atividades do arquivo | nada a fazer: código antigo lê campo a campo e ignora (só descarta o histograma ao regravar a atividade; ao reaplicar o nº 10, a carga usa Banister até o histograma voltar) |
 | 27/09 | `profiles/mauricio.json` `target_time` 00:57:00 → 01:22:30 e `races/mauricio.json` (15 km 20/12) → 01:22:30 | copiar `rollback_points/coach-2026-09-27/data/profiles_mauricio.json` e `races_mauricio.json` de volta |
