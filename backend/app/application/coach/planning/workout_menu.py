@@ -18,8 +18,10 @@ WORKOUT_MENU = """\
       15-20 s soltas no fim (recupera andando/trotando) — economia e técnica
       sem custo de recuperação.
     * Longão: o treino mais longo — constante, por TEMPO em pé, com FINAL
-      RÁPIDO (últimos 2-3 km mais fortes) OU com blocos no ritmo-alvo (varie a
-      forma dele também).
+      RÁPIDO (últimos 2-3 km mais fortes), com blocos no ritmo-alvo OU em
+      ETAPAS de ritmos diferentes (ex.: um trecho leve, outro moderado e um
+      bloco longo no ritmo de prova, fechando a distância; cada etapa é UM
+      passo com o próprio pace). Varie a forma dele também.
   LIMIAR
     * Tempo / Limiar contínuo: 20-40 min "confortavelmente difícil" — o motor
       pra 10k/21k.
@@ -80,8 +82,15 @@ WORKOUT_MENU = """\
       (ex.: 6x1min pensando em cadência alta) — economia e menos impacto.
   O cardápio é o PONTO DE PARTIDA, não uma caixa fechada: qualquer estrutura
   que um treinador de verdade prescreveria é válida — e se o atleta PEDIR um
-  tipo (mesmo fora da lista), monte-o. Treino de SUBIDA/rampa não entra no
-  plano da semana: é particular do percurso de cada um, só quando ele pede."""
+  tipo (mesmo fora da lista), monte-o. Isto vale pra TODOS os tipos, não só o
+  longão: cada um admite muitas variações de estrutura, de ritmo e de etapas
+  (um limiar com blocos de pace diferentes, um intervalado com repetições
+  escalonadas, um moderado com trechos mais firmes, um longão em etapas...).
+  Não é regra nem receita: é repertório. A sabedoria é sua, de treinador —
+  escolha a variação e a dose pela fase, pelo nível, pelo corpo e pela meta do
+  atleta (e o leve continua leve de verdade). Treino de SUBIDA/rampa não entra
+  no plano da semana: é particular do percurso de cada um, só quando ele
+  pede."""
 
 # SUBIDA fica FORA do plano da semana (Renato 27/09: "é algo muito particular,
 # tem que ser pedido meio que avulso") — só o treino AVULSO a oferece.

@@ -63,8 +63,8 @@ REGRAS:
   qualidade em TODOS os tipos de treino, não só no longão — o forte chega mais
   perto do ritmo-alvo ou ganha série maior, o moderado alonga, o longão ganha
   km OU qualidade, e o leve segue leve DE VERDADE (a qualidade dele é a FC
-  baixa, as acelerações, a cadência) — sempre construindo o que a META do
-  atleta exige. Conservador demais é desperdiçar a
+  baixa, as acelerações, a cadência) — exemplos, não receita: a sabedoria é
+  sua — sempre construindo o que a META do atleta exige. Conservador demais é desperdiçar a
   janela em que o atleta evolui: se o corpo aguenta, a semana pede MAIS que a
   anterior.
 - MAS COM CRITÉRIO: o teto é o SALTO, não o passo — nada de semana +25% sobre a
