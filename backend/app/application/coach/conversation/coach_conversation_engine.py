@@ -1,5 +1,6 @@
 from google.genai import types
 
+from app.application.coach.writer.analysis_hygiene import athlete_words, voice_text
 from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.core.config import get_settings
 from app.infrastructure.integrations.gemini.client import generate_text
@@ -136,7 +137,7 @@ class CoachConversationEngine:
         # require_text=True: resposta vazia (safety/finish_reason) é
         # reenviada e, se persistir, levanta pro fallback do chamador —
         # o atleta nunca recebe mensagem em branco.
-        return await generate_text(
+        reply = await generate_text(
             portuguese=True,
             model=settings.gemini_chat_model,
             contents=contents,
@@ -152,3 +153,7 @@ class CoachConversationEngine:
             ),
             require_text=True,
         )
+
+        # as muletas, o jargão e o estado interno inventado saem — as mesmas regras da
+        # análise e do plano (o que o ATLETA disse ele mesmo pode ser respondido no termo dele)
+        return voice_text(reply, athlete_said=athlete_words(conversation_history, incoming_text))

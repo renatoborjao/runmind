@@ -12,7 +12,11 @@ que o modelo escreva. São impossibilidades de FATO e regras que o Renato já de
   coach exige — contagem sem lastro, e repetida a cada corrida, vira bronca que não muda nada.
 
 Tira a FRASE (ou só a oração) que fere a regra e preserva o resto — melhor um texto mais curto
-e verdadeiro que um com número impossível. Puro/determinístico."""
+e verdadeiro que um com número impossível. Puro/determinístico.
+
+Vale pra TODA fala por IA do coach: a análise (`sanitize`), o plano (`plan_text`/`plan_lines`) e,
+desde o nº 73, o chat e a leitura da semana (`voice_text`) — o resumo de domingo e o chat
+repetiam "cravou", "ACWR 1.7" e "segure a ansiedade" que a análise já não deixava passar."""
 
 from __future__ import annotations
 
@@ -212,9 +216,31 @@ def _scrub(text: str, pattern: re.Pattern, min_words: int = _MIN_WORDS) -> str |
     return " ".join(kept) or None
 
 
+# "cravar a inscrição/a vaga/a data" é FECHAR (garantir), não "manter": a troca cega mudaria o
+# sentido ("cravar a tua inscrição" → "manter a tua inscrição")
+_TIC_CLOSE = re.compile(
+    r"\bcrav(ar|ou|aram|ando|e)\b"
+    r"(?=(?:\s+(?:a|na|sua|tua|essa|esta|nossa))+\s+(?:inscri|vaga|data))",
+    re.IGNORECASE,
+)
+
+_TIC_CLOSE_WORD = {
+    "ar": "fechar", "ou": "fechou", "aram": "fecharam", "ando": "fechando", "e": "feche",
+}
+
+
 def swap_tics(text: str) -> str:
     """Troca as muletas ("cravou", "cravados") por palavras que dizem a coisa, preservando a
     maiúscula do início."""
+
+    text = _TIC_CLOSE.sub(
+        lambda m: (
+            _TIC_CLOSE_WORD[m.group(1).lower()].capitalize()
+            if m.group(0)[:1].isupper()
+            else _TIC_CLOSE_WORD[m.group(1).lower()]
+        ),
+        text,
+    )
 
     for pattern, word in _TICS:
 
@@ -296,6 +322,113 @@ def plan_text(text: str | None) -> str:
     cleaned = clean_text(text, has_hr=True, min_words=_MIN_WORDS_PLAN)
 
     return cleaned or swap_tics(text)
+
+
+def athlete_words(history: list[dict] | None, incoming_text: str = "") -> str:
+    """O que o ATLETA escreveu na conversa (turnos dele + a mensagem de agora): o que o coach
+    pode responder no mesmo termo."""
+
+    spoken = [
+        str(turn.get("text") or "")
+        for turn in history or []
+        if turn.get("role") == "user"
+    ]
+
+    return "\n".join([*spoken, incoming_text or ""])
+
+
+# "• item", "- item", "1. item": o marcador de uma linha de lista do chat
+_BULLET = re.compile(r"^(\s*(?:[•\-–*]|\d+[.)])\s+)(.*)$")
+
+
+def _voice_line(body: str, *, told_state: bool, told_jargon: bool, has_hr: bool) -> str | None:
+    """Uma linha de fala do coach já limpa; a MESMA linha, intacta, se nada nela fere a regra;
+    None se a linha inteira caiu."""
+
+    hits = (
+        _COUNT.search(body)
+        or any(pattern.search(body) for pattern, _ in _TICS)
+        or _TIC_CLOSE.search(body)
+        or (not told_jargon and _JARGON.search(body))
+        or (not told_state and _INTERNAL_STATE.search(body))
+        or (not has_hr and _HR.search(body))
+    )
+
+    if not hits:
+
+        return body
+
+    cleaned = swap_tics(strip_repeat_counts(body))
+
+    for pattern, active in (
+        (_JARGON, not told_jargon),
+        (_INTERNAL_STATE, not told_state),
+        (_HR, not has_hr),
+    ):
+
+        if cleaned and active:
+
+            cleaned = _scrub(cleaned, pattern, _MIN_WORDS_PLAN)
+
+    return cleaned
+
+
+def voice_text(
+    text: str | None,
+    *,
+    athlete_said: str = "",
+    has_hr: bool = True,
+    keep_if_empty: bool = True,
+) -> str:
+    """Uma FALA do coach (resposta do chat, leitura da semana) com as mesmas regras da análise e
+    do plano: sem muleta ("cravou"), sem jargão de carga ("ACWR 1.7"), sem estado interno
+    inventado ("segure a ansiedade") e sem contagem de vezes sem as datas.
+
+    Diferente do plano, quem fala aqui conversa com o atleta: se ELE mesmo disse "ansiedade" ou
+    perguntou do "ACWR" (`athlete_said`), o coach pode responder no mesmo termo — a regra é
+    contra o que ele NÃO contou. Preserva as linhas, os marcadores de lista e as linhas em
+    branco (WhatsApp/Telegram).
+
+    Se a fala INTEIRA cai: `keep_if_empty` (o chat — o atleta nunca fica sem resposta) devolve o
+    texto só sem as muletas; sem ele (a leitura da semana, que tem fallback próprio) devolve ""."""
+
+    if not text or not text.strip():
+
+        return text or ""
+
+    told_state = bool(_INTERNAL_STATE.search(athlete_said or ""))
+
+    told_jargon = bool(_JARGON.search(athlete_said or ""))
+
+    out = []
+
+    for raw in text.split("\n"):
+
+        if not raw.strip():
+
+            out.append(raw)
+
+            continue
+
+        bullet = _BULLET.match(raw)
+
+        prefix, body = (bullet.group(1), bullet.group(2)) if bullet else ("", raw)
+
+        cleaned = _voice_line(
+            body, told_state=told_state, told_jargon=told_jargon, has_hr=has_hr,
+        )
+
+        if cleaned:
+
+            out.append(prefix + cleaned)
+
+    result = "\n".join(out).strip()
+
+    if result:
+
+        return result
+
+    return swap_tics(text) if keep_if_empty else ""
 
 
 def plan_lines(text: str | None) -> str:

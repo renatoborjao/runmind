@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.application.history.adherence_analyzer import AdherenceAnalyzer
 from app.application.history.consistency_calculator import (
@@ -9,13 +9,19 @@ from app.application.history.consistency_calculator import (
 from app.application.history.evolution_analyzer import EvolutionAnalyzer
 from app.application.history.race_time_predictor import RaceTimePredictor
 from app.application.history.week_comparator import WeekComparator
-from app.application.history.weekly_buckets import activity_date
+from app.application.history.weekly_buckets import (
+    activity_date,
+    group_by_week,
+    last_week_keys,
+    week_stats,
+)
 from app.application.planner.weekly_plan_matcher import WeeklyPlanMatcher
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.core.clock import today_local
 from app.domain.entities.runner_profile import RunnerProfile
 from app.domain.entities.training_history import TrainingHistory
 from app.domain.entities.training_plan import TrainingPlan
+from app.domain.value_objects.sports import is_run_sport
 from app.infrastructure.persistence.race_result_repository import (
     RaceResultRepository,
 )
@@ -26,6 +32,9 @@ from app.infrastructure.persistence.weekly_plan_repository import (
 TREND_WEEKS = 8
 
 _RUNNING_KINDS = {"run", "walk", "run_walk"}
+
+# a semana anterior abaixo desta fração da média das 4 antes dela é RECESSO (pausa, viagem, gripe)
+_BREAK_FRACTION = 0.4
 
 
 class WeeklyReviewBuilder:
@@ -85,6 +94,15 @@ class WeeklyReviewBuilder:
                 history,
                 review_week,
             ),
+            # a semana anterior foi de RECESSO? ("+773%" contra uma semana parada não é carga)
+            "previous_week_break": WeeklyReviewBuilder._previous_was_break(
+                history, review_week,
+            ),
+            # as corridas de ESTEIRA da semana (pace/distância estimados) e se o atleta tem FC
+            # medida nela — a leitura da semana não pode provar ritmo com a esteira nem citar FC
+            # de quem corre sem monitor
+            "indoor_runs": WeeklyReviewBuilder._indoor_runs(history, review_week),
+            "has_hr": WeeklyReviewBuilder._week_has_hr(history, review_week),
             # a PROVA que aconteceu nesta semana (se houve) — o destaque do
             # resumo. Vem do resultado persistido (o race_date já foi consumido
             # pelo debrief). None quando não houve prova na semana.
@@ -225,6 +243,66 @@ class WeeklyReviewBuilder:
             print(f"Detecção de prova na semana falhou p/ '{profile}': {e}")
 
         return None
+
+    @staticmethod
+    def _previous_was_break(history: TrainingHistory, review_week: date) -> bool:
+        """A semana anterior à que fechou ficou muito abaixo do normal DELE (menos de 40% da
+        média das 4 semanas antes dela, que precisam ter corrida em pelo menos 2)? Então a conta
+        "esta vs anterior" mede a volta de uma pausa, não um salto de carga."""
+
+        buckets = group_by_week(history.activities)
+
+        previous_key = (review_week - timedelta(weeks=1)).isocalendar()[:2]
+
+        before = [
+            week_stats(buckets.get(key, []))["distance_km"]
+            for key in last_week_keys(review_week - timedelta(weeks=2), 4)
+        ]
+
+        ran = [km for km in before if km > 0]
+
+        if len(ran) < 2:
+
+            return False
+
+        typical = sum(ran) / len(ran)
+
+        previous_km = week_stats(buckets.get(previous_key, []))["distance_km"]
+
+        return previous_km < typical * _BREAK_FRACTION
+
+    @staticmethod
+    def _week_runs(history: TrainingHistory, review_week: date) -> list:
+
+        week_key = review_week.isocalendar()[:2]
+
+        return [
+            activity
+            for activity in history.activities
+            if activity_date(activity).isocalendar()[:2] == week_key
+            and is_run_sport(activity.sport)
+        ]
+
+    @staticmethod
+    def _indoor_runs(history: TrainingHistory, review_week: date) -> list[dict]:
+
+        return [
+            {
+                "day": activity_date(activity).strftime("%d/%m"),
+                "km": round(activity.distance / 1000, 1),
+            }
+            for activity in WeeklyReviewBuilder._week_runs(history, review_week)
+            if activity.raw.get("trainer")
+        ]
+
+    @staticmethod
+    def _week_has_hr(history: TrainingHistory, review_week: date) -> bool:
+        """Alguma corrida da semana tem FC medida? Sem nenhuma (corre sem monitor), a leitura
+        não pode falar de frequência cardíaca. Semana sem corrida: não restringe."""
+
+        runs = WeeklyReviewBuilder._week_runs(history, review_week)
+
+        return not runs or any(run.average_heartrate for run in runs)
 
     @staticmethod
     def _longest_km(

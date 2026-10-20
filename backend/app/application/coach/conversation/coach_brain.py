@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 from google.genai import types
 
+from app.application.coach.writer.analysis_hygiene import athlete_words, voice_text
 from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
@@ -420,7 +421,7 @@ class CoachBrain:
             message=incoming_text.replace('"', "'"),
         )
 
-        return await generate_json(
+        decision = await generate_json(
             model=settings.gemini_chat_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -432,6 +433,24 @@ class CoachBrain:
             ),
             parse=CoachBrain._parse,
         )
+
+        if decision is not None:
+
+            # a FALA do coach (o `say` e a cobrança que fica no registro) passa pela higiene
+            # das outras vozes: sem muleta, sem jargão, sem estado interno que o atleta não
+            # contou. Os cartões e os textos dos appliers são determinísticos e não passam.
+            said = athlete_words(conversation_history, incoming_text)
+
+            decision.say = voice_text(decision.say, athlete_said=said)
+
+            if decision.cobranca:
+
+                decision.cobranca = (
+                    voice_text(decision.cobranca, athlete_said=said, keep_if_empty=False)
+                    or None
+                )
+
+        return decision
 
     # quantos turnos recentes o coach vê pra resolver referências ("deixa livre"
     # depois de falarem do treino de sábado). Poucos, pra não inflar o prompt.

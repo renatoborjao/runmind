@@ -89,6 +89,7 @@ class WeeklyReviewMessageFormatter:
                 current,
                 previous,
                 comparison["delta"],
+                previous_break=bool(review.get("previous_week_break")),
             )
         )
 
@@ -213,11 +214,17 @@ class WeeklyReviewMessageFormatter:
         current: dict,
         previous: dict,
         delta: dict,
+        previous_break: bool = False,
     ) -> str:
 
         percent = ""
 
-        if delta["volume_delta_percent"] is not None:
+        if previous_break:
+
+            # contra uma semana de recesso o percentual não diz nada ("+773%"): diz o que foi
+            percent = ", semana de recesso"
+
+        elif delta["volume_delta_percent"] is not None:
 
             percent = f", {delta['volume_delta_percent']:+.1f}%"
 

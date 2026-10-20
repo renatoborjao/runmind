@@ -9,6 +9,7 @@ import json
 
 from google.genai import types
 
+from app.application.coach.writer.analysis_hygiene import voice_text
 from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.application.planner.pace_formatter import PaceFormatter
 from app.application.review.weekly_review_message_formatter import (
@@ -105,6 +106,28 @@ class WeeklyReviewNarrativeWriter:
 
             reading, attention = result
 
+            # as mesmas regras da análise e do plano: sem muleta ("cravou"), sem jargão de
+            # carga ("ACWR 1.7") e sem estado interno inventado; antes de gravar a cobrança
+            has_hr = review.get("has_hr", True)
+
+            reading = [
+                line
+                for line in (
+                    voice_text(r, has_hr=has_hr, keep_if_empty=False) for r in reading
+                )
+                if line
+            ]
+
+            attention = (
+                voice_text(attention, has_hr=has_hr, keep_if_empty=False) or None
+                if attention
+                else None
+            )
+
+            if not reading:
+
+                return None
+
             if attention and profile:
 
                 # só o notificador de domingo chama isto, logo antes de enviar
@@ -193,6 +216,15 @@ class WeeklyReviewNarrativeWriter:
             else ""
         )
 
+        if review.get("previous_week_break"):
+
+            # a semana anterior foi de RECESSO (muito abaixo do normal dele): a conta contra
+            # ela não mede carga — era "o volume disparou 773%" depois de uma semana parada
+            vol_delta = (
+                " — semana de RECESSO, muito abaixo do normal dele: esta é a volta ao "
+                "ritmo, NÃO um salto de carga; não cite percentual"
+            )
+
         lines.append(
             f"Volume: {current['distance_km']:.1f} km "
             f"(anterior {previous['distance_km']:.1f} km{vol_delta})"
@@ -225,6 +257,18 @@ class WeeklyReviewNarrativeWriter:
         if review.get("longest_km"):
 
             lines.append(f"Maior treino da semana: {review['longest_km']:.1f} km")
+
+        treadmill = review.get("indoor_runs") or []
+
+        if treadmill:
+
+            days = ", ".join(f"{run['day']} ({run['km']:.1f} km)" for run in treadmill)
+
+            lines.append(
+                f"Corrida na ESTEIRA nesta semana: {days}. Pace e distância são ESTIMADOS "
+                "pelo relógio (não são medida): não elogie nem cobre ritmo com eles e não "
+                "os use como prova de limiar; julgue pelo esforço e pelo tempo."
+            )
 
         # (sem "Consistência recente": conta diferente da aderência ao plano e
         # sem a semana que fecha — a IA recebia 58% ao lado de 100% e escolhia)
