@@ -7,6 +7,7 @@ from app.application.coach.planning.race_calendar_directive import (
     future_races,
     has_calendar,
     race_calendar_directive,
+    race_list_line,
 )
 
 TODAY = date(2026, 10, 17)
@@ -111,3 +112,35 @@ def test_race_today_still_counts_and_past_is_dropped():
 
     assert "Hoje" in text and "Depois" in text and "Ontem" not in text
     assert "esta semana" in text
+
+
+def test_single_race_shows_its_name_as_the_athlete_sees_it_in_the_app():
+    """Leonardo 18/10: reclamou do NOME na aba Treino ("Corrida 10km/15km") e o coach, que só
+    via distância e data, respondeu "já está certinha". Com uma prova só, o dossiê agora traz o
+    nome da lista."""
+
+    leonardo = [_race("Corrida 10km/15km", "2026-12-20", 10.0, target="01:00:00")]
+
+    line = race_list_line(leonardo, TODAY)
+
+    assert "o nome que o atleta vê na aba Treino): Corrida 10km/15km — 20/12/2026 · 10 km" in line
+    assert "ANTES de afirmar que está certo" in line
+
+
+def test_the_list_name_is_left_out_when_the_calendar_already_names_the_races():
+
+    # duas provas à frente: o calendário já traz cada nome
+    assert race_list_line(RENATO, TODAY) == ""
+
+    # uma prova que ele marcou B/C também vira calendário
+    assert race_list_line([_race("5 km", "2026-11-01", 5.0, priority="B")], TODAY) == ""
+
+
+def test_the_list_name_needs_a_race_ahead():
+
+    assert race_list_line([], TODAY) == ""
+
+    assert race_list_line([_race("10 km", "2026-09-19", 10.0)], TODAY) == ""
+
+    # sem distância guardada a linha não inventa uma
+    assert "km" not in race_list_line([_race("Prova do bairro", "2026-12-20", None)], TODAY)

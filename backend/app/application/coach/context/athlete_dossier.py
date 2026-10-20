@@ -479,6 +479,24 @@ class AthleteDossier:
 
             return ""
 
+    @staticmethod
+    def _race_list_name(data: _Inputs) -> str:
+        """A prova pelo NOME da lista do app (o que o atleta vê), no caso de uma prova só."""
+
+        try:
+
+            from app.application.coach.planning.race_calendar_directive import (
+                race_list_line,
+            )
+
+            return race_list_line(AthleteDossier._races(data), data.today)
+
+        except Exception as e:
+
+            print(f"Dossiê: nome da prova falhou p/ '{data.profile}': {e}")
+
+            return ""
+
     # ------------------------------------------------------------------
     # seções
 
@@ -529,6 +547,14 @@ class AthleteDossier:
             if calendar:
 
                 lines.append(calendar)
+
+            else:
+
+                list_name = AthleteDossier._race_list_name(data)
+
+                if list_name:
+
+                    lines.append(list_name)
 
             weeks = AthleteDossier._weeks_to_race(data)
 

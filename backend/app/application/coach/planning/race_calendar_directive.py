@@ -100,6 +100,38 @@ def race_calendar_directive(races: list[dict], today: date) -> str:
     return "\n".join(lines)
 
 
+def race_list_line(races: list[dict], today: date) -> str:
+    """O NOME da prova como o atleta o vê na lista do app (aba Treino), pra o caso SEM calendário
+    (uma prova só): ali o coach só enxergava distância e data e dizia "já está certinha" a quem
+    reclamava do nome ("Corrida 10km/15km" — Leonardo, 18/10). Vazia com calendário (ele já traz
+    os nomes) ou sem prova à frente."""
+
+    if has_calendar(races, today):
+
+        return ""
+
+    ahead = future_races(races, today)
+
+    if len(ahead) != 1:
+
+        return ""
+
+    race = ahead[0]
+
+    when = date.fromisoformat(race["date"])
+
+    km = race.get("distance_km")
+
+    distance = f" · {km:.1f} km".replace(".0 km", " km") if km else ""
+
+    return (
+        "PROVA NA LISTA DO APP (o nome que o atleta vê na aba Treino): "
+        f"{race.get('name') or 'prova'} — {when.strftime('%d/%m/%Y')}{distance}. Se ele "
+        "disser que o nome ou a distância está errado, compare com isto ANTES de afirmar que "
+        "está certo."
+    )
+
+
 def _describe(
     race: dict, when: date, today: date, previous: date | None
 ) -> str:

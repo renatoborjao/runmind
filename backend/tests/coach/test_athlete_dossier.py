@@ -635,6 +635,46 @@ def test_who_keeps_the_anchor_wording_with_a_single_race():
     assert "Prova-âncora (periodize pra ela)" in text
 
 
+def test_who_shows_the_list_name_of_a_single_race():
+    """O atleta vê o nome da lista na aba Treino; com uma prova só o coach não o enxergava."""
+
+    data = _data()
+
+    with patch(
+        RACES, return_value=[_race("Corrida 10km/15km", "2026-12-20", 10.0)]
+    ), patch(
+        "app.application.races.race_intel_service.RaceIntelService"
+    ) as intel:
+
+        intel.render_context.return_value = ""
+
+        text = "\n".join(AthleteDossier._who(data))
+
+    assert "PROVA NA LISTA DO APP" in text and "Corrida 10km/15km" in text
+    # e o resto do dossiê segue como estava
+    assert "Prova-âncora (periodize pra ela)" in text
+
+
+def test_who_does_not_repeat_the_list_name_when_the_calendar_lists_the_races():
+
+    data = _data()
+
+    races = [
+        _race("Villa-Lobos (15 km)", "2026-12-20", 15.0, suggested="B"),
+        _race("Meia Maratona SP", "2027-04-04", 21.0975, suggested="A"),
+    ]
+
+    with patch(RACES, return_value=races), patch(
+        "app.application.races.race_intel_service.RaceIntelService"
+    ) as intel:
+
+        intel.render_context.return_value = ""
+
+        text = "\n".join(AthleteDossier._who(data))
+
+    assert "PROVA NA LISTA DO APP" not in text
+
+
 def test_who_survives_a_calendar_failure():
     """Falha lendo a lista de provas nunca derruba o dossiê."""
 

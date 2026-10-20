@@ -168,3 +168,21 @@ def test_parse_empty_decision_returns_none():
 def test_parse_broken_json_returns_none():
 
     assert CoachBrain._parse("{quebrado") is None
+
+
+def test_the_prompt_separates_a_race_correction_from_the_race_card():
+    """Leonardo 18/10: pediu pra corrigir o NOME da prova e recebeu "já está certinha" + o cartão
+    de estratégia que ninguém pediu. Corrigir cadastro é ajuste (goal), nunca cartão, e o
+    "certo" se confere com o nome da lista do app."""
+
+    from app.application.coach.conversation.coach_brain import PROMPT_TEMPLATE
+    from app.application.coach.writer.coach_persona import COACH_VOICE
+
+    assert "CARTÃO NÃO É CORREÇÃO" in PROMPT_TEMPLATE
+    assert 'type="goal"' in PROMPT_TEMPLATE and "PROVA NA LISTA DO APP" in PROMPT_TEMPLATE
+
+    # o prompt segue formatável (as chaves do JSON de exemplo são escapadas)
+    PROMPT_TEMPLATE.format(
+        runner_name="Leonardo", voice=COACH_VOICE, context_facts="", pending_block="",
+        history_block="", cards="race", message="oi",
+    )

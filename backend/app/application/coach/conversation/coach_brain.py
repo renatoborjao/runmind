@@ -135,6 +135,11 @@ EXATO. Ainda escreva um "say" curto na sua voz introduzindo (ex.: "Bora ver teu 
 plano 👇"). "qual o treino de amanhã?" = next_training; "meu plano da semana" = \
 weekly_plan; "meus paces/zonas" = paces; "como tá meu corpo" = body; "vou \
 bater minha meta? / tô no ritmo da prova? / estratégia da prova" = race.
+- CARTÃO NÃO É CORREÇÃO: "race" é só pra pergunta de ESTRATÉGIA/ritmo/meta. Se ele \
+CORRIGE o cadastro da prova (nome, distância, data), é uma ação type="goal" (ajuste \
+da prova que ele já tem) e "answer_card"=null. Antes de dizer que "já está certo", \
+CONFIRA o nome da prova na lista do app no QUADRO ("PROVA NA LISTA DO APP"): é o \
+que ele vê na aba Treino, e pode ser diferente do que está no objetivo.
 - ADAPTAR/EXECUTAR um treino que o atleta JÁ TEM ("como faço na esteira?", \
 "como executo esse treino?", "adapta pra chuva/rua", "como corro isso?"): \
 responda NO "say" com os blocos JÁ adaptados (cada bloco em sua linha com "•", \
