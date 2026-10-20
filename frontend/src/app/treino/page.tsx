@@ -8,7 +8,7 @@ import WeekPlanSection from "./week-plan";
 
 // UMA tela só: o calendário do mês em cima e, logo abaixo, o plano da semana com o
 // detalhe de cada treino (o mesmo que o coach manda no chat). Tocar num dia do
-// calendário seleciona a semana dele e leva até o treino daquele dia.
+// calendário abre o treino dele, como sempre (trocar de dia, enviar pro relógio).
 
 // Status por cor (não por tipo): verde = feito, amarelo = a realizar.
 const DONE_COLOR = "var(--accent)";
@@ -35,13 +35,6 @@ function addDays(iso: string, n: number): string {
   return isoOf(d);
 }
 
-// segunda-feira da semana de uma data (o plano é sempre de segunda a domingo)
-function mondayOf(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return isoOf(d);
-}
-
 export default function TreinoPage() {
   const router = useRouter();
   const today = new Date();
@@ -54,8 +47,6 @@ export default function TreinoPage() {
   const [weekStart, setWeekStart] = useState<string | undefined>(undefined);
   // a semana que o plano carregado cobre — pinta a faixa no calendário
   const [week, setWeek] = useState<{ start: string; end: string } | null>(null);
-  // dia tocado no calendário: o plano rola até ele (tick refaz o scroll no mesmo dia)
-  const [focus, setFocus] = useState<{ iso: string; tick: number } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -93,15 +84,8 @@ export default function TreinoPage() {
     });
   }
 
-  // toque num dia: seleciona a semana dele (se for outra) e leva até o treino do dia
-  function pickDay(iso: string) {
-    setFocus({ iso, tick: Date.now() });
-    if (!week || iso < week.start || iso > week.end) setWeekStart(mondayOf(iso));
-  }
-
   // setas do plano: troca de semana e acompanha com o mês do calendário
   function goToWeek(startIso: string) {
-    setFocus(null);
     setWeekStart(startIso);
     const mid = new Date(addDays(startIso, 3) + "T00:00:00");
     setYm({ y: mid.getFullYear(), m: mid.getMonth() + 1 });
@@ -174,7 +158,8 @@ export default function TreinoPage() {
           </section>
         )}
 
-        {/* CALENDÁRIO do mês — toque num dia pra ver o plano daquela semana logo abaixo */}
+        {/* CALENDÁRIO do mês — toque num dia: feito abre a atividade; a fazer abre o treino
+            (trocar de dia, enviar pro relógio) */}
         <section className="card">
           <div className="month-nav" style={{ marginBottom: 10 }}>
             <button className="icon-btn" aria-label="Mês anterior" onClick={() => shift(-1)}>
@@ -200,11 +185,12 @@ export default function TreinoPage() {
                   const isToday = iso === todayIso;
                   const isRace = iso === raceIso;
                   const inWeek = !!week && iso >= week.start && iso <= week.end;
+                  const clickable = !!ex || !!pl;
                   return (
                     <div
                       key={i}
-                      className={`cal-cell${ex || pl ? " has" : ""}${isToday ? " today" : ""}${inWeek ? " inweek" : ""}${focus?.iso === iso ? " sel" : ""}`}
-                      onClick={() => pickDay(iso)}
+                      className={`cal-cell${clickable ? " has" : ""}${isToday ? " today" : ""}${inWeek ? " inweek" : ""}`}
+                      onClick={clickable ? () => openDay(iso, !!ex, pl?.day_en) : undefined}
                     >
                       {isRace && <span className="flag">🏁</span>}
                       {ex ? (
@@ -230,8 +216,6 @@ export default function TreinoPage() {
         {/* PLANO DA SEMANA — o detalhe de cada treino, aberto */}
         <WeekPlanSection
           weekStart={weekStart}
-          focusIso={focus?.iso ?? null}
-          focusTick={focus?.tick ?? 0}
           onLoaded={onLoaded}
           onNavigate={goToWeek}
         />

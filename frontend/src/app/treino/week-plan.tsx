@@ -89,14 +89,14 @@ function dotColor(status: string): string {
   return PLANNED;
 }
 
-function DayCard({ d, focused, isCurrentWeek }: { d: WeekPlanDay; focused: boolean; isCurrentWeek: boolean }) {
+function DayCard({ d, isCurrentWeek }: { d: WeekPlanDay; isCurrentWeek: boolean }) {
   const router = useRouter();
   const s = d.session;
   const ex = d.executed;
 
   if (!s && !ex) {
     return (
-      <div id={`wk-${d.date_iso}`} className={`wk-day rest${focused ? " focus" : ""}`}>
+      <div id={`wk-${d.date_iso}`} className="wk-day rest">
         <div className="date"><div className="dn">{d.day_pt}</div><div className="dd">{d.date_num}</div></div>
         <span className="muted" style={{ margin: 0 }}>Descanso</span>
       </div>
@@ -110,7 +110,7 @@ function DayCard({ d, focused, isCurrentWeek }: { d: WeekPlanDay; focused: boole
   const pace = s ? paceText(s.pace_min, s.pace_max) : null;
 
   return (
-    <div id={`wk-${d.date_iso}`} className={`wk-day${d.is_today ? " today" : ""}${focused ? " focus" : ""}`}>
+    <div id={`wk-${d.date_iso}`} className={`wk-day${d.is_today ? " today" : ""}`}>
       <div className="wk-main">
         <div className="date"><div className="dn">{d.day_pt}</div><div className="dd">{d.date_num}</div></div>
         <span className="kdot" style={{ background: dotColor(d.status) }} />
@@ -154,15 +154,9 @@ function DayCard({ d, focused, isCurrentWeek }: { d: WeekPlanDay; focused: boole
                   Ver como foi
                 </button>
               ) : (
-                <>
-                  <button className="btn-sm" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
-                    Abrir treino
-                  </button>
-                  {/* remanejar: abre o treino já com a escolha do novo dia aberta */}
-                  <button className="btn-sm ghost" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}&trocar=1`)}>
-                    Trocar de dia
-                  </button>
-                </>
+                <button className="btn-sm" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
+                  Abrir treino
+                </button>
               )}
             </div>
           )}
@@ -213,11 +207,9 @@ function RaceMapCard({ map }: { map: RaceMapData }) {
 }
 
 export default function WeekPlanSection({
-  weekStart, focusIso, focusTick, onLoaded, onNavigate,
+  weekStart, onLoaded, onNavigate,
 }: {
   weekStart: string | undefined;
-  focusIso: string | null;
-  focusTick: number;
   onLoaded: (plan: WeekPlan, requested: string | undefined) => void;
   onNavigate: (weekStartIso: string) => void;
 }) {
@@ -249,13 +241,6 @@ export default function WeekPlanSection({
   useEffect(() => {
     if (authFail) router.replace("/entrar");
   }, [authFail, router]);
-
-  // toque num dia do calendário: leva até o treino daquele dia
-  useEffect(() => {
-    if (!focusIso || loading) return;
-    const el = document.getElementById(`wk-${focusIso}`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusIso, focusTick, loading, data]);
 
   if (loading && !data) {
     return <section className="card"><p className="auth-sub center" style={{ margin: 0 }}>Carregando o plano…</p></section>;
@@ -340,7 +325,7 @@ export default function WeekPlanSection({
       <section className="card" style={{ opacity: loading ? 0.6 : 1 }}>
         <div className="card-head"><span className="eyebrow">Treino a treino</span></div>
         {data.days.map((d) => (
-          <DayCard key={d.date_iso} d={d} focused={focusIso === d.date_iso} isCurrentWeek={!!data.is_current} />
+          <DayCard key={d.date_iso} d={d} isCurrentWeek={!!data.is_current} />
         ))}
         <div className="legend">
           <span><i style={{ background: DONE }} />Feito</span>

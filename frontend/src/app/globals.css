@@ -968,9 +968,7 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .nut-acc > summary .nut-meal-t { margin-left: auto; }
 
 /* ===== treino · plano da semana (tela única: calendário + plano aberto) ===== */
-.cal-cell { cursor: pointer; }
 .cal-cell.inweek { background: var(--accent-wash); }
-.cal-cell.sel { outline: 2px solid var(--accent); }
 .wk-head .mlabel { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
 .wk-head .wk-when { font-family: var(--font-mono), monospace; font-size: 9.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
 .wk-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -1009,7 +1007,6 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .wk-day .date .dd { font-weight: 700; font-size: 16px; }
 .wk-day.today { background: var(--accent-wash); margin: 0 -14px; padding: 14px; border-radius: 12px; border-top-color: transparent; }
 .wk-day.today + .wk-day { border-top-color: transparent; }
-.wk-day.focus { outline: 1.5px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
 .wk-main { display: flex; align-items: flex-start; gap: 12px; }
 .wk-main .kdot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 9px; }
 .wk-body { flex: 1; min-width: 0; }
@@ -1035,4 +1032,3 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .wk-step.rep { color: var(--muted); font-family: var(--font-mono), monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; background: var(--surface-2); }
 .wk-actions { display: flex; gap: 8px; margin-top: 10px; }
 .btn-sm { border: 1px solid var(--line); background: var(--surface); color: var(--accent-ink); font-weight: 700; font-size: 12.5px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
-.btn-sm.ghost { background: transparent; color: var(--ink-soft); font-weight: 600; }
