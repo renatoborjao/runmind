@@ -8,6 +8,7 @@ from app.application.coach.planning.workout_menu import (
     TIME_OR_DISTANCE_RULE,
     WORKOUT_MENU,
 )
+from app.application.coach.writer.analysis_hygiene import plan_lines, plan_text
 from app.core.config import get_settings
 from app.core.weekdays import WEEKDAYS
 from app.domain.entities.planned_session import PlannedSession
@@ -175,6 +176,13 @@ REGRAS:
   e o rótulo do bloco têm que dizer a MESMA coisa que a semana é (descarga não
   pode vir com objetivo de "construir"). Semana normal: "is_deload": false e
   "deload_why": null.
+- LINGUAGEM DO PLANO: o atleta LÊ cada frase. (1) Pace em palavras claras: \
+"mais rápido que 6:45" / "mais lento que 7:15" — nunca "o pace cair abaixo de \
+X" ou "subir acima de X" (pace menor = mais rápido: a frase fica ambígua). \
+(2) Fale do TREINO, nunca de um estado interno que ele não contou: em vez de \
+"segure a empolgação/ansiedade", "segure o ritmo na faixa X". (3) Sem as \
+muletas "crave/cravar a faixa" e "foco absoluto": diga o que fazer, com o \
+número. (4) Sem jargão de carga (ACWR, carga aguda): km e semanas dele.
 - MAIS UM DIA DE TREINO? A frequência é escolha DELE: NUNCA adicione dia ao
   plano. Mas, pensando na EVOLUÇÃO rumo à meta, se um dia a mais faria
   diferença real (a meta pede mais volume do que os dias dele comportam, ele
@@ -390,12 +398,15 @@ class CoachPlanEngine:
             running_days=running_days,
             week_start=week_start,
             sessions=sessions,
-            weekly_objective=str(data.get("weekly_objective", "")).strip(),
+            # o texto que o atleta lê passa pela higiene (sem muletas, sem estado
+            # interno inventado, sem jargão de carga) — a auditoria dos planos de
+            # 18/10 achou "crave a faixa", "segure a empolgação", "ACWR 1.7" em 6/6
+            weekly_objective=plan_text(str(data.get("weekly_objective", "")).strip()),
             is_deload=data.get("is_deload") is True,
             deload_why=CoachPlanEngine._deload_why(data),
             block=CoachPlanEngine._parse_block(data.get("block")),
             extra_day_note=(
-                str(data.get("suggest_extra_day")).strip()
+                plan_text(str(data.get("suggest_extra_day")).strip())
                 if data.get("suggest_extra_day") else None
             ),
         )
@@ -411,7 +422,7 @@ class CoachPlanEngine:
 
         why = str(data.get("deload_why") or "").strip()
 
-        return why if why and why.lower() not in ("null", "none") else None
+        return plan_text(why) if why and why.lower() not in ("null", "none") else None
 
     @staticmethod
     def _parse_block(raw) -> dict | None:
@@ -493,7 +504,7 @@ class CoachPlanEngine:
                         item.get("workout_type")
                         or CoachPlanEngine._default_type(kind)
                     ),
-                    objective=str(item.get("purpose", "")).strip(),
+                    objective=plan_text(str(item.get("purpose", "")).strip()),
                     planned_distance_km=(
                         round(float(distance), 1)
                         if distance is not None
@@ -511,7 +522,7 @@ class CoachPlanEngine:
                     structure=CoachPlanEngine._structure(
                         item.get("structure"),
                     ),
-                    purpose=str(item.get("purpose", "")).strip(),
+                    purpose=plan_text(str(item.get("purpose", "")).strip()),
                     steps=parsed_steps,
                 )
             )
@@ -525,11 +536,11 @@ class CoachPlanEngine:
 
         if isinstance(value, list):
 
-            return "\n".join(
-                str(step).strip() for step in value if str(step).strip()
+            return plan_lines(
+                "\n".join(str(step).strip() for step in value if str(step).strip())
             )
 
-        return str(value or "").strip()
+        return plan_lines(str(value or "").strip())
 
     @staticmethod
     def _default_type(kind: str) -> str:

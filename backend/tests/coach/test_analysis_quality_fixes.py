@@ -491,8 +491,9 @@ def test_the_cravou_tic_becomes_plain_words():
     assert clean_text("Tente cravar o pace nos tiros.", has_hr=True) == (
         "Tente manter o pace nos tiros."
     )
-    # o que não é a muleta fica
-    assert clean_text("Você cravou? Não: a regra é crave.", has_hr=True).count("crave") == 1
+    # a muleta no imperativo também; e o que NÃO é a muleta fica
+    assert clean_text("Crave a faixa leve hoje.", has_hr=True) == "Mantenha a faixa leve hoje."
+    assert clean_text("Tempere com cravo e canela.", has_hr=True) == "Tempere com cravo e canela."
 
 
 # ---- estado interno inventado ("segure a ansiedade") -------------------------------------
