@@ -16,9 +16,6 @@ from app.domain.entities.training_goal import TrainingGoal
 # ~5 s/km pra cada lado: largada segura sem jogar tempo fora, final forte.
 _SPLIT_OFFSET_MIN = 5 / 60
 
-# a partir daqui a prova é longa o bastante pra abastecer (gel/carboidrato)
-_FUELING_DISTANCE_KM = 15.0
-
 
 @dataclass(slots=True)
 class RacePacePlan:
@@ -39,9 +36,11 @@ class RaceStrategyEngine:
         runner_name: str,
         goal: TrainingGoal,
         metrics: RunnerMetrics | None = None,
+        profile: str | None = None,
     ) -> str | None:
         """Mensagem da estratégia, ou None se não dá pra montar (sem distância
-        e sem tempo-alvo nem forma pra estimar)."""
+        e sem tempo-alvo nem forma pra estimar). `profile` (slug) deixa a nutrição
+        do dia da prova respeitar as restrições da aba Nutrição."""
 
         plan = RaceStrategyEngine.plan(goal, metrics)
 
@@ -49,7 +48,7 @@ class RaceStrategyEngine:
 
             return None
 
-        return RaceStrategyEngine._message(runner_name, goal, plan)
+        return RaceStrategyEngine._message(runner_name, goal, plan, profile)
 
     @staticmethod
     def plan(
@@ -143,10 +142,28 @@ class RaceStrategyEngine:
         return total if total > 0 else None
 
     @staticmethod
+    def _fueling(plan: RacePacePlan, profile: str | None) -> list[str]:
+        """As linhas de nutrição do dia da prova (as do advisor dos longões).
+        Best-effort: falhou = a estratégia sai sem a linha, nunca quebra."""
+
+        try:
+
+            from app.application.planner.fueling_advisor import race_fueling_lines
+
+            return race_fueling_lines(plan.total_minutes, profile)
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Estratégia de prova: nutrição falhou p/ '{profile}': {e}")
+
+            return []
+
+    @staticmethod
     def _message(
         runner_name: str,
         goal: TrainingGoal,
         plan: RacePacePlan,
+        profile: str | None = None,
     ) -> str:
 
         distance = RaceStrategyEngine._fmt_distance(plan.distance_km)
@@ -187,13 +204,12 @@ class RaceStrategyEngine:
             "disso, segura; muito depois, é hora de acelerar).",
         ]
 
-        if plan.distance_km >= _FUELING_DISTANCE_KM:
+        # nutrição: a MESMA do plano dos longões (duração da prova, não distância)
+        fueling = RaceStrategyEngine._fueling(plan, profile)
 
-            linhas += [
-                "",
-                "⚡ Como é longa: leve carboidrato (gel/isotônico) a cada "
-                "~40-45 min e hidrate desde cedo, antes de sentir sede.",
-            ]
+        if fueling:
+
+            linhas += ["", *fueling]
 
         linhas += [
             "",

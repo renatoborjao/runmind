@@ -272,6 +272,48 @@ def test_the_plan_ai_is_told_not_to_write_its_own_gel_advice():
     assert "o sistema anexa SOZINHO" in PROMPT_TEMPLATE
 
 
+# ---- a nutrição do dia da prova (mesma cabeça do treino) -------------------------------
+
+
+@pytest.mark.parametrize(
+    "minutes,expected_times",
+    [
+        (74, None),
+        (75, "40"),
+        (94, "45"),
+        (95, "35 e 70"),
+        (120, "35, 70 e 105"),
+        (180, "30, 60, 90, 120 e 150"),
+    ],
+)
+def test_race_fueling_uses_the_same_schedule_as_the_training(minutes, expected_times):
+
+    from app.application.planner.fueling_advisor import race_fueling_lines
+
+    with _no_restrictions():
+
+        lines = race_fueling_lines(minutes, "p")
+
+    if expected_times is None:
+
+        assert lines == []
+
+        return
+
+    assert f"aos {expected_times} min" in lines[0]
+    assert lines[0].startswith("⚡ Nutrição na prova")
+    assert ("(opcional)" in lines[0]) == (minutes < 95)
+    assert schedule(minutes)  # a fonte única dos horários
+
+
+def test_race_fueling_without_a_duration_says_nothing():
+
+    from app.application.planner.fueling_advisor import race_fueling_lines
+
+    assert race_fueling_lines(None) == []
+    assert race_fueling_lines(0) == []
+
+
 # ---- a dica do alerta de tempo no relógio ---------------------------------------------
 # O Renato queria o ponto do gel "no treino"; esclareceu que NÃO precisa ir no treino
 # enviado ao relógio — o plano de domingo e a aba Treino bastam. A dica ensina o recurso

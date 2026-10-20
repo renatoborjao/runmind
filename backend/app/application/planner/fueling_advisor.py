@@ -215,6 +215,70 @@ def _alert_tip(times: list[int], no_gel: bool) -> str:
     )
 
 
+def race_fueling_lines(minutes: float | None, profile: str | None = None) -> list[str]:
+    """A nutrição do DIA DA PROVA — a mesma cabeça do treino: mesma fisiologia
+    (< 75 min nada; 75–94 min 1 gel opcional; de 95 min cronograma), mesmo gel, mesmos
+    horários e as mesmas restrições da aba Nutrição (diabetes → só o encaminhamento;
+    "não curto gel" → derivados). Antes a estratégia de prova tinha uma linha própria,
+    por DISTÂNCIA ("≥ 15 km: a cada ~40-45 min"), que contradizia o plano dos longões e
+    ignorava as restrições — um 15 km em 1h05 mandava tomar gel e um meia mandava 40-45
+    quando o treino ensinava 35. [] quando a prova é curta."""
+
+    if not minutes:
+
+        return []
+
+    minutes = int(round(minutes))
+
+    if minutes < MIN_MINUTES:
+
+        return []
+
+    hydrate = "Hidrate desde cedo, antes de sentir sede."
+
+    text = _restrictions_text(profile)
+
+    if _MEDICAL.search(text):
+
+        return [
+            "⚡ Nutrição na prova: combine com seu médico ou nutricionista quanto e "
+            "quando repor carboidrato — o plano não dá dose pra quem tem essa condição. "
+            + hydrate
+        ]
+
+    times = schedule(minutes)
+
+    optional = " (opcional)" if minutes < SCHEDULE_FROM_MINUTES else ""
+
+    no_gel = bool(_NO_GEL.search(text))
+
+    if no_gel:
+
+        lines = [
+            f"⚡ Nutrição na prova{optional}: ~{GEL_CARBS_G} g de carboidrato aos "
+            f"{_join(times)} min — como você não curte gel, use {_ALTERNATIVES}, com água"
+        ]
+
+    else:
+
+        count = "1 gel" if len(times) == 1 else "gel"
+
+        lines = [
+            f"⚡ Nutrição na prova{optional}: {count} (~{GEL_CARBS_G} g de carboidrato) "
+            f"aos {_join(times)} min, com água. Sem gel: {_ALTERNATIVES} no lugar de "
+            "cada um."
+        ]
+
+    lines.append(_alert_tip(times, no_gel))
+
+    lines.append(
+        f"{hydrate} Use o MESMO gel e os mesmos horários que você testou nos "
+        "longões — nada novo no dia da prova."
+    )
+
+    return lines
+
+
 def fueling_lines(session, profile: str | None = None) -> list[str]:
     """As linhas de nutrição do treino ([] quando não se aplica). Entram no detalhe
     da sessão — a mensagem do plano e o app leem o MESMO texto."""

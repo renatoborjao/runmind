@@ -260,7 +260,9 @@ class OnDemandAnswers:
                 runner.name, goal, history, profile=profile,
             )
 
-            strategy = RaceStrategyEngine.build(runner.name, goal, metrics)
+            strategy = RaceStrategyEngine.build(
+                runner.name, goal, metrics, profile=profile,
+            )
 
             parts = [p for p in (projection, strategy) if p]
 
