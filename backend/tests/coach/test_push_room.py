@@ -272,6 +272,18 @@ def test_the_dossier_is_silent_without_room():
     assert _push(acwr=1.6) == ""
 
 
+def test_the_low_base_mark_is_read_like_the_injury_analyzer_does():
+    """tuple (min/semana da base, min a mais) = razão alta só pela base baixa."""
+
+    marked = SimpleNamespace(load=SimpleNamespace(low_base=(46, 12)))
+    plain = SimpleNamespace(load=SimpleNamespace(low_base=None))
+    missing = SimpleNamespace(load=SimpleNamespace())
+
+    assert AthleteDossier._is_low_base(marked) is True
+    assert AthleteDossier._is_low_base(plain) is False
+    assert AthleteDossier._is_low_base(missing) is False
+
+
 def test_a_failure_in_the_push_signal_never_breaks_the_dossier():
 
     with patch(

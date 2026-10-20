@@ -122,6 +122,7 @@ class DayContextReader:
                 reading.recovery,
                 acwr=getattr(reading.load, "acwr", None),
                 body_state=reading.body_state,
+                low_base=isinstance(getattr(reading.load, "low_base", None), tuple),
             )
 
             if decision.due:

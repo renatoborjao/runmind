@@ -1028,6 +1028,10 @@ class AthleteDossier:
 
                 form = AthleteDossier._form_direction(data)
 
+                # razão alta só pela base BAIXA não é pico de carga (nem pra
+                # descarregar, nem pra travar o puxar)
+                low_base = AthleteDossier._is_low_base(reading)
+
                 lines.append(
                     deload_directive(
                         DeloadAnalyzer.assess(
@@ -1042,6 +1046,7 @@ class AthleteDossier:
                             block_deload_this_week=block_this_week,
                             body_state=reading.body_state,
                             form=form,
+                            low_base=low_base,
                         )
                     )
                 )
@@ -1049,7 +1054,7 @@ class AthleteDossier:
                 lines.append(
                     AthleteDossier._push_room(
                         data, week_start, weeks_to_race, weeks_since_race,
-                        taper_zone, acwr, form, risk,
+                        taper_zone, None if low_base else acwr, form, risk,
                     )
                 )
 
@@ -1058,6 +1063,13 @@ class AthleteDossier:
                 print(f"Dossiê: descarga falhou p/ '{data.profile}': {e}")
 
         return lines
+
+    @staticmethod
+    def _is_low_base(reading) -> bool:
+        """O analisador da carga marcou "razão alta só pela base BAIXA"? (mesma
+        convenção do alerta de lesão: nesse caso o ACWR não é pico)."""
+
+        return isinstance(getattr(reading.load, "low_base", None), tuple)
 
     @staticmethod
     def _push_numbers(data: _Inputs, week_start: date, base) -> str:

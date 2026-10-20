@@ -142,6 +142,7 @@ class DeloadAnalyzer:
         block_deload_this_week: bool = False,
         body_state: str | None = None,
         form: str | None = None,
+        low_base: bool = False,
     ) -> DeloadDecision:
         """Decide se a PRÓXIMA semana (a que estamos gerando) deve ser de
         descarga: só se o atleta está SENTINDO a carga. O taper e a janela
@@ -153,7 +154,12 @@ class DeloadAnalyzer:
         avisado (`block_skipped`) e segue a progressão.
 
         `body_state` / `form`: o estado do corpo (BODY_*) e a direção da forma
-        (EVO_*, None = sem leitura com lastro)."""
+        (EVO_*, None = sem leitura com lastro).
+
+        `low_base`: o analisador da carga marcou "razão alta só pela base
+        BAIXA" (João Soares: 40 → 90 de carga, ACWR 1,42 sobre ~46 min/semana):
+        a razão não é pico, então NÃO há carga em alta pra dissipar — mesma
+        convenção do alerta de lesão (`load.low_base is None`)."""
 
         streak = DeloadAnalyzer._consecutive_load_weeks(weekly_loads)
 
@@ -163,7 +169,7 @@ class DeloadAnalyzer:
 
             return DeloadDecision(False, streak, owner)
 
-        loaded = acwr is None or acwr >= _MIN_OVERLOAD_ACWR
+        loaded = not low_base and (acwr is None or acwr >= _MIN_OVERLOAD_ACWR)
 
         recovery_falling = (
             recovery.hrv_direction == FALLING or recovery.rhr_direction == FALLING

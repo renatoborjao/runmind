@@ -189,6 +189,37 @@ def test_acwr_none_keeps_the_fatigue_signal_working():
     assert d.due is True
 
 
+def test_a_high_ratio_from_a_tiny_base_is_not_load_to_dissipate():
+    """João Soares 19/10: carga 40 → 90 sobre ~46 min/semana, ACWR 1,42, forma
+    recuando e a leitura do corpo marcando "razão alta só pela base BAIXA". Sem
+    carga em alta de verdade, descarregar só destreina."""
+
+    loads = [40, 41, 84, 90]
+
+    flagged = DeloadAnalyzer.assess(
+        loads, _recovery(), acwr=1.42, form=EVO_DECLINING, low_base=True,
+    )
+
+    assert flagged.due is False
+    assert deload_directive(flagged) == ""
+
+    # a mesma situação SEM a marca de base baixa seria carga em alta de verdade
+    real = DeloadAnalyzer.assess(loads, _recovery(), acwr=1.42, form=EVO_DECLINING)
+
+    assert real.due is True
+
+
+def test_a_tiny_base_does_not_hide_a_strained_body():
+    """A marca só desarma a razão de CARGA; o corpo sobrecarregado segue valendo."""
+
+    d = DeloadAnalyzer.assess(
+        [40, 41, 84, 90], _recovery(), acwr=1.42, body_state=BODY_STRAINED,
+        low_base=True,
+    )
+
+    assert d.due is True
+
+
 # ---- a prova manda na carga ----------------------------------------------------------
 
 
