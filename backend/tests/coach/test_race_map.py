@@ -11,6 +11,8 @@ from unittest.mock import patch
 from app.application.coach.planning.race_map import (
     BASE,
     BUILD,
+    MINI,
+    RECOVERY,
     SIMULATED,
     SPECIFIC,
     TAPER,
@@ -175,7 +177,7 @@ def test_the_app_payload_carries_phases_dates_markers_and_the_previsto_note():
     assert [s["key"] for s in payload["segments"]] == [BUILD, SPECIFIC, SIMULATED, TAPER]
     assert payload["segments"][0] == {
         "key": BUILD, "label": "Construção", "start": "2026-10-26", "end": "2026-11-22",
-        "weeks": 4, "current": True,
+        "weeks": 4, "current": True, "race_label": None,
     }
     assert payload["markers"] == [marker]
     assert payload["note"].startswith("Previsto")
@@ -194,23 +196,149 @@ def _race(day, km, role, name="prova"):
     }
 
 
-def test_the_map_follows_the_principal_race_and_the_others_become_markers():
-    """Renato2: a principal é a meia em abril; o 15 km de 20/12 é marco no caminho."""
+RENATO = [
+    _race("2026-12-20", 15.0, "B", "15 km"),
+    _race("2027-04-04", 21.0975, "A", "Maratona SP"),
+]
+
+
+def test_a_preparatory_race_is_a_stage_of_the_road_not_just_a_marker():
+    """Renato2 (20/10): "eu também tenho como prova a do dia 20/12". A principal é a meia
+    em abril, mas o 15 km de 20/12 está NO caminho: mini-polimento na semana dele e uma
+    semana de recuperação depois — como o coach trata a preparatória."""
+
+    with patch(CYCLE, return_value=RENATO):
+
+        m = RaceMapBuilder.for_profile("renato2", WEEK)
+
+    assert m.race_date == date(2027, 4, 4)
+    assert m.race_name == "Maratona SP"
+    assert m.markers == []
+    assert m.waypoints == [{"label": "15 km", "date_iso": "2026-12-20", "weeks_left": 8}]
+
+    assert [(s.key, s.weeks) for s in m.segments] == [
+        (BASE, 7), (MINI, 1), (RECOVERY, 1), (BASE, 2), (BUILD, 6),
+        (SPECIFIC, 3), (SIMULATED, 1), (TAPER, 2),
+    ]
+
+    mini = m.segments[1]
+
+    assert mini.label == "15 km: mini-polimento e prova"
+    assert mini.race_label == "15 km"
+    assert (mini.start, mini.end) == (date(2026, 12, 14), date(2026, 12, 20))
+    assert (m.segments[2].start, m.segments[2].end) == (date(2026, 12, 21), date(2026, 12, 27))
+    # a meia continua com o polimento de 2 semanas até o dia da prova
+    assert (m.segments[-1].start, m.segments[-1].end) == (date(2027, 3, 22), date(2027, 4, 4))
+    assert m.current.key == BASE
+
+
+def test_the_sunday_line_names_both_races_for_renato():
+
+    with patch(CYCLE, return_value=RENATO):
+
+        line = RaceMapBuilder.line(RaceMapBuilder.for_profile("renato2", WEEK))
+
+    assert line == (
+        "🗺️ Faltam 8 semanas pra 15 km (20/12) e 23 pra meia maratona (04/04): "
+        "base agora → mini-polimento 14/12 → simulado 15/03 → polimento 22/03. "
+        "(previsto — se ajusta ao seu corpo)"
+    )
+
+
+def test_a_preparatory_race_too_close_to_the_principal_is_only_a_marker():
+    """Menos de ~3 semanas entre as provas: a de menor papel vira treino."""
 
     races = [
-        _race("2026-12-20", 15.0, "B", "15 km"),
-        _race("2027-04-04", 21.0975, "A", "Maratona SP"),
+        _race("2026-12-06", 10.0, "B", "10 km"),
+        _race("2026-12-20", 21.0975, "A", "Meia"),
     ]
 
     with patch(CYCLE, return_value=races):
 
-        m = RaceMapBuilder.for_profile("renato2", date(2026, 10, 19))
+        m = RaceMapBuilder.for_profile("p", WEEK)
 
-    assert m.race_date == date(2027, 4, 4)
-    assert m.race_name == "Maratona SP"
+    assert m.waypoints == []
+    assert MINI not in [s.key for s in m.segments]
     assert m.markers == [
-        {"label": "15 km", "date_iso": "2026-12-20", "role": "preparatória"}
+        {
+            "label": "10 km", "date_iso": "2026-12-06", "role": "preparatória",
+            "when": "before", "note": "perto da principal: entra como treino, sem polimento",
+        }
     ]
+
+
+def test_a_training_race_is_only_a_marker_and_a_later_race_is_told_as_after():
+
+    races = [
+        _race("2026-11-15", 10.0, "C", "10 km"),
+        _race("2026-12-20", 15.0, "A", "15 km"),
+        _race("2027-03-07", 21.0975, "B", "Meia"),
+    ]
+
+    with patch(CYCLE, return_value=races):
+
+        m = RaceMapBuilder.for_profile("p", WEEK)
+
+    assert m.waypoints == []
+    assert MINI not in [s.key for s in m.segments]
+    assert [(k["label"], k["when"], k["note"]) for k in m.markers] == [
+        ("10 km", "before", "entra como treino, sem polimento"),
+        ("meia maratona", "after", "depois da principal"),
+    ]
+
+    line = RaceMapBuilder.line(m)
+
+    assert "Depois: meia maratona em 07/03." in line
+    assert "Faltam 8 semanas pra 15 km (20/12):" in line
+
+
+def test_a_waypoint_race_week_in_the_past_is_ignored_and_a_close_one_counts_the_weeks():
+
+    one = RaceMapBuilder.build(
+        date(2027, 4, 4), 21.0975, date(2026, 12, 14),
+        waypoints=[{"date": date(2026, 12, 20), "label": "15 km"}],
+    )
+
+    assert one.segments[0].key == MINI and one.segments[0].current
+    assert one.waypoints[0]["weeks_left"] == 1
+
+    line = RaceMapBuilder.line(one)
+
+    assert line.startswith("🗺️ Falta 1 semana pra 15 km (20/12) e 16 pra meia maratona (04/04):")
+
+    passed = RaceMapBuilder.build(
+        date(2027, 4, 4), 21.0975, date(2026, 12, 28),
+        waypoints=[{"date": date(2026, 12, 20), "label": "15 km"}],
+    )
+
+    assert passed.waypoints == [] and MINI not in [s.key for s in passed.segments]
+
+
+def test_the_principal_alone_keeps_the_old_line():
+    """Sem preparatória no caminho a frase continua a de antes."""
+
+    with patch(CYCLE, return_value=[RENATO[1]]):
+
+        line = RaceMapBuilder.line(RaceMapBuilder.for_profile("p", WEEK))
+
+    assert line.startswith("🗺️ Faltam 23 semanas pra meia maratona (04/04): base agora → ")
+    assert "mini-polimento" not in line
+
+
+def test_the_app_payload_carries_the_stage_race_and_the_marker_notes():
+
+    with patch(CYCLE, return_value=RENATO):
+
+        payload = RaceMapBuilder.payload(RaceMapBuilder.for_profile("renato2", WEEK))
+
+    assert payload["target"] == "meia maratona"
+    assert payload["markers"] == []
+
+    stage = next(s for s in payload["segments"] if s["key"] == MINI)
+
+    assert stage["race_label"] == "15 km"
+    assert stage["label"] == "15 km: mini-polimento e prova"
+    assert (stage["start"], stage["end"]) == ("2026-12-14", "2026-12-20")
 
 
 def test_a_single_race_without_a_role_still_gets_a_map():

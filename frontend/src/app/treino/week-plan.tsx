@@ -184,9 +184,10 @@ function RaceMapCard({ map }: { map: RaceMapData }) {
       </p>
       <ol className="rmap-list">
         {map.segments.map((s) => (
-          <li key={s.key} className={`rmap-row${s.current ? " on" : ""}`}>
+          <li key={`${s.key}-${s.start}`} className={`rmap-row${s.current ? " on" : ""}`}>
             <i className="rmap-dot" aria-hidden />
             <span className="rmap-name">
+              {(s.key === "mini_polimento" || s.key === "polimento") && "🏁 "}
               {s.label}
               {s.current && <small className="wk-tag">agora</small>}
             </span>
@@ -197,6 +198,7 @@ function RaceMapCard({ map }: { map: RaceMapData }) {
       {map.markers.map((m) => (
         <p key={m.date_iso + m.label} className="rmap-marker">
           🏁 {m.label}{m.role ? ` (${m.role})` : ""} · {dayMonth(m.date_iso)}
+          {m.note ? ` — ${m.note}` : ""}
         </p>
       ))}
       <p className="rmap-note">{map.note}</p>
