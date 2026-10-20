@@ -111,6 +111,29 @@ class PushRoomAnalyzer:
         )
 
 
+def push_room_fact(room: PushRoom, numbers: str = "") -> str:
+    """O mesmo sinal como FATO CURTO, pras vozes que NÃO montam o plano (chat, análise
+    do treino, resumos, reengajamento, nutrição...): só o que o atleta fez e como o
+    corpo está — sem a instrução de dose, que é do plano (`push_room_directive`). O
+    dossiê é a base de todas as vozes; instrução de plano vazando pra elas custa
+    tokens e puxa conselho de treino fora de hora."""
+
+    if not room.open:
+
+        return ""
+
+    pct = round((room.adherence or 0) * 100)
+
+    span = (
+        f"nas últimas {room.weeks} semanas" if room.weeks > 1 else "na última semana"
+    )
+
+    return (
+        f"Folga pra progredir: cumpriu {pct}% do plano {span}, a recuperação está "
+        f"firme e a forma não recuou.{numbers}"
+    )
+
+
 def push_room_directive(room: PushRoom, numbers: str = "") -> str:
     """Sinal COACH-facing pro plano: há folga pra puxar. É CONHECIMENTO, não
     ordem — a IA decide a dose e a forma. Vazio quando não há folga (sem

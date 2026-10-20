@@ -1003,8 +1003,15 @@ class AthleteDossier:
                 )
                 from app.application.history.deload_analyzer import (
                     DeloadAnalyzer,
+                    deload_chat_line,
                     deload_directive,
                 )
+
+                # só a voz que MONTA o plano (a que passa a semana-alvo) recebe a
+                # instrução; as demais (chat, análise, resumos, nutrição...) recebem
+                # o FATO curto — o dossiê é a base de todas e instrução de plano
+                # vazando custa tokens e puxa conselho de treino fora de hora
+                plan_voice = data.target_week is not None
 
                 week_start = data.target_week or (
                     data.today - timedelta(days=data.today.weekday())
@@ -1032,8 +1039,10 @@ class AthleteDossier:
                 # descarregar, nem pra travar o puxar)
                 low_base = AthleteDossier._is_low_base(reading)
 
+                say_deload = deload_directive if plan_voice else deload_chat_line
+
                 lines.append(
-                    deload_directive(
+                    say_deload(
                         DeloadAnalyzer.assess(
                             reading.load.weekly_loads,
                             reading.recovery,
@@ -1055,6 +1064,7 @@ class AthleteDossier:
                     AthleteDossier._push_room(
                         data, week_start, weeks_to_race, weeks_since_race,
                         taper_zone, None if low_base else acwr, form, risk,
+                        plan_voice=plan_voice,
                     )
                 )
 
@@ -1120,16 +1130,20 @@ class AthleteDossier:
         acwr,
         form,
         risk,
+        plan_voice: bool = True,
     ) -> str:
         """O espelho da descarga: há FOLGA pra puxar? Acende com o plano
         cumprido, a recuperação firme e a carga sob controle — e traz os km
-        reais pra IA dosar o passo. Vazio sem folga. Best-effort."""
+        reais. Só a voz que MONTA o plano recebe a instrução de dose; as demais
+        (chat, análise, resumos...) recebem o fato curto. Vazio sem folga.
+        Best-effort."""
 
         try:
 
             from app.application.history.push_room import (
                 PushRoomAnalyzer,
                 push_room_directive,
+                push_room_fact,
             )
             from app.application.history.runner_baseline_builder import (
                 RunnerBaselineBuilder,
@@ -1165,9 +1179,13 @@ class AthleteDossier:
 
             base = RunnerBaselineBuilder.build(data.history, data.runner)
 
-            return push_room_directive(
-                room, AthleteDossier._push_numbers(data, week_start, base),
-            )
+            numbers = AthleteDossier._push_numbers(data, week_start, base)
+
+            if plan_voice:
+
+                return push_room_directive(room, numbers)
+
+            return push_room_fact(room, numbers)
 
         except Exception as e:  # noqa: BLE001
 

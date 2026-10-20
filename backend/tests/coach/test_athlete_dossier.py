@@ -442,7 +442,11 @@ def test_body_state_line_and_sleep_but_no_sleep_verdict_when_worsening():
         patch.object(AthleteDossier, "_prehab", return_value=""),
         patch(
             "app.application.history.deload_analyzer.deload_directive",
-            return_value="SINAL DE DESCARGA",
+            return_value="SINAL DE DESCARGA (plano)",
+        ),
+        patch(
+            "app.application.history.deload_analyzer.deload_chat_line",
+            return_value="SINAL DE DESCARGA (chat)",
         ),
         patch(
             "app.application.history.deload_analyzer.DeloadAnalyzer"
@@ -463,9 +467,68 @@ def test_body_state_line_and_sleep_but_no_sleep_verdict_when_worsening():
     assert "(ACWR) 1.12" in text
     assert "PIORA REAL" in text
     assert "Sono: ~6.3h/noite, caindo (abaixo do que o corpo pede)." in text
-    assert "SINAL DE DESCARGA" in text
+    # voz que NÃO monta o plano (sem semana-alvo): o fato curto, nunca a instrução
+    assert "SINAL DE DESCARGA (chat)" in text
+    assert "SINAL DE DESCARGA (plano)" not in text
     assert "SONO×EXECUÇÃO" not in text
     sleep_verdict.assert_not_called()
+
+
+def test_only_the_plan_voice_gets_the_deload_instruction():
+    """O plano passa a semana-alvo (target_week): só ele recebe a instrução completa;
+    chat, análise, resumos e nutrição leem a mesma base com o fato curto."""
+
+    for target_week, expected, absent in (
+        (date(2026, 10, 26), "SINAL DE DESCARGA (plano)", "SINAL DE DESCARGA (chat)"),
+        (None, "SINAL DE DESCARGA (chat)", "SINAL DE DESCARGA (plano)"),
+    ):
+
+        data = _data(reading=_reading(), drift=None)
+
+        data.target_week = target_week
+
+        with (
+            patch(
+                "app.application.coach.planning.body_directive.body_plan_directive",
+                return_value="",
+            ),
+            patch(
+                "app.application.coach.intelligence.sleep_reading_service."
+                "SleepReadingService"
+            ) as sleep,
+            patch(
+                "app.application.history.sleep_performance_analyzer."
+                "sleep_performance_directive",
+                return_value="",
+            ),
+            patch("app.application.history.injury_risk_analyzer.InjuryRiskAnalyzer"),
+            patch(
+                "app.application.history.injury_risk_analyzer.injury_risk_directive",
+                return_value="",
+            ),
+            patch.object(AthleteDossier, "_prehab", return_value=""),
+            patch.object(AthleteDossier, "_push_room", return_value=""),
+            patch(
+                "app.application.history.deload_analyzer.deload_directive",
+                return_value="SINAL DE DESCARGA (plano)",
+            ),
+            patch(
+                "app.application.history.deload_analyzer.deload_chat_line",
+                return_value="SINAL DE DESCARGA (chat)",
+            ),
+            patch("app.application.history.deload_analyzer.DeloadAnalyzer"),
+            patch(
+                "app.application.coach.planning.ai_plan_service.AIPlanService."
+                "_weeks_since_race", return_value=None,
+            ),
+        ):
+
+            sleep.read.return_value = MagicMock(has_data=False)
+
+            text = "\n".join(line for line in AthleteDossier._body(data) if line)
+
+        assert expected in text
+        assert absent not in text
 
 
 def test_archive_history_dedups_and_keeps_only_runs_newest_first():

@@ -19,9 +19,6 @@ from app.application.coach.intelligence.state_portrait_service import (
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
-from app.application.coach.planning.race_strategy_engine import (
-    RaceStrategyEngine,
-)
 from app.application.coach.writer.body_reading_writer import (
     BodyReadingWriter,
 )
@@ -51,6 +48,7 @@ from app.application.planner.weekly_plan_matcher import (
 from app.application.planner.weekly_plan_message_formatter import (
     WeeklyPlanMessageFormatter,
 )
+from app.application.races.race_strategy_service import RaceStrategyService
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
@@ -260,8 +258,9 @@ class OnDemandAnswers:
                 runner.name, goal, history, profile=profile,
             )
 
-            strategy = RaceStrategyEngine.build(
-                runner.name, goal, metrics, profile=profile,
+            # com a previsão do atleta (histórico × Garmin) e o calor do dia, quando há
+            strategy = await RaceStrategyService.message(
+                runner, profile, goal, metrics, history,
             )
 
             parts = [p for p in (projection, strategy) if p]

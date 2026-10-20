@@ -8,12 +8,9 @@ não bate um marco. Ver [[project_ideias_produto]]."""
 
 from datetime import timedelta
 
-from app.application.coach.planning.race_strategy_engine import (
-    RaceStrategyEngine,
-)
 from app.application.history.metrics_resolver import MetricsResolver
 from app.application.notifications.coach_outbox import CoachOutbox
-from app.application.planner.pace_formatter import PaceFormatter
+from app.application.races.race_strategy_service import RaceStrategyService
 from app.application.use_cases.build_training_goal import BuildTrainingGoal
 from app.application.use_cases.load_runner_profile import LoadRunnerProfile
 from app.application.use_cases.load_training_history import (
@@ -370,15 +367,11 @@ class RaceCompanionNotifier:
 
             metrics = MetricsResolver.resolve(runner, history)
 
-            plan = RaceStrategyEngine.plan(goal, metrics)
-
-            if plan is None:
-
-                return None
-
-            avg = PaceFormatter.format(plan.avg_pace_min)
-
-            return f"🎯 Lembrete: pace-alvo ~{avg}/km, largada controlada."
+            # pace-alvo e largada controlada; meta à frente dos números do atleta →
+            # plano B; semana da prova → ajuste de calor pela previsão do dia
+            return await RaceStrategyService.reminder(
+                runner, profile, goal, metrics, history,
+            )
 
         except Exception as e:
 

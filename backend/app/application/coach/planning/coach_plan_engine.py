@@ -59,7 +59,9 @@ REGRAS:
 - TREINE RUMO À META — não faça manutenção. O plano deve EVOLUIR o atleta em
   direção ao objetivo, não sentar no volume/ritmo médio atual dele. Quando ele
   vem consistente, PUXE: suba o volume (passo-padrão ~+10%; até ~15% quando o
-  corpo está verde e o dossiê mostra ESPAÇO PRA PUXAR) E/OU aprofunde a
+  corpo está verde e o dossiê mostra ESPAÇO PRA PUXAR), ancorado no que o
+  atleta REALMENTE correu nas semanas fechadas (se correu acima do plano, o
+  plano é que ficou baixo) E/OU aprofunde a
   qualidade em TODOS os tipos de treino, não só no longão — o forte chega mais
   perto do ritmo-alvo ou ganha série maior, o moderado alonga, o longão ganha
   km OU qualidade, e o leve segue leve DE VERDADE (a qualidade dele é a FC

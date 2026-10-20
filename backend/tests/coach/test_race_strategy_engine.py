@@ -177,18 +177,6 @@ def test_a_failure_in_the_nutrition_never_breaks_the_strategy():
     assert "Nutrição na prova" not in msg
 
 
-def test_the_chat_passes_the_profile_so_the_restrictions_apply():
-    """O atleta pede a estratégia no chat: o slug segue até a nutrição."""
-
-    import inspect
-
-    from app.application.coach.conversation import on_demand_answers
-
-    source = inspect.getsource(on_demand_answers)
-
-    assert "runner.name, goal, metrics, profile=profile" in source
-
-
 def test_parse_time_formats():
 
     assert RaceStrategyEngine._parse_time("01:30:00") == 90.0

@@ -12,6 +12,7 @@ from app.application.history.push_room import (
     PushRoom,
     PushRoomAnalyzer,
     push_room_directive,
+    push_room_fact,
 )
 from app.domain.entities.body_reading import (
     BODY_ABSORBING,
@@ -295,3 +296,46 @@ def test_a_failure_in_the_push_signal_never_breaks_the_dossier():
         assert AthleteDossier._push_room(
             _data(), date(2026, 10, 26), None, None, None, 0.9, None, None,
         ) == ""
+
+
+# ---- fato × instrução: cada voz recebe o que serve a ela (dossiê só com fatos) -----------------
+
+
+def test_the_fact_is_short_and_has_no_dose_instruction():
+    """Chat, análise, resumos e nutrição leem a mesma base: o FATO, sem o "passo de ~+10%"."""
+
+    room = PushRoom(True, "ok", 1.0, 2)
+
+    fact = push_room_fact(room, " Números reais: melhor semana ~47 km.")
+
+    assert fact == (
+        "Folga pra progredir: cumpriu 100% do plano nas últimas 2 semanas, a recuperação "
+        "está firme e a forma não recuou. Números reais: melhor semana ~47 km."
+    )
+    for instruction in ("+10%", "~15%", "SALTO", "PUXE", "A dose e a forma são suas"):
+
+        assert instruction not in fact
+
+    # o texto do plano é bem maior: é o que deixava de vazar pras outras vozes
+    assert len(push_room_directive(room)) > 3 * len(push_room_fact(room))
+
+
+def test_the_fact_is_silent_without_room_and_counts_one_week():
+
+    assert push_room_fact(PushRoom(False, "x")) == ""
+    assert "na última semana" in push_room_fact(PushRoom(True, "ok", 0.9, 1))
+
+
+def test_the_dossier_gives_the_plan_the_instruction_and_the_others_the_fact():
+
+    plan_text = _push(plan_voice=True)
+    other_text = _push(plan_voice=False)
+
+    assert plan_text.startswith("ESPAÇO PRA PUXAR")
+    assert "passo-padrão é ~+10%" in plan_text
+
+    assert other_text.startswith("Folga pra progredir")
+    assert "+10%" not in other_text and "SALTO" not in other_text
+    # os números reais seguem nas duas
+    assert "melhor semana ~47 km" in plan_text and "melhor semana ~47 km" in other_text
+    assert len(other_text) < len(plan_text) / 2
