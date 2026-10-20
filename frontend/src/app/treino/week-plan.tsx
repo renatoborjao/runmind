@@ -154,9 +154,15 @@ function DayCard({ d, focused, isCurrentWeek }: { d: WeekPlanDay; focused: boole
                   Ver como foi
                 </button>
               ) : (
-                <button className="btn-sm" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
-                  Abrir treino
-                </button>
+                <>
+                  <button className="btn-sm" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}`)}>
+                    Abrir treino
+                  </button>
+                  {/* remanejar: abre o treino já com a escolha do novo dia aberta */}
+                  <button className="btn-sm ghost" onClick={() => router.push(`/treino/detalhe?day=${d.day_en}&trocar=1`)}>
+                    Trocar de dia
+                  </button>
+                </>
               )}
             </div>
           )}

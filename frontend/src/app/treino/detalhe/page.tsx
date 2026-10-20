@@ -59,7 +59,8 @@ function DetalheInner() {
   const [week, setWeek] = useState<WorkoutDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [watch, setWatch] = useState<{ sending: boolean; msg: string | null }>({ sending: false, msg: null });
-  const [picking, setPicking] = useState(false);
+  // "Trocar de dia" no plano da semana abre o treino já com a escolha do novo dia aberta
+  const [picking, setPicking] = useState(params.get("trocar") === "1");
   const [target, setTarget] = useState<WorkoutDay | null>(null);
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
@@ -107,6 +108,13 @@ function DetalheInner() {
       setLoading(false);
     })();
   }, [router, dayParam]);
+
+  // veio do "Trocar de dia": leva a vista até a escolha do dia (fica abaixo dos blocos)
+  useEffect(() => {
+    if (loading || !picking || params.get("trocar") !== "1") return;
+    document.getElementById("trocar-dia")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   if (loading) {
     return <div className="card center"><p className="auth-sub" style={{ margin: 0 }}>Carregando…</p></div>;
@@ -179,7 +187,7 @@ function DetalheInner() {
             </button>
 
             {picking && (
-              <div className="card" style={{ padding: 14 }}>
+              <div id="trocar-dia" className="card" style={{ padding: 14 }}>
                 <p className="eyebrow" style={{ margin: "0 0 10px" }}>Escolha o novo dia (nada muda até confirmar)</p>
                 {week.filter((d) => !d.session && !d.is_past && d.day_en !== day?.day_en).length === 0 ? (
                   <p className="muted" style={{ margin: 0 }}>Não há dia livre pra frente nesta semana. Pra abrir espaço, fala com o coach. 💬</p>

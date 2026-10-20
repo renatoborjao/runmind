@@ -1035,3 +1035,4 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .wk-step.rep { color: var(--muted); font-family: var(--font-mono), monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; background: var(--surface-2); }
 .wk-actions { display: flex; gap: 8px; margin-top: 10px; }
 .btn-sm { border: 1px solid var(--line); background: var(--surface); color: var(--accent-ink); font-weight: 700; font-size: 12.5px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.btn-sm.ghost { background: transparent; color: var(--ink-soft); font-weight: 600; }
