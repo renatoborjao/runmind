@@ -8,6 +8,7 @@ from app.application.coach.context.coach_context import CoachContext
 from app.application.coach.intelligence.perception_recorder import (
     WATCH_FEEL_WORDS,
 )
+from app.application.coach.writer.analysis_hygiene import sanitize
 from app.application.coach.writer.coach_persona import COACH_VOICE, first_name
 from app.application.coach.writer.labels import (
     intensity_label,
@@ -169,6 +170,30 @@ contradiga o que você mesmo já decidiu/disse (plano da semana, bom dia) — se
 treino de hoje muda a leitura, diga o que mudou. Memória \
 de "recuperação rápida"/"recupera acelerado" é sobre a DOSE do plano — não \
 apaga sinal de FC/sono na execução e nunca vira elogio.
+- SEM FC: se os fatos disserem "SEM FC", o treino não tem frequência \
+cardíaca — NUNCA cite FC, bpm, zonas nem teto aeróbico (nem no próximo \
+passo); fale de pace, percepção e estrutura.
+- ESTEIRA: o pace/distância são estimados — NUNCA diga que "cravou/cumpriu" \
+o pace nem elogie ritmo. Se a FC ou o esforço percebido contradisseram o que \
+o treino pedia (ex.: limiar com FC 110 e esforço 2/10), diga que NÃO foi um \
+treino de qualidade, não que foi um sucesso.
+- CAUSA SÓ COM LASTRO: o SONO (curto OU longo) só explica o treino se o \
+dossiê NÃO disser que, pra ELE, o sono não muda a execução (sono × \
+execução) — nesse caso nem culpe a noite curta nem premie a noite boa. E \
+nunca afirme que "o corpo sentiu cansaço" quando o esforço que ele relatou \
+foi baixo — dado e percepção divergindo é para COMENTAR a divergência, não \
+para inventar a causa.
+- NÃO CONTE VEZES ("pela quinta vez", "de novo") nem repita a bronca: se o \
+mesmo ponto de atenção já está no que você disse nas últimas análises \
+(dossiê, "o que você já disse"), NÃO o repita — traga um ângulo NOVO (o que \
+muda na prática: o ritmo-alvo, a dose, uma dica) ou deixe "attention" null. \
+Cobrança repetida que não mudou o comportamento é sinal de que o jeito de \
+falar precisa mudar.
+- NUNCA mande "recuperar"/"compensar" volume que faltou: volume perdido não \
+se recupera — a próxima sessão volta ao plano.
+- ELOGIO COM NÚMERO, SEM TIQUE: diga O QUE foi bom, com o dado. Evite as \
+muletas "cravou/cravada/cravado", "impecável", "perfeito", "controle \
+absoluto".
 - Fale com "você", português do Brasil.
 
 RESPONDA APENAS JSON com:
@@ -211,7 +236,7 @@ class AIAnalysisWriter:
             # às vezes) — a análise é o coração do produto, não pode cair no
             # genérico à toa. Só cai no fallback se TODAS as tentativas
             # falharem.
-            return await generate_json(
+            analysis = await generate_json(
                 model=settings.gemini_coach_model,
                 contents=PROMPT_TEMPLATE.format(
                     voice=COACH_VOICE,
@@ -227,6 +252,17 @@ class AIAnalysisWriter:
                     ),
                 ),
                 parse=AIAnalysisWriter._parse,
+            )
+
+            # higiene: o que nunca pode chegar ao atleta (FC pra quem não tem FC,
+            # jargão de carga, contagem de vezes sem datas) — ver analysis_hygiene
+            if analysis is None:
+
+                return None
+
+            return sanitize(
+                analysis,
+                has_hr=bool(context.executed.activity.average_heartrate),
             )
 
         except Exception as e:
@@ -446,12 +482,23 @@ class AIAnalysisWriter:
 
             lines.append("Planejado: (treino extra, sem sessão no plano)")
 
+        has_hr = bool(activity.average_heartrate)
+
         if executed.indoor:
 
             lines.append(
-                "Ambiente: ESTEIRA — distância/pace do relógio podem "
-                "divergir do real; a referência de distância é a do plano."
+                "Ambiente: ESTEIRA — distância e pace são ESTIMADOS pelo relógio "
+                "(não são medida): NÃO elogie nem cobre cumprimento de pace/"
+                "distância e NÃO cite desacoplamento; julgue pelo esforço (FC e "
+                "percepção) e pelo tempo, e use a distância do plano como "
+                "referência."
             )
+
+            mismatch = AIAnalysisWriter._indoor_pace_mismatch(executed)
+
+            if mismatch:
+
+                lines.append(mismatch)
 
         elif activity.start_latitude is not None:
 
@@ -464,19 +511,34 @@ class AIAnalysisWriter:
                 "distância e o pace do relógio são REAIS; NÃO é esteira."
             )
 
+        # a zona só existe com FC MEDIDA: sem FC o enricher estima "zona" pelo PACE, e
+        # rotulá-la "FC média na zona" fazia a IA citar frequência cardíaca de quem
+        # corre sem monitor (Hélio 19/10: "frequência cardíaca na Z4")
         lines.append(
             f"Executado: {activity.distance / 1000:.1f} km, "
-            f"pace médio {PaceFormatter.format(executed.pace_min_km)} min/km, "
-            f"tipo identificado {workout_type_label(executed.training_type)}, "
+            f"pace médio {PaceFormatter.format(executed.pace_min_km)} min/km"
+            + (" (ESTIMADO pela esteira)" if executed.indoor else "")
+            + f", tipo identificado {workout_type_label(executed.training_type)}, "
             f"intensidade {intensity_label(executed.intensity)}"
             + (
                 f", FC média na zona {executed.estimated_zone}"
-                if executed.estimated_zone
+                if has_hr and executed.estimated_zone
                 else ""
             )
         )
 
-        zone_facts = AIAnalysisWriter._hr_zone_facts(executed, runner)
+        if not has_hr:
+
+            lines.append(
+                "SEM FC: este treino NÃO tem frequência cardíaca (o atleta corre sem "
+                "monitor, ou o sensor não gravou). NÃO cite FC, bpm, zonas (Z1–Z5) nem "
+                "teto aeróbico — nem no próximo passo. A 'intensidade' acima foi "
+                "estimada só pelo PACE. Julgue por pace, percepção e estrutura."
+            )
+
+        zone_facts = (
+            AIAnalysisWriter._hr_zone_facts(executed, runner) if has_hr else None
+        )
 
         if zone_facts:
 
@@ -542,6 +604,15 @@ class AIAnalysisWriter:
 
             lines.append(dossier)
 
+        # o que você JÁ cobrou nas últimas análises, verbatim e com a data — o dossiê
+        # traz as mensagens, mas a IA repetia a mesma bronca (Hélio: "pela quinta/sexta
+        # vez" em duas corridas seguidas)
+        already = AIAnalysisWriter._previous_attentions_fact(runner.id)
+
+        if already:
+
+            lines.append(already)
+
         # o próximo treino do plano — pra o "próximo passo" dizer o que fazer
         # DIFERENTE nele, não uma frase genérica de recuperação
         next_line = AIAnalysisWriter._next_session_fact(context)
@@ -551,6 +622,83 @@ class AIAnalysisWriter:
             lines.append(next_line)
 
         return "\n".join(lines)
+
+    # quantas análises recentes entram em "o que você já cobrou" e até quantos dias atrás
+    _ATTENTION_LOOKBACK = 2
+    _ATTENTION_DAYS = 14
+
+    @staticmethod
+    def _previous_attentions_fact(profile) -> str | None:
+        """Os "⚠️ Ponto de atenção" que o coach JÁ deu nas últimas análises (texto e data):
+        se a cobrança de hoje é o mesmo comportamento, a IA não a repete. Best-effort."""
+
+        try:
+
+            from datetime import datetime
+
+            from app.core import messages
+            from app.infrastructure.persistence.coach_outbox_repository import (
+                CoachOutboxRepository,
+            )
+
+            title = messages.ATTENTION_TITLE
+
+            cutoff = today_local().toordinal() - AIAnalysisWriter._ATTENTION_DAYS
+
+            found = []
+
+            for entry in CoachOutboxRepository().recent(profile, 20):
+
+                text = str(entry.get("text") or "")
+
+                if title not in text:
+
+                    continue
+
+                try:
+
+                    day = datetime.fromisoformat(str(entry.get("timestamp"))).date()
+
+                except ValueError:
+
+                    continue
+
+                if day.toordinal() < cutoff:
+
+                    continue
+
+                block = text.split(title, 1)[1].lstrip('\n').split('\n\n', 1)[0]
+
+                block = " ".join(
+                    line.lstrip("•- ").strip()
+                    for line in block.splitlines()
+                    if line.strip()
+                )
+
+                if block:
+
+                    found.append(f"{day:%d/%m}: {block[:320]}")
+
+            found = found[-AIAnalysisWriter._ATTENTION_LOOKBACK:]
+
+            if not found:
+
+                return None
+
+            return (
+                "PONTOS DE ATENÇÃO que você JÁ deu nas últimas análises ("
+                + " | ".join(found)
+                + "). Se o ponto de atenção de hoje é o MESMO comportamento, NÃO o "
+                "repita nem conte as vezes: deixe \"attention\" null, ou traga um "
+                "ângulo NOVO que mude a prática (o ritmo-alvo, a dose, uma dica). "
+                "O atleta já ouviu."
+            )
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Análise: pontos de atenção anteriores falharam p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def _intent_facts(context: CoachContext) -> str | None:
@@ -608,14 +756,22 @@ class AIAnalysisWriter:
 
         text = f"Intenção do treino: {intent}"
 
-        if ceiling:
+        has_hr = bool(context.executed.activity.average_heartrate)
+
+        if ceiling and has_hr:
 
             text += f" (teto aeróbico dele ~{ceiling} bpm, 70% da reserva de FC)"
 
         # desacoplamento só vale em esforço CONSTANTE (leve/longão-base): num
         # progressivo o pace sobe de propósito e o número vira ruído — foi o
         # que fez a IA chamar de "redonda" uma parte leve com FC em 149-165
-        decoupling = AIAnalysisWriter._decoupling(context.executed.structure)
+        # (e só com FC medida e pace real: na esteira o pace é estimado e o
+        # desacoplamento vira ruído — Maurício 19/10: "+1,4% = sem estresse")
+        decoupling = (
+            AIAnalysisWriter._decoupling(context.executed.structure)
+            if has_hr and not context.executed.indoor
+            else None
+        )
 
         if decoupling is not None and (
             family == EASY or (family == LONG and not long_quality)
@@ -627,6 +783,39 @@ class AIAnalysisWriter:
             )
 
         return text + "."
+
+    # parciais por km que divergem do pace médio por mais que isto = dado de esteira
+    # que não se sustenta (Fernanda 16/10: média 5:36 com parciais 6:37 · 6:38 · 6:07 · 5:47)
+    _PACE_MISMATCH = 0.07
+
+    @staticmethod
+    def _indoor_pace_mismatch(executed) -> str | None:
+        """Aviso quando, NA ESTEIRA, o pace médio não fecha com os parciais por km: o
+        relógio estimou distância/pace e o número não se sustenta — a IA não pode
+        elogiar nem cobrar pace em cima dele."""
+
+        structure = executed.structure
+
+        splits = [p for p in (getattr(structure, "km_splits", None) or []) if p]
+
+        average = getattr(executed, "pace_min_km", None)
+
+        if len(splits) < 3 or not average:
+
+            return None
+
+        mean = sum(splits) / len(splits)
+
+        if abs(mean - average) / average <= AIAnalysisWriter._PACE_MISMATCH:
+
+            return None
+
+        return (
+            "DADO DE ESTEIRA INCONSISTENTE: os parciais por km "
+            f"(média ~{PaceFormatter.format(mean)}) não fecham com o pace médio "
+            f"({PaceFormatter.format(average)}) — NÃO cite pace como cumprido nem "
+            "elogie ritmo; julgue só por FC, percepção e tempo."
+        )
 
     @staticmethod
     def _decoupling(structure: WorkoutStructure | None) -> float | None:

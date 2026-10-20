@@ -207,7 +207,11 @@ class PlannedExecutionMatcher:
             cursor = match_idx + 1
 
             blocks.append(
-                PlannedExecutionMatcher._build_block(exp, executed[match_idx])
+                PlannedExecutionMatcher._build_block(
+                    exp,
+                    executed[match_idx],
+                    is_last_lap=match_idx == len(executed) - 1,
+                )
             )
 
         extra = len(executed) - sum(1 for flag in used if flag)
@@ -215,7 +219,9 @@ class PlannedExecutionMatcher:
         return blocks, missing, extra
 
     @staticmethod
-    def _build_block(exp: dict, ex: dict) -> ExecutedBlock:
+    def _build_block(
+        exp: dict, ex: dict, is_last_lap: bool = False,
+    ) -> ExecutedBlock:
 
         return ExecutedBlock(
             kind=exp["kind"],
@@ -228,11 +234,28 @@ class PlannedExecutionMatcher:
             executed_duration_sec=ex["duration_s"],
             executed_pace=ex.get("pace"),
             executed_hr=ex.get("avg_hr"),
-            within_target=PlannedExecutionMatcher._within_target(exp, ex),
+            within_target=PlannedExecutionMatcher._within_target(
+                exp, ex, is_last_lap,
+            ),
         )
 
     @staticmethod
-    def _within_target(exp: dict, ex: dict) -> bool | None:
+    def _within_target(
+        exp: dict, ex: dict, is_last_lap: bool = False,
+    ) -> bool | None:
+
+        # a ÚLTIMA volta do relógio de uma pausa/recuperação por TEMPO absorve o resto
+        # do treino quando o atleta não aperta a volta (Leonardo 19/10: "Pausa 4: 488 m,
+        # alvo 0:40 ⚠️" — era o desaquecimento todo dentro dela). Não é pausa longa
+        # demais: o relógio simplesmente não fechou a volta. Sem veredito.
+        if (
+            is_last_lap
+            and exp["kind"] in (RECOVERY, REST)
+            and exp["duration_sec"]
+            and ex["duration_s"] > exp["duration_sec"] * (1 + _AMOUNT_TOLERANCE)
+        ):
+
+            return None
 
         pace_min = _parse_pace(exp["pace_min"])
 

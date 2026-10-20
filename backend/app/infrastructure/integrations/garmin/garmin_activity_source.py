@@ -47,6 +47,14 @@ _MIN_SPEED_RATIO = 1.15     # esforço >=15% mais rápido que a recuperação
 # — não mexemos nesse caminho.
 _WALK_PACE_RATIO = 1.4
 
+# Um "tiro" bem MAIOR que os outros não é tiro: é o trecho contínuo que o Garmin
+# também rotulou como esforço (a base de 5 km de uma rodagem com acelerações — o
+# builder empurra RUN e INTERVAL como o mesmo stepType). Leonardo 19/10: "5 tiros ·
+# pace médio 5:17" com "Tiro 1: 5000 m" ao lado de 4 acelerações de ~70 m. Acima de
+# N× a MEDIANA das distâncias, sai da lista de tiros (pirâmide e Michigan ficam longe
+# disso: 200→800 m = 4×).
+_OVERSIZED_EFFORT_RATIO = 8
+
 
 def _drop_walk_paced_efforts(efforts: list[dict]) -> list[dict]:
     """Tira os 'tiros' em ritmo de caminhada — bem mais lentos que a mediana
@@ -62,6 +70,26 @@ def _drop_walk_paced_efforts(efforts: list[dict]) -> list[dict]:
     limit = statistics.median(paces) * _WALK_PACE_RATIO
 
     kept = [e for e in efforts if not e["pace"] or e["pace"] <= limit]
+
+    return kept if len(kept) >= 2 else efforts
+
+
+def _drop_oversized_efforts(efforts: list[dict]) -> list[dict]:
+    """Tira dos "tiros" o trecho contínuo gigante (ver `_OVERSIZED_EFFORT_RATIO`).
+    Com menos de 3 esforços não há mediana que sustente; e nunca deixa < 2."""
+
+    distances = [e["distance_m"] for e in efforts if e.get("distance_m")]
+
+    if len(distances) < 3:
+
+        return efforts
+
+    limit = statistics.median(distances) * _OVERSIZED_EFFORT_RATIO
+
+    kept = [
+        e for e in efforts
+        if not e.get("distance_m") or e["distance_m"] <= limit
+    ]
 
     return kept if len(kept) >= 2 else efforts
 
@@ -921,6 +949,8 @@ class GarminActivitySource:
             for c in classified
             if c["kind"] == "effort"
         ]
+
+        efforts = _drop_oversized_efforts(efforts)
 
         recovery_hrs = [
             c["avg_hr"]
