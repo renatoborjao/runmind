@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getWeekPlan, type WeekPlan, type WeekPlanDay, type WorkoutStep } from "@/lib/api";
+import {
+  getWeekPlan,
+  type RaceMapData,
+  type WeekPlan,
+  type WeekPlanDay,
+  type WorkoutStep,
+} from "@/lib/api";
 
 // O PLANO DA SEMANA — o mesmo que o coach manda no chat (objetivo, bloco, fase e o
 // DETALHE de cada treino, passo a passo), só que na tela, junto do calendário: a
@@ -160,6 +166,44 @@ function DayCard({ d, focused, isCurrentWeek }: { d: WeekPlanDay; focused: boole
   );
 }
 
+function dayMonth(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+// O MAPA ATÉ A PROVA — o olhar pra frente: quantas semanas faltam e como o ciclo costuma
+// se organizar até o dia. Calculado na hora e sempre "previsto" (o coach ajusta se o corpo
+// pedir); só fases e marcos, sem números de volume.
+function RaceMapCard({ map }: { map: RaceMapData }) {
+  return (
+    <section className="card rmap">
+      <div className="card-head"><span className="eyebrow">Mapa até a prova</span></div>
+      <p className="rmap-head">
+        <b>{map.weeks_left === 1 ? "Semana da prova" : `Faltam ${map.weeks_left} semanas`}</b>
+        {" · "}{map.target}{" · "}{dayMonth(map.race_date)}
+      </p>
+      <ol className="rmap-list">
+        {map.segments.map((s) => (
+          <li key={s.key} className={`rmap-row${s.current ? " on" : ""}`}>
+            <i className="rmap-dot" aria-hidden />
+            <span className="rmap-name">
+              {s.label}
+              {s.current && <small className="wk-tag">agora</small>}
+            </span>
+            <span className="rmap-when">{rangeLabel(s.start, s.end)} · {s.weeks} sem</span>
+          </li>
+        ))}
+      </ol>
+      {map.markers.map((m) => (
+        <p key={m.date_iso + m.label} className="rmap-marker">
+          🏁 {m.label}{m.role ? ` (${m.role})` : ""} · {dayMonth(m.date_iso)}
+        </p>
+      ))}
+      <p className="rmap-note">{map.note}</p>
+    </section>
+  );
+}
+
 export default function WeekPlanSection({
   weekStart, focusIso, focusTick, onLoaded, onNavigate,
 }: {
@@ -282,6 +326,8 @@ export default function WeekPlanSection({
           <p className="wk-note">💡 {data.extra_day_note} Se topar, fala com o coach na aba Coach que eu incluo no plano.</p>
         )}
       </section>
+
+      {data.race_map && <RaceMapCard map={data.race_map} />}
 
       <section className="card" style={{ opacity: loading ? 0.6 : 1 }}>
         <div className="card-head"><span className="eyebrow">Treino a treino</span></div>

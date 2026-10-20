@@ -985,6 +985,22 @@ a.link { color: var(--accent-ink); font-weight: 600; text-decoration: none; curs
 .wk-tag { display: inline-block; margin-left: 7px; font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 99px; background: var(--surface-2); color: var(--muted); vertical-align: middle; }
 .wk-tag.warn { margin-left: 0; background: color-mix(in srgb, #E1911A 16%, var(--surface)); color: #E1911A; }
 
+/* mapa até a prova (previsto): fases com datas, a de agora em destaque */
+.rmap-head { margin: 0 0 10px; font-size: 14px; line-height: 1.4; color: var(--ink-soft); }
+.rmap-head b { color: var(--ink); }
+.rmap-list { list-style: none; margin: 0; padding: 0; }
+.rmap-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; font-size: 13.5px; }
+.rmap-row + .rmap-row { margin-top: 2px; }
+.rmap-row.on { background: var(--accent-wash); color: var(--accent-ink); font-weight: 600; }
+.rmap-dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--muted); background: transparent; justify-self: center; }
+.rmap-row.on .rmap-dot { background: var(--accent); border-color: var(--accent); }
+.rmap-name { min-width: 0; }
+.rmap-name .wk-tag { margin-left: 8px; }
+.rmap-when { font-family: var(--font-mono), monospace; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rmap-row.on .rmap-when { color: var(--accent-ink); }
+.rmap-marker { margin: 10px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+.rmap-note { margin: 12px 0 0; font-size: 12px; line-height: 1.45; color: var(--muted); font-style: italic; }
+
 .wk-day { padding: 14px 0; scroll-margin-top: 12px; }
 .wk-day + .wk-day { border-top: 1px solid var(--line); }
 .wk-day.rest { display: flex; align-items: center; gap: 12px; padding: 9px 0; opacity: .75; }

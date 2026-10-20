@@ -13,7 +13,7 @@ const API_BASE =
 // Marca de build visível no app (rodapé da home) — pra confirmar rápido qual
 // versão está de fato rodando no aparelho quando o cache do PWA teima. Bump a
 // cada deploy junto com o service worker.
-export const APP_BUILD = "b55 · semana mais leve explicada no plano (por que + números)";
+export const APP_BUILD = "b56 · mapa até a prova (previsto) na aba Treino";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API_BASE}/api/v1${path}`, {
@@ -374,6 +374,34 @@ export interface WeekPlanDay {
   executed: { km: number; pace: string | null; duration_min: number; runs: number } | null;
 }
 
+/** Mapa até a prova: calculado na hora (nunca guardado) e sempre "previsto" — o coach
+ * ajusta se o corpo pedir. Só fases e marcos, sem números de volume. */
+export interface RaceMapSegment {
+  key: string;
+  label: string;
+  start: string;
+  end: string;
+  weeks: number;
+  current: boolean;
+}
+
+export interface RaceMapMarker {
+  label: string;
+  date_iso: string;
+  role: string | null;
+}
+
+export interface RaceMapData {
+  race_name: string;
+  target: string;
+  race_date: string;
+  weeks_left: number;
+  current_key: string | null;
+  segments: RaceMapSegment[];
+  markers: RaceMapMarker[];
+  note: string;
+}
+
 export interface WeekPlan {
   has_plan: boolean;
   week_start?: string;
@@ -387,6 +415,7 @@ export interface WeekPlan {
   extra_day_note?: string | null;
   is_deload?: boolean;
   deload_why?: string | null;
+  race_map?: RaceMapData | null;
   totals?: { planned_km: number; done_km: number; sessions: number; done_sessions: number };
   days?: WeekPlanDay[];
   race?: RaceInfo | null;

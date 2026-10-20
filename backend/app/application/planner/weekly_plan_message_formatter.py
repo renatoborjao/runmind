@@ -48,7 +48,7 @@ class WeeklyPlanMessageFormatter:
             "",
         ]
 
-        lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan))
+        lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan, profile))
 
         lines.extend(
             WeeklyPlanMessageFormatter.session_lines(plan, profile=profile)
@@ -59,8 +59,29 @@ class WeeklyPlanMessageFormatter:
         return "\n".join(lines)
 
     @staticmethod
+    def _map_line(plan: TrainingPlan, profile: str | None) -> str:
+        """O MAPA até a prova numa linha (quem tem prova com data): quantas semanas
+        faltam e como o ciclo costuma se organizar — calculado na hora, rotulado
+        "previsto". Best-effort: sem prova, sem perfil ou falha = sem a linha."""
+
+        try:
+
+            from app.application.coach.planning.race_map import RaceMapBuilder
+
+            return RaceMapBuilder.line(
+                RaceMapBuilder.for_profile(profile, plan.week_start)
+            )
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Mapa até a prova (linha) falhou p/ '{profile}': {e}")
+
+            return ""
+
+    @staticmethod
     def _phase_lines(
         plan: TrainingPlan,
+        profile: str | None = None,
     ) -> list[str]:
         """Cabeçalho da periodização: fase do ciclo e aviso de semana de
         corte. Plano externo (treinador) não tem fase do Ritmind."""
@@ -84,6 +105,12 @@ class WeeklyPlanMessageFormatter:
         if label:
 
             lines.append(f"📈 Fase: {label}")
+
+        map_line = WeeklyPlanMessageFormatter._map_line(plan, profile)
+
+        if map_line:
+
+            lines.append(map_line)
 
         if getattr(plan, "extra_day_note", None):
 
@@ -136,7 +163,7 @@ class WeeklyPlanMessageFormatter:
 
         lines = [f"🏃 Seu plano da semana, {runner_name}:", ""]
 
-        lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan))
+        lines.extend(WeeklyPlanMessageFormatter._phase_lines(plan, profile))
 
         lines.extend(
             WeeklyPlanMessageFormatter.session_lines(

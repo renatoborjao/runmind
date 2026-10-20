@@ -83,11 +83,13 @@ class WeekPlanBuilder:
             for i, day_en in enumerate(_WEEK_EN)
         ]
 
+        is_current = chosen == current_key
+
         return {
             "has_plan": True,
             "week_start": monday.isoformat(),
             "week_end": (monday + timedelta(days=6)).isoformat(),
-            "is_current": chosen == current_key,
+            "is_current": is_current,
             "source": getattr(plan, "source", "runmind"),
             "phase": plan.phase,
             "phase_label": PHASE_LABELS.get(plan.phase),
@@ -96,11 +98,34 @@ class WeekPlanBuilder:
             "extra_day_note": getattr(plan, "extra_day_note", None),
             "is_deload": bool(getattr(plan, "is_deload", False)),
             "deload_why": getattr(plan, "deload_why", None),
+            "race_map": WeekPlanBuilder._race_map(plan, profile, is_current),
             "totals": WeekPlanBuilder._totals(days),
             "days": days,
             "race": race,
             **nav,
         }
+
+    @staticmethod
+    def _race_map(plan, profile: str, is_current: bool) -> dict | None:
+        """O mapa até a prova (calculado na hora, "previsto") — só na semana do plano
+        atual: o mapa olha pra frente, não pra semanas passadas. Plano de treinador
+        externo não tem o ciclo do Ritmind. None sem prova com data."""
+
+        if not is_current or getattr(plan, "source", "runmind") == "externo":
+
+            return None
+
+        try:
+
+            from app.application.coach.planning.race_map import RaceMapBuilder
+
+            return RaceMapBuilder.payload(
+                RaceMapBuilder.for_profile(profile, plan.week_start)
+            )
+
+        except Exception:
+
+            return None
 
     # ------------------------------------------------------------------
 
