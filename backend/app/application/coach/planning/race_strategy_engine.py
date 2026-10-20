@@ -400,13 +400,14 @@ class RaceStrategyEngine:
         if scenarios.position == "inside":
 
             return (
-                f"Sua meta ({target}) cabe na faixa dos seus números ({phrase}). É o "
+                f"Sua meta ({target}) cabe na faixa dos seus números: {phrase}. É o "
                 "plano A — possível, mas pede um dia bom. O B é a sua rede de segurança."
             )
 
         return (
-            f"Seus números ({phrase}) mostram que dá pra ir mais rápido que a sua "
-            f"meta ({target}): o A é um desafio possível; o B é a meta que você definiu."
+            f"Seus números mostram que dá pra ir mais rápido que a sua meta "
+            f"({target}): {phrase}. O A é um desafio possível; o B é a meta que você "
+            "definiu."
         )
 
     @staticmethod
