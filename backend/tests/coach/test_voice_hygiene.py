@@ -449,3 +449,32 @@ def test_has_hr_follows_the_week():
     )
 
     assert without["has_hr"] is False
+
+
+# --- a esteira sobrevive ao arquivo ---------------------------------------------------------------
+
+
+def test_the_archive_keeps_the_treadmill_flag_and_a_plain_rewrite_does_not_erase_it(tmp_path):
+    """O arquivo reduzido guardava tudo MENOS a esteira: lido de volta, a corrida de esteira
+    virava "corrida normal" e a leitura da semana provava ritmo com um pace estimado."""
+
+    from app.infrastructure.persistence.activity_archive_repository import (
+        ActivityArchiveRepository,
+    )
+
+    repo = ActivityArchiveRepository()
+    repo.storage = tmp_path
+
+    repo.upsert_many("f", [_week(0, 5.4, raw={"trainer": True}), _week(1, 10.0)])
+
+    by_km = {round(a.distance / 1000, 1): a for a in repo.load_activities("f")}
+
+    assert by_km[5.4].raw.get("trainer") is True
+    assert not by_km[10.0].raw.get("trainer")
+
+    # a MESMA corrida regravada por uma fonte sem a marca (lista do Strava) não apaga a esteira
+    repo.upsert_many("f", [_week(0, 5.4)])
+
+    again = {round(a.distance / 1000, 1): a for a in repo.load_activities("f")}
+
+    assert again[5.4].raw.get("trainer") is True

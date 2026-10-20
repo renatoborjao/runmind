@@ -175,7 +175,7 @@ class ActivityArchiveRepository:
             # histograma de FC (carga) e zonas (gráfico)
             previous = records.get(activity.id) or {}
 
-            for key in ("hr_histogram", "hr_zone_minutes"):
+            for key in ("hr_histogram", "hr_zone_minutes", "indoor"):
 
                 if key not in record and previous.get(key):
 
@@ -301,7 +301,9 @@ class ActivityArchiveRepository:
             kudos=0,
             comments=0,
             suffer_score=None,
-            raw={},
+            # (a ESTEIRA é o único bit do raw que o arquivo guarda: pace e distância de esteira
+            # são estimados, e a leitura da semana não pode provar ritmo com eles)
+            raw={"trainer": True} if record.get("indoor") else {},
             hr_zone_minutes=record.get("hr_zone_minutes"),
             hr_histogram=record.get("hr_histogram"),
             air_temp_c=record.get("air_temp_c"),
@@ -354,5 +356,10 @@ class ActivityArchiveRepository:
         if activity.air_temp_c is not None:
 
             record["air_temp_c"] = activity.air_temp_c
+
+        # esteira: só quando é (pace/distância estimados) — sem poluir os registros normais
+        if activity.raw.get("trainer"):
+
+            record["indoor"] = True
 
         return record
