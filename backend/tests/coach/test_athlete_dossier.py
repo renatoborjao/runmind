@@ -710,3 +710,145 @@ def test_taper_zone_follows_the_role_of_the_next_race_in_the_dossier():
     with patch(RACES, return_value=[_race("15 km", "2026-12-20", 15.0, suggested="A")]):
 
         assert AthleteDossier._taper_zone(_data()) is None
+
+
+# ---- rota até a meta e pedido de mais carga (nº 76) --------------------------------------------
+
+
+def _weekly_runs(*km_by_week, first_monday=date(2026, 8, 31)):
+    """Uma corrida por semana (segunda), `km_by_week` da mais antiga pra mais recente."""
+
+    from datetime import timedelta
+
+    from tests.coach.factories import make_activity
+
+    return [
+        make_activity(
+            id=i, distance=km * 1000,
+            start_date=datetime.combine(first_monday + timedelta(weeks=i), datetime.min.time()),
+        )
+        for i, km in enumerate(km_by_week)
+        if km
+    ]
+
+
+def test_the_route_shows_the_gap_to_the_goal_in_the_plan_voice_and_a_short_fact_elsewhere():
+    """Leonardo: 10 km em 1h a 8 semanas, longão parado e ~13 km por semana."""
+
+    acts = _weekly_runs(0, 8.3, 10.0, 7.5, 5.2, 9.0, 8.0, 6.0, 0)
+
+    goal = TrainingGoal(
+        name="10 km sub 1h", distance_km=10.0, target_time="01:00:00",
+        race_date=date(2026, 12, 20),
+    )
+
+    base = dict(
+        activities=acts, goal=goal, runner=make_runner(weekly_training_days=3),
+        today=date(2026, 10, 21),
+    )
+
+    plan = AthleteDossier._route(_data(target_week=date(2026, 10, 26), **base))
+
+    assert len(plan) == 1 and plan[0].startswith("ROTA ATÉ A META")
+    assert "faltam 7 semanas pra 10 km em 01:00:00" in plan[0]
+    assert "FALTAM" in plan[0] and "o primeiro JÁ nesta semana" in plan[0]
+
+    chat = AthleteDossier._route(_data(**base))
+
+    assert len(chat) == 1 and chat[0].startswith("Rota até a meta (hipótese de treinador")
+    assert "FALTAM" not in chat[0]
+
+
+def test_the_route_aims_at_the_main_race_not_the_nearest_preparatory_one():
+    """Renato: o 15 km de dezembro é preparatória (B); a rota mira a meia (A) de abril."""
+
+    acts = _weekly_runs(25, 28, 30, 27, 29, 31, 28, 30, 0)
+
+    races = [
+        _race("Villa-Lobos (15 km)", "2026-12-20", 15.0, suggested="B"),
+        _race("Meia Maratona SP", "2027-04-04", 21.0975, suggested="A", target="1:59:59"),
+    ]
+
+    with patch(RACES, return_value=races):
+
+        text = AthleteDossier._route(
+            _data(target_week=date(2026, 10, 26), activities=acts, today=date(2026, 10, 21))
+        )[0]
+
+    assert "pra 21,1 km em 1:59:59" in text
+    assert "faltam 22 semanas" in text
+    assert "~18-21 km" in text
+
+
+def test_no_route_without_a_dated_race():
+
+    goal = TrainingGoal(name="saúde", distance_km=5.0, target_time=None, race_date=None)
+
+    assert AthleteDossier._route(_data(goal=goal, activities=_weekly_runs(10, 12, 11))) == []
+
+
+_ASK_TURNS = [
+    {"role": "user", "timestamp": "2026-10-02T15:51:00-03:00",
+     "text": "venho achando as metas muito baixas, os treinos muito leve, poucas distâncias"},
+    {"role": "assistant", "timestamp": "2026-10-02T15:52:00-03:00", "text": "Entendi!"},
+]
+
+
+def _patch_asks(turns=None, checkins=None):
+
+    stack = ExitStack()
+
+    stack.enter_context(patch(
+        "app.infrastructure.persistence.conversation_repository.ConversationRepository.load",
+        return_value=_ASK_TURNS if turns is None else turns,
+    ))
+    stack.enter_context(patch(
+        "app.infrastructure.persistence.checkin_repository.CheckinRepository.load",
+        return_value=[] if checkins is None else checkins,
+    ))
+    stack.enter_context(patch(f"{MODULE}.AthleteDossier._hard_pct", return_value=0))
+
+    return stack
+
+
+def test_his_request_for_more_reaches_the_plan_as_a_directive_and_the_chat_as_a_fact():
+
+    reading = MagicMock(body_state="BALANCED")
+
+    base = dict(today=date(2026, 10, 21), activities=_weekly_runs(0, 8.3, 10.0, 7.5, 5.2, 9.0, 8.0))
+
+    with _patch_asks():
+
+        plan = AthleteDossier._asks_more(
+            _data(target_week=date(2026, 10, 26), reading=reading, **base), [2, 3, 2, 3],
+        )
+
+        chat = AthleteDossier._asks_more(_data(**base), [2, 3, 2, 3])
+
+    assert plan.startswith("ELE PEDE MAIS") and "a resposta é DOSE" in plan
+    assert "poucas distâncias" in plan and "4 de 4" in plan
+    assert chat.startswith("Ele pediu mais em 02/10") and "ELE PEDE MAIS" not in chat
+
+
+def test_no_request_no_line():
+
+    with _patch_asks(turns=[{"role": "user", "timestamp": "2026-10-02T15:51:00-03:00",
+                             "text": "qual o treino de amanhã?"}]):
+
+        assert AthleteDossier._asks_more(_data(today=date(2026, 10, 21)), [3]) == ""
+
+
+def test_the_perception_section_carries_the_request_even_without_effort_reports():
+
+    with patch(f"{MODULE}.AthleteDossier._asks_more", return_value="ELE PEDE MAIS (teste)"), patch(
+        "app.infrastructure.persistence.session_rpe_repository.SessionRpeRepository.load_sessions",
+        return_value=[],
+    ), patch(
+        "app.infrastructure.persistence.checkin_repository.CheckinRepository.load",
+        return_value=[],
+    ):
+
+        lines = AthleteDossier._perception(_data())
+
+    assert "ELE PEDE MAIS (teste)" in lines
+    assert any("Sem relato de esforço" in line for line in lines)

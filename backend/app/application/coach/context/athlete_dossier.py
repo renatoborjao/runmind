@@ -25,6 +25,7 @@ from datetime import date, timedelta
 WHO = "who"
 CAPACITY = "capacity"
 EVOLUTION = "evolution"
+ROUTE = "route"
 BODY = "body"
 PERCEPTION = "perception"
 PATTERNS = "patterns"
@@ -32,13 +33,14 @@ PLAN_WEEK = "plan_week"
 COACH_MIND = "coach_mind"
 
 SECTIONS = (
-    WHO, CAPACITY, EVOLUTION, BODY, PERCEPTION, PATTERNS, PLAN_WEEK, COACH_MIND,
+    WHO, CAPACITY, EVOLUTION, ROUTE, BODY, PERCEPTION, PATTERNS, PLAN_WEEK, COACH_MIND,
 )
 
 _TITLES = {
     WHO: "QUEM É E O QUE BUSCA",
     CAPACITY: "CAPACIDADE HOJE",
     EVOLUTION: "VOLUME E EVOLUÇÃO",
+    ROUTE: "ROTA ATÉ A META",
     BODY: "CORPO (carga × recuperação)",
     PERCEPTION: "PERCEPÇÃO — o que ELE sente",
     PATTERNS: "PADRÕES, ADERÊNCIA E ESTÍMULOS",
@@ -1282,6 +1284,159 @@ class AthleteDossier:
         return ""
 
     @staticmethod
+    def _hard_pct(data: _Inputs) -> int | None:
+        """% do tempo de corrida em zona forte nas últimas 4 semanas (pela FC média de cada
+        corrida), a mesma medida do balanço de estímulos. None sem régua de FC."""
+
+        try:
+
+            from app.application.history.hr_zone_resolver import HrZoneResolver
+            from app.application.history.stimulus_ledger import StimulusLedger
+
+            if data.zones is None:
+
+                return None
+
+            resting = HrZoneResolver.resting_now(data.profile) or data.zones.resting_hr
+
+            split = StimulusLedger.zone_split(
+                data.activities, data.today, data.zones.max_hr, resting,
+            )
+
+            return split.hard_pct if split else None
+
+        except Exception as e:
+
+            print(f"Dossiê: intensidade falhou p/ '{data.profile}': {e}")
+
+            return None
+
+    @staticmethod
+    def _route_goal(data: _Inputs, ref: date):
+        """A prova que a rota mira: a PRINCIPAL (A) ainda à frente; sem papel escolhido, a
+        mais próxima. (distância km, tempo-alvo, data) ou None."""
+
+        ahead = [
+            r for r in AthleteDossier._races(data)
+            if r.get("date") and date.fromisoformat(r["date"]) > ref
+        ]
+
+        if ahead:
+
+            ahead.sort(key=lambda r: r["date"])
+
+            main = next(
+                (r for r in ahead if (r.get("priority_effective") or r.get("priority")) == "A"),
+                ahead[0],
+            )
+
+            distance = main.get("distance_km") or getattr(data.goal, "distance_km", None)
+
+            return distance, main.get("target_time"), date.fromisoformat(main["date"])
+
+        goal = data.goal
+
+        if goal is not None and goal.race_date and goal.race_date > ref:
+
+            return goal.distance_km, goal.target_time, goal.race_date
+
+        return None
+
+    @staticmethod
+    def _route(data: _Inputs) -> list[str]:
+        """ROTA ATÉ A META: o que a prova exige × pra onde o plano atual leva (ver
+        `history/goal_path`). Vazia sem prova com data, com a prova no taper ou sem corrida."""
+
+        from app.application.history.goal_path import (
+            assess,
+            goal_path_directive,
+            goal_path_fact,
+        )
+        from app.application.history.weekly_buckets import activity_date
+        from app.domain.value_objects.sports import is_run_sport
+
+        plan_voice = data.target_week is not None
+
+        ref = data.target_week or data.today
+
+        target = AthleteDossier._route_goal(data, ref)
+
+        if target is None:
+
+            return []
+
+        distance, target_time, race_date = target
+
+        anchor = ref - timedelta(days=ref.weekday())
+
+        weekly: list[float] = []
+
+        longest: list[float] = []
+
+        for back in range(8, 0, -1):
+
+            start = anchor - timedelta(weeks=back)
+
+            km = [
+                a.distance / 1000
+                for a in data.activities
+                if is_run_sport(a.sport)
+                and a.distance
+                and start <= activity_date(a) < start + timedelta(days=7)
+            ]
+
+            weekly.append(sum(km))
+
+            longest.append(max(km) if km else 0.0)
+
+        path = assess(
+            distance_km=distance,
+            target_time=target_time,
+            weeks_left=(race_date - ref).days // 7,
+            weekly_km=weekly,
+            longest_km=longest,
+            runs_per_week=getattr(data.runner, "weekly_training_days", None) or 3,
+            hard_pct=AthleteDossier._hard_pct(data),
+        )
+
+        text = goal_path_directive(path) if plan_voice else goal_path_fact(path)
+
+        return [text] if text else []
+
+    @staticmethod
+    def _asks_more(data: _Inputs, rpes: list[int]) -> str:
+        """Ele disse que os treinos estão leves/que aguenta mais? O pedido + o que os números
+        dizem + (pro plano) a obrigação de responder com dose ou com o dado."""
+
+        from app.application.history import athlete_asks_more as asks_more
+        from app.infrastructure.persistence.checkin_repository import CheckinRepository
+        from app.infrastructure.persistence.conversation_repository import (
+            ConversationRepository,
+        )
+
+        asks = asks_more.find(
+            ConversationRepository().load(data.profile),
+            CheckinRepository().load(data.profile),
+            data.today,
+        )
+
+        if not asks:
+
+            return ""
+
+        hard = AthleteDossier._hard_pct(data)
+
+        since = asks_more.dose_since(data.activities, asks[0].day, data.today)
+
+        if data.target_week is None:
+
+            return asks_more.asks_more_fact(asks, rpes, hard, since)
+
+        body = _BODY_STATE_PT.get(getattr(data.reading, "body_state", None))
+
+        return asks_more.asks_more_directive(asks, rpes, hard, body, since)
+
+    @staticmethod
     def _perception(data: _Inputs) -> list[str]:
         """O que ELE sente — esforço percebido dos treinos (relógio, resposta
         ou conversa), sensação, check-ins (energia/sono/dor/doença). É a
@@ -1384,12 +1539,25 @@ class AthleteDossier:
 
                 lines.append(f"- {label(c.day)} (check-in): {', '.join(bits)}")
 
+        try:
+
+            asks = AthleteDossier._asks_more(
+                data, [s.rpe for s in recent if s.rpe is not None],
+            )
+
+        except Exception as e:
+
+            print(f"Dossiê: pedido de mais carga falhou p/ '{data.profile}': {e}")
+
+            asks = ""
+
         if not lines:
 
             return [
                 "Sem relato de esforço/sensação nas últimas 3 semanas — você "
                 "está sem a percepção dele. Quando fizer sentido, pergunte como "
-                "ele se sentiu (natural, sem formulário)."
+                "ele se sentiu (natural, sem formulário).",
+                asks,
             ]
 
         out = [
@@ -1397,6 +1565,10 @@ class AthleteDossier:
             "a carga diz = está sentindo mais, cuidado; baixo ou boa energia = "
             "sobra pra dosar mais):"
         ] + lines
+
+        if asks:
+
+            out.append(asks)
 
         out.append(CheckinService.render_recent(data.profile))
 

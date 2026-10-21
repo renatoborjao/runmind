@@ -216,3 +216,137 @@ def test_gps_broken_flags_only_superhuman_peaks():
 
     assert gps_broken(sprint) is False
     assert gps_broken(glitch) is True
+
+
+# --- leve pela FC (nº 76) ----------------------------------------------------------------------
+
+
+class _Runner:
+
+    id = "leonardo"
+
+
+def _recent_run(km: float, pace: float, days_ago: int, hr: float, trainer: bool = False):
+
+    from datetime import timedelta
+
+    run = _run(km, pace)
+
+    run.start_date = datetime.now() - timedelta(days=days_ago)
+    run.average_heartrate = hr
+    run.raw = {"trainer": True} if trainer else {}
+    run.id = int(days_ago * 1000 + pace * 100)
+
+    return run
+
+
+def _with_ceiling(ceiling: int | None):
+
+    return (
+        patch("app.application.history.hr_zone_resolver.HrZoneResolver.for_profile",
+              return_value=object()),
+        patch("app.application.history.training_patterns.TrainingPatterns.ceiling_of",
+              return_value=ceiling),
+    )
+
+
+def _leonardo_history(extra=()):
+    """10 km "de referência" a 6:42 com FC 149 (leve, não esforço máximo) + rodagens reais a
+    ~6:50 com FC 135-142 — o fácil do modelo saía 7:07-7:34."""
+
+    return _history(
+        _recent_run(10, 6.7, 33, 149),
+        _recent_run(5, 6.85, 22, 136),
+        _recent_run(5.2, 6.6, 18, 140),
+        _recent_run(5.1, 6.78, 14, 136),
+        _recent_run(9, 6.88, 8, 142),
+        _recent_run(8, 6.92, 2, 140),
+        *extra,
+    )
+
+
+def test_the_easy_pace_follows_the_runs_done_inside_the_heart_rate_ceiling():
+    """A régua do leve é a FC: se ele corre 6:50 com FC de leve, o fácil NÃO pode ser 7:07 só
+    porque o VDOT vem de um esforço submáximo."""
+
+    history = _leonardo_history()
+
+    without = PaceModelBuilder.build(history)
+
+    a, b = _with_ceiling(152)
+
+    with a, b:
+
+        with_hr = PaceModelBuilder.build(history, _Runner())
+
+    assert with_hr.easy_min < without.easy_min
+    assert with_hr.easy_min <= 6.9
+    # só a ponta rápida se mexe: o resto do modelo (limiar, VO2) segue a fisiologia
+    assert with_hr.threshold == without.threshold and with_hr.interval == without.interval
+
+
+def test_runs_above_the_ceiling_or_on_the_treadmill_do_not_confirm_an_easy_pace():
+
+    a, b = _with_ceiling(152)
+
+    quality = _leonardo_history(extra=(_recent_run(8, 6.0, 5, 165), _recent_run(8, 6.05, 6, 168)))
+
+    with a, b:
+
+        assert PaceModelBuilder._hr_confirmed_easy_paces(quality, _Runner()) == (
+            PaceModelBuilder._hr_confirmed_easy_paces(_leonardo_history(), _Runner())
+        )
+
+        # esteira: pace estimado, não prova nada
+        treadmill = _history(
+            _recent_run(5, 5.5, 3, 130, trainer=True), _recent_run(5, 5.6, 4, 130, trainer=True),
+            _recent_run(5, 5.7, 5, 130, trainer=True),
+        )
+
+        assert PaceModelBuilder._hr_confirmed_easy_paces(treadmill, _Runner()) == []
+
+
+def test_without_a_sample_or_a_heart_rate_ruler_the_model_is_what_it_was():
+
+    history = _leonardo_history()
+
+    baseline = PaceModelBuilder.build(history)
+
+    # sem régua de FC (sem repouso): nada muda
+    a, b = _with_ceiling(None)
+
+    with a, b:
+
+        assert PaceModelBuilder.build(history, _Runner()).easy_min == baseline.easy_min
+
+    # sem atleta (sem como achar a régua): nada muda
+    assert PaceModelBuilder.build(history).easy_min == baseline.easy_min
+
+    # menos de 3 corridas dentro do teto: nada muda
+    few = _history(_recent_run(10, 6.7, 33, 149), _recent_run(5, 6.8, 10, 140))
+
+    a, b = _with_ceiling(152)
+
+    with a, b:
+
+        assert (
+            PaceModelBuilder.build(few, _Runner()).easy_min
+            == PaceModelBuilder.build(few).easy_min
+        )
+
+
+def test_the_heart_rate_evidence_never_slows_an_athlete_who_already_runs_easy_faster():
+    """Só acelera a ponta rápida: quem faz o leve mais rápido que a evidência segue como estava."""
+
+    fast = _history(
+        _recent_run(10, 5.0, 33, 150),
+        _recent_run(8, 5.3, 20, 140), _recent_run(6, 5.3, 12, 140), _recent_run(6, 5.35, 5, 141),
+    )
+
+    baseline = PaceModelBuilder.build(fast)
+
+    a, b = _with_ceiling(152)
+
+    with a, b:
+
+        assert PaceModelBuilder.build(fast, _Runner()).easy_min <= baseline.easy_min

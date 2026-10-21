@@ -61,6 +61,9 @@ _RECENT_DAYS = 35
 # abaixo disso, usa o histórico todo (não inventa com 1-2 treinos).
 _MIN_RECENT_RUNS = 4
 
+# amostra mínima de corridas dentro do teto de FC pra o leve pela FC valer
+_MIN_HR_EASY_RUNS = 3
+
 # default conservador de estreante (nunca correu / não informou)
 _ROOKIE_PACE = 8.0
 
@@ -115,9 +118,84 @@ class PaceModelBuilder:
 
         reference = recent if len(recent) >= _MIN_RECENT_RUNS else paces
 
-        return PaceModelBuilder._from_vdot(vdot, reference)
+        return PaceModelBuilder._from_vdot(
+            vdot, reference, PaceModelBuilder._hr_confirmed_easy_paces(history, runner),
+        )
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _hr_confirmed_easy_paces(
+        history: TrainingHistory, runner: RunnerProfile | None,
+    ) -> list[float]:
+        """Paces das corridas RECENTES feitas DENTRO do teto aeróbico de FC dele — o leve de
+        verdade, medido pelo coração (a régua do leve é a FC, decisão de 28/09). Esteira (pace
+        estimado) e GPS quebrado ficam de fora. Vazio sem FC/régua: o modelo segue como era.
+
+        Por que existe: o fácil era o meio-termo entre a fisiologia (VDOT) e o que ele corre — e
+        o VDOT de quem nunca correu forte vem de esforço submáximo (Leonardo: 10 km em 1:07 com
+        FC 149 = leve), então o fácil saía 7:07-7:34 quando ele corre 6:50 com FC de leve; ele
+        obedecia, o pace médio ficava mais lento e a âncora seguia o lento: uma catraca."""
+
+        profile = getattr(runner, "id", None) if runner else None
+
+        if not profile:
+
+            return []
+
+        try:
+
+            from app.application.history.hr_zone_resolver import HrZoneResolver
+            from app.application.history.training_patterns import TrainingPatterns
+            from app.core.clock import today_local
+
+            zones = HrZoneResolver.for_profile(profile, runner, history.activities)
+
+            ceiling = TrainingPatterns.ceiling_of(zones, profile)
+
+            if not ceiling:
+
+                return []
+
+            today = today_local()
+
+            paces = []
+
+            for a in history.activities:
+
+                if not is_run_sport(a.sport) or a.average_speed <= 0:
+
+                    continue
+
+                if a.distance / 1000 < _ANCHOR_MIN_KM or gps_broken(a):
+
+                    continue
+
+                if (a.raw or {}).get("trainer"):
+
+                    continue
+
+                if (today - a.start_date.date()).days > _RECENT_DAYS:
+
+                    continue
+
+                if not a.average_heartrate or a.average_heartrate > ceiling:
+
+                    continue
+
+                pace = (1000 / a.average_speed) / 60
+
+                if _MIN_PACE <= pace <= _MAX_PACE:
+
+                    paces.append(pace)
+
+            return paces
+
+        except Exception as e:  # noqa: BLE001 — melhor o modelo de sempre do que derrubar o plano
+
+            print(f"Leve pela FC falhou p/ '{profile}': {e}")
+
+            return []
 
     @staticmethod
     def _best_effort_floor(runner: RunnerProfile | None) -> float | None:
@@ -251,7 +329,9 @@ class PaceModelBuilder:
         return best
 
     @staticmethod
-    def _from_vdot(vdot: float, paces: list[float]) -> PaceModel:
+    def _from_vdot(
+        vdot: float, paces: list[float], hr_easy_paces: list[float] | None = None,
+    ) -> PaceModel:
         """Ritmos E/M/T/I/R do VDOT. O FÁCIL segue o padrão meio-termo: média
         entre a fisiologia (VDOT) e o que o atleta corre de verdade (`paces`,
         janela recente) — nem lento demais (VDOT de treino submáximo), nem
@@ -280,6 +360,21 @@ class PaceModelBuilder:
             easy_fast = (1 - _REALITY_BLEND) * easy_fast + _REALITY_BLEND * reality_easy
 
             easy_slow = (1 - _REALITY_BLEND) * easy_slow + _REALITY_BLEND * reality_easy
+
+        # LEVE PELA FC: com amostra de corridas feitas DENTRO do teto de FC, esse pace é o leve
+        # DELE medido pelo coração — a fisiologia de um esforço submáximo não puxa o fácil pra
+        # trás dele (só acelera a ponta rápida; nunca desacelera quem já corre mais solto).
+        if hr_easy_paces and len(hr_easy_paces) >= _MIN_HR_EASY_RUNS:
+
+            hr_median = median(hr_easy_paces)
+
+            easy_fast = min(easy_fast, hr_median)
+
+            # e a trava passa a olhar o leve REAL medido pelo coração (as corridas de esteira,
+            # fortes ou longas demais no meio não o puxam pra trás)
+            observed_easy = min(
+                observed_easy, median([p for p in hr_easy_paces if p >= hr_median]),
+            )
 
         # TRAVA (não matar): o fácil não pode ser mais rápido que o leve real
         # dele (+margem) — segura o excesso pro outro lado.

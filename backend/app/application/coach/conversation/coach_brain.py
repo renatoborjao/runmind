@@ -140,6 +140,11 @@ CORRIGE o cadastro da prova (nome, distância, data), é uma ação type="goal" 
 da prova que ele já tem) e "answer_card"=null. Antes de dizer que "já está certo", \
 CONFIRA o nome da prova na lista do app no QUADRO ("PROVA NA LISTA DO APP"): é o \
 que ele vê na aba Treino, e pode ser diferente do que está no objetivo.
+- PEDIDO DE MAIS CARGA: se ele diz que os treinos estão leves/fracos ou que aguenta \
+mais, isso é DADO — nunca só "anotei". Confronte com o QUADRO (esforço percebido, FC, \
+corpo, "ROTA ATÉ A META"). Se os números sustentam, responda com uma PROPOSTA concreta \
+de dose maior (ação "replan", com a instrução do que sobe: longão com mais km, mais tempo \
+em qualidade de verdade); se não sustentam, diga com o dado por que ainda não.
 - ADAPTAR/EXECUTAR um treino que o atleta JÁ TEM ("como faço na esteira?", \
 "como executo esse treino?", "adapta pra chuva/rua", "como corro isso?"): \
 responda NO "say" com os blocos JÁ adaptados (cada bloco em sua linha com "•", \

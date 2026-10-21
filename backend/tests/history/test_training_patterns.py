@@ -142,3 +142,45 @@ def test_long_run_done_longer_on_another_day_is_not_a_miss():
 
     assert "Aderência: fez 2 de 2" in text
     assert "furou" not in text
+
+
+def test_the_easy_pace_he_really_runs_inside_the_heart_rate_ceiling_is_named():
+    """Leonardo: o leve prescrito era 7:05-7:35, ele corria ~6:50 com a FC DENTRO do teto (leve
+    de verdade) e era cobrado por pace. A régua do leve é a FC: o coach vê o pace do leve DELE."""
+
+    plan = _plan([
+        ("Tuesday", "Rodagem Leve", 5.0, None),
+        ("Thursday", "Rodagem Leve", 5.0, None),
+        ("Saturday", "Rodagem Leve", 5.0, None),
+    ])
+
+    runs = [
+        _run(WEEK + timedelta(days=1), 5.0, 34.5, 135, 1),   # 6:54/km, FC 135 < 152
+        _run(WEEK + timedelta(days=3), 5.0, 34.0, 140, 2),   # 6:48/km
+        _run(WEEK + timedelta(days=5), 5.0, 34.0, 138, 3),
+    ]
+
+    text = TrainingPatterns.render([plan], runs, [], [], TODAY, ceiling=152)
+
+    assert "no controle: 3 treinos abaixo do teto aeróbico (~152 bpm)" in text
+    assert "O pace em que ele faz isso é ~6:48/km (3 treinos): é o leve DELE" in text
+    assert "A régua do leve é a FC" in text and "não o cobre por pace" in text
+
+
+def test_the_easy_pace_note_needs_a_pattern_not_one_run():
+
+    assert TrainingPatterns._easy_pace_note([6.8, 6.9]) == ""
+
+    assert TrainingPatterns._easy_pace_note([]) == ""
+
+
+def test_an_easy_run_above_the_ceiling_gets_no_pace_note():
+    """Leve saindo FORTE (FC acima do teto) segue sendo falta de controle — sem nota de pace."""
+
+    plan = _plan([("Tuesday", "Rodagem Leve", 8.0, None)])
+
+    runs = [_run(WEEK + timedelta(days=1), 8.0, 50, 160, 1)]
+
+    text = TrainingPatterns.render([plan], runs, [], [], TODAY, ceiling=152)
+
+    assert "saindo FORTE" in text and "é o leve DELE" not in text

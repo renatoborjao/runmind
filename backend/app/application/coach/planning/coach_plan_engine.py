@@ -70,6 +70,16 @@ REGRAS:
   sua — sempre construindo o que a META do atleta exige. Conservador demais é desperdiçar a
   janela em que o atleta evolui: se o corpo aguenta, a semana pede MAIS que a
   anterior.
+- ROTA ATÉ A META e PEDIDO DO ATLETA: se o dossiê trouxer "ROTA ATÉ A META", ela é
+  a conta do que a prova exige × onde o plano atual o leva — feche a DIFERENÇA nas
+  semanas que restam, com o primeiro degrau JÁ nesta semana, ou diga ao atleta que
+  não cabe e proponha ajustar a meta; semana igual à anterior sem dizer por quê é
+  erro. Se trouxer "ELE PEDE MAIS", o que ele diz de si é DADO: com os números
+  confirmando (esforço baixo, corpo firme) a resposta é DOSE — longão com mais km,
+  mais tempo em qualidade de verdade, não só um dia a mais — dita a ele no objetivo
+  e no propósito da semana; sem confirmar, diga o porquê com o dado. O leve segue
+  definido pela FC (teto aeróbico): se o dossiê mostrar o pace em que ele faz o
+  leve de verdade, use ESSA faixa e não a do modelo.
 - MAS COM CRITÉRIO: o teto é o SALTO, não o passo — nada de semana +25% sobre a
   anterior nem de longão muito acima do maior recente (é onde corredor amador
   se machuca, e o HRV não avisa). Respeite a capacidade real e a aderência — se
@@ -128,7 +138,9 @@ REGRAS:
     limiar de hoje, ou tiro médio acima do VO2 de hoje, costuma não sair — o
     atleta corta ou sobrevive sem o estímulo certo (confira nos PADRÕES se isso
     já aconteceu com ele). Se decidir puxar acima, que seja deliberado e dito
-    no propósito.
+    no propósito. A faixa do leve e do aquecimento é a "fácil" das "Paces reais"
+    DESTA semana — ela pode ter mudado (o leve dele é medido pela FC): não copie
+    a faixa do plano anterior.
   * DISTRIBUIÇÃO DE INTENSIDADE: evolução sustentável vem de muito volume leve
     DE VERDADE (pela FC, abaixo do teto aeróbico dele — escreva hr_max nos
     passos dos leves quando souber o teto) e poucas sessões fortes bem feitas.

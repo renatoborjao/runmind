@@ -45,6 +45,12 @@ CHAT_SCENARIOS = (
     "monta um treino pra amanhã",
 )
 
+# só monta o contexto do plano e mostra os sinais novos (SEM chamar a IA — custo zero)
+CONTEXT_ONLY = False
+
+# trechos do contexto do plano que provam o que a IA viu (rota, pedido do atleta, leve pela FC)
+SIGNALS = ("ROTA ATÉ A META", "ELE PEDE MAIS", "é o leve DELE", "Paces reais")
+
 ALL = (
     "dossier", "chat", "analysis", "conduct", "missed", "review", "plan",
     "recap", "race", "reengage",
@@ -651,6 +657,18 @@ async def _plan(profile, runner):
         assessment.run_walk,
     )
 
+    if CONTEXT_ONLY:
+
+        _s(f"CONTEXTO do plano {week:%d/%m} ({len(context)} chars) — só os sinais, sem IA")
+
+        for line in context.splitlines():
+
+            if any(key in line for key in SIGNALS):
+
+                print(f"  > {line[:700]}")
+
+        return
+
     started = time.time()
 
     plan = await AIPlanService._generate_ai(
@@ -1051,7 +1069,13 @@ async def main() -> None:
 
     parser.add_argument("--repeats", type=int, default=2)
 
+    parser.add_argument("--context-only", action="store_true")
+
     args = parser.parse_args()
+
+    global CONTEXT_ONLY
+
+    CONTEXT_ONLY = args.context_only
 
     sys.path.insert(0, str(BACKEND))
 

@@ -394,6 +394,27 @@ class TrainingPatterns:
         return round(resting_hr + _AEROBIC_HRR * (max_hr - resting_hr))
 
     @staticmethod
+    def _easy_pace_note(paces: list[float]) -> str:
+        """O pace em que ele faz o leve DE VERDADE (FC dentro do teto): a régua do leve é a FC,
+        então esse é o leve DELE — se a faixa prescrita é mais lenta, ficou lenta pra ele e o
+        coach não o cobra por pace (Leonardo: prescrito 7:05-7:35, corria 6:50 com FC de leve)."""
+
+        if len(paces) < 3:
+
+            return ""
+
+        from statistics import median
+
+        from app.application.planner.pace_formatter import PaceFormatter
+
+        return (
+            f" O pace em que ele faz isso é ~{PaceFormatter.format(median(paces))}/km "
+            f"({len(paces)} treinos): é o leve DELE. A régua do leve é a FC — se a faixa "
+            "prescrita é mais lenta que isso, ela ficou lenta pra ele: reponha a faixa e não "
+            "o cobre por pace."
+        )
+
+    @staticmethod
     def _intent_lines(sessions, ceiling: int | None = None) -> list[str]:
         """Intenção × execução: leve/longão-base saindo forte (FC média acima
         do teto aeróbico dele), estourar o combinado no dia leve, cortar a
@@ -402,6 +423,9 @@ class TrainingPatterns:
         lines = []
 
         easy_checked, easy_hard, easy_hrs = 0, [], []
+
+        # pace dos leves feitos DENTRO do teto de FC (o leve de verdade): a régua do leve é a FC
+        easy_paces: list[float] = []
 
         overshoot, cut = [], []
 
@@ -432,6 +456,10 @@ class TrainingPatterns:
                 if hr >= limit:
 
                     easy_hard.append(f"{day:%d/%m} ({hr:.0f} bpm)")
+
+                elif act.distance and act.moving_time:
+
+                    easy_paces.append((act.moving_time / 60) / (act.distance / 1000))
 
             ratio = TrainingPatterns._volume_ratio(session, act)
 
@@ -466,6 +494,7 @@ class TrainingPatterns:
                     f"- Leve/longão-base no controle: {easy_checked} treinos "
                     f"abaixo do teto aeróbico (~{ceiling} bpm), média {avg:.0f} "
                     "bpm — leve de verdade."
+                    f"{TrainingPatterns._easy_pace_note(easy_paces)}"
                 )
 
         if overshoot:
