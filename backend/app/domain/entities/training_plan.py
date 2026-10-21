@@ -74,6 +74,13 @@ class TrainingPlan:
     # decide no chat). None = sem proposta nesta semana.
     extra_day_note: str | None = None
 
+    # A ROTA semana a semana que o coach tinha à frente ao montar este plano (as próximas
+    # semanas: fase, faixa de km, longão, dose de qualidade, foco) e, quando a semana fugiu dela
+    # (volume fora de ±20%), o MOTIVO em palavras dele. É o que deixa a semana seguinte e a
+    # auditoria ver o que ele planejou × o que aconteceu. None = plano antigo / sem rota.
+    route: dict | None = None
+    route_note: str | None = None
+
     # Quando este plano foi gerado pela primeira vez (ISO datetime). É o marco
     # de "a partir de quando as sessões existiram pro atleta": um plano montado
     # no meio da semana (atleta que entrou na quinta) NÃO pode cobrar a segunda

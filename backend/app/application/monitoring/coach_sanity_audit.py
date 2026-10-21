@@ -79,6 +79,24 @@ STOPPED_DAYS = 14
 # o "pós-prova" do coach vale por este número de semanas (deload_analyzer._POST_RACE_GRACE_WEEKS)
 POST_RACE_WEEKS = 3
 
+# --- o plano nasce do que o atleta FEZ (a rota semana a semana, nº 80) ---------------------------
+
+# volume prescrito que oscila: variação semana a semana acima disto, tantas vezes, sem motivo
+SAWTOOTH_SWING = 0.35
+SAWTOOTH_MIN_SWINGS = 2
+
+# o papel passou disto sobre o que ele FEZ (o maior entre a semana anterior e o que ele sustenta);
+# com o motivo escrito só alerta num salto bem maior (um motivo não justifica qualquer salto)
+JUMP_OVER_DONE = 1.40
+JUMP_EXPLAINED_MAX = 1.60
+
+# volume prescrito fora desta faixa da rota, sem o motivo escrito pelo coach
+ROUTE_OFF = 0.20
+
+# ele fez menos que esta fração da rota por tantas semanas seguidas
+ROUTE_LATE_SHARE = 0.8
+ROUTE_LATE_WEEKS = 3
+
 HIGH = "alto"
 WATCH = "atenção"
 
@@ -101,6 +119,7 @@ class Snapshot:
     long_km: float | None
     adherence: float | None
     next_race: str | None
+    route: str | None = None
 
 
 # --- os checks (puros) ---------------------------------------------------------------------------
@@ -351,6 +370,146 @@ def low_adherence(profile: str, done: int, planned: int, weeks: int) -> Finding 
     )
 
 
+def sawtooth(profile: str, weeks: list[tuple[date, float, bool]]) -> Finding | None:
+    """O volume PRESCRITO sobe e desce em dente de serra: `weeks` = (semana, km prescritos, tem
+    motivo escrito — descarga ou nota da rota), da mais antiga pra mais recente. Variação acima de
+    `SAWTOOTH_SWING` sem motivo, ao menos `SAWTOOTH_MIN_SWINGS` vezes: o plano de cada semana está
+    nascendo do ruído da anterior, não de um desenho."""
+
+    swings = []
+
+    for (_, before, _), (week, after, explained) in zip(weeks, weeks[1:]):
+
+        if before <= 0 or after <= 0 or explained:
+
+            continue
+
+        change = after / before - 1
+
+        if abs(change) > SAWTOOTH_SWING:
+
+            swings.append((week, before, after))
+
+    if len(swings) < SAWTOOTH_MIN_SWINGS:
+
+        return None
+
+    km = " → ".join(f"{v:.0f}" for _, v, _ in weeks[-6:])
+
+    return Finding(
+        profile, "dente_de_serra", WATCH,
+        f"O volume prescrito oscila sem motivo escrito ({km} km): {len(swings)} saltos de mais de "
+        f"{SAWTOOTH_SWING:.0%} entre semanas. O plano não está seguindo uma curva — cada semana "
+        "nasce do ruído da anterior.",
+    )
+
+
+def jump_over_done(
+    profile: str, week: date, planned: float, prev_done: float, sustained: float | None,
+    explained: bool, note: str | None = None,
+) -> Finding | None:
+    """O papel desta semana passou muito do que ele FEZ (o maior entre a semana anterior e o que
+    ele sustenta). Prescrever por cima do papel e não do feito é descartar o que ele cumpriu. Sem
+    motivo escrito alerta a partir de `JUMP_OVER_DONE`; COM motivo só num salto de
+    `JUMP_EXPLAINED_MAX` ou mais — um motivo não justifica qualquer salto."""
+
+    base = max(prev_done, sustained or 0.0)
+
+    if planned <= 0 or base <= 0 or planned < base * JUMP_OVER_DONE:
+
+        return None
+
+    head = (
+        f"O plano de {_fmt_date(week)} prescreve ~{planned:.0f} km: {planned / base - 1:+.0%} "
+        f"sobre o que ele fez (semana anterior {prev_done:.0f} km; sustenta "
+        f"~{(sustained or 0):.0f} km)"
+    )
+
+    if not explained:
+
+        return Finding(
+            profile, "salto_sobre_o_feito", HIGH, f"{head} e o coach não escreveu o motivo.",
+        )
+
+    if planned < base * JUMP_EXPLAINED_MAX:
+
+        return None
+
+    return Finding(
+        profile, "salto_sobre_o_feito", WATCH,
+        f"{head}. O coach justificou ({note or 'motivo escrito'}), mas é um salto grande: vale "
+        "conferir se o corpo dele comporta.",
+    )
+
+
+def off_route(
+    profile: str, week: date, planned: float, route_km: float | None, explained: bool,
+) -> Finding | None:
+    """O volume prescrito fugiu da rota (mais que `ROUTE_OFF`) sem o motivo escrito."""
+
+    if explained or not route_km or planned <= 0:
+
+        return None
+
+    change = planned / route_km - 1
+
+    if abs(change) <= ROUTE_OFF:
+
+        return None
+
+    return Finding(
+        profile, "desvio_sem_motivo", WATCH,
+        f"O plano de {_fmt_date(week)} prescreve ~{planned:.0f} km contra ~{route_km:.0f} km da "
+        f"rota ({change:+.0%}) e o coach não escreveu o motivo do desvio.",
+    )
+
+
+def route_late(profile: str, pairs: list[tuple[float, float]]) -> Finding | None:
+    """Ele fez menos que `ROUTE_LATE_SHARE` da rota por `ROUTE_LATE_WEEKS` semanas fechadas
+    seguidas: `pairs` = (km feitos, km da rota), da mais antiga pra mais recente."""
+
+    recent = pairs[-ROUTE_LATE_WEEKS:]
+
+    if len(recent) < ROUTE_LATE_WEEKS or any(r <= 0 for _, r in recent):
+
+        return None
+
+    if not all(done < ROUTE_LATE_SHARE * route for done, route in recent):
+
+        return None
+
+    done_km = ", ".join(f"{d:.0f}" for d, _ in recent)
+
+    route_km = ", ".join(f"{r:.0f}" for _, r in recent)
+
+    return Finding(
+        profile, "rota_atrasada", WATCH,
+        f"Ele está atrás da rota há {ROUTE_LATE_WEEKS} semanas (fez {done_km} km; a rota pedia "
+        f"{route_km} km): a rota está acima do que ele cumpre — a rotina dele mudou ou o plano "
+        "precisa ser reancorado no que ele consegue.",
+    )
+
+
+def route_status(done: float | None, route: float | None) -> str | None:
+    """Pro painel: o que ele fez na última semana fechada contra a rota."""
+
+    if done is None or not route:
+
+        return None
+
+    ratio = done / route
+
+    if ratio < ROUTE_LATE_SHARE:
+
+        return f"atrás da rota ({done:.0f} de {route:.0f} km)"
+
+    if ratio > 1 + ROUTE_OFF:
+
+        return f"adiante da rota ({done:.0f} de {route:.0f} km)"
+
+    return f"na rota ({done:.0f} de {route:.0f} km)"
+
+
 def stopped_running(profile: str, days_since: int | None, ill: bool) -> Finding | None:
     """Sem correr há semanas e sem doença registrada: pausa combinada ou afastamento?"""
 
@@ -418,7 +577,91 @@ class CoachSanityAudit:
         run(lambda d: CoachSanityAudit._check_adherence(d))
         run(lambda d: CoachSanityAudit._check_stopped(d))
 
+        for check in CoachSanityAudit._route_checks(data):
+
+            run(check)
+
         return findings
+
+    @staticmethod
+    def _ledger(data):
+        """O livro-razão das semanas até a semana SEGUINTE à de hoje (a corrente entra em
+        andamento): prescrito × feito, com a rota e o motivo que cada plano guardou."""
+
+        from app.application.coach.context.athlete_dossier import AthleteDossier
+
+        ref = data.today - timedelta(days=data.today.weekday()) + timedelta(weeks=1)
+
+        saved, data.target_week = data.target_week, ref
+
+        try:
+
+            return AthleteDossier._ledger(data)
+
+        finally:
+
+            data.target_week = saved
+
+    @staticmethod
+    def _route_checks(data) -> list:
+
+        def sawtooth_check(d):
+
+            weeks = [
+                (w.week_start, w.planned_km, bool(w.deload or w.route_note))
+                for w in CoachSanityAudit._ledger(d)
+            ]
+
+            return sawtooth(d.profile, weeks)
+
+        def jump_check(d):
+
+            from app.application.history import week_ledger
+
+            ledger = CoachSanityAudit._ledger(d)
+
+            if not ledger:
+
+                return None
+
+            last = ledger[-1]
+
+            usual = week_ledger.typical(ledger[:-1])
+
+            return jump_over_done(
+                d.profile, last.week_start, last.planned_km, last.prev_done_km,
+                usual[0] if usual else None, bool(last.deload or last.route_note),
+                last.route_note,
+            )
+
+        def off_check(d):
+
+            ledger = CoachSanityAudit._ledger(d)
+
+            last = ledger[-1] if ledger else None
+
+            if last is None or not last.route_km:
+
+                return None
+
+            mid = (last.route_km[0] + last.route_km[1]) / 2
+
+            return off_route(
+                d.profile, last.week_start, last.planned_km, mid,
+                bool(last.deload or last.route_note),
+            )
+
+        def late_check(d):
+
+            pairs = [
+                (w.done_km, (w.route_km[0] + w.route_km[1]) / 2)
+                for w in CoachSanityAudit._ledger(d)
+                if not w.in_progress and w.route_km
+            ]
+
+            return route_late(d.profile, pairs)
+
+        return [sawtooth_check, jump_check, off_check, late_check]
 
     @staticmethod
     def _check_race(data) -> Finding | None:
@@ -731,7 +974,7 @@ class CoachSanityAudit:
 
         data = AthleteDossier._inputs(profile, None, None, None, today)
 
-        km_week = long_km = adherence = next_race = None
+        km_week = long_km = adherence = next_race = route = None
 
         try:
 
@@ -769,7 +1012,23 @@ class CoachSanityAudit:
 
             print(f"Sanidade: painel (prova) falhou p/ '{profile}': {e}")
 
-        return Snapshot(profile, km_week, long_km, adherence, next_race)
+        try:
+
+            closed = [
+                w for w in CoachSanityAudit._ledger(data) if not w.in_progress and w.route_km
+            ]
+
+            if closed:
+
+                last = closed[-1]
+
+                route = route_status(last.done_km, (last.route_km[0] + last.route_km[1]) / 2)
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Sanidade: painel (rota) falhou p/ '{profile}': {e}")
+
+        return Snapshot(profile, km_week, long_km, adherence, next_race, route)
 
     @staticmethod
     def audit_all(today: date | None = None) -> list[Finding]:
@@ -950,6 +1209,10 @@ def format_panel(
         if snap.next_race:
 
             bits.append(snap.next_race)
+
+        if snap.route:
+
+            bits.append(snap.route)
 
         alerts = f" — {len(items)} alerta(s)" if items else ""
 

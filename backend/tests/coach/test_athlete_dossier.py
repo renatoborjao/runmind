@@ -749,14 +749,20 @@ def test_the_route_shows_the_gap_to_the_goal_in_the_plan_voice_and_a_short_fact_
 
     plan = AthleteDossier._route(_data(target_week=date(2026, 10, 26), **base))
 
-    assert len(plan) == 1 and plan[0].startswith("ROTA ATÉ A META")
+    # a conta da meta + a rota semana a semana (guia, com o detalhe das próximas 4 semanas)
+    assert len(plan) == 2 and plan[0].startswith("ROTA ATÉ A META")
     assert "faltam 7 semanas pra 10 km em 01:00:00" in plan[0]
     assert "FALTAM" in plan[0] and "o primeiro JÁ nesta semana" in plan[0]
+    assert plan[1].startswith("ROTA SEMANA A SEMANA") and plan[1].count("- sem ") == 4
+    assert "route_note" in plan[1]
 
     chat = AthleteDossier._route(_data(**base))
 
-    assert len(chat) == 1 and chat[0].startswith("Rota até a meta (hipótese de treinador")
+    # o chat recebe os fatos: a rota até a meta curta + só as 2 próximas semanas, sem instrução
+    assert len(chat) == 2 and chat[0].startswith("Rota até a meta (hipótese de treinador")
     assert "FALTAM" not in chat[0]
+    assert chat[1].startswith("ROTA SEMANA A SEMANA") and chat[1].count("- sem ") == 2
+    assert "COMO USAR" not in chat[1]
 
 
 def test_the_route_aims_at_the_main_race_not_the_nearest_preparatory_one():
@@ -780,11 +786,20 @@ def test_the_route_aims_at_the_main_race_not_the_nearest_preparatory_one():
     assert "~18-21 km" in text
 
 
-def test_no_route_without_a_dated_race():
+def test_without_a_dated_race_there_is_no_goal_path_but_the_route_rolls():
+    """Sem prova com data não há "rota até a meta" (nada a fechar), mas a rota semana a semana
+    ROLA nas próximas 8 semanas — quem corre sem prova também precisa de progressão."""
 
     goal = TrainingGoal(name="saúde", distance_km=5.0, target_time=None, race_date=None)
 
-    assert AthleteDossier._route(_data(goal=goal, activities=_weekly_runs(10, 12, 11))) == []
+    lines = AthleteDossier._route(_data(goal=goal, activities=_weekly_runs(10, 12, 11)))
+
+    assert len(lines) == 1 and lines[0].startswith("ROTA SEMANA A SEMANA")
+    assert "rolante, sem prova com data" in lines[0]
+    assert not any(line.startswith("ROTA ATÉ A META") for line in lines)
+
+    # sem corrida nenhuma, nem a rolante
+    assert AthleteDossier._route(_data(goal=goal, activities=[])) == []
 
 
 _ASK_TURNS = [

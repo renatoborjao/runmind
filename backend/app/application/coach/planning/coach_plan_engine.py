@@ -80,6 +80,20 @@ REGRAS:
   e no propósito da semana; sem confirmar, diga o porquê com o dado. O leve segue
   definido pela FC (teto aeróbico): se o dossiê mostrar o pace em que ele faz o
   leve de verdade, use ESSA faixa e não a do modelo.
+- SEMANAS ANTERIORES e ROTA SEMANA A SEMANA: o dossiê traz o que você prescreveu × o
+  que ELE fez em cada semana e a rota semana a semana (volume, longão, dose de
+  qualidade, km no ritmo da prova, foco sugerido). A semana nasce do que ele FEZ,
+  nunca do papel: sessão que ele não cumpriu não foi dose absorvida (refaça ou
+  ajuste o degrau em vez de somar por cima como se tivesse feito), e o que ele fez
+  além do papel é carga que o corpo já pagou. A rota SOBE enquanto ele cumpre: o
+  volume desta semana fica dentro de ±20% do dela SEM precisar justificar; fora
+  disso escreva o MOTIVO em "route_note" (1 frase, com os números dele: corpo,
+  doença, viagem, prova, o que ele não cumpriu) — o mesmo vale pro LONGÃO: ficar
+  abaixo do maior recente dele ou do da rota pede o motivo. Repetir o mesmo estímulo com a
+  mesma dose semana após semana é ESTAGNAR: o foco sugerido gira de propósito
+  (limiar → VO2 → subidas/força → ritmo de prova) e o longão muda de forma — troque
+  com razão (lacuna, corpo, preferência dele), mas faça a dose, o ritmo e a distância
+  EVOLUÍREM juntos. A decisão é sua; a rota é guia, não trilho.
 - ESCADA DO ESTÍMULO e FUNÇÃO DE CADA SESSÃO (conhecimento, não regra — a decisão é
   sua): o dossiê traz a "ÚLTIMA DOSE DE CADA ESTÍMULO". Treinador de verdade costuma
   fazer o MESMO estímulo subir em degrau mensurável (uma repetição a mais, bloco
@@ -257,6 +271,7 @@ copiar o tipo "Velocidade" toda semana; escolha os tipos pela fase/meta/variedad
   "phase": "BUILD",
   "is_deload": false | true,
   "deload_why": null | "por que esta semana é mais leve, com os números dele",
+  "route_note": null | "se saiu de ±20% da rota ou o longão ficou abaixo: o motivo, com números",
   "block": null | {{"weeks": 4, "focus": "foco do bloco rumo à meta",
             "weeks_plan": ["sem 1: ...", "sem 2: ...", "sem 3: ...", "sem 4: ..."]}},
   "suggest_extra_day": null | "proposta curta de UM dia a mais (qual, o quê, por quê)",
@@ -429,6 +444,7 @@ class CoachPlanEngine:
             weekly_objective=plan_text(str(data.get("weekly_objective", "")).strip()),
             is_deload=data.get("is_deload") is True,
             deload_why=CoachPlanEngine._deload_why(data),
+            route_note=CoachPlanEngine._route_note(data),
             block=CoachPlanEngine._parse_block(data.get("block")),
             extra_day_note=(
                 plan_text(str(data.get("suggest_extra_day")).strip())
@@ -448,6 +464,14 @@ class CoachPlanEngine:
         why = str(data.get("deload_why") or "").strip()
 
         return plan_text(why) if why and why.lower() not in ("null", "none") else None
+
+    @staticmethod
+    def _route_note(data: dict) -> str | None:
+        """O motivo de a semana fugir da rota (volume fora de ±20%), nas palavras do coach."""
+
+        note = str(data.get("route_note") or "").strip()
+
+        return plan_text(note) if note and note.lower() not in ("null", "none") else None
 
     @staticmethod
     def _parse_block(raw) -> dict | None:

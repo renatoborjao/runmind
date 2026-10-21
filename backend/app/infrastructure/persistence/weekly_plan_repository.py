@@ -201,6 +201,8 @@ class WeeklyPlanRepository:
             "block": plan.block,
             "block_label": plan.block_label,
             "extra_day_note": plan.extra_day_note,
+            "route": plan.route,
+            "route_note": plan.route_note,
             "sessions": [
                 asdict(session)
                 for session in plan.sessions
@@ -249,4 +251,6 @@ class WeeklyPlanRepository:
             block=data.get("block"),
             block_label=data.get("block_label"),
             extra_day_note=data.get("extra_day_note"),
+            route=data.get("route"),
+            route_note=data.get("route_note"),
         )

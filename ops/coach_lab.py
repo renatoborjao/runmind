@@ -47,6 +47,7 @@ CHAT_SCENARIOS = (
 
 # só monta o contexto do plano e mostra os sinais novos (SEM chamar a IA — custo zero)
 CONTEXT_ONLY = False
+CONTEXT_FULL = False
 
 # trechos do contexto do plano que provam o que a IA viu (rota, pedido do atleta, leve pela FC)
 SIGNALS = (
@@ -664,6 +665,12 @@ async def _plan(profile, runner):
 
         _s(f"CONTEXTO do plano {week:%d/%m} ({len(context)} chars) — só os sinais, sem IA")
 
+        if CONTEXT_FULL:
+
+            print(context)
+
+            return
+
         for line in context.splitlines():
 
             if any(key in line for key in SIGNALS):
@@ -707,6 +714,26 @@ async def _plan(profile, runner):
         print(f"BLOCO ABERTO: {plan.block['focus']} | " + " | ".join(plan.block["weeks_plan"]))
 
     print(f"dia extra: {plan.extra_day_note or '—'}")
+
+    from app.application.coach.context.athlete_dossier import AthleteDossier
+
+    route = AthleteDossier.route_for(profile, runner, history, week)
+
+    if route is not None:
+
+        first = route.weeks[0]
+
+        print(
+            f"ROTA desta semana: ~{first.volume_km:.1f} km ({first.volume_lo:.1f}–"
+            f"{first.volume_hi:.1f}) · longão ~{first.long_km:.1f} · qualidade "
+            f"~{first.quality_km:.1f} · foco sugerido: {first.focus}"
+        )
+
+        print(
+            f"PLANO gerado: {plan.weekly_volume:.1f} km "
+            f"({(plan.weekly_volume / first.volume_km - 1) * 100:+.0f}% sobre a rota) · "
+            f"motivo escrito (route_note): {plan.route_note or '—'}"
+        )
 
     for session in plan.sessions:
 
@@ -1074,11 +1101,18 @@ async def main() -> None:
 
     parser.add_argument("--context-only", action="store_true")
 
+    # com --context-only: imprime o contexto INTEIRO do plano (não só os sinais)
+    parser.add_argument("--full", action="store_true")
+
     args = parser.parse_args()
 
     global CONTEXT_ONLY
 
     CONTEXT_ONLY = args.context_only
+
+    global CONTEXT_FULL
+
+    CONTEXT_FULL = args.full
 
     sys.path.insert(0, str(BACKEND))
 

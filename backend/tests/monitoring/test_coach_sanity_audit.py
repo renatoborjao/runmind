@@ -542,3 +542,102 @@ def test_low_effort_is_judged_against_the_nearest_race_even_if_it_is_preparatory
 
     assert finding is not None and finding.code == "esforco_baixo"
     assert "a prova de 15 km em 20/12 (preparatória) em 8 semanas (meta 1:15:00)" in finding.text
+
+
+# --- o plano nasce do que o atleta FEZ (rota semana a semana, nº 80) ------------------------------
+
+
+def _w(day: int, km: float, explained: bool = False):
+
+    return date(2026, 9, day), km, explained
+
+
+def test_a_sawtooth_volume_without_a_written_reason_is_flagged():
+    """Leonardo: 12 → 12 → 9 → 13 → 8 → 22. O plano de cada semana nascia do ruído da anterior."""
+
+    weeks = [_w(14, 12), _w(21, 12), _w(28, 9), (date(2026, 10, 5), 13, False),
+             (date(2026, 10, 12), 8, False), (date(2026, 10, 19), 22, False)]
+
+    found = audit.sawtooth("leonardo", weeks)
+
+    assert found.code == "dente_de_serra" and found.level == audit.WATCH
+    assert "12 → 12 → 9 → 13 → 8 → 22 km" in found.text and "3 saltos" in found.text
+
+
+def test_swings_with_a_written_reason_or_a_smooth_ramp_are_not_flagged():
+
+    smooth = [_w(14, 30), _w(21, 32), _w(28, 34), (date(2026, 10, 5), 36, False)]
+
+    assert audit.sawtooth("mauricio", smooth) is None
+
+    explained = [
+        _w(14, 12), _w(21, 12), (date(2026, 10, 5), 22, True), (date(2026, 10, 12), 8, True),
+    ]
+
+    assert audit.sawtooth("leonardo", explained) is None
+    # um salto só não é dente de serra
+    assert audit.sawtooth("leonardo", [_w(14, 12), _w(21, 22), _w(28, 22)]) is None
+
+
+def test_a_week_far_above_what_he_did_without_a_reason_is_high():
+    """Plano de 19/10: 22 km depois de uma semana de 8 km (sustenta ~11): descarta o que ele fez."""
+
+    found = audit.jump_over_done("leonardo", date(2026, 10, 19), 22.1, 8.0, 11.4, explained=False)
+
+    assert found.code == "salto_sobre_o_feito" and found.level == audit.HIGH
+    assert "+94% sobre o que ele fez" in found.text and "22 km" in found.text
+
+
+def test_a_jump_over_what_he_did_needs_no_alert_when_explained_or_small():
+
+    # um salto moderado com motivo escrito passa (o grande: ver o teste seguinte)
+    assert audit.jump_over_done("l", TODAY, 17.0, 8.0, 11.4, explained=True, note="3 dias") is None
+    assert audit.jump_over_done("l", TODAY, 14.0, 12.0, 11.4, explained=False) is None
+    assert audit.jump_over_done("l", TODAY, 14.0, 0.0, None, explained=False) is None
+
+
+def test_a_reason_does_not_justify_just_any_jump():
+    """Semana teste do Leonardo (21/10): o coach escreveu "recuperação excelente" e prescreveu
+    21,5 km (+89% sobre os ~11,4 que ele sustenta). Motivo escrito, mas o salto pede olhar."""
+
+    found = audit.jump_over_done(
+        "leonardo", date(2026, 10, 26), 21.5, 8.0, 11.4, explained=True,
+        note="recuperação excelente e já comportou cargas similares",
+    )
+
+    assert found.code == "salto_sobre_o_feito" and found.level == audit.WATCH
+    assert "+89%" in found.text and "O coach justificou (recuperação excelente" in found.text
+
+
+def test_the_plan_that_left_the_route_without_a_motive_is_flagged():
+
+    found = audit.off_route("leonardo", date(2026, 10, 26), 22.0, 13.2, explained=False)
+
+    assert found.code == "desvio_sem_motivo" and "+67%" in found.text
+
+    assert audit.off_route("leonardo", TODAY, 14.0, 13.2, explained=False) is None
+    assert audit.off_route("leonardo", TODAY, 22.0, 13.2, explained=True) is None
+    assert audit.off_route("leonardo", TODAY, 22.0, None, explained=False) is None
+
+
+def test_being_behind_the_route_for_three_weeks_means_the_route_is_above_what_he_does():
+
+    found = audit.route_late("fernanda", [(18, 20), (9, 22), (10, 24), (11, 26)])
+
+    assert found.code == "rota_atrasada" and "9, 10, 11 km" in found.text
+
+    # uma semana boa no meio desfaz; menos de 3 semanas não conta
+    assert audit.route_late("fernanda", [(9, 22), (23, 24), (11, 26)]) is None
+    assert audit.route_late("fernanda", [(9, 22), (10, 24)]) is None
+
+
+def test_the_monday_panel_says_whether_each_athlete_is_on_the_route():
+
+    assert audit.route_status(13, 13.2).startswith("na rota")
+    assert audit.route_status(8, 13.2).startswith("atrás da rota")
+    assert audit.route_status(18, 13.2).startswith("adiante da rota")
+    assert audit.route_status(None, 13.2) is None and audit.route_status(10, None) is None
+
+    snap = Snapshot("leonardo", 11.0, 9.0, 1.0, "10 km, em 8 sem", "atrás da rota (8 de 13 km)")
+
+    assert "atrás da rota (8 de 13 km)" in format_panel([snap], [], {"leonardo": "Leonardo"})

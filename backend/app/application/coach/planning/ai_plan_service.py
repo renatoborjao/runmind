@@ -139,6 +139,8 @@ class AIPlanService:
             # da semana contando TODOS os tipos (não só os por distância).
             AIPlanService._fill_time_based_km(plan, metrics)
 
+            AIPlanService._stamp_route(profile, runner, history, week_start, plan)
+
             repository.save(profile, plan)
 
             return plan
@@ -452,6 +454,25 @@ class AIPlanService:
             f"Plano do bloco: {roles}. ESTA semana: {role}. Monte cumprindo "
             f"esse papel; se precisar desviar, redefina \"block\".{caution}"
         )
+
+    @staticmethod
+    def _stamp_route(profile, runner, history, week_start, plan: TrainingPlan) -> None:
+        """Guarda com o plano o retrato da rota semana a semana que o coach tinha à frente (a
+        semana seguinte e a auditoria comparam planejado × feito). Best-effort — nunca derruba
+        o plano."""
+
+        try:
+
+            from app.application.coach.context.athlete_dossier import AthleteDossier
+            from app.application.history import macro_route
+
+            plan.route = macro_route.snapshot(
+                AthleteDossier.route_for(profile, runner, history, week_start)
+            )
+
+        except Exception as e:
+
+            print(f"Rota do plano falhou p/ '{profile}': {e}")
 
     @staticmethod
     def _stamp_block(repository, profile, plan: TrainingPlan) -> None:

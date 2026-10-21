@@ -1419,7 +1419,163 @@ class AthleteDossier:
             goal_path_directive(path) if data.target_week is not None else goal_path_fact(path)
         )
 
-        return [text] if text else []
+        lines = [text] if text else []
+
+        try:
+
+            from app.application.history import macro_route
+
+            weekly = macro_route.render(
+                AthleteDossier.weekly_route(data), directive=data.target_week is not None,
+            )
+
+            if weekly:
+
+                lines.append(weekly)
+
+        except Exception as e:
+
+            print(f"Dossiê: rota semana a semana falhou p/ '{data.profile}': {e}")
+
+        return lines
+
+    @staticmethod
+    def _ledger(data: _Inputs):
+        """O livro-razão das semanas (`history/week_ledger`): prescrito × feito, semana a semana,
+        até a semana que o plano monta (ou a de hoje)."""
+
+        from app.application.history import week_ledger
+        from app.infrastructure.persistence.weekly_plan_repository import (
+            WeeklyPlanRepository,
+        )
+
+        ref = data.target_week or (data.today - timedelta(days=data.today.weekday()))
+
+        repository = WeeklyPlanRepository()
+
+        plans = list(repository.history(data.profile))
+
+        current = repository.load(data.profile)
+
+        if current is not None:
+
+            plans.append(current)
+
+        return week_ledger.build(plans, data.activities, data.today, ref)
+
+    @staticmethod
+    def _route_slack(data: _Inputs, ledger) -> bool:
+        """Ele cumpre com FOLGA? Cumpriu ≥90% do plano nas duas últimas semanas fechadas E (pediu
+        mais OU o esforço percebido vem baixo): a rota pode subir no teto do salto seguro."""
+
+        from app.application.history import athlete_asks_more as asks_more
+        from app.infrastructure.persistence.checkin_repository import CheckinRepository
+        from app.infrastructure.persistence.conversation_repository import (
+            ConversationRepository,
+        )
+        from app.infrastructure.persistence.session_rpe_repository import (
+            SessionRpeRepository,
+        )
+
+        closed = [w for w in ledger if not w.in_progress and w.planned_sessions][-2:]
+
+        if not closed or sum(w.fulfilled for w in closed) < 0.9 * sum(
+            w.planned_sessions for w in closed
+        ):
+
+            return False
+
+        if asks_more.find(
+            ConversationRepository().load(data.profile),
+            CheckinRepository().load(data.profile),
+            data.today,
+        ):
+
+            return True
+
+        rpes = [
+            r.rpe for r in SessionRpeRepository().load_sessions(data.profile) if r.rpe is not None
+        ]
+
+        recent = rpes[-6:]
+
+        return len(recent) >= 3 and sum(recent) / len(recent) <= 4.0
+
+    @staticmethod
+    def weekly_route(data: _Inputs):
+        """A rota semana a semana (`history/macro_route`) — a mesma do dossiê, do plano guardado
+        e da auditoria. Parte do que ele FEZ; None sem corrida recente."""
+
+        from app.application.coach.planning.race_map import RaceMapBuilder
+        from app.application.history import macro_route
+        from app.application.history.weekly_buckets import activity_date
+        from app.domain.value_objects.sports import is_run_sport
+
+        ref = data.target_week or (data.today - timedelta(days=data.today.weekday()))
+
+        weekly, longest = AthleteDossier.closed_weeks(data)
+
+        # a semana anterior à da rota ainda em andamento (plano montado no meio da semana) não é
+        # semana FECHADA: contaria pela metade e puxaria o ponto de partida pra baixo
+        if data.today < ref - timedelta(days=1):
+
+            weekly, longest = weekly[:-1], longest[:-1]
+
+        ledger = AthleteDossier._ledger(data)
+
+        target = AthleteDossier._route_goal(data, ref)
+
+        race_map = RaceMapBuilder.for_profile(data.profile, ref)
+
+        distance, target_time, race_date = target or (None, None, None)
+
+        phases = None
+
+        if race_map is not None and race_map.segments:
+
+            phases = [seg.key for seg in race_map.segments for _ in range(seg.weeks)]
+
+            distance = race_map.distance_km or distance
+
+            race_date = race_map.race_date
+
+        last_run = max(
+            (activity_date(a) for a in data.activities if is_run_sport(a.sport) and a.distance),
+            default=None,
+        )
+
+        return macro_route.build(
+            ref_week=ref,
+            phases=phases,
+            distance_km=distance,
+            target_time=target_time,
+            race_date=race_date,
+            executed_weeks=weekly,
+            longest_runs=longest,
+            quality_done_km=max((w.quality_done_km for w in ledger), default=0.0),
+            runs_per_week=getattr(data.runner, "weekly_training_days", None) or 3,
+            layoff_days=(data.today - last_run).days if last_run else 0,
+            slack=AthleteDossier._route_slack(data, ledger),
+        )
+
+    @staticmethod
+    def route_for(profile: str, runner, history, week_start: date):
+        """A rota que o plano de `week_start` tem à frente — pra o plano guardar o retrato dela
+        (`TrainingPlan.route`). None em qualquer falha (o plano sai igual, sem o retrato)."""
+
+        try:
+
+            data = AthleteDossier._inputs(profile, runner, history, None, None)
+
+            data.target_week = week_start
+
+            return AthleteDossier.weekly_route(data)
+
+        except Exception as e:
+
+            print(f"Dossiê: rota do plano falhou p/ '{profile}': {e}")
+
+            return None
 
     @staticmethod
     def _asks_more(data: _Inputs, rpes: list[int]) -> str:
@@ -1642,6 +1798,22 @@ class AthleteDossier:
             print(f"Dossiê: aderência falhou p/ '{data.profile}': {e}")
 
         lines.append(TrainingPatterns.for_profile(data.profile, drift=data.drift))
+
+        # semana a semana, o que o coach prescreveu × o que ele fez: o ponto de partida de
+        # toda semana nova (a rota e o plano nascem do FEITO, não do papel)
+        try:
+
+            from app.application.history import week_ledger
+
+            lines.append(
+                week_ledger.render(
+                    AthleteDossier._ledger(data), directive=data.target_week is not None,
+                )
+            )
+
+        except Exception as e:
+
+            print(f"Dossiê: semanas anteriores falhou p/ '{data.profile}': {e}")
 
         # sessão a sessão, o alvo × o feito — de onde sai a calibração e a
         # leitura de evolução (a IA lê e decide; nada de viés pronto)
