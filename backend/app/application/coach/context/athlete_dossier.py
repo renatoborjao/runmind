@@ -1343,19 +1343,13 @@ class AthleteDossier:
         return None
 
     @staticmethod
-    def _route(data: _Inputs) -> list[str]:
-        """ROTA ATÉ A META: o que a prova exige × pra onde o plano atual leva (ver
-        `history/goal_path`). Vazia sem prova com data, com a prova no taper ou sem corrida."""
+    def route_path(data: _Inputs):
+        """A rota até a meta como NÚMEROS (`history/goal_path.GoalPath`) — a mesma conta do
+        dossiê e da auditoria de sanidade. None sem prova com data, no taper ou sem corrida."""
 
-        from app.application.history.goal_path import (
-            assess,
-            goal_path_directive,
-            goal_path_fact,
-        )
+        from app.application.history.goal_path import assess
         from app.application.history.weekly_buckets import activity_date
         from app.domain.value_objects.sports import is_run_sport
-
-        plan_voice = data.target_week is not None
 
         ref = data.target_week or data.today
 
@@ -1363,7 +1357,7 @@ class AthleteDossier:
 
         if target is None:
 
-            return []
+            return None
 
         distance, target_time, race_date = target
 
@@ -1389,7 +1383,7 @@ class AthleteDossier:
 
             longest.append(max(km) if km else 0.0)
 
-        path = assess(
+        return assess(
             distance_km=distance,
             target_time=target_time,
             weeks_left=(race_date - ref).days // 7,
@@ -1399,7 +1393,18 @@ class AthleteDossier:
             hard_pct=AthleteDossier._hard_pct(data),
         )
 
-        text = goal_path_directive(path) if plan_voice else goal_path_fact(path)
+    @staticmethod
+    def _route(data: _Inputs) -> list[str]:
+        """ROTA ATÉ A META: o que a prova exige × pra onde o plano atual leva (ver
+        `history/goal_path`). Vazia sem prova com data, com a prova no taper ou sem corrida."""
+
+        from app.application.history.goal_path import goal_path_directive, goal_path_fact
+
+        path = AthleteDossier.route_path(data)
+
+        text = (
+            goal_path_directive(path) if data.target_week is not None else goal_path_fact(path)
+        )
 
         return [text] if text else []
 
