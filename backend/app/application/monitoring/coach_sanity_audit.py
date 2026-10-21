@@ -1030,7 +1030,9 @@ def run(
 
         parts.append(format_message(pending, names, audited))
 
-    if today.weekday() == 0 or force_panel:
+    with_panel = today.weekday() == 0 or force_panel
+
+    if with_panel:
 
         parts.append(panel())
 
@@ -1050,7 +1052,7 @@ def run(
 
         state.save(stored)
 
-        print(f"{today} sanidade: {len(pending)} achado(s) novo(s), painel={today.weekday() == 0}")
+        print(f"{today} sanidade: {len(pending)} achado(s) novo(s), painel={with_panel}")
 
     return message
 
