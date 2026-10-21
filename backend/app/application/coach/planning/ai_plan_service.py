@@ -430,6 +430,11 @@ class AIPlanService:
 
         roles = " | ".join(block["weeks_plan"])
 
+        redefine = (
+            " Se for REDEFINIR \"block\": não reserve semana de descarga/alívio (nem a última) — "
+            "o recuo só existe quando o corpo pede ou quando ele não vem aderindo."
+        )
+
         role = block["weeks_plan"][index - 1]
 
         # o papel de DESCARGA foi escrito semanas antes, sem saber como o atleta
@@ -452,7 +457,7 @@ class AIPlanService:
             f"BLOCO EM ANDAMENTO — semana {index} de {block['weeks']} (desde "
             f"{date.fromisoformat(block['start']):%d/%m}), foco: {block['focus']}. "
             f"Plano do bloco: {roles}. ESTA semana: {role}. Monte cumprindo "
-            f"esse papel; se precisar desviar, redefina \"block\".{caution}"
+            f"esse papel; se precisar desviar, redefina \"block\".{redefine}{caution}"
         )
 
     @staticmethod

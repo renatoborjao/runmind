@@ -194,13 +194,19 @@ REGRAS:
   um bloco. Ao ABRIR: defina "block" — o FOCO do bloco rumo à meta/prova e o
   PAPEL de cada semana (ex.: construir, construir, puxar mais, consolidar/
   testar — alívio só se o corpo pedir, nunca por calendário; a forma e a dose
-  são suas). Em
-  andamento: monte a semana cumprindo o papel dela e devolva "block": null. Se
+  são suas). NUNCA escreva em "weeks_plan" uma semana de descarga, alívio,
+  recuperação ou "semana leve" — nem a última do bloco: o bloco só diz
+  construir, puxar, consolidar ou testar. O recuo de volume só existe em DOIS
+  casos: o CORPO pede (sinal de descarga do dossiê) ou o atleta NÃO vem
+  aderindo (aí o plano se ancora no que ele cumpre — veja SEMANAS ANTERIORES).
+  Em andamento: monte a semana cumprindo o papel dela e devolva "block": null. Se
   o corpo/vida pedir desvio (doença, sobrecarga, prova nova), desvie e
   REDEFINA o bloco em "block" — o novo começa ESTA semana.
 - SEMANA DE DESCARGA (mais leve de propósito): só quando o CORPO pede — o
   "sinal de descarga" do dossiê (recuperação caindo com a carga em alta, corpo
   sobrecarregado, forma recuando), ou a reta final da prova (aí é o polimento).
+  Quando ele NÃO vem aderindo, o volume desce ao que ele cumpre — isso não é
+  descarga, é ancorar no real.
   Descarga NÃO é calendário: semanas seguidas subindo, bloco que carrega ou
   "já faz um tempo" não são motivo. Atleta que cumpre o plano e recupera bem
   segue EVOLUINDO — aliviar nele só destreina. O papel que o bloco deu a uma

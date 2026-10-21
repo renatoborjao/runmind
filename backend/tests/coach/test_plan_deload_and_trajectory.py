@@ -757,3 +757,28 @@ def test_a_new_block_is_not_told_to_reserve_a_deload_week():
 
     assert "Descarga NÃO é item de calendário" in text
     assert "consolidando/testando" in text
+
+
+def test_the_plan_never_reserves_a_deload_week_in_the_block_only_body_or_non_adherence():
+    """Renato (21/10): descarga só se o corpo pedir OU o atleta não aderir — nunca por calendário.
+    O modelo abriu um bloco com a semana 4 de "descarga leve" mesmo com a instrução antiga."""
+
+    from app.application.coach.planning.coach_plan_engine import PROMPT_TEMPLATE
+
+    flat = " ".join(PROMPT_TEMPLATE.split())
+
+    assert 'NUNCA escreva em "weeks_plan" uma semana de descarga, alívio' in flat
+    assert "nem a última do bloco" in flat
+    assert "DOIS casos: o CORPO pede" in flat and "o atleta NÃO vem aderindo" in flat
+    assert "isso não é descarga, é ancorar no real" in flat
+
+
+def test_a_running_block_also_reminds_the_coach_not_to_reserve_a_deload_when_redefining():
+
+    active = ({"start": "2026-10-12", "weeks": 4, "focus": "base",
+               "weeks_plan": ["sem 1: a", "sem 2: b", "sem 3: c", "sem 4: d"]}, 3)
+
+    text = AIPlanService._block_line(active)
+
+    assert "REDEFINIR" in text and "não reserve semana de descarga/alívio (nem a última)" in text
+    assert "o recuo só existe quando o corpo pede ou quando ele não vem aderindo" in text

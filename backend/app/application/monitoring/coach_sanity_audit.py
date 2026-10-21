@@ -490,6 +490,41 @@ def route_late(profile: str, pairs: list[tuple[float, float]]) -> Finding | None
     )
 
 
+def calendar_deload(
+    profile: str, weeks_plan: list[str] | None, start: date | None, from_week: int,
+) -> Finding | None:
+    """O bloco aberto pelo coach reserva uma semana de descarga/alívio POR CALENDÁRIO. Descarga só
+    existe quando o corpo pede ou o atleta não adere; o papel escrito semanas antes é hipótese que
+    o coach precisa redefinir quando a semana chegar. `from_week`: a primeira semana (1-based)
+    que ainda importa."""
+
+    from app.application.history.deload_analyzer import is_deload_role
+
+    if not weeks_plan or start is None:
+
+        return None
+
+    hits = [
+        (k + 1, role) for k, role in enumerate(weeks_plan)
+        if k + 1 >= from_week and is_deload_role(role)
+    ]
+
+    if not hits:
+
+        return None
+
+    number, role = hits[0]
+
+    day = start + timedelta(weeks=number - 1)
+
+    return Finding(
+        profile, "descarga_por_calendario", WATCH,
+        f"O bloco aberto em {_fmt_date(start)} reserva a semana {number} ({_fmt_date(day)}) como "
+        f"descarga/alívio (\"{role[:90]}\"). Descarga não é calendário: só vale se o corpo pedir "
+        "ou se ele não aderir — o coach precisa redefinir o bloco quando a semana chegar.",
+    )
+
+
 def route_status(done: float | None, route: float | None) -> str | None:
     """Pro painel: o que ele fez na última semana fechada contra a rota."""
 
@@ -661,7 +696,28 @@ class CoachSanityAudit:
 
             return route_late(d.profile, pairs)
 
-        return [sawtooth_check, jump_check, off_check, late_check]
+        def deload_check(d):
+
+            from app.application.coach.planning.ai_plan_service import AIPlanService
+            from app.infrastructure.persistence.weekly_plan_repository import (
+                WeeklyPlanRepository,
+            )
+
+            upcoming = d.today - timedelta(days=d.today.weekday()) + timedelta(weeks=1)
+
+            found = AIPlanService._find_block(WeeklyPlanRepository(), d.profile, upcoming)
+
+            if found is None:
+
+                return None
+
+            block, index = found
+
+            return calendar_deload(
+                d.profile, block.get("weeks_plan"), date.fromisoformat(block["start"]), index,
+            )
+
+        return [sawtooth_check, jump_check, off_check, late_check, deload_check]
 
     @staticmethod
     def _check_race(data) -> Finding | None:

@@ -641,3 +641,34 @@ def test_the_monday_panel_says_whether_each_athlete_is_on_the_route():
     snap = Snapshot("leonardo", 11.0, 9.0, 1.0, "10 km, em 8 sem", "atrás da rota (8 de 13 km)")
 
     assert "atrás da rota (8 de 13 km)" in format_panel([snap], [], {"leonardo": "Leonardo"})
+
+
+def test_a_deload_week_reserved_by_calendar_in_the_block_is_flagged():
+    """Semana teste do Renato (21/10): o coach abriu um bloco de 4 semanas com a 4ª de "descarga
+    leve". Descarga só existe quando o corpo pede ou o atleta não adere."""
+
+    block = [
+        "sem 1: Introdução de blocos curtos no ritmo-alvo",
+        "sem 2: Aumento do tempo no ritmo-alvo",
+        "sem 3: Treino de limiar estendido e pico de distância no longão",
+        "sem 4: Descarga leve e recuperação antes de progredir para a reta final",
+    ]
+
+    found = audit.calendar_deload("renato2", block, date(2026, 10, 26), from_week=1)
+
+    assert found.code == "descarga_por_calendario" and found.level == audit.WATCH
+    assert "reserva a semana 4 (16/11) como descarga/alívio" in found.text
+    assert "só vale se o corpo pedir ou se ele não aderir" in found.text
+
+
+def test_a_block_without_a_deload_role_or_with_it_already_behind_is_not_flagged():
+
+    clean = ["sem 1: construir", "sem 2: puxar mais", "sem 3: consolidar e testar"]
+
+    assert audit.calendar_deload("a", clean, date(2026, 10, 26), 1) is None
+    assert audit.calendar_deload("a", None, date(2026, 10, 26), 1) is None
+
+    old = ["sem 1: Descarga", "sem 2: construir", "sem 3: puxar"]
+
+    # a descarga da semana 1 já ficou pra trás (estamos na 2)
+    assert audit.calendar_deload("a", old, date(2026, 10, 5), from_week=2) is None
