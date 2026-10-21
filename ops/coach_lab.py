@@ -49,7 +49,10 @@ CHAT_SCENARIOS = (
 CONTEXT_ONLY = False
 
 # trechos do contexto do plano que provam o que a IA viu (rota, pedido do atleta, leve pela FC)
-SIGNALS = ("ROTA ATÉ A META", "ELE PEDE MAIS", "é o leve DELE", "Paces reais")
+SIGNALS = (
+    "ROTA ATÉ A META", "ELE PEDE MAIS", "é o leve DELE", "Paces reais", "ÚLTIMA DOSE",
+    " (feito): ", " (NÃO feito): ", "CONHECIMENTO, não regra: o MESMO",
+)
 
 ALL = (
     "dossier", "chat", "analysis", "conduct", "missed", "review", "plan",

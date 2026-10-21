@@ -1636,7 +1636,42 @@ class AthleteDossier:
 
         lines.append(StimulusLedger.for_profile(data.profile))
 
+        # a DOSE de cada estímulo que progride (a escada): só a voz do plano decide a próxima
+        if data.target_week is not None:
+
+            try:
+
+                lines.append(AthleteDossier._stimulus_doses(data))
+
+            except Exception as e:
+
+                print(f"Dossiê: última dose falhou p/ '{data.profile}': {e}")
+
         return lines
+
+    @staticmethod
+    def _stimulus_doses(data: _Inputs) -> str:
+        """A última dose de cada estímulo que progride (limiar, VO2, ritmo de prova, longão...):
+        o que o coach prescreveu e se ele fez — o próximo degrau sai da dose, não só do nome."""
+
+        from app.application.history import stimulus_dose
+        from app.infrastructure.persistence.weekly_plan_repository import (
+            WeeklyPlanRepository,
+        )
+
+        repository = WeeklyPlanRepository()
+
+        plans = list(repository.history(data.profile))
+
+        current = repository.load(data.profile)
+
+        if current is not None:
+
+            plans.append(current)
+
+        return stimulus_dose.render(
+            stimulus_dose.last_doses(plans, data.activities, data.today), data.today,
+        )
 
     @staticmethod
     def _plan_week(data: _Inputs) -> list[str]:

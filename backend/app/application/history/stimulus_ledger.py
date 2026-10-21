@@ -331,7 +331,8 @@ class StimulusLedger:
 
         lines.append(
             "USE ISTO PRA ESCOLHER E OFERECER o treino: priorize a lacuna mais "
-            "relevante pra meta e pra fase, VARIE a forma dentro da família, e "
+            "relevante pra meta e pra fase; a FORMA é sua — varie se o estímulo "
+            "ficou repetitivo, ou AVANCE a mesma dose se ele ainda está subindo; "
             "diga ao atleta POR QUE esse estímulo agora (a evolução × o "
             "objetivo). O corpo de hoje ainda manda na DOSE."
         )

@@ -852,3 +852,72 @@ def test_the_perception_section_carries_the_request_even_without_effort_reports(
 
     assert "ELE PEDE MAIS (teste)" in lines
     assert any("Sem relato de esforço" in line for line in lines)
+
+
+# ---- última dose de cada estímulo (nº 78) --------------------------------------------------
+
+
+def _limiar_plan(week_start, series):
+
+    return _plan(
+        [PlannedSession(
+            day="Tuesday", workout_type="Limiar", objective="", planned_distance_km=9.0,
+            planned_duration_minutes=None, target_pace_min=None, target_pace_max=None,
+            structure=f"Aquecimento: 2 km leve\nSérie: {series} no pace de limiar\nDica: calma",
+        )],
+        week_start,
+    )
+
+
+def test_the_dossier_gives_the_plan_the_last_dose_of_each_stimulus():
+
+    plans = [
+        _limiar_plan(date(2026, 9, 14), "3x 1,5 km"),
+        _limiar_plan(date(2026, 9, 21), "4x 1,5 km"),
+    ]
+
+    repo = "app.infrastructure.persistence.weekly_plan_repository.WeeklyPlanRepository"
+
+    with patch(f"{repo}.history", return_value=plans), patch(f"{repo}.load", return_value=None):
+
+        text = AthleteDossier._stimulus_doses(_data(activities=[], today=date(2026, 9, 25)))
+
+    assert text.startswith("ÚLTIMA DOSE DE CADA ESTÍMULO")
+    assert "limiar: 22/09 (NÃO feito): Série: 4x 1,5 km no pace de limiar" in text
+    assert "antes, 15/09 (NÃO feito): Série: 3x 1,5 km" in text
+    assert "a decisão é sua" in text
+
+
+def test_only_the_plan_voice_receives_the_doses():
+
+    base = "app.application.history"
+
+    repo = "app.infrastructure.persistence.weekly_plan_repository.WeeklyPlanRepository"
+
+    stack = ExitStack()
+
+    for target in (
+        f"{base}.training_patterns.TrainingPatterns.for_profile",
+        f"{base}.execution_log.ExecutionLog.for_profile",
+        f"{base}.stimulus_ledger.StimulusLedger.for_profile",
+    ):
+
+        stack.enter_context(patch(target, return_value=""))
+
+    stack.enter_context(patch(
+        "app.application.planner.weekly_plan_service.WeeklyPlanService._recent_adherence",
+        return_value=[],
+    ))
+    stack.enter_context(patch(f"{repo}.history", return_value=[]))
+    stack.enter_context(patch(
+        f"{MODULE}.AthleteDossier._stimulus_doses", return_value="ÚLTIMA DOSE (marcador)",
+    ))
+
+    with stack:
+
+        plan_voice = AthleteDossier._patterns(_data(target_week=date(2026, 9, 28)))
+
+        chat_voice = AthleteDossier._patterns(_data())
+
+    assert "ÚLTIMA DOSE (marcador)" in plan_voice
+    assert "ÚLTIMA DOSE (marcador)" not in chat_voice
