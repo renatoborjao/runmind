@@ -1343,23 +1343,15 @@ class AthleteDossier:
         return None
 
     @staticmethod
-    def route_path(data: _Inputs):
-        """A rota até a meta como NÚMEROS (`history/goal_path.GoalPath`) — a mesma conta do
-        dossiê e da auditoria de sanidade. None sem prova com data, no taper ou sem corrida."""
+    def closed_weeks(data: _Inputs, weeks: int = 8) -> tuple[list[float], list[float]]:
+        """As últimas `weeks` semanas FECHADAS (da mais antiga pra mais recente): km por semana e
+        o maior treino de cada uma (0 = semana sem corrida). A semana de referência é a do plano
+        (`target_week`) ou a de hoje — as fechadas são as anteriores."""
 
-        from app.application.history.goal_path import assess
         from app.application.history.weekly_buckets import activity_date
         from app.domain.value_objects.sports import is_run_sport
 
         ref = data.target_week or data.today
-
-        target = AthleteDossier._route_goal(data, ref)
-
-        if target is None:
-
-            return None
-
-        distance, target_time, race_date = target
 
         anchor = ref - timedelta(days=ref.weekday())
 
@@ -1367,7 +1359,7 @@ class AthleteDossier:
 
         longest: list[float] = []
 
-        for back in range(8, 0, -1):
+        for back in range(weeks, 0, -1):
 
             start = anchor - timedelta(weeks=back)
 
@@ -1382,6 +1374,27 @@ class AthleteDossier:
             weekly.append(sum(km))
 
             longest.append(max(km) if km else 0.0)
+
+        return weekly, longest
+
+    @staticmethod
+    def route_path(data: _Inputs):
+        """A rota até a meta como NÚMEROS (`history/goal_path.GoalPath`) — a mesma conta do
+        dossiê e da auditoria de sanidade. None sem prova com data, no taper ou sem corrida."""
+
+        from app.application.history.goal_path import assess
+
+        ref = data.target_week or data.today
+
+        target = AthleteDossier._route_goal(data, ref)
+
+        if target is None:
+
+            return None
+
+        distance, target_time, race_date = target
+
+        weekly, longest = AthleteDossier.closed_weeks(data)
 
         return assess(
             distance_km=distance,
