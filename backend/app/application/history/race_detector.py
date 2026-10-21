@@ -18,6 +18,7 @@ Puro/determinístico e best-effort — nenhuma marcação manual do coach.
 Ver [[deload_analyzer]], [[race_result_repository]] e
 [[feedback_base_historico_sempre]]."""
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -34,6 +35,22 @@ _RACE_NAME_HINTS = (
     "corrida de rua", "meia maratona", "maratona", "half marathon",
     "marathon", "circuito", "desafio", "grand prix", "gp ", "10k ",
     "5k ", "21k", "42k", "night run", "color run",
+)
+
+# O NOME de um TREINO não é prova, mesmo com "prova" dentro: "Ritmo de Prova", "Simulado",
+# "Ativação Pré-Prova" são sessões de preparação. Bug real (Leonardo, 21/10): o treino do
+# PRÓPRIO coach "Ritmind · Ritmo de Prova 8.0km" (09/10) virou "prova" e o atleta ficou em modo
+# pós-prova (sem descarga nem sinal de "puxar") durante as 3 semanas seguintes.
+# 1) sessão do próprio coach: "Ritmind · <tipo> <km>" (com ou sem prefixo de cidade do Garmin)
+_OWN_SESSION = re.compile(r"(?:ritmind|runmind)\s*[·\-–]\s*(?P<type>.+)$")
+
+# a ÚNICA sessão do coach que É a prova: a do dia dela ("Ritmind · Prova 10.0km")
+_OWN_RACE_DAY = re.compile(r"^prova(?:\s+[\d.,]+\s*km)?$")
+
+# 2) o mesmo vocabulário num nome que o atleta/treinador deu ("Simulado 10k", "ritmo de prova 6km")
+_TRAINING_PHRASES = (
+    "simulado de prova", "simulado", "ritmo de prova", "ritmo-de-prova",
+    "pré-prova", "pre-prova", "pré prova", "pre prova",
 )
 
 # quão longe atrás procuramos uma prova (cobre taper + reconstrução pós-prova)
@@ -137,7 +154,7 @@ class RaceDetector:
     @staticmethod
     def _is_race(activity) -> bool:
         """Prova quando o Strava marca (workout_type==1) OU o nome bate um termo
-        inequívoco de prova."""
+        inequívoco de prova — descontados os nomes de TREINO (ver `_OWN_SESSION`)."""
 
         raw = getattr(activity, "raw", None)
 
@@ -146,6 +163,17 @@ class RaceDetector:
             return True
 
         name = str(getattr(activity, "name", "") or "").lower()
+
+        own = _OWN_SESSION.search(name)
+
+        if own:
+
+            # sessão do próprio coach: só a do DIA da prova conta (o resto é preparação)
+            return bool(_OWN_RACE_DAY.match(own.group("type").strip()))
+
+        for phrase in _TRAINING_PHRASES:
+
+            name = name.replace(phrase, " ")
 
         return any(hint in name for hint in _RACE_NAME_HINTS)
 
