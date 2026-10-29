@@ -94,6 +94,12 @@ REGRAS:
   (limiar → VO2 → subidas/força → ritmo de prova) e o longão muda de forma — troque
   com razão (lacuna, corpo, preferência dele), mas faça a dose, o ritmo e a distância
   EVOLUÍREM juntos. A decisão é sua; a rota é guia, não trilho.
+- FORTE ENTREGUE: o dossiê traz "FORTES: PRESCRITO × ENTREGUE" — se ele vem
+  FAZENDO os fortes mas NÃO bate o ritmo-alvo (blocos mais lentos, esforço
+  percebido ≤3/10), mais um forte igual não evolui ninguém: trate a CAUSA (alvo
+  acima do que ele sustenta → recalibre pelo que ele fez; ele não empurra → dê a
+  régua que ele entende e diga o que você viu) e escreva no propósito o que muda
+  pra ele entregar. Prescrever e contar como feito não é estímulo.
 - ESCADA DO ESTÍMULO e FUNÇÃO DE CADA SESSÃO (conhecimento, não regra — a decisão é
   sua): o dossiê traz a "ÚLTIMA DOSE DE CADA ESTÍMULO". Treinador de verdade costuma
   fazer o MESMO estímulo subir em degrau mensurável (uma repetição a mais, bloco

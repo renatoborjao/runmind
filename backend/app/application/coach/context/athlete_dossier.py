@@ -1821,6 +1821,22 @@ class AthleteDossier:
 
         lines.append(StimulusLedger.for_profile(data.profile))
 
+        # o estímulo forte ENTREGUE (não só "feito"): correr no dia certo não é bater o alvo
+        try:
+
+            from app.application.history import stimulus_delivery
+
+            lines.append(
+                stimulus_delivery.render(
+                    stimulus_delivery.for_profile(data.profile, data.today),
+                    directive=data.target_week is not None,
+                )
+            )
+
+        except Exception as e:
+
+            print(f"Dossiê: forte entregue falhou p/ '{data.profile}': {e}")
+
         # a DOSE de cada estímulo que progride (a escada): só a voz do plano decide a próxima
         if data.target_week is not None:
 

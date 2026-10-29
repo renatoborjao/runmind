@@ -79,6 +79,15 @@ STOPPED_DAYS = 14
 # o "pós-prova" do coach vale por este número de semanas (deload_analyzer._POST_RACE_GRACE_WEEKS)
 POST_RACE_WEEKS = 3
 
+# --- forte PRESCRITO × ENTREGUE (nº 81) -----------------------------------------------------------
+
+# fortes FEITOS na janela (6 semanas) pra opinar, e quantos "sem intensidade" entre eles
+DELIVERY_MIN_DONE = 3
+DELIVERY_MIN_SOFT = 2
+
+# nenhum forte entregue há tantas semanas = o forte existe só no papel
+DELIVERY_STALE_WEEKS = 3
+
 # --- o plano nasce do que o atleta FEZ (a rota semana a semana, nº 80) ---------------------------
 
 # volume prescrito que oscila: variação semana a semana acima disto, tantas vezes, sem motivo
@@ -525,6 +534,48 @@ def calendar_deload(
     )
 
 
+def strong_not_delivered(profile: str, summary, today: date) -> Finding | None:
+    """Os fortes são prescritos e FEITOS, mas não ENTREGUES: ele corre em ritmo/esforço de leve
+    (Leonardo, 29/10: 6 fortes prescritos em 6 semanas, 0 no alvo, esforço 3/10 — o aviso antigo
+    dizia só "0% em zona forte", sem semanas nem causa). `summary` = `stimulus_delivery.assess`."""
+
+    from app.application.history import stimulus_delivery as delivery
+
+    if summary is None or summary.done < DELIVERY_MIN_DONE or summary.soft < DELIVERY_MIN_SOFT:
+
+        return None
+
+    weeks = delivery.weeks_since(summary, today)
+
+    if summary.delivered and weeks < DELIVERY_STALE_WEEKS:
+
+        return None
+
+    if summary.last_delivered is None:
+
+        since = f"Nas últimas {delivery.WINDOW_WEEKS} semanas nenhum treino forte bateu o alvo"
+
+    else:
+
+        since = (
+            f"Há {weeks} semanas sem um treino forte que bata o alvo "
+            f"(o último foi em {_fmt_date(summary.last_delivered)})"
+        )
+
+    tail = delivery._tail(summary)
+
+    extra = f" {tail[0].upper()}{tail[1:]}." if tail else ""
+
+    return Finding(
+        profile, "forte_sem_intensidade", HIGH if not summary.delivered else WATCH,
+        f"{since}: {delivery.headline(summary)}.{extra}"
+        " Ele corre o forte em ritmo de leve — o coach prescreve, mas o estímulo não chega. "
+        "Mais um forte igual não resolve: o coach precisa tratar a causa (alvo alto demais ou "
+        "esforço baixo) "
+        "e falar com ele.",
+    )
+
+
 def route_status(done: float | None, route: float | None) -> str | None:
     """Pro painel: o que ele fez na última semana fechada contra a rota."""
 
@@ -616,7 +667,25 @@ class CoachSanityAudit:
 
             run(check)
 
+        run(lambda d: CoachSanityAudit._check_delivery(d))
+
+        # o achado novo explica os dois mais vagos (esforço baixo / sem estímulo forte): um aviso só
+        if any(f.code == "forte_sem_intensidade" for f in findings):
+
+            findings[:] = [
+                f for f in findings if f.code not in ("esforco_baixo", "sem_estimulo_forte")
+            ]
+
         return findings
+
+    @staticmethod
+    def _check_delivery(data) -> Finding | None:
+
+        from app.application.history import stimulus_delivery
+
+        return strong_not_delivered(
+            data.profile, stimulus_delivery.for_profile(data.profile, data.today), data.today,
+        )
 
     @staticmethod
     def _ledger(data):
