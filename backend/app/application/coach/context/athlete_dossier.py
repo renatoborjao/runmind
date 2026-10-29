@@ -1083,24 +1083,27 @@ class AthleteDossier:
 
                 say_deload = deload_directive if plan_voice else deload_chat_line
 
-                lines.append(
-                    say_deload(
-                        DeloadAnalyzer.assess(
-                            reading.load.weekly_loads,
-                            reading.recovery,
-                            weeks_to_race=weeks_to_race,
-                            acwr=acwr,
-                            weeks_since_race=weeks_since_race,
-                            taper_zone_weeks=taper_zone,
-                            # o BLOCO que o coach desenhou pôs a descarga aqui?
-                            # (hipótese escrita semanas antes: o corpo confirma?)
-                            block_deload_this_week=block_this_week,
-                            body_state=reading.body_state,
-                            form=form,
-                            low_base=low_base,
-                        )
-                    )
+                decision = DeloadAnalyzer.assess(
+                    reading.load.weekly_loads,
+                    reading.recovery,
+                    weeks_to_race=weeks_to_race,
+                    acwr=acwr,
+                    weeks_since_race=weeks_since_race,
+                    taper_zone_weeks=taper_zone,
+                    # o BLOCO que o coach desenhou pôs a descarga aqui?
+                    # (hipótese escrita semanas antes: o corpo confirma?)
+                    block_deload_this_week=block_this_week,
+                    body_state=reading.body_state,
+                    form=form,
+                    low_base=low_base,
                 )
+
+                lines.append(say_deload(decision))
+
+                # com sinal de descarga, o que pesa MAIS que o sinal curto: a adaptação dele
+                if getattr(decision, "due", False) is True:
+
+                    lines.append(AthleteDossier._adaptation(data, plan_voice))
 
                 lines.append(
                     AthleteDossier._push_room(
@@ -1115,6 +1118,37 @@ class AthleteDossier:
                 print(f"Dossiê: descarga falhou p/ '{data.profile}': {e}")
 
         return lines
+
+    @staticmethod
+    def _adaptation(data: _Inputs, plan_voice: bool) -> str:
+        """ADAPTAÇÃO DELE (`history/adaptation`): cumprimento recente, o corpo nas semanas mais
+        pesadas, os sinais anteriores e se voltou ao normal. Vazio em qualquer falha."""
+
+        try:
+
+            from app.application.history import adaptation
+            from app.application.history.weekly_evolution_digest import WeeklyEvolutionDigest
+
+            current = data.today - timedelta(days=data.today.weekday())
+
+            closed = [
+                w for w in AthleteDossier._ledger(data) if not w.in_progress and w.planned_sessions
+            ][-3:]
+
+            found = adaptation.assess(
+                WeeklyEvolutionDigest.stats_for_profile(data.profile),
+                sum(w.fulfilled for w in closed),
+                sum(w.planned_sessions for w in closed),
+                current,
+            )
+
+            return adaptation.render(found, directive=plan_voice) if found else ""
+
+        except Exception as e:
+
+            print(f"Dossiê: adaptação falhou p/ '{data.profile}': {e}")
+
+            return ""
 
     @staticmethod
     def _is_low_base(reading) -> bool:

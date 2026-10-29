@@ -99,6 +99,39 @@ class WeeklyEvolutionDigest:
             return ""
 
     @staticmethod
+    def stats_for_profile(profile: str) -> list[WeekStat]:
+        """As semanas (a mais antiga primeiro) com a MESMA matéria-prima do `for_profile`, sem o
+        texto — pra quem precisa dos números (a adaptação do atleta). Vazio em qualquer falha."""
+
+        try:
+
+            from app.application.coach.intelligence.fitness_reading_service import (
+                FitnessReadingService,
+            )
+            from app.infrastructure.persistence.body_reading_history_repository import (
+                BodyReadingHistoryRepository,
+            )
+
+            activities, _series, resting_hr, max_hr = FitnessReadingService._load(profile)
+
+            stats, _ref = WeeklyEvolutionDigest.build(
+                activities,
+                BodyReadingHistoryRepository().load(profile),
+                today_local(),
+                resting_hr=resting_hr,
+                max_hr=max_hr,
+                ef_activities=FitnessReadingService._without_races(profile, activities),
+            )
+
+            return stats
+
+        except Exception as e:
+
+            print(f"Semanas do atleta falharam p/ '{profile}': {e}")
+
+            return []
+
+    @staticmethod
     def build(
         activities: list[Activity],
         snapshots: list[BodyReadingSnapshot],

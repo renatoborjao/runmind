@@ -212,7 +212,10 @@ REGRAS:
   "sinal de descarga" do dossiê (recuperação caindo com a carga em alta, corpo
   sobrecarregado, forma recuando), ou a reta final da prova (aí é o polimento).
   Quando ele NÃO vem aderindo, o volume desce ao que ele cumpre — isso não é
-  descarga, é ancorar no real.
+  descarga, é ancorar no real. O TAMANHO da descarga é proporcional ao sinal e à
+  ADAPTAÇÃO DELE (o dossiê mostra): sinal curto + atleta que cumpre e se recupera
+  rápido = segurar a rampa ou recuo leve; recuo fundo seguido de volta ao volume
+  cheio é dente de serra.
   Descarga NÃO é calendário: semanas seguidas subindo, bloco que carrega ou
   "já faz um tempo" não são motivo. Atleta que cumpre o plano e recupera bem
   segue EVOLUINDO — aliviar nele só destreina. O papel que o bloco deu a uma
