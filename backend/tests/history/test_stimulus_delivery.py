@@ -145,6 +145,34 @@ def test_on_the_treadmill_the_watch_cannot_judge_so_it_is_not_a_soft_session():
     assert judge(_session("Friday", "Velocidade / VO2"), outdoor, None, 3, TODAY).verdict == SOFT
 
 
+def test_another_recording_or_his_own_note_naming_the_treadmill_also_makes_it_unmeasured():
+    """Leonardo 09/10: o treino principal foi gravado como corrida comum (6,9 km) e só uma 2ª
+    gravação de 1,2 km se chamava "Corrida em esteira"; ele ainda escreveu "esteira" na nota."""
+
+    plans = [_plan(date(2026, 10, 5), _session("Friday", "Ritmo de Prova", 8.0))]
+
+    main = _run(date(2026, 10, 9), 6.9, 1)
+
+    side = _run(date(2026, 10, 9), 1.2, 2)
+
+    side.name = "Corrida em esteira"
+
+    summary = assess(plans, [main, side], {}, [_rpe(date(2026, 10, 9), 3)], TODAY)
+
+    assert summary.items[0].verdict == UNKNOWN and summary.soft == 0
+
+    noted = SimpleNamespace(
+        day="2026-10-09", rpe=3, note="corrida em esteira com diferença de calibração",
+    )
+
+    alone = assess(plans, [main], {}, [noted], TODAY)
+
+    assert alone.items[0].verdict == UNKNOWN
+
+    # sem nenhum sinal de esteira, o esforço de leve continua valendo
+    assert assess(plans, [main], {}, [_rpe(date(2026, 10, 9), 3)], TODAY).items[0].verdict == SOFT
+
+
 def test_without_measured_laps_how_he_felt_decides():
 
     session = _session("Friday", "Ritmo de Prova")

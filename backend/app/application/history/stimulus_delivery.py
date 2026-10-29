@@ -100,10 +100,20 @@ def _gap_seconds(pace: str | None, target: str | None) -> int | None:
     return 0
 
 
-def _indoor(act) -> bool:
-    """Corrida na esteira (o arquivo guarda a marca do relógio)."""
+_TREADMILL_WORDS = ("esteira", "treadmill")
 
-    return bool((getattr(act, "raw", None) or {}).get("trainer"))
+
+def _treadmill_named(text: str | None) -> bool:
+
+    return any(word in (text or "").lower() for word in _TREADMILL_WORDS)
+
+
+def _indoor(act) -> bool:
+    """Corrida na esteira: a marca do relógio ou o nome da gravação."""
+
+    return bool((getattr(act, "raw", None) or {}).get("trainer")) or _treadmill_named(
+        getattr(act, "name", None)
+    )
 
 
 def _blocks(entry: dict | None) -> list[dict]:
@@ -115,8 +125,11 @@ def _blocks(entry: dict | None) -> list[dict]:
     ]
 
 
-def judge(session, act, entry: dict | None, rpe: int | None, day: date) -> Delivery:
-    """Uma sessão forte FEITA: entregou o estímulo?"""
+def judge(
+    session, act, entry: dict | None, rpe: int | None, day: date, indoor: bool = False,
+) -> Delivery:
+    """Uma sessão forte FEITA: entregou o estímulo? `indoor`: outros sinais de esteira (outra
+    gravação do dia com "esteira" no nome, ou ele escreveu "esteira" na nota)."""
 
     name = session.workout_type
 
@@ -161,7 +174,7 @@ def judge(session, act, entry: dict | None, rpe: int | None, day: date) -> Deliv
     # na esteira o relógio não mede o ritmo (calibração) e o esforço do relógio não diz o que foi
     # corrido: Leonardo 09/10 (relógio descalibrado) e 23/10 (tiros a 5:27/km pelo painel, mais
     # rápidos que o alvo) apareciam como "sem intensidade" — não dá pra julgar
-    if _indoor(act):
+    if indoor or _indoor(act):
 
         detail = "esteira: o relógio não mede o ritmo (peça a velocidade do painel)"
 
@@ -195,6 +208,16 @@ def assess(
 
     by_day = {str(getattr(r, "day", "")): r for r in rpes or []}
 
+    # dias em que ele correu na esteira: o relógio descalibra e o treino principal pode ter sido
+    # gravado como corrida comum (Leonardo 09/10: 6,9 km "comum" + 1,2 km "Corrida em esteira")
+    from app.application.history.weekly_buckets import activity_date
+
+    treadmill_days = {
+        activity_date(a) for a in activities
+        if _treadmill_named(getattr(a, "name", None))
+        or (getattr(a, "raw", None) or {}).get("trainer")
+    }
+
     prescribed, items = 0, []
 
     for day, session, family, act in TrainingPatterns._sessions(plans, activities, today, weeks):
@@ -217,8 +240,13 @@ def assess(
 
         rpe_row = by_day.get(day.isoformat())
 
+        indoor = (
+            activity_date(act) in treadmill_days
+            or _treadmill_named(getattr(rpe_row, "note", None))
+        )
+
         items.append(
-            judge(session, act, entry, getattr(rpe_row, "rpe", None), day)
+            judge(session, act, entry, getattr(rpe_row, "rpe", None), day, indoor)
         )
 
     if not prescribed:
