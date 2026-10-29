@@ -43,6 +43,12 @@ _QUALITY = {RACE_PACE, HILLS, FARTLEK, THRESHOLD, VO2, PROGRESSION}
 # o papel só vira nota quando mudou isto sobre o que ele FEZ na semana anterior
 _JUMP = 0.25
 
+# ele ENTREGA o plano? mediana de feito ÷ prescrito nas últimas semanas fechadas com plano nosso;
+# abaixo disto (com ao menos `DELIVERY_MIN_WEEKS` semanas) o papel não é o que ele corre
+DELIVERY_WEEKS = 5
+DELIVERY_MIN_WEEKS = 3
+DELIVERY_LOW = 0.75
+
 _WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 
 _OBJECTIVE_CHARS = 95
@@ -248,6 +254,62 @@ def typical(ledger: list[LedgerWeek]) -> tuple[float, float, float] | None:
     )
 
 
+@dataclass(slots=True)
+class Delivery:
+    """Quanto do volume prescrito ele fecha: a mediana de feito ÷ prescrito + os números."""
+
+    ratio: float
+    done: list[float]
+    planned: list[float]
+    runs: list[int]
+    sessions: list[int]
+
+    @property
+    def median_done(self) -> float:
+
+        return median(self.done)
+
+    @property
+    def median_runs(self) -> float:
+
+        return median(self.runs)
+
+    @property
+    def median_sessions(self) -> float:
+
+        return median(self.sessions)
+
+
+def delivery(ledger: list[LedgerWeek]) -> Delivery | None:
+    """A entrega do plano nas últimas `DELIVERY_WEEKS` semanas FECHADAS com volume prescrito (a mais
+    antiga primeiro). None com menos de `DELIVERY_MIN_WEEKS`. Mediana, não média: uma semana parada
+    por gripe ou um treino extra isolado não decidem sozinhos."""
+
+    closed = [w for w in ledger if not w.in_progress and w.planned_km > 0][-DELIVERY_WEEKS:]
+
+    if len(closed) < DELIVERY_MIN_WEEKS:
+
+        return None
+
+    return Delivery(
+        ratio=median(w.done_km / w.planned_km for w in closed),
+        done=[w.done_km for w in closed],
+        planned=[w.planned_km for w in closed],
+        runs=[w.done_runs for w in closed],
+        sessions=[w.planned_sessions for w in closed],
+    )
+
+
+def low_delivery(ledger: list[LedgerWeek]) -> Delivery | None:
+    """A entrega, só quando ele fecha menos que `DELIVERY_LOW` do que o coach prescreve — a 2ª
+    regra do recuo de volume (a 1ª é o corpo pedir): o atleta não vem entregando, então o plano se
+    ancora no que ele cumpre."""
+
+    found = delivery(ledger)
+
+    return found if found is not None and found.ratio < DELIVERY_LOW else None
+
+
 def _num(value: float) -> str:
 
     return f"{value:.0f}" if abs(value - round(value)) < 0.05 else f"{value:.1f}".replace(".", ",")
@@ -372,6 +434,41 @@ _DIRECTIVE = (
 )
 
 
+def _delivery_line(found: Delivery) -> str:
+
+    done = ", ".join(_num(v) for v in found.done)
+
+    planned = ", ".join(_num(v) for v in found.planned)
+
+    return (
+        f"ENTREGA DO PLANO: nas últimas {len(found.done)} semanas fechadas ele fez, na mediana, "
+        f"{found.ratio:.0%} do volume que você prescreveu (fez {done} km contra {planned} km "
+        f"prescritos) e correu ~{_num(found.median_runs)} dia(s) por semana contra "
+        f"{_num(found.median_sessions)} sessões prescritas. O plano que está no papel não é o que "
+        "ele corre."
+    )
+
+
+def _delivery_directive(found: Delivery) -> str:
+
+    anchor = found.median_done
+
+    return (
+        "REGRA DO RECUO (dada pelo dono do app): o volume só recua por DOIS motivos — o corpo "
+        "pedir OU o atleta não entregar o plano. Ele não está entregando, então a semana nova se "
+        "ancora no que ele FECHA, não no que cabe no papel: (1) o volume da semana fica perto do "
+        f"que ele fecha (~{_num(anchor)} km, no máximo uns +20%, ~{_num(anchor * 1.2)} km) — "
+        "prescrever acima disso é a melhor semana dele virada em rotina, e ele não corre isso; "
+        f"(2) os DIAS são os que ele cumpre (~{_num(found.median_runs)} por semana): fechar a "
+        "frequência vale mais que somar km, e só se abre mais um dia depois que ele fechar duas "
+        "semanas seguidas; (3) o route_note diz a entrega dele (quantos % em quantas semanas) e o "
+        "volume em que você ancorou — nunca \"em linha com a rota\" se não estiver; (4) isso NÃO é "
+        "descarga: não rotule como descarga. Se o furo veio de doença, viagem ou lesão que o "
+        "dossiê registra, a causa é essa, não falta de vontade — e o texto ao atleta fala de "
+        "rotina, não de cobrança."
+    )
+
+
 def render(ledger: list[LedgerWeek], *, directive: bool = False) -> str:
     """O bloco do dossiê. Vazio sem semana com plano. `directive` (só a voz do plano) acrescenta
     o conhecimento de como usar; as outras vozes recebem os fatos."""
@@ -393,8 +490,18 @@ def render(ledger: list[LedgerWeek], *, directive: bool = False) -> str:
             f"km/semana, melhor semana {_num(best_km)} km, maior corrida {_num(longest)} km."
         )
 
+    low = low_delivery(ledger)
+
+    if low is not None:
+
+        lines.append(_delivery_line(low))
+
     if directive:
 
         lines.append(_DIRECTIVE)
+
+        if low is not None:
+
+            lines.append(_delivery_directive(low))
 
     return "\n".join(lines)

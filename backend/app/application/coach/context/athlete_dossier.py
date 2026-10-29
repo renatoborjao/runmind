@@ -1522,7 +1522,7 @@ class AthleteDossier:
         e da auditoria. Parte do que ele FEZ; None sem corrida recente."""
 
         from app.application.coach.planning.race_map import RaceMapBuilder
-        from app.application.history import macro_route
+        from app.application.history import macro_route, week_ledger
         from app.application.history.weekly_buckets import activity_date
         from app.domain.value_objects.sports import is_run_sport
 
@@ -1571,6 +1571,7 @@ class AthleteDossier:
             runs_per_week=getattr(data.runner, "weekly_training_days", None) or 3,
             layoff_days=(data.today - last_run).days if last_run else 0,
             slack=AthleteDossier._route_slack(data, ledger),
+            low_delivery=week_ledger.low_delivery(ledger) is not None,
         )
 
     @staticmethod

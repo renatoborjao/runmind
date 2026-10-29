@@ -56,6 +56,44 @@ def test_the_baseline_is_what_he_sustains_not_his_one_best_week():
     assert "segunda melhor" in basis
 
 
+def test_who_does_not_deliver_the_plan_starts_from_what_he_closes_not_from_his_second_best_week():
+    """João (29/10): 5, 5, 10, 5 e 14 km — a base era 9 km (90% da segunda melhor) quando ele
+    fecha ~5 km por semana contra 10 a 19 km prescritos."""
+
+    weeks = [5.0, 5.0, 10.1, 5.0, 13.7]
+
+    value, basis = baseline_km(weeks)
+
+    assert 8.5 < value < 9.5
+
+    delivered, why = baseline_km(weeks, low_delivery=True)
+
+    assert delivered == 5.0
+    assert "ele fecha bem menos do que o plano pede" in why and "segunda melhor" not in why
+
+    # sem entrega baixa a conta é a mesma de antes
+    assert baseline_km([0, 13.3, 10.0, 12.6, 10.2, 22.1, 8.0], low_delivery=False) == (
+        baseline_km([0, 13.3, 10.0, 12.6, 10.2, 22.1, 8.0])
+    )
+
+
+def test_the_route_of_a_non_deliverer_starts_lower_than_the_same_history_without_the_flag():
+
+    history = dict(
+        executed_weeks=[5.0, 5.0, 10.1, 5.0, 13.7], longest_runs=[5.0, 5.0, 5.1, 5.0, 8.6],
+        slack=False,
+    )
+
+    normal = _leonardo(**history)
+    anchored = _leonardo(**history, low_delivery=True)
+
+    assert anchored.baseline_km == 5.0 and normal.baseline_km > 8.5
+    # o longão também parte do que ele costuma fechar (5 km), não da corrida de um dia bom (8,6)
+    assert anchored.baseline_long_km == 5.0 and normal.baseline_long_km > 7.5
+    assert anchored.weeks[0].volume_km < normal.weeks[0].volume_km
+    assert "ele fecha bem menos do que o plano pede" in render(anchored)
+
+
 def test_no_runs_no_route():
 
     assert baseline_km([0, 0, 0]) is None

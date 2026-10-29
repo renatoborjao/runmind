@@ -170,16 +170,30 @@ def _quality_peak(distance_km: float) -> float:
     return _QUALITY_PEAK[-1][1]
 
 
-def baseline_km(executed_weeks: list[float]) -> tuple[float, str] | None:
+def baseline_km(
+    executed_weeks: list[float], low_delivery: bool = False,
+) -> tuple[float, str] | None:
     """O que ele SUSTENTA, do que ele FEZ: a mediana das 4 últimas semanas com corrida, ou 90% da
     segunda melhor das 6 (o que vier maior) — a melhor semana isolada (treino extra, uma vez) não
-    vira chão. None sem corrida."""
+    vira chão. Se ele NÃO entrega o plano (`low_delivery`: fecha bem menos do que é prescrito), vale
+    só a mediana de TODAS as semanas com corrida: a segunda melhor é um dia bom, não o que ele
+    cumpre (João, 29/10: semanas de 5, 10, 5, 5, 10, 5 e 14 km davam base de 9 km; ele fecha 5).
+    None sem corrida."""
 
     ran = [w for w in executed_weeks if w > 0]
 
     if not ran:
 
         return None
+
+    if low_delivery:
+
+        usual = median(ran)
+
+        return usual, (
+            f"mediana das últimas semanas com corrida (~{usual:.0f} km); ele fecha bem menos do "
+            "que o plano pede, então a rota parte do que ele entrega e não da melhor semana"
+        )
 
     recent = median(ran[-4:])
 
@@ -238,13 +252,16 @@ def build(
     runs_per_week: int = 3,
     layoff_days: int = 0,
     slack: bool = False,
+    low_delivery: bool = False,
 ) -> WeeklyRoute | None:
     """A rota a partir da semana `ref_week`. `phases`: a fase de cada semana até a prova (as do
     mapa até a prova; uma por semana, a última é a da prova); None = sem prova com data → as
     próximas 8 semanas, rolantes. `executed_weeks`/`longest_runs`: as últimas semanas FECHADAS (da
-    mais antiga pra mais recente, 0 = sem corrida). `slack`: ele cumpre com folga ou pediu mais."""
+    mais antiga pra mais recente, 0 = sem corrida). `slack`: ele cumpre com folga ou pediu mais.
+    `low_delivery`: ele fecha bem menos do que o coach prescreve (a rota parte do que ele
+    entrega)."""
 
-    base = baseline_km(executed_weeks)
+    base = baseline_km(executed_weeks, low_delivery)
 
     if base is None:
 
@@ -296,6 +313,11 @@ def build(
     long_runs = [v for v in longest_runs if v > 0]
 
     long_now = max(max(longest_runs[-4:] or [0.0]), 0.9 * max(long_runs or [0.0]))
+
+    if low_delivery and long_runs:
+
+        # quem não entrega o plano tem o longão que ele costuma fechar, não a corrida de um dia bom
+        long_now = median(long_runs)
 
     if long_now <= 0:
 

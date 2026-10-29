@@ -232,3 +232,83 @@ def test_the_plan_prompt_asks_for_the_motive_outside_the_route_and_forbids_repea
     assert CoachPlanEngine._route_note({"route_note": None}) is None
     assert CoachPlanEngine._route_note({"route_note": "null"}) is None
     assert CoachPlanEngine._route_note({}) is None
+
+
+# --- ele ENTREGA o plano? (nº 86) ----------------------------------------------------------------
+
+
+def _lw(week: int, planned: float, done: float, in_progress: bool = False):
+
+    return week_ledger.LedgerWeek(
+        week_start=date(2026, 9, 21 + 7 * week) if week < 2 else date(2026, 10, 5 + 7 * (week - 2)),
+        phase="BUILD", objective="", deload=False, planned_km=planned, planned_sessions=3,
+        planned_long_km=0.0, planned_key=[], done_km=done, done_runs=2 if done else 0,
+        done_long_km=done / 2, fulfilled=1, missed=[], pending=[], extras=0,
+        in_progress=in_progress, prev_done_km=0.0, quality_done_km=0.0,
+    )
+
+
+def _joao():
+    """João (29/10): 5 semanas fechadas fazendo 5 a 14 km contra 10 a 19 km prescritos."""
+
+    return [
+        _lw(0, 10.0, 5.0), _lw(1, 14.5, 5.0), _lw(2, 17.1, 10.1),
+        _lw(3, 17.1, 5.0), _lw(4, 19.3, 13.7), _lw(5, 12.4, 0.0, in_progress=True),
+    ]
+
+
+def test_an_athlete_who_closes_half_of_what_is_prescribed_does_not_deliver_the_plan():
+
+    found = week_ledger.low_delivery(_joao())
+
+    assert found is not None and round(found.ratio, 2) == 0.5
+    assert found.done == [5.0, 5.0, 10.1, 5.0, 13.7] and round(found.median_done, 1) == 5.0
+    assert found.median_runs == 2 and found.median_sessions == 3
+
+    text = render(_joao())
+
+    # a semana em andamento (12,4 prescritos, 0 até agora) não conta como furo
+    assert "ENTREGA DO PLANO: nas últimas 5 semanas fechadas ele fez, na mediana, 50%" in text
+    assert "fez 5, 5, 10,1, 5, 13,7 km contra 10, 14,5, 17,1, 17,1, 19,3 km prescritos" in text
+    assert "correu ~2 dia(s) por semana contra 3 sessões prescritas" in text
+    assert "ensine" not in text and "NÃO é descarga" not in text     # a diretriz é só do plano
+
+
+def test_the_plan_voice_is_told_to_anchor_on_what_he_closes_and_not_to_call_it_a_deload():
+
+    text = render(_joao(), directive=True)
+
+    assert "REGRA DO RECUO (dada pelo dono do app)" in text and "DOIS motivos" in text
+    assert "perto do que ele fecha (~5 km, no máximo uns +20%, ~6 km)" in text
+    assert "os DIAS são os que ele cumpre (~2 por semana)" in text
+    assert "nunca \"em linha com a rota\" se não estiver" in text
+    assert "NÃO é descarga" in text and "doença, viagem ou lesão" in text
+
+
+def test_an_athlete_who_delivers_or_overdelivers_has_no_delivery_warning():
+
+    steady = [_lw(0, 13.1, 22.1), _lw(1, 7.5, 8.0), _lw(2, 22.1, 22.1), _lw(3, 23.5, 21.0)]
+
+    assert week_ledger.delivery(steady).ratio >= 1.0
+    assert week_ledger.low_delivery(steady) is None
+    assert "ENTREGA DO PLANO" not in render(steady, directive=True)
+
+
+def test_one_stopped_week_does_not_make_an_athlete_a_non_deliverer():
+    """Hélio (29/10): duas semanas paradas por gripe e depois 33%, 36% e 39% ACIMA do prescrito."""
+
+    helio = [
+        _lw(0, 25.5, 0.0), _lw(1, 19.0, 0.0), _lw(2, 14.0, 18.7), _lw(3, 19.5, 26.5),
+        _lw(4, 20.0, 27.8),
+    ]
+
+    assert week_ledger.low_delivery(helio) is None
+
+
+def test_too_few_closed_weeks_say_nothing_about_delivery():
+
+    assert week_ledger.delivery([_lw(0, 10.0, 3.0), _lw(1, 12.0, 4.0)]) is None
+    running = [_lw(0, 10.0, 3.0), _lw(1, 12.0, 4.0), _lw(2, 9.0, 2.0, True)]
+
+    assert week_ledger.delivery(running) is None
+    assert week_ledger.delivery([]) is None
