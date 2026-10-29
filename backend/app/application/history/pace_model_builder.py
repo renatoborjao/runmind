@@ -11,6 +11,7 @@ REAIS e na condição dele:
 Puro/determinístico. Garmin premium (limiar medido) entra por cima quando houver
 (follow-up). Ver [[VdotCalculator]] e [[project_pace_so_corrida]]."""
 
+from dataclasses import replace
 from statistics import median
 
 from app.application.history.vdot_calculator import (
@@ -112,15 +113,32 @@ class PaceModelBuilder:
 
             return PaceModelBuilder._fallback(runner)
 
+        # CALIBRAÇÃO pela evolução: o VDOT do histórico é o piso; quando o relógio projeta mais e
+        # ele entrega os fortes com folga (sem prova recente que o ancore), sobe uma fração do
+        # caminho — o modelo acompanha o atleta em vez de segurá-lo no pior esforço que ele mostrou
+        from app.application.history import pace_calibration
+
+        calibration = pace_calibration.for_runner(vdot, runner)
+
+        if calibration is not None:
+
+            vdot = calibration.vdot
+
         # âncora de REALIDADE do fácil: as corridas RECENTES (evolui semana a
         # semana). Poucas recentes -> usa o histórico todo (não inventa).
         recent = PaceModelBuilder._recent_paces(history)
 
         reference = recent if len(recent) >= _MIN_RECENT_RUNS else paces
 
-        return PaceModelBuilder._from_vdot(
+        model = PaceModelBuilder._from_vdot(
             vdot, reference, PaceModelBuilder._hr_confirmed_easy_paces(history, runner),
         )
+
+        if calibration is None:
+
+            return model
+
+        return replace(model, calibration_note=pace_calibration.note(calibration))
 
     # ------------------------------------------------------------------
 

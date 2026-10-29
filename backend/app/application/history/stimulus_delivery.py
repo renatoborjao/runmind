@@ -163,7 +163,11 @@ def judge(
 
                 detail += f" (em média {margin} s/km mais rápido que a faixa)"
 
-            return Delivery(day, name, DELIVERED, detail, 0, rpe)
+            # gap negativo = quanto ele passou da faixa (0 = dentro): é a prova OBJETIVA de que o
+            # alvo está abaixo do que ele faz (a calibração do pace usa)
+            overshoot = round(sum(fast) / len(fast)) if fast else 0
+
+            return Delivery(day, name, DELIVERED, detail, overshoot, rpe)
 
         mean_slow = round(sum(slow) / len(slow)) if slow else None
 

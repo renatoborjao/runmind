@@ -639,6 +639,20 @@ class AthleteDossier:
 
             lines.append(PlanContextBuilder._paces_line(data.metrics))
 
+            try:
+
+                from app.application.history.pace_model_builder import PaceModelBuilder
+
+                note = PaceModelBuilder.build(data.history, data.runner).calibration_note
+
+                if note:
+
+                    lines.append(note)
+
+            except Exception as e:
+
+                print(f"Dossiê: nota de calibração falhou p/ '{data.profile}': {e}")
+
         if data.zones is not None:
 
             ruler = f"Régua de FC ({data.zones.method}): {data.zones.describe()} bpm"

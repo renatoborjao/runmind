@@ -28,3 +28,7 @@ class PaceModel:
     # do que o atleta REALMENTE roda de leve, então respeitamos a realidade
     # dele (nunca mandar um pace que ele não sustenta). Ver a regra do Renato.
     easy_capped: bool = False
+
+    # os ritmos foram CALIBRADOS pela evolução dele (ver pace_calibration): a frase que explica
+    # de onde vieram, pro coach e pro atleta não acharem que o pace subiu do nada
+    calibration_note: str | None = None

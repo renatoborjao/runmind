@@ -113,6 +113,8 @@ def test_blocks_faster_than_the_band_are_delivered_not_soft():
 
     assert item.verdict == DELIVERED
     assert "8 de 8 blocos no ritmo-alvo ou mais rápido (em média 30 s/km mais rápido" in item.detail
+    # o quanto passou da faixa fica registrado (negativo): prova de que o alvo está abaixo dele
+    assert item.gap_s == -30
 
 
 def test_blocks_on_target_are_delivered_even_with_a_missed_rep():
