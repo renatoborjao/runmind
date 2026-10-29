@@ -123,6 +123,74 @@ class Finding:
     text: str
 
 
+# O aviso é lido pelo dono, não por engenheiro: cada achado vira um título curto, a frase com os
+# números (`Finding.text`) e UMA linha dizendo o que fazer. Tudo em português de corredor — sem
+# "dose", "estímulo", "prescrito", "ruído" (Renato, 29/10: "recebi a auditoria e não entendi nada").
+TITLES = {
+    "prova_sem_lastro": "Prova que talvez não seja prova",
+    "esforco_baixo": "Treinos talvez leves demais",
+    "pediu_mais_sem_resposta": "Pediu mais treino e não foi atendido",
+    "rota_abaixo_da_faixa": "Preparo abaixo do que a prova pede",
+    "forma_estagnada": "Condicionamento parado",
+    "rodagem_demais": "Muita corrida leve no plano",
+    "sem_estimulo_forte": "Sem treino forte há tempo",
+    "plano_parado": "Plano parou de evoluir",
+    "aderencia_baixa": "Cumprindo pouco do plano",
+    "dente_de_serra": "Km por semana subindo e descendo sem explicação",
+    "salto_sobre_o_feito": "Semana muito acima do que ele fez",
+    "desvio_sem_motivo": "Plano fora da rota sem explicação",
+    "rota_atrasada": "Abaixo da rota há semanas",
+    "descarga_por_calendario": "Semana leve marcada por calendário",
+    "forte_sem_intensidade": "Treino forte feito em ritmo de leve",
+    "parou_de_correr": "Parou de correr",
+}
+
+ACTIONS = {
+    "prova_sem_lastro": (
+        "Confira se foi prova de verdade ou só um treino com \"prova\" no nome. Se foi treino, "
+        "o coach está freando sem motivo."
+    ),
+    "esforco_baixo": (
+        "Pode ser que o treino esteja leve demais pra meta, ou base de propósito. Olhe o plano da "
+        "semana dele."
+    ),
+    "pediu_mais_sem_resposta": "O coach precisa subir a carga ou explicar a ele por que não.",
+    "rota_abaixo_da_faixa": (
+        "As próximas semanas precisam subir o volume, com cuidado, pra ele chegar pronto."
+    ),
+    "forma_estagnada": "Falta variar ou apertar o treino forte pra ele evoluir antes da prova.",
+    "rodagem_demais": "Veja se o plano tem treino forte e longão suficientes pra ele evoluir.",
+    "sem_estimulo_forte": "O próximo plano precisa ter um treino forte.",
+    "plano_parado": "Se não é manutenção de propósito, o plano precisa subir aos poucos.",
+    "aderencia_baixa": (
+        "Vale o coach conversar com ele sobre a rotina e ajustar o plano pro que ele consegue "
+        "fazer."
+    ),
+    "dente_de_serra": (
+        "Plano bom sobe aos poucos e só alivia quando o corpo pede: cada semana deve partir do "
+        "que ele fez."
+    ),
+    "salto_sobre_o_feito": (
+        "Pular muito acima do que ele fez aumenta o risco de lesão e de ele não cumprir. Sem bom "
+        "motivo, o coach deve reduzir."
+    ),
+    "desvio_sem_motivo": "O coach tem que seguir a rota ou escrever por que saiu dela.",
+    "rota_atrasada": (
+        "A rota está acima do que ele cumpre: a rotina mudou, ou o plano precisa partir do que "
+        "ele consegue."
+    ),
+    "descarga_por_calendario": (
+        "Semana leve não é calendário: só vale se o corpo pedir ou se ele não cumprir o plano. O "
+        "coach precisa refazer isso quando a semana chegar."
+    ),
+    "forte_sem_intensidade": (
+        "Repetir o mesmo treino forte não resolve: o coach precisa ajustar o ritmo-alvo ou "
+        "conversar com ele sobre esforço."
+    ),
+    "parou_de_correr": "Confira se há uma pausa combinada ou se ele se afastou.",
+}
+
+
 @dataclass(slots=True)
 class Snapshot:
     """Os números de um atleta no painel de segunda."""
@@ -161,9 +229,9 @@ def unbacked_race(
 
     return Finding(
         profile, "prova_sem_lastro", HIGH,
-        f"O coach acha que \"{event.name}\" ({_fmt_date(event.date)}) foi uma PROVA e está em "
-        "modo pós-prova (sem sinal de \"puxar\" nem descarga) — mas não há prova nessa data na "
-        "lista do app nem resultado registrado. Confira se não é um treino com \"prova\" no nome.",
+        f"O coach entendeu que \"{event.name}\" ({_fmt_date(event.date)}) foi uma prova e entrou "
+        "em modo pós-prova (não aumenta a carga e não alivia). Só que não há prova nessa data na "
+        "lista do app nem resultado registrado.",
     )
 
 
@@ -194,10 +262,10 @@ def low_effort(
 
     return Finding(
         profile, "esforco_baixo", WATCH,
-        f"Esforço percebido abaixo do habitual dele (mediana {median(rpes):g} nas últimas "
-        f"{len(rpes)} corridas contra {scale.median:g} de sempre) e 0% do tempo em zona forte, "
-        f"com {race_label} em {weeks_left} semanas (meta {target_time}). O treino pode estar leve "
-        "demais pro que a meta pede — ou ser base de propósito: vale olhar.",
+        f"O esforço que ele relata está abaixo do normal dele (mediana {median(rpes):g} nas "
+        f"últimas {len(rpes)} corridas, contra {scale.median:g} de sempre) e ele não correu nada "
+        f"em zona forte (0% do tempo), com {race_label} em {weeks_left} semanas "
+        f"(meta {target_time}).",
     )
 
 
@@ -229,9 +297,9 @@ def asked_more_unanswered(
 
     return Finding(
         profile, "pediu_mais_sem_resposta", HIGH,
-        f"Em {_fmt_date(first.day)} ele disse \"{first.quote}\" e, há {days} dias, a dose não "
-        f"subiu: antes ~{since['before_week']:.0f} km/semana e maior treino "
-        f"{since['before_long']:.1f} km; depois ~{since['after_week']:.0f} km/semana e maior "
+        f"Em {_fmt_date(first.day)} ele disse \"{first.quote}\" e, há {days} dias, o treino dele "
+        f"não aumentou: antes ~{since['before_week']:.0f} km por semana e maior treino "
+        f"{since['before_long']:.1f} km; depois ~{since['after_week']:.0f} km por semana e maior "
         f"treino {since['after_long']:.1f} km. O corpo dele não justifica segurar.",
     )
 
@@ -259,10 +327,10 @@ def path_gap(profile: str, path) -> Finding | None:
 
     return Finding(
         profile, "rota_abaixo_da_faixa", WATCH,
-        f"Faltam {path.weeks_left} semanas pra prova e, no passo das últimas semanas, ele chega "
-        f"com longão de ~{path.projected_long:.0f} km e ~{path.projected_week:.0f} km/semana "
-        f"(referência: {path.long_ref[0]}-{path.long_ref[1]} km e "
-        f"{path.week_ref[0]}-{path.week_ref[1]} km/semana): faltam {' e '.join(gaps)}.",
+        f"Faltam {path.weeks_left} semanas pra prova. No passo das últimas semanas, ele chega "
+        f"com longão de ~{path.projected_long:.0f} km e ~{path.projected_week:.0f} km por semana. "
+        f"Pra essa prova o ideal é {path.long_ref[0]}-{path.long_ref[1]} km no longão e "
+        f"{path.week_ref[0]}-{path.week_ref[1]} km por semana: faltam {' e '.join(gaps)}.",
     )
 
 
@@ -281,8 +349,8 @@ def stagnant_form(
 
     return Finding(
         profile, "forma_estagnada", WATCH,
-        f"A forma está estável há ~{weeks} semanas (economia aeróbica sem melhorar) com a prova "
-        f"em {weeks_left} semanas.",
+        f"O condicionamento dele não melhora há ~{weeks} semanas (o corpo não fica mais "
+        f"eficiente no mesmo esforço) e a prova é em {weeks_left} semanas.",
     )
 
 
@@ -298,9 +366,9 @@ def easy_heavy(
 
     return Finding(
         profile, "rodagem_demais", WATCH,
-        f"{easy} de {total} sessões prescritas nas últimas {EASY_WINDOW_WEEKS} semanas "
-        f"({easy / total:.0%}) são rodagem leve ou regenerativa, e ele tem meta de tempo "
-        f"({target_time}). Vale olhar se o plano tem estímulo e função suficientes pra evoluir.",
+        f"{easy} de {total} treinos planejados nas últimas {EASY_WINDOW_WEEKS} semanas "
+        f"({easy / total:.0%}) são corridas leves ou de recuperação, e ele tem meta de tempo "
+        f"({target_time}).",
     )
 
 
@@ -322,7 +390,7 @@ def no_quality(
 
     return Finding(
         profile, "sem_estimulo_forte", WATCH,
-        f"Nenhum estímulo forte (limiar, VO2, ritmo de prova, fartlek ou progressivo) feito "
+        f"Nenhum treino forte (limiar, VO2, ritmo de prova, fartlek ou progressivo) feito "
         f"{since}, com {runs} corridas nos últimos {NO_QUALITY_DAYS} dias e meta de "
         f"{target_time}.",
     )
@@ -358,9 +426,9 @@ def stalled_plan(
 
     return Finding(
         profile, "plano_parado", WATCH,
-        f"O volume (~{mean:.0f} km/semana, variando só {(max(weeks) - min(weeks)) / mean:.0%}) e "
-        f"o maior treino (~{max(longs):.0f} km) não mudam há {STALL_WEEKS} semanas com o plano "
-        "em dia: o plano parou de progredir.",
+        f"O volume (~{mean:.0f} km por semana, variando só {(max(weeks) - min(weeks)) / mean:.0%}) "
+        f"e o maior treino (~{max(longs):.0f} km) estão iguais há {STALL_WEEKS} semanas, e ele "
+        "está cumprindo o plano.",
     )
 
 
@@ -378,8 +446,8 @@ def low_adherence(profile: str, done: int, planned: int, weeks: int) -> Finding 
 
     return Finding(
         profile, "aderencia_baixa", WATCH,
-        f"Cumpriu {done} de {planned} treinos nas últimas {weeks} semanas ({done / planned:.0%}): "
-        "o plano pode estar desalinhado da rotina dele.",
+        f"Cumpriu {done} de {planned} treinos nas últimas {weeks} semanas ({done / planned:.0%}). "
+        "O plano pode não combinar com a rotina dele (dias, volume ou tipo de treino).",
     )
 
 
@@ -387,11 +455,26 @@ def sawtooth(profile: str, weeks: list[tuple[date, float, bool]]) -> Finding | N
     """O volume PRESCRITO sobe e desce em dente de serra: `weeks` = (semana, km prescritos, tem
     motivo escrito — descarga ou nota da rota), da mais antiga pra mais recente. Variação acima de
     `SAWTOOTH_SWING` sem motivo, ao menos `SAWTOOTH_MIN_SWINGS` vezes: o plano de cada semana está
-    nascendo do ruído da anterior, não de um desenho."""
+    nascendo do ruído da anterior, não de um desenho.
+
+    Só vale pra semanas VIZINHAS — um "salto" entre duas semanas com buracos no meio não é salto
+    (Renato, 29/10: 29 km em 21/09 e 18 km em 12/10, sem plano guardado nas semanas entre elas) — e
+    só enquanto AINDA acontece: a mudança mais recente precisa ser um salto sem motivo. O que já se
+    acalmou é história que ninguém consegue consertar."""
+
+    tail = [weeks[-1]] if weeks else []
+
+    for item in reversed(weeks[:-1]):
+
+        if (tail[0][0] - item[0]).days != 7:
+
+            break
+
+        tail.insert(0, item)
 
     swings = []
 
-    for (_, before, _), (week, after, explained) in zip(weeks, weeks[1:]):
+    for (_, before, _), (week, after, explained) in zip(tail, tail[1:]):
 
         if before <= 0 or after <= 0 or explained:
 
@@ -403,17 +486,17 @@ def sawtooth(profile: str, weeks: list[tuple[date, float, bool]]) -> Finding | N
 
             swings.append((week, before, after))
 
-    if len(swings) < SAWTOOTH_MIN_SWINGS:
+    if len(swings) < SAWTOOTH_MIN_SWINGS or swings[-1][0] != tail[-1][0]:
 
         return None
 
-    km = " → ".join(f"{v:.0f}" for _, v, _ in weeks[-6:])
+    km = " → ".join(f"{v:.0f}" for _, v, _ in tail[-6:])
 
     return Finding(
         profile, "dente_de_serra", WATCH,
-        f"O volume prescrito oscila sem motivo escrito ({km} km): {len(swings)} saltos de mais de "
-        f"{SAWTOOTH_SWING:.0%} entre semanas. O plano não está seguindo uma curva — cada semana "
-        "nasce do ruído da anterior.",
+        f"Os km planejados por semana sobem e descem bruscamente ({km} km): {len(swings)} "
+        f"mudanças de mais de {SAWTOOTH_SWING:.0%} de uma semana pra outra, e o coach não "
+        "explicou o motivo.",
     )
 
 
@@ -433,15 +516,15 @@ def jump_over_done(
         return None
 
     head = (
-        f"O plano de {_fmt_date(week)} prescreve ~{planned:.0f} km: {planned / base - 1:+.0%} "
-        f"sobre o que ele fez (semana anterior {prev_done:.0f} km; sustenta "
+        f"O plano de {_fmt_date(week)} pede ~{planned:.0f} km: {planned / base - 1:+.0%} "
+        f"sobre o que ele fez (semana anterior {prev_done:.0f} km; ele costuma sustentar "
         f"~{(sustained or 0):.0f} km)"
     )
 
     if not explained:
 
         return Finding(
-            profile, "salto_sobre_o_feito", HIGH, f"{head} e o coach não escreveu o motivo.",
+            profile, "salto_sobre_o_feito", HIGH, f"{head}, e o coach não explicou o motivo.",
         )
 
     if planned < base * JUMP_EXPLAINED_MAX:
@@ -450,8 +533,7 @@ def jump_over_done(
 
     return Finding(
         profile, "salto_sobre_o_feito", WATCH,
-        f"{head}. O coach justificou ({note or 'motivo escrito'}), mas é um salto grande: vale "
-        "conferir se o corpo dele comporta.",
+        f"{head}. O coach explicou ({note or 'motivo escrito'}), mas o salto é grande.",
     )
 
 
@@ -472,8 +554,9 @@ def off_route(
 
     return Finding(
         profile, "desvio_sem_motivo", WATCH,
-        f"O plano de {_fmt_date(week)} prescreve ~{planned:.0f} km contra ~{route_km:.0f} km da "
-        f"rota ({change:+.0%}) e o coach não escreveu o motivo do desvio.",
+        f"O plano de {_fmt_date(week)} pede ~{planned:.0f} km, contra ~{route_km:.0f} km da rota "
+        f"(a escada de km por semana até a prova): {change:+.0%}, e o coach não explicou o "
+        "desvio.",
     )
 
 
@@ -497,9 +580,8 @@ def route_late(profile: str, pairs: list[tuple[float, float]]) -> Finding | None
 
     return Finding(
         profile, "rota_atrasada", WATCH,
-        f"Ele está atrás da rota há {ROUTE_LATE_WEEKS} semanas (fez {done_km} km; a rota pedia "
-        f"{route_km} km): a rota está acima do que ele cumpre — a rotina dele mudou ou o plano "
-        "precisa ser reancorado no que ele consegue.",
+        f"Ele está abaixo da rota (a escada de km por semana até a prova) há {ROUTE_LATE_WEEKS} "
+        f"semanas: fez {done_km} km; a rota pedia {route_km} km.",
     )
 
 
@@ -532,10 +614,26 @@ def calendar_deload(
 
     return Finding(
         profile, "descarga_por_calendario", WATCH,
-        f"O bloco aberto em {_fmt_date(start)} reserva a semana {number} ({_fmt_date(day)}) como "
-        f"descarga/alívio (\"{role[:90]}\"). Descarga não é calendário: só vale se o corpo pedir "
-        "ou se ele não aderir — o coach precisa redefinir o bloco quando a semana chegar.",
+        f"O bloco de treino aberto em {_fmt_date(start)} reservou a semana {number} "
+        f"({_fmt_date(day)}) como semana leve (\"{role[:90]}\").",
     )
+
+
+def _strong_counts(summary) -> str:
+    """Os números do treino forte em português de corredor (o `headline` do dossiê fala em
+    "prescritos / entregues / sem intensidade", que só o coach entende)."""
+
+    text = f"Dos {summary.prescribed} treinos fortes planejados, ele fez {summary.done}"
+
+    if summary.soft:
+
+        text += f"; {summary.soft} saíram em ritmo de leve"
+
+    if summary.unknown:
+
+        text += f"; {summary.unknown} sem como medir"
+
+    return text
 
 
 def strong_not_delivered(profile: str, summary, today: date) -> Finding | None:
@@ -572,11 +670,8 @@ def strong_not_delivered(profile: str, summary, today: date) -> Finding | None:
 
     return Finding(
         profile, "forte_sem_intensidade", HIGH,
-        f"{since}: {delivery.headline(summary)}.{extra}"
-        " Ele corre o forte em ritmo de leve — o coach prescreve, mas o estímulo não chega. "
-        "Mais um forte igual não resolve: o coach precisa tratar a causa (alvo alto demais ou "
-        "esforço baixo) "
-        "e falar com ele.",
+        f"{since}. {_strong_counts(summary)}.{extra}"
+        " Ele faz o treino forte em ritmo de leve: o coach manda, mas o esforço não chega.",
     )
 
 
@@ -609,8 +704,7 @@ def stopped_running(profile: str, days_since: int | None, ill: bool) -> Finding 
 
     return Finding(
         profile, "parou_de_correr", HIGH,
-        f"A última corrida foi há {days_since} dias e não há doença registrada: confira se há uma "
-        "pausa combinada ou se ele se afastou.",
+        f"A última corrida foi há {days_since} dias e não há doença registrada.",
     )
 
 
@@ -1250,13 +1344,21 @@ def _name(profile: str) -> str:
         return profile
 
 
+def _count(n: int, one: str, many: str) -> str:
+
+    return f"{n} {one if n == 1 else many}"
+
+
 def format_message(
     findings: list[Finding],
     names: dict[str, str] | None = None,
     audited: list[str] | None = None,
+    open_findings: list[Finding] | None = None,
 ) -> str:
-    """O aviso pro dono: um bloco por atleta, 🔴 alto antes de 🟡 atenção. Com `audited`, diz QUEM
-    foi auditado e quem ficou sem achado novo — pra ninguém achar que só alguns são olhados."""
+    """O aviso pro dono: um bloco por atleta (🔴 alto antes de 🟡 atenção), cada achado com título,
+    a frase com os números e o que fazer. Com `audited`, diz QUEM foi olhado: quem está em dia de
+    verdade e quem tem aviso antigo ainda aberto (`open_findings` = todos os achados de hoje, novos
+    ou em cooldown) — um ✅ só aparece pra quem não tem pendência nenhuma."""
 
     names = names or {}
 
@@ -1266,7 +1368,27 @@ def format_message(
 
         by_profile.setdefault(finding.profile, []).append(finding)
 
-    lines = [f"🔎 Auditoria de sanidade do coach — {len(findings)} achado(s) novo(s)", ""]
+    serious = sum(1 for f in findings if f.level == HIGH)
+
+    lines = [
+        f"🔎 Revisão diária do coach — {_count(len(findings), 'aviso novo', 'avisos novos')}",
+        "",
+    ]
+
+    if serious:
+
+        lines.append(
+            f"{_count(serious, 'ponto sério', 'pontos sérios')} (🔴) e "
+            f"{_count(len(findings) - serious, 'pra acompanhar', 'pra acompanhar')} (🟡)."
+        )
+
+    else:
+
+        lines.append(
+            f"Nada urgente: {_count(len(findings), 'ponto', 'pontos')} pra acompanhar (🟡)."
+        )
+
+    lines.append("")
 
     for profile, items in by_profile.items():
 
@@ -1274,25 +1396,47 @@ def format_message(
 
         for item in items:
 
-            lines.append(f"{'🔴' if item.level == HIGH else '🟡'} {item.text}")
+            icon = "🔴" if item.level == HIGH else "🟡"
 
-        lines.append("")
+            title = TITLES.get(item.code)
+
+            lines.append(f"{icon} {title}" if title else f"{icon} {item.text}")
+
+            if title:
+
+                lines.append(item.text)
+
+            action = ACTIONS.get(item.code)
+
+            if action:
+
+                lines.append(f"👉 {action}")
+
+            lines.append("")
 
     if audited:
 
-        quiet = [names.get(p, p) for p in audited if p not in by_profile]
+        still_open = {f.profile for f in open_findings or findings}
 
-        lines.append(f"Atletas auditados: {len(audited)}.")
+        clean = [names.get(p, p) for p in audited if p not in still_open]
 
-        if quiet:
+        pending = [names.get(p, p) for p in audited if p in still_open and p not in by_profile]
 
-            lines.append(f"✅ Sem achado novo: {', '.join(quiet)}.")
+        lines.append(f"Olhei os {len(audited)} atletas hoje.")
+
+        if clean:
+
+            lines.append(f"✅ Em dia, sem nenhuma pendência: {', '.join(clean)}.")
+
+        if pending:
+
+            lines.append(f"🕐 Avisados antes e ainda em aberto: {', '.join(pending)}.")
 
         lines.append("")
 
     lines.append(
-        "É só um aviso: nada foi alterado. O dossiê e o plano do atleta mostram o que o coach "
-        "está vendo."
+        f"É só um aviso: nada foi alterado. Cada ponto aberto volta a ser avisado só depois de "
+        f"{COOLDOWN_DAYS} dias."
     )
 
     return "\n".join(lines)
@@ -1407,7 +1551,7 @@ def run(
 
     if not send:
 
-        alert = format_message(findings, names, audited) if findings else "Sem achados."
+        alert = format_message(findings, names, audited, findings) if findings else "Sem achados."
 
         shown = f"{alert}\n\n{panel()}"
 
@@ -1421,7 +1565,7 @@ def run(
 
     if pending:
 
-        parts.append(format_message(pending, names, audited))
+        parts.append(format_message(pending, names, audited, findings))
 
     with_panel = today.weekday() == 0 or force_panel
 

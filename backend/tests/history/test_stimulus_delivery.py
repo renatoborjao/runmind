@@ -281,8 +281,9 @@ def test_the_audit_says_how_long_and_why_instead_of_zero_percent_in_a_zone():
 
     assert found.code == "forte_sem_intensidade" and found.level == audit.HIGH
     assert "Nas últimas 6 semanas nenhum treino forte bateu o alvo" in found.text
-    assert "feitos 3, entregues 0, sem intensidade 3" in found.text
-    assert "Ele corre o forte em ritmo de leve" in found.text and "tratar a causa" in found.text
+    assert "Dos 5 treinos fortes planejados, ele fez 3; 3 saíram em ritmo de leve" in found.text
+    assert "Ele faz o treino forte em ritmo de leve" in found.text
+    assert "ajustar o ritmo-alvo" in audit.ACTIONS["forte_sem_intensidade"]
 
 
 def test_the_audit_stays_quiet_when_a_forte_was_delivered_recently_or_there_is_little_data():

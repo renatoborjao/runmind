@@ -88,13 +88,13 @@ def test_low_effort_with_a_time_goal_close_to_the_race_is_flagged():
     )
 
     assert finding.level == "atenção" and finding.code == "esforco_baixo"
-    assert "abaixo do habitual dele (mediana 3 nas últimas 7 corridas contra 7 de sempre)" in (
+    assert "abaixo do normal dele (mediana 3 nas últimas 7 corridas, contra 7 de sempre)" in (
         finding.text
     )
-    assert "0% do tempo em zona forte" in finding.text
+    assert "não correu nada em zona forte (0% do tempo)" in finding.text
     assert "em 8 semanas (meta 01:00:00)" in finding.text
     # é pra OLHAR: pode ser base de propósito
-    assert "base de propósito" in finding.text
+    assert "base de propósito" in audit.ACTIONS["esforco_baixo"]
 
 
 def test_low_effort_needs_every_condition():
@@ -151,8 +151,8 @@ def test_a_request_for_more_that_changed_nothing_is_flagged_as_high():
 
     assert finding.level == "alto" and finding.code == "pediu_mais_sem_resposta"
     assert "Em 02/10 ele disse" in finding.text
-    assert "há 19 dias, a dose não subiu" in finding.text
-    assert "antes ~12 km/semana e maior treino 10.0 km" in finding.text
+    assert "há 19 dias, o treino dele não aumentou" in finding.text
+    assert "antes ~12 km por semana e maior treino 10.0 km" in finding.text
     assert "O corpo dele não justifica segurar" in finding.text
 
 
@@ -193,7 +193,7 @@ def test_a_route_below_the_reference_close_to_the_race_is_flagged():
     assert finding.code == "rota_abaixo_da_faixa" and finding.level == "atenção"
     assert "Faltam 8 semanas pra prova" in finding.text
     assert "faltam ~2 km no longão e ~9 km por semana" in finding.text
-    assert "11-13 km" in finding.text and "28-38 km/semana" in finding.text
+    assert "11-13 km" in finding.text and "28-38 km por semana" in finding.text
 
 
 def test_the_route_is_not_flagged_when_far_or_covered_or_missing():
@@ -218,7 +218,8 @@ def test_a_form_stuck_for_weeks_close_to_the_race_is_flagged():
     finding = stagnant_form("leonardo", "STABLE", 6, 8)
 
     assert finding.code == "forma_estagnada"
-    assert "estável há ~6 semanas" in finding.text and "prova em 8 semanas" in finding.text
+    assert "não melhora há ~6 semanas" in finding.text
+    assert "a prova é em 8 semanas" in finding.text
 
     assert stagnant_form("x", "IMPROVING", 8, 8) is None
     assert stagnant_form("x", "STABLE", 4, 8) is None
@@ -252,10 +253,35 @@ def test_the_message_puts_high_first_groups_by_athlete_and_says_nothing_was_chan
         {"leonardo": "Leonardo", "mauricio": "Maurício"},
     )
 
-    assert text.startswith("🔎 Auditoria de sanidade do coach — 3 achado(s) novo(s)")
+    assert text.startswith("🔎 Revisão diária do coach — 3 avisos novos")
+    assert "1 ponto sério (🔴) e 2 pra acompanhar (🟡)." in text
     assert text.index("Leonardo") < text.index("Maurício")
-    assert text.index("🔴 texto de prova_sem_lastro") < text.index("🟡 texto de esforco_baixo")
+    assert text.index("🔴 Prova que talvez não seja prova") < text.index(
+        "🟡 Treinos talvez leves demais"
+    )
     assert "nada foi alterado" in text
+    # cada aviso: título, a frase com os números e o que fazer
+    assert "texto de esforco_baixo\n👉 Pode ser que o treino esteja leve demais" in text
+
+
+def test_a_message_with_only_attention_points_says_nothing_is_urgent():
+
+    text = format_message([_f("leonardo")], {"leonardo": "Leonardo"})
+
+    assert "1 aviso novo" in text and "avisos novos" not in text
+    assert "Nada urgente: 1 ponto pra acompanhar (🟡)." in text
+
+
+def test_every_finding_has_a_plain_title_and_a_what_to_do_line():
+
+    assert set(audit.TITLES) == set(audit.ACTIONS)
+    assert len(audit.TITLES) == 16
+
+    internal = ("dose", "estímulo", "prescri", "ruído", "lastro", "economia aeróbica", "função")
+
+    for text in [*audit.TITLES.values(), *audit.ACTIONS.values()]:
+
+        assert not any(word in text.lower() for word in internal), text
 
 
 AUDITED = ["fernanda", "leonardo", "mauricio"]
@@ -289,11 +315,25 @@ def test_the_message_says_who_was_audited_and_who_had_nothing_new():
         ["fernanda", "leonardo", "mauricio"],
     )
 
-    assert "Atletas auditados: 3." in text
-    assert "✅ Sem achado novo: Fernanda, Maurício." in text
+    assert "Olhei os 3 atletas hoje." in text
+    assert "✅ Em dia, sem nenhuma pendência: Fernanda, Maurício." in text
 
     # sem a lista de auditados a mensagem segue como era
-    assert "Atletas auditados" not in format_message([_f("leonardo")], {})
+    assert "Olhei os" not in format_message([_f("leonardo")], {})
+
+
+def test_the_green_check_is_only_for_who_has_no_open_finding_at_all():
+    """29/10: o João tinha 2 avisos em aberto (já avisados) e aparecia com ✅ "sem achado novo"."""
+
+    names = {"leonardo": "Leonardo", "fernanda": "Fernanda", "joao": "João"}
+
+    text = format_message(
+        [_f("leonardo")], names, ["fernanda", "joao", "leonardo"],
+        open_findings=[_f("leonardo"), _f("joao", "aderencia_baixa")],
+    )
+
+    assert "✅ Em dia, sem nenhuma pendência: Fernanda." in text
+    assert "🕐 Avisados antes e ainda em aberto: João." in text
 
 
 def test_the_weekly_panel_lists_every_athlete_with_a_traffic_light():
@@ -330,7 +370,7 @@ def test_a_dry_run_shows_everything_and_sends_nothing(tmp_path, capsys):
 
     send.assert_not_called()
     assert "Leonardo" in shown and "texto de esforco_baixo" in capsys.readouterr().out
-    assert "Atletas auditados: 3." in shown and "📋 Painel dos atletas — 3 auditados" in shown
+    assert "Olhei os 3 atletas hoje." in shown and "📋 Painel dos atletas — 3 auditados" in shown
     assert state.load() == {}
 
 
@@ -345,9 +385,9 @@ def test_sending_warns_once_then_stays_quiet_until_the_cooldown_ends(tmp_path):
         second = audit.run(send=True, today=date(2026, 10, 22), state=state)
         later = audit.run(send=True, today=date(2026, 10, 29), state=state)
 
-    assert "1 achado(s) novo(s)" in first and "Painel" not in first
+    assert "1 aviso novo" in first and "Painel" not in first
     assert second == ""
-    assert "1 achado(s) novo(s)" in later
+    assert "1 aviso novo" in later
     assert send.await_count == 2
     assert state.load() == {"leonardo:esforco_baixo": "2026-10-29"}
 
@@ -367,7 +407,7 @@ def test_on_monday_the_panel_of_everyone_goes_even_without_new_findings(tmp_path
 
     assert send.await_count == 1
     assert sent.startswith("📋 Painel dos atletas — 3 auditados")
-    assert "achado(s) novo(s)" not in sent
+    assert "Revisão diária" not in sent
     assert "Fernanda" in sent and "Leonardo" in sent and "Mauricio" in sent
 
 
@@ -380,7 +420,7 @@ def test_on_monday_with_a_new_finding_the_alert_and_the_panel_go_together(tmp_pa
         sent = audit.run(send=True, today=date(2026, 10, 26), state=state)
 
     assert send.await_count == 1
-    assert "1 achado(s) novo(s)" in sent and "📋 Painel dos atletas" in sent
+    assert "1 aviso novo" in sent and "📋 Painel dos atletas" in sent
 
 
 def test_the_panel_can_be_forced_on_any_day(tmp_path):
@@ -466,7 +506,7 @@ def test_too_much_easy_running_with_a_time_goal_is_flagged():
     finding = easy_heavy("joaosoares", 11, 20, "00:23:00")
 
     assert finding.code == "rodagem_demais" and finding.level == "atenção"
-    assert "11 de 20 sessões prescritas" in finding.text and "(55%)" in finding.text
+    assert "11 de 20 treinos planejados" in finding.text and "(55%)" in finding.text
     assert "meta de tempo (00:23:00)" in finding.text
 
     assert easy_heavy("x", 11, 20, None) is None            # sem meta de tempo (saúde): ok
@@ -494,8 +534,8 @@ def test_a_plan_that_stopped_progressing_with_the_athlete_on_track_is_flagged():
     finding = stalled_plan("helio", [20.0, 21.0, 20.5, 20.0], [9.0, 9.5, 9.0, 9.0], 1.0)
 
     assert finding.code == "plano_parado"
-    assert "~20 km/semana, variando só 5%" in finding.text and "~10 km" in finding.text
-    assert "há 4 semanas com o plano em dia" in finding.text
+    assert "~20 km por semana, variando só 5%" in finding.text and "~10 km" in finding.text
+    assert "iguais há 4 semanas, e ele está cumprindo o plano" in finding.text
 
     assert stalled_plan("x", [20.0, 26.0, 21.0, 20.0], [9.0] * 4, 1.0) is None     # volume mexeu
     assert stalled_plan("x", [20.0] * 4, [9.0, 11.0, 9.0, 9.0], 1.0) is None       # longão mexeu
@@ -599,7 +639,36 @@ def test_a_sawtooth_volume_without_a_written_reason_is_flagged():
     found = audit.sawtooth("leonardo", weeks)
 
     assert found.code == "dente_de_serra" and found.level == audit.WATCH
-    assert "12 → 12 → 9 → 13 → 8 → 22 km" in found.text and "3 saltos" in found.text
+    assert "12 → 12 → 9 → 13 → 8 → 22 km" in found.text and "3 mudanças" in found.text
+
+
+def test_a_gap_in_the_saved_plans_is_not_a_swing():
+    """Renato (29/10): planos de 21/09 (29 km), 12/10 (18), 19/10 (25) e 26/10 (21). O "salto" de 29
+    pra 18 cruzava 3 semanas sem plano guardado — só havia uma mudança de verdade (18 → 25)."""
+
+    weeks = [
+        (date(2026, 9, 21), 29.0, False), (date(2026, 10, 12), 18.1, False),
+        (date(2026, 10, 19), 24.6, False), (date(2026, 10, 26), 20.8, False),
+    ]
+
+    assert audit.sawtooth("renato2", weeks) is None
+
+
+def test_a_sawtooth_that_already_settled_is_history_not_an_alert():
+    """Leonardo (29/10): 11.5, 9.3, 13.1, 7.5, 22.1, 23.5 — as duas últimas semanas já seguem a
+    rota. Só avisa enquanto a mudança mais recente ainda é um salto."""
+
+    weeks = [
+        (date(2026, 9, 21), 11.5, False), (date(2026, 9, 28), 9.3, False),
+        (date(2026, 10, 5), 13.1, False), (date(2026, 10, 12), 7.5, False),
+        (date(2026, 10, 19), 22.1, False), (date(2026, 10, 26), 23.5, False),
+    ]
+
+    assert audit.sawtooth("leonardo", weeks) is None
+
+    weeks[-1] = (date(2026, 10, 26), 12.0, False)
+
+    assert audit.sawtooth("leonardo", weeks) is not None
 
 
 def test_swings_with_a_written_reason_or_a_smooth_ramp_are_not_flagged():
@@ -644,7 +713,7 @@ def test_a_reason_does_not_justify_just_any_jump():
     )
 
     assert found.code == "salto_sobre_o_feito" and found.level == audit.WATCH
-    assert "+89%" in found.text and "O coach justificou (recuperação excelente" in found.text
+    assert "+89%" in found.text and "O coach explicou (recuperação excelente" in found.text
 
 
 def test_the_plan_that_left_the_route_without_a_motive_is_flagged():
@@ -695,8 +764,10 @@ def test_a_deload_week_reserved_by_calendar_in_the_block_is_flagged():
     found = audit.calendar_deload("renato2", block, date(2026, 10, 26), from_week=1)
 
     assert found.code == "descarga_por_calendario" and found.level == audit.WATCH
-    assert "reserva a semana 4 (16/11) como descarga/alívio" in found.text
-    assert "só vale se o corpo pedir ou se ele não aderir" in found.text
+    assert "reservou a semana 4 (16/11) como semana leve" in found.text
+    assert "só vale se o corpo pedir ou se ele não cumprir o plano" in (
+        audit.ACTIONS["descarga_por_calendario"]
+    )
 
 
 def test_a_block_without_a_deload_role_or_with_it_already_behind_is_not_flagged():
