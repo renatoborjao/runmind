@@ -363,6 +363,10 @@ class ExecutionLog:
 
             parts.append("não fez: " + ", ".join(entry["missing"]))
 
+        if entry.get("reported"):
+
+            parts.append("relato dele na esteira (o relógio não mede lá)")
+
         return " | ".join(parts)
 
     @staticmethod

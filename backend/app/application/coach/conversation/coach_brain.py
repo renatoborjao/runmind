@@ -115,7 +115,10 @@ repetir o mesmo alerta na próxima mensagem. Resposta pura, confirmação, ajust
 plano e elogio NÃO são cobrança: null",
   "on_pending": null | <apply|reject|refine>,
   "perception": null | {{"day": "<aaaa-mm-dd do treino de que ele fala>", \
-"rpe": <0-10 | null>, "feel": "<as palavras dele, curto> | null"}}}}
+"rpe": <0-10 | null>, "feel": "<as palavras dele, curto> | null", \
+"treadmill": <SÓ se ele correu na ESTEIRA e deu velocidade ou pace do painel: lista de \
+{{"kind": "interval"|"run", "pace": "m:ss" | null, "speed_kmh": <km/h | null>, \
+"meters": <metros de cada tiro | null>, "reps": <quantos | null>}}, senão null>}}}}
 
 COMO ESCOLHER:
 - ANTES DE TUDO — afirmar, corrigir ou perguntar NÃO é pedir mudança. Se o \
@@ -298,6 +301,12 @@ treino do quadro; "rpe" = o número se ele disse, senão o que a fala indica \
 "feel" = as palavras dele, curtas. É a percepção dele que calibra a dose — não \
 deixe passar. Se não fala de como se sentiu num treino, "perception"=null. Não \
 transforme isso em interrogatório: não pergunte só pra preencher.
+- ESTEIRA: se ele conta que correu na esteira e dá a velocidade (km/h) ou o pace do \
+PAINEL (ex.: "tiros de 400 m na velocidade 11, pace 5:27; o leve na 8"), preencha \
+"perception.treadmill" com cada trecho (tiros: kind "interval", com meters e reps; \
+contínuo: kind "run") — o relógio não mede o ritmo na esteira, e o que ele conta \
+vale. Use "day" do treino de que ele fala. Sem número de velocidade/pace, \
+"treadmill"=null.
 - TREINADOR QUE OFERECE: você enxerga o BALANÇO DE ESTÍMULOS × META no quadro \
 (o que ele recebeu de cada família, a intensidade real por zona de FC e as \
 LACUNAS rumo ao objetivo/fase). Quando o assunto abrir espaço — ele pergunta \
@@ -561,11 +570,21 @@ class CoachBrain:
 
         feel = str(raw.get("feel") or "").strip() or None
 
-        if len(day) != 10 or (rpe is None and not feel):
+        from app.application.history.treadmill_report import normalize
+
+        treadmill = normalize(raw.get("treadmill"))
+
+        if len(day) != 10 or (rpe is None and not feel and not treadmill):
 
             return None
 
-        return {"day": day, "rpe": rpe, "feel": feel}
+        parsed = {"day": day, "rpe": rpe, "feel": feel}
+
+        if treadmill:
+
+            parsed["treadmill"] = treadmill
+
+        return parsed
 
     @staticmethod
     def _parse_actions(data: dict) -> list[BrainAction]:

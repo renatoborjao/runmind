@@ -112,6 +112,14 @@ class PerceptionRecorder:
 
             return False
 
+        # o que ele contou da ESTEIRA (velocidade/pace do painel) vira registro de execução:
+        # o relógio não mede o ritmo lá. Independe de ele ter dado o esforço.
+        if perception.get("treadmill"):
+
+            from app.application.history import treadmill_report
+
+            treadmill_report.record(profile, day, perception["treadmill"])
+
         rpe = perception.get("rpe")
 
         try:

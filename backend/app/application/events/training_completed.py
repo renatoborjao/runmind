@@ -99,6 +99,8 @@ class TrainingCompletedEvent:
 
                 message = TrainingCompletedEvent._ask_rpe(profile, result, message)
 
+                message = TrainingCompletedEvent._ask_treadmill(profile, result, message)
+
             except Exception as e:
 
                 print(f"Falha ao preparar RPE de '{profile}': {e}")
@@ -342,6 +344,33 @@ class TrainingCompletedEvent:
         )
 
         return f"{message}\n\n{RpeFlow.ASK_LINE}"
+
+    @staticmethod
+    def _ask_treadmill(profile: str, result: dict, message: str) -> str:
+        """Treino forte na ESTEIRA: o relógio não mede o ritmo lá — pede a velocidade do painel (o
+        que ele responder vira registro de execução). Só em treino exigente; se ele já contou, o
+        registro existe e não pergunta de novo."""
+
+        from app.application.history import treadmill_report
+        from app.infrastructure.persistence.execution_log_store import ExecutionLogStore
+
+        enriched = result.get("activity")
+
+        activity = getattr(enriched, "activity", None)
+
+        if activity is None or not treadmill_report.is_treadmill(activity):
+
+            return message
+
+        if not TrainingCompletedEvent._is_demanding(result):
+
+            return message
+
+        if ExecutionLogStore().all(profile).get(int(activity.id), {}).get("reported"):
+
+            return message
+
+        return f"{message}\n\n{treadmill_report.ASK_LINE}"
 
     @staticmethod
     def _is_demanding(result: dict) -> bool:

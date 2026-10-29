@@ -137,6 +137,8 @@ def judge(
 
     if blocks:
 
+        told = ", relato dele na esteira" if (entry or {}).get("reported") else ""
+
         gaps = [_gap_seconds(b.get("pace"), b.get("target")) for b in blocks]
 
         # bateu a faixa OU correu mais rápido que ela: o estímulo chegou (mais rápido é pacing, não
@@ -153,7 +155,7 @@ def judge(
 
         if on / len(blocks) >= _DELIVERED_SHARE:
 
-            detail = f"{on} de {len(blocks)} blocos no ritmo-alvo ou mais rápido"
+            detail = f"{on} de {len(blocks)} blocos no ritmo-alvo ou mais rápido{told}"
 
             if fast:
 
@@ -168,7 +170,8 @@ def judge(
         slower = f", em média {mean_slow} s/km mais lento" if mean_slow else ""
 
         return Delivery(
-            day, name, SOFT, f"{on} de {len(blocks)} blocos no ritmo-alvo{slower}", mean_slow, rpe,
+            day, name, SOFT, f"{on} de {len(blocks)} blocos no ritmo-alvo{slower}{told}",
+            mean_slow, rpe,
         )
 
     # na esteira o relógio não mede o ritmo (calibração) e o esforço do relógio não diz o que foi
