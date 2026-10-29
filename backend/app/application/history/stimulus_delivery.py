@@ -100,6 +100,12 @@ def _gap_seconds(pace: str | None, target: str | None) -> int | None:
     return 0
 
 
+def _indoor(act) -> bool:
+    """Corrida na esteira (o arquivo guarda a marca do relógio)."""
+
+    return bool((getattr(act, "raw", None) or {}).get("trainer"))
+
+
 def _blocks(entry: dict | None) -> list[dict]:
     """Os blocos de estímulo MEDIDOS (com a faixa do passo e se bateu)."""
 
@@ -151,6 +157,15 @@ def judge(session, act, entry: dict | None, rpe: int | None, day: date) -> Deliv
         return Delivery(
             day, name, SOFT, f"{on} de {len(blocks)} blocos no ritmo-alvo{slower}", mean_slow, rpe,
         )
+
+    # na esteira o relógio não mede o ritmo (calibração) e o esforço do relógio não diz o que foi
+    # corrido: Leonardo 09/10 (relógio descalibrado) e 23/10 (tiros a 5:27/km pelo painel, mais
+    # rápidos que o alvo) apareciam como "sem intensidade" — não dá pra julgar
+    if _indoor(act):
+
+        detail = "esteira: o relógio não mede o ritmo (peça a velocidade do painel)"
+
+        return Delivery(day, name, UNKNOWN, detail, None, rpe)
 
     if rpe is not None and rpe <= _SOFT_RPE:
 

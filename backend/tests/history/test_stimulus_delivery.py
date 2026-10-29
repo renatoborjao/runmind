@@ -126,6 +126,25 @@ def test_blocks_on_target_are_delivered_even_with_a_missed_rep():
     assert item.verdict == DELIVERED and "5 de 6 blocos" in item.detail
 
 
+def test_on_the_treadmill_the_watch_cannot_judge_so_it_is_not_a_soft_session():
+    """Leonardo 09/10 (relógio descalibrado na esteira) e 23/10 (tiros a 5:27/km pelo painel, mais
+    rápidos que o alvo de 5:40-5:55): o esforço de 3/10 do relógio não prova que foi leve."""
+
+    act = _run(date(2026, 10, 23), 7.1, 9)
+
+    act.raw["trainer"] = True
+
+    item = judge(_session("Friday", "Velocidade / VO2"), act, None, 3, date(2026, 10, 23))
+
+    assert item.verdict == UNKNOWN
+    assert "esteira: o relógio não mede o ritmo" in item.detail
+
+    # sem a marca de esteira, o mesmo esforço continua valendo como "de leve"
+    outdoor = _run(date(2026, 10, 23), 7.1, 10)
+
+    assert judge(_session("Friday", "Velocidade / VO2"), outdoor, None, 3, TODAY).verdict == SOFT
+
+
 def test_without_measured_laps_how_he_felt_decides():
 
     session = _session("Friday", "Ritmo de Prova")
