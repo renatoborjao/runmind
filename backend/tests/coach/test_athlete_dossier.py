@@ -12,6 +12,8 @@ from app.application.coach.context.athlete_dossier import (
     AthleteDossier,
     _Inputs,
 )
+from app.application.history import effort_scale
+from app.application.history.effort_scale import EffortScale
 from app.domain.entities.daily_checkin import DailyCheckin
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.session_rpe import SessionRpe
@@ -832,7 +834,11 @@ def test_his_request_for_more_reaches_the_plan_as_a_directive_and_the_chat_as_a_
 
     base = dict(today=date(2026, 10, 21), activities=_weekly_runs(0, 8.3, 10.0, 7.5, 5.2, 9.0, 8.0))
 
-    with _patch_asks():
+    habit = EffortScale(
+        reports=(5, 6, 6, 7, 7, 7, 8, 8), rho=0.6, pairs=8, kind=effort_scale.READS,
+    )
+
+    with _patch_asks(), patch.object(effort_scale, "for_data", return_value=habit):
 
         plan = AthleteDossier._asks_more(
             _data(target_week=date(2026, 10, 26), reading=reading, **base), [2, 3, 2, 3],
@@ -841,7 +847,8 @@ def test_his_request_for_more_reaches_the_plan_as_a_directive_and_the_chat_as_a_
         chat = AthleteDossier._asks_more(_data(**base), [2, 3, 2, 3])
 
     assert plan.startswith("ELE PEDE MAIS") and "a resposta é DOSE" in plan
-    assert "poucas distâncias" in plan and "4 de 4" in plan
+    assert "poucas distâncias" in plan
+    assert "esforço percebido abaixo do habitual dele (mediana recente 2.5 × 7 de sempre" in plan
     assert chat.startswith("Ele pediu mais em 02/10") and "ELE PEDE MAIS" not in chat
 
 

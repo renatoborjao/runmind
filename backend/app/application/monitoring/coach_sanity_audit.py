@@ -22,17 +22,21 @@ import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
+from statistics import median
+
+from app.application.history import effort_scale
+from app.application.history.effort_scale import EffortScale
 
 # --- limiares (todos em um lugar; o alerta é pra OLHAR, não pra decidir) -------------------------
 
 # cada achado só volta a ser avisado depois disto
 COOLDOWN_DAYS = 7
 
-# esforço baixo o tempo todo: relatos de esforço nos últimos 28 dias, mínimo e fração ≤3/10
+# esforço baixo o tempo todo: relatos de esforço nos últimos 28 dias e mínimo de relatos; "baixo" é
+# ABAIXO DO HABITUAL DELE (`effort_scale`), nunca um limite absoluto que acusa quem responde baixo
+# por hábito
 RPE_WINDOW_DAYS = 28
 RPE_MIN_REPORTS = 5
-RPE_EASY = 3
-RPE_EASY_SHARE = 0.8
 
 # com prova datada e meta de tempo entre estas semanas de distância, esforço baixo pesa
 EFFORT_WEEKS = (3, 12)
@@ -165,11 +169,12 @@ def unbacked_race(
 
 def low_effort(
     profile: str, rpes: list[int], hard_pct: int | None, weeks_left: int | None,
-    target_time: str | None, race_label: str,
+    target_time: str | None, race_label: str, scale: EffortScale = effort_scale.UNKNOWN,
 ) -> Finding | None:
-    """Esforço percebido baixo em quase tudo E 0% do tempo em zona forte, com prova datada e meta
-    de tempo a poucas semanas: o treino pode estar leve demais pro que a meta pede (ou é base
-    deliberada — por isso é pra OLHAR)."""
+    """Esforço percebido ABAIXO DO HABITUAL DELE E 0% do tempo em zona forte, com prova datada e
+    meta de tempo a poucas semanas: o treino pode estar leve demais pro que a meta pede (ou é base
+    deliberada — por isso é pra OLHAR). Só vale quando o número dele acompanha o treino: quem
+    responde 3 em tudo (ou 2-3 por hábito) não tem "esforço baixo" a acusar."""
 
     if weeks_left is None or not target_time:
 
@@ -183,17 +188,16 @@ def low_effort(
 
         return None
 
-    easy = sum(1 for r in rpes if r <= RPE_EASY)
-
-    if easy / len(rpes) < RPE_EASY_SHARE:
+    if not scale.below_habit(rpes):
 
         return None
 
     return Finding(
         profile, "esforco_baixo", WATCH,
-        f"Esforço percebido ≤{RPE_EASY}/10 em {easy} de {len(rpes)} corridas e 0% do tempo em "
-        f"zona forte, com {race_label} em {weeks_left} semanas (meta {target_time}). O treino "
-        "pode estar leve demais pro que a meta pede — ou ser base de propósito: vale olhar.",
+        f"Esforço percebido abaixo do habitual dele (mediana {median(rpes):g} nas últimas "
+        f"{len(rpes)} corridas contra {scale.median:g} de sempre) e 0% do tempo em zona forte, "
+        f"com {race_label} em {weeks_left} semanas (meta {target_time}). O treino pode estar leve "
+        "demais pro que a meta pede — ou ser base de propósito: vale olhar.",
     )
 
 
@@ -899,6 +903,7 @@ class CoachSanityAudit:
                     weeks_left,
                     race["target"],
                     CoachSanityAudit._race_label(race),
+                    effort_scale.for_data(data.profile, data.activities),
                 )
 
         return None

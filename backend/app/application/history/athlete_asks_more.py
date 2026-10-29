@@ -13,13 +13,13 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import date, timedelta
-from statistics import mean
+from statistics import mean, median
+
+from app.application.history import effort_scale
+from app.application.history.effort_scale import EffortScale
 
 # quanto tempo um pedido continua valendo como sinal
 WINDOW_DAYS = 28
-
-# esforço percebido que conta como "leve pra ele"
-_EASY_RPE = 3
 
 _MAX_QUOTE = 150
 
@@ -139,15 +139,33 @@ def find(
     return sorted(found, key=lambda a: a.day)
 
 
-def _rpe_line(rpes: list[int]) -> str:
+def _rpe_line(rpes: list[int], scale: EffortScale) -> str:
+    """O esforço dele lido pela RÉGUA DELE: só é sinal quando o número acompanha o treino, e
+    comparado ao habitual dele (não a um "≤3 é leve" de todos)."""
 
     if not rpes:
 
         return "sem esforço percebido registrado"
 
-    easy = sum(1 for r in rpes if r <= _EASY_RPE)
+    if scale.kind == effort_scale.FEW:
 
-    return f"esforço percebido ≤{_EASY_RPE}/10 em {easy} de {len(rpes)} corridas recentes"
+        return "poucos relatos de esforço dele ainda (não pese como sinal)"
+
+    if not scale.reads:
+
+        return (
+            "o esforço que ele relata não acompanha o ritmo nem a FC (não conta como sinal de "
+            "folga nem de excesso)"
+        )
+
+    now, habit = median(rpes), scale.median
+
+    place = "abaixo do" if scale.below_habit(rpes) else "dentro do"
+
+    return (
+        f"esforço percebido {place} habitual dele (mediana recente {now:g} × {habit:g} de sempre, "
+        f"em {len(rpes)} corridas)"
+    )
 
 
 def _dose_line(since: dict | None) -> str:
@@ -222,6 +240,7 @@ def asks_more_directive(
     hard_pct: int | None,
     body: str | None,
     since: dict | None,
+    scale: EffortScale = effort_scale.UNKNOWN,
 ) -> str:
     """Pro PLANO: o pedido + o que os dados dizem + a obrigação de responder com dose ou com o
     dado. Vazio sem pedido."""
@@ -234,7 +253,9 @@ def asks_more_directive(
 
     hard = f"{hard_pct}% do tempo em zona forte (4 sem)" if hard_pct is not None else ""
 
-    facts = ", ".join(x for x in (_rpe_line(rpes), hard, f"corpo: {body}" if body else "") if x)
+    corpo = f"corpo: {body}" if body else ""
+
+    facts = ", ".join(x for x in (_rpe_line(rpes, scale), hard, corpo) if x)
 
     return (
         "ELE PEDE MAIS (dado dele — pese JUNTO do corpo e do esforço percebido; não é ordem nem "
@@ -248,7 +269,11 @@ def asks_more_directive(
 
 
 def asks_more_fact(
-    asks: list[Ask], rpes: list[int], hard_pct: int | None, since: dict | None,
+    asks: list[Ask],
+    rpes: list[int],
+    hard_pct: int | None,
+    since: dict | None,
+    scale: EffortScale = effort_scale.UNKNOWN,
 ) -> str:
     """O mesmo como FATO CURTO pras vozes que não montam o plano."""
 
@@ -260,7 +285,9 @@ def asks_more_fact(
 
     hard = f"; {hard_pct}% do tempo em zona forte (4 sem)" if hard_pct is not None else ""
 
+    effort = _rpe_line(rpes, scale)
+
     return (
-        f'Ele pediu mais em {last.day:%d/%m}: "{last.quote}". Os números: {_rpe_line(rpes)}{hard}. '
+        f'Ele pediu mais em {last.day:%d/%m}: "{last.quote}". Os números: {effort}{hard}. '
         f"{_dose_line(since)} Responda com isso e não prometa mudança que o plano não fez."
     ).replace("  ", " ")

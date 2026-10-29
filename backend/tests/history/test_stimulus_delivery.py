@@ -8,7 +8,11 @@ from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
+from app.application.history import effort_scale
 from app.application.history import stimulus_delivery as delivery
+from app.application.history.effort_scale import EffortScale
 from app.application.history.stimulus_delivery import (
     DELIVERED,
     SOFT,
@@ -29,6 +33,20 @@ from app.domain.entities.training_plan import TrainingPlan
 from tests.coach.factories import make_activity
 
 TODAY = date(2026, 10, 29)    # quinta
+
+# o número dele acompanha o treino e vai de 3 a 8 (3 é dos mais leves, 7 dos mais puxados): a régua
+# que dá valor ao esforço relatado quando não há voltas medidas
+SCALE = EffortScale(
+    reports=(3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8), rho=0.7, pairs=12, kind=effort_scale.READS,
+)
+
+
+@pytest.fixture(autouse=True)
+def _his_effort_scale():
+
+    with patch.object(effort_scale, "build", return_value=SCALE):
+
+        yield
 
 
 def _session(day, workout_type, km=7.0):
@@ -144,7 +162,9 @@ def test_on_the_treadmill_the_watch_cannot_judge_so_it_is_not_a_soft_session():
     # sem a marca de esteira, o mesmo esforço continua valendo como "de leve"
     outdoor = _run(date(2026, 10, 23), 7.1, 10)
 
-    assert judge(_session("Friday", "Velocidade / VO2"), outdoor, None, 3, TODAY).verdict == SOFT
+    assert judge(
+        _session("Friday", "Velocidade / VO2"), outdoor, None, 3, TODAY, scale=SCALE,
+    ).verdict == SOFT
 
 
 def test_another_recording_or_his_own_note_naming_the_treadmill_also_makes_it_unmeasured():
@@ -179,12 +199,16 @@ def test_without_measured_laps_how_he_felt_decides():
 
     session = _session("Friday", "Ritmo de Prova")
 
-    soft = judge(session, None, None, 3, TODAY)
-    hard = judge(session, None, None, 7, TODAY)
-    unknown = judge(session, None, None, None, TODAY)
+    soft = judge(session, None, None, 3, TODAY, scale=SCALE)
+    hard = judge(session, None, None, 7, TODAY, scale=SCALE)
+    usual = judge(session, None, None, 5, TODAY, scale=SCALE)
+    unknown = judge(session, None, None, None, TODAY, scale=SCALE)
 
-    assert soft.verdict == SOFT and "sentiu 3/10 (esforço de leve)" in soft.detail
-    assert hard.verdict == DELIVERED
+    assert soft.verdict == SOFT
+    assert "sentiu 3/10, dos mais leves que ele relata" in soft.detail
+    assert hard.verdict == DELIVERED and "dos mais puxados que ele relata" in hard.detail
+    # o habitual dele não prova leveza nem entrega
+    assert usual.verdict == UNKNOWN and "o habitual dele" in usual.detail
     assert unknown.verdict == UNKNOWN
 
 

@@ -5,6 +5,7 @@ esforço percebido, nunca ignorado em silêncio."""
 
 from datetime import date, datetime, timedelta
 
+from app.application.history import effort_scale
 from app.application.history.athlete_asks_more import (
     Ask,
     asks_more_directive,
@@ -13,7 +14,13 @@ from app.application.history.athlete_asks_more import (
     find,
     says_more,
 )
+from app.application.history.effort_scale import EffortScale
 from tests.coach.factories import make_activity
+
+# escala larga, habitual 7, que acompanha o treino: 2-4 é BEM abaixo do habitual dele
+HABIT = EffortScale(
+    reports=(5, 6, 6, 7, 7, 7, 8, 8), rho=0.6, pairs=8, kind=effort_scale.READS,
+)
 
 # as frases REAIS do Leonardo (resumidas só nas pontas)
 _TOO_EASY = (
@@ -144,12 +151,12 @@ _SINCE = {"before_week": 8.6, "before_long": 10.0, "after_week": 7.4, "after_lon
 def test_the_plan_directive_quotes_him_weighs_the_numbers_and_demands_an_answer():
 
     text = asks_more_directive(
-        _ASKS, [2, 3, 2, 3, 4, 3, 3], 0, "equilibrado (carga ótima + recuperado)", _SINCE,
+        _ASKS, [2, 3, 2, 3, 4, 3, 3], 0, "equilibrado (carga ótima + recuperado)", _SINCE, HABIT,
     )
 
     assert text.startswith("ELE PEDE MAIS")
     assert 'em 02/10 (conversa) "treinos muito leve, poucas distâncias"' in text
-    assert "esforço percebido ≤3/10 em 6 de 7 corridas recentes" in text
+    assert "esforço percebido abaixo do habitual dele (mediana recente 3 × 7 de sempre" in text
     assert "0% do tempo em zona forte" in text and "corpo: equilibrado" in text
     assert "Antes do pedido: ~9 km/semana" in text and "Desde então: ~7 km/semana" in text
     # a resposta é dose se os números sustentam, o dado se não — e nunca o silêncio
@@ -161,20 +168,20 @@ def test_the_directive_does_not_hide_a_body_that_contradicts_the_request():
     """O pedido pesa JUNTO do corpo: esforço alto e corpo sobrecarregado aparecem nos números."""
 
     text = asks_more_directive(
-        _ASKS[-1:], [7, 8, 7], 40, "sobrecarregado (carga alta + recuperação caindo)", None,
+        _ASKS[-1:], [7, 8, 7], 40, "sobrecarregado (carga alta + recuperação caindo)", None, HABIT,
     )
 
-    assert "esforço percebido ≤3/10 em 0 de 3" in text
+    assert "esforço percebido dentro do habitual dele (mediana recente 7 × 7 de sempre" in text
     assert "corpo: sobrecarregado" in text
     assert "recuperação caindo" in text
 
 
 def test_the_fact_for_the_other_voices_is_short_and_does_not_promise():
 
-    text = asks_more_fact(_ASKS, [2, 3, 3], 0, _SINCE)
+    text = asks_more_fact(_ASKS, [2, 3, 3], 0, _SINCE, HABIT)
 
     assert text.startswith('Ele pediu mais em 18/10: "demorando muito para chegar ao meu objetivo"')
-    assert "esforço percebido ≤3/10 em 3 de 3" in text
+    assert "esforço percebido abaixo do habitual dele (mediana recente 3 × 7 de sempre" in text
     assert "não prometa mudança que o plano não fez" in text
     assert "ELE PEDE MAIS" not in text
 

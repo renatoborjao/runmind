@@ -1480,9 +1480,11 @@ class AthleteDossier:
     @staticmethod
     def _route_slack(data: _Inputs, ledger) -> bool:
         """Ele cumpre com FOLGA? Cumpriu ≥90% do plano nas duas últimas semanas fechadas E (pediu
-        mais OU o esforço percebido vem baixo): a rota pode subir no teto do salto seguro."""
+        mais OU o esforço percebido vem abaixo do habitual DELE): a rota pode subir no teto do
+        salto seguro."""
 
         from app.application.history import athlete_asks_more as asks_more
+        from app.application.history import effort_scale
         from app.infrastructure.persistence.checkin_repository import CheckinRepository
         from app.infrastructure.persistence.conversation_repository import (
             ConversationRepository,
@@ -1511,9 +1513,8 @@ class AthleteDossier:
             r.rpe for r in SessionRpeRepository().load_sessions(data.profile) if r.rpe is not None
         ]
 
-        recent = rpes[-6:]
-
-        return len(recent) >= 3 and sum(recent) / len(recent) <= 4.0
+        # lido pela régua dele: "≤4" absoluto acusaria folga em quem responde baixo por hábito
+        return effort_scale.for_data(data.profile, data.activities).below_habit(rpes[-6:])
 
     @staticmethod
     def weekly_route(data: _Inputs):
@@ -1597,6 +1598,7 @@ class AthleteDossier:
         dizem + (pro plano) a obrigação de responder com dose ou com o dado."""
 
         from app.application.history import athlete_asks_more as asks_more
+        from app.application.history import effort_scale
         from app.infrastructure.persistence.checkin_repository import CheckinRepository
         from app.infrastructure.persistence.conversation_repository import (
             ConversationRepository,
@@ -1616,13 +1618,15 @@ class AthleteDossier:
 
         since = asks_more.dose_since(data.activities, asks[0].day, data.today)
 
+        scale = effort_scale.for_data(data.profile, data.activities)
+
         if data.target_week is None:
 
-            return asks_more.asks_more_fact(asks, rpes, hard, since)
+            return asks_more.asks_more_fact(asks, rpes, hard, since, scale)
 
         body = _BODY_STATE_PT.get(getattr(data.reading, "body_state", None))
 
-        return asks_more.asks_more_directive(asks, rpes, hard, body, since)
+        return asks_more.asks_more_directive(asks, rpes, hard, body, since, scale)
 
     @staticmethod
     def _perception(data: _Inputs) -> list[str]:
@@ -1751,8 +1755,16 @@ class AthleteDossier:
         out = [
             "Relatos recentes (pese JUNTO do corpo/carga: esforço alto pro que "
             "a carga diz = está sentindo mais, cuidado; baixo ou boa energia = "
-            "sobra pra dosar mais):"
+            "sobra pra dosar mais — o número vale pela régua DELE, veja a linha abaixo):"
         ] + lines
+
+        from app.application.history import effort_scale
+
+        reading = effort_scale.note(effort_scale.for_data(data.profile, data.activities))
+
+        if reading:
+
+            out.append(reading)
 
         if asks:
 

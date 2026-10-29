@@ -9,14 +9,17 @@ forte" (sem quantas semanas, sem a causa), e o coach seguia prescrevendo outro f
 29/10).
 
 Aqui sai o que faltava: por sessão forte feita, se ele ENTREGOU o estímulo — pelos blocos do
-relógio quando há (ritmo dentro da faixa), senão pelo esforço que ele mesmo relatou — e há quantas
-semanas não entrega um. É DADO + CONHECIMENTO pro coach tratar a CAUSA (alvo acima do que ele
-sustenta, ele não empurra, terreno), nunca cota nem fórmula ([[feedback_ia_decide_sem_regras]]).
-Puro/determinístico."""
+relógio quando há (ritmo dentro da faixa), senão pelo esforço que ele mesmo relatou, LIDO PELA
+RÉGUA DELE (`effort_scale`: o número só vale se acompanha a FC e o ritmo dele, e pelo habitual
+dele, não pelo absoluto) — e há quantas semanas não entrega um. É DADO + CONHECIMENTO pro coach
+tratar a CAUSA (alvo acima do que ele sustenta, ele não empurra, terreno), nunca cota nem fórmula
+([[feedback_ia_decide_sem_regras]]). Puro/determinístico."""
 
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from app.application.history import effort_scale
+from app.application.history.effort_scale import HIGH, LOW, EffortScale
 from app.application.history.execution_log import ExecutionLog
 from app.application.history.stimulus_ledger import (
     FARTLEK,
@@ -35,10 +38,6 @@ WINDOW_WEEKS = 6
 
 # bateu a faixa em pelo menos esta fração dos blocos medidos = entregou
 _DELIVERED_SHARE = 0.6
-
-# sem blocos medidos, o que ele mesmo sentiu decide: até 3/10 num treino forte é leve; 5+ é forte
-_SOFT_RPE = 3
-_HARD_RPE = 5
 
 DELIVERED = "entregou"
 SOFT = "sem intensidade"
@@ -71,6 +70,8 @@ class DeliverySummary:
     mean_gap_s: int | None
     mean_rpe: float | None
     items: list[Delivery]
+    # o esforço habitual dele (mediana dos relatos), quando o número dele acompanha o treino
+    habit_rpe: float | None = None
 
 
 def _gap_seconds(pace: str | None, target: str | None) -> int | None:
@@ -126,10 +127,18 @@ def _blocks(entry: dict | None) -> list[dict]:
 
 
 def judge(
-    session, act, entry: dict | None, rpe: int | None, day: date, indoor: bool = False,
+    session,
+    act,
+    entry: dict | None,
+    rpe: int | None,
+    day: date,
+    indoor: bool = False,
+    scale: EffortScale = effort_scale.UNKNOWN,
 ) -> Delivery:
     """Uma sessão forte FEITA: entregou o estímulo? `indoor`: outros sinais de esteira (outra
-    gravação do dia com "esteira" no nome, ou ele escreveu "esteira" na nota)."""
+    gravação do dia com "esteira" no nome, ou ele escreveu "esteira" na nota). `scale`: a régua de
+    esforço dele — sem blocos medidos, o que ele sentiu só decide se o número dele acompanha o
+    treino, e é lido pelo habitual dele."""
 
     name = session.workout_type
 
@@ -187,22 +196,39 @@ def judge(
 
         return Delivery(day, name, UNKNOWN, detail, None, rpe)
 
-    if rpe is not None and rpe <= _SOFT_RPE:
+    if rpe is None:
 
         return Delivery(
-            day, name, SOFT, f"blocos sem voltas medidas; ele sentiu {rpe}/10 (esforço de leve)",
-            None, rpe,
+            day, name, UNKNOWN, "blocos sem voltas medidas e sem esforço relatado", None, rpe,
         )
 
-    if rpe is not None and rpe >= _HARD_RPE:
+    level = scale.level(rpe)
 
-        detail = f"blocos sem voltas medidas; ele sentiu {rpe}/10"
+    if level == LOW:
+
+        felt = effort_scale.describe(rpe, scale)
+
+        detail = f"blocos sem voltas medidas; ele sentiu {rpe}/10, {felt}"
+
+        return Delivery(day, name, SOFT, detail, None, rpe)
+
+    if level == HIGH:
+
+        felt = effort_scale.describe(rpe, scale)
+
+        detail = f"blocos sem voltas medidas; ele sentiu {rpe}/10, {felt}"
 
         return Delivery(day, name, DELIVERED, detail, None, rpe)
 
-    detail = "blocos sem voltas medidas e sem esforço relatado"
+    # o número dele não acompanha o treino (ou ainda não dá pra saber) OU é o habitual dele: não
+    # prova nem leveza nem entrega (Leonardo responde 3 em tudo; Maurício, 2 ou 3 em tudo)
+    why = (
+        "o habitual dele" if level else "o esforço que ele relata não separa leve de forte"
+    )
 
-    return Delivery(day, name, UNKNOWN, detail, None, rpe)
+    return Delivery(
+        day, name, UNKNOWN, f"blocos sem voltas medidas; ele sentiu {rpe}/10 ({why})", None, rpe,
+    )
 
 
 def assess(
@@ -214,6 +240,8 @@ def assess(
     from app.application.history.training_patterns import TrainingPatterns
 
     by_day = {str(getattr(r, "day", "")): r for r in rpes or []}
+
+    scale = effort_scale.build(rpes, activities)
 
     # dias em que ele correu na esteira: o relógio descalibra e o treino principal pode ter sido
     # gravado como corrida comum (Leonardo 09/10: 6,9 km "comum" + 1,2 km "Corrida em esteira")
@@ -253,7 +281,7 @@ def assess(
         )
 
         items.append(
-            judge(session, act, entry, getattr(rpe_row, "rpe", None), day, indoor)
+            judge(session, act, entry, getattr(rpe_row, "rpe", None), day, indoor, scale)
         )
 
     if not prescribed:
@@ -268,7 +296,8 @@ def assess(
 
     gaps = [i.gap_s for i in soft if i.gap_s]
 
-    rpe_values = [i.rpe for i in items if i.rpe is not None]
+    # o esforço médio só entra quando o número dele acompanha o treino
+    rpe_values = [i.rpe for i in items if i.rpe is not None] if scale.reads else []
 
     return DeliverySummary(
         prescribed=prescribed,
@@ -281,6 +310,7 @@ def assess(
         mean_gap_s=round(sum(gaps) / len(gaps)) if gaps else None,
         mean_rpe=sum(rpe_values) / len(rpe_values) if rpe_values else None,
         items=sorted(items, key=lambda i: i.day),
+        habit_rpe=scale.median if scale.reads else None,
     )
 
 
@@ -363,7 +393,9 @@ def _tail(summary: DeliverySummary) -> str:
 
     if summary.mean_rpe is not None:
 
-        bits.append(f"esforço percebido médio {summary.mean_rpe:.1f}/10")
+        habit = f" (o habitual dele é {summary.habit_rpe:g})" if summary.habit_rpe else ""
+
+        bits.append(f"esforço percebido médio {summary.mean_rpe:.1f}/10{habit}")
 
     return "; ".join(bits)
 
@@ -380,8 +412,8 @@ _DIRECTIVE = (
     "certo não é entregar. Antes de repetir, ache a CAUSA com os números: (a) o alvo está acima do "
     "que ele sustenta hoje (recalibre pelo que ele fez nos blocos medidos); (b) ele não empurra "
     "— o "
-    "esforço dele é de leve (≤3/10, FC abaixo da zona): dê a régua que ele entende (FC-alvo da "
-    "zona, "
+    "esforço dele é de leve pela régua dele, FC abaixo da zona): dê a régua que ele entende "
+    "(FC-alvo da zona, "
     "\"esforço 7 de 10\", repetições curtas com pace-guia, um teste curto de 3 km) e diga a ele o "
     "que você viu, sem repetir a mesma bronca; (c) esteira, calor ou terreno. A decisão é sua."
 )
@@ -397,8 +429,8 @@ def render(summary: DeliverySummary | None, *, directive: bool = False) -> str:
 
     head = (
         f"FORTES: PRESCRITO × ENTREGUE (últimas {WINDOW_WEEKS} semanas — \"entregue\" = bateu o "
-        "ritmo-alvo nos blocos medidos do relógio, ou ele sentiu 5/10 ou mais; fazer o treino no "
-        "dia "
+        "ritmo-alvo nos blocos medidos (relógio ou relato da esteira), ou ele sentiu um esforço "
+        "dos mais puxados que ele costuma relatar; fazer o treino no dia "
         f"certo não basta): {headline(summary)}."
     )
 

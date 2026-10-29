@@ -28,6 +28,9 @@ from app.domain.value_objects.sports import is_run_sport
 
 WINDOW_WEEKS = 4
 
+# esforço que num treino leve já pesa em absoluto (e ainda precisa ser alto pra régua dele)
+_HEAVY_RPE = 6
+
 _MIN_DISTANCE_M = 1000
 
 # teto AERÓBICO pela reserva de FC (Karvonen 70%) — mesma fisiologia pra todo
@@ -193,7 +196,7 @@ class TrainingPatterns:
 
         lines += TrainingPatterns._volume_lines(plans, activities, today, weeks)
 
-        lines += TrainingPatterns._rpe_lines(sessions, rpes)
+        lines += TrainingPatterns._rpe_lines(sessions, rpes, activities)
 
         drift = drift or TrainingPatterns.recovery_drift(snapshots)
 
@@ -592,8 +595,15 @@ class TrainingPatterns:
         return None
 
     @staticmethod
-    def _rpe_lines(sessions, rpes) -> list[str]:
-        """Percepção × intenção: leve sentido pesado é sinal (fadiga)."""
+    def _rpe_lines(sessions, rpes, activities=()) -> list[str]:
+        """Percepção × intenção: leve sentido pesado é sinal (fadiga) — pela régua DELE: só conta
+        se o número dele acompanha o treino e é dos mais puxados que ele relata, e além disso pesado
+        em absoluto (6+): quem usa a faixa 2-4 e sobe o número quando corre mais forte não está
+        "cansado" ao dar 3."""
+
+        from app.application.history import effort_scale
+
+        scale = effort_scale.build(rpes, activities)
 
         by_day = {str(getattr(r, "day", "")): r for r in rpes or []}
 
@@ -607,7 +617,11 @@ class TrainingPatterns:
 
                 continue
 
-            if family == EASY and rpe.rpe >= 6:
+            if (
+                family == EASY
+                and rpe.rpe >= _HEAVY_RPE
+                and scale.level(rpe.rpe) == effort_scale.HIGH
+            ):
 
                 heavy_easy.append(f"{day:%d/%m} ({rpe.rpe}/10)")
 

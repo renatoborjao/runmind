@@ -8,7 +8,9 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from app.application.history import effort_scale
 from app.application.history.athlete_asks_more import Ask
+from app.application.history.effort_scale import EffortScale
 from app.application.history.goal_path import assess
 from app.application.history.race_detector import RaceEvent
 from app.application.monitoring import coach_sanity_audit as audit
@@ -33,6 +35,11 @@ from app.application.monitoring.coach_sanity_audit import (
 )
 
 TODAY = date(2026, 10, 21)
+
+# o número dele acompanha o treino e o habitual dele é 7: 2-3 é BEM abaixo
+HABIT = EffortScale(
+    reports=(5, 6, 6, 7, 7, 7, 8, 8), rho=0.6, pairs=8, kind=effort_scale.READS,
+)
 
 MODULE = "app.application.monitoring.coach_sanity_audit"
 
@@ -74,14 +81,16 @@ def test_an_old_race_or_none_is_not_flagged():
 
 
 def test_low_effort_with_a_time_goal_close_to_the_race_is_flagged():
-    """Leonardo: esforço ≤3/10 em 6 de 7, 0% em zona forte, prova em 8 semanas, meta 1h."""
+    """Esforço bem abaixo do habitual DELE, 0% em zona forte, prova em 8 semanas, meta 1h."""
 
     finding = low_effort(
-        "leonardo", [2, 3, 2, 3, 4, 3, 3], 0, 8, "01:00:00", "a prova de 10 km",
+        "leonardo", [2, 3, 2, 3, 4, 3, 3], 0, 8, "01:00:00", "a prova de 10 km", HABIT,
     )
 
     assert finding.level == "atenção" and finding.code == "esforco_baixo"
-    assert "≤3/10 em 6 de 7 corridas" in finding.text
+    assert "abaixo do habitual dele (mediana 3 nas últimas 7 corridas contra 7 de sempre)" in (
+        finding.text
+    )
     assert "0% do tempo em zona forte" in finding.text
     assert "em 8 semanas (meta 01:00:00)" in finding.text
     # é pra OLHAR: pode ser base de propósito
@@ -92,14 +101,41 @@ def test_low_effort_needs_every_condition():
 
     rpes = [2, 3, 2, 3, 3, 2]
 
-    assert low_effort("x", rpes, 12, 8, "01:00:00", "a prova") is None        # tem tempo forte
-    assert low_effort("x", rpes, None, 8, "01:00:00", "a prova") is None      # sem régua de FC
-    assert low_effort("x", rpes, 0, 20, "01:00:00", "a prova") is None        # prova longe
-    assert low_effort("x", rpes, 0, 2, "01:00:00", "a prova") is None         # taper
-    assert low_effort("x", rpes, 0, 8, None, "a prova") is None               # sem meta de tempo
-    assert low_effort("x", rpes, 0, None, "01:00:00", "a prova") is None      # sem prova datada
-    assert low_effort("x", [2, 3, 2], 0, 8, "01:00:00", "a prova") is None    # poucos relatos
-    assert low_effort("x", [2, 3, 7, 8, 6, 3], 0, 8, "01:00:00", "a prova") is None  # esforço real
+    def check(rpes=rpes, hard=0, weeks=8, target="01:00:00", scale=HABIT):
+
+        return low_effort("x", rpes, hard, weeks, target, "a prova", scale)
+
+    assert check(hard=12) is None                    # tem tempo forte
+    assert check(hard=None) is None                  # sem régua de FC
+    assert check(weeks=20) is None                   # prova longe
+    assert check(weeks=2) is None                    # taper
+    assert check(target=None) is None                # sem meta de tempo
+    assert check(weeks=None) is None                 # sem prova datada
+    assert check(rpes=[2, 3, 2]) is None             # poucos relatos
+    assert check(rpes=[7, 8, 6, 7, 7, 8]) is None    # esforço no habitual dele
+    assert check() is not None
+
+
+def test_low_effort_is_not_evidence_when_his_number_does_not_follow_the_training():
+    """Leonardo responde 3 em 73% das vezes e o número não acompanha a FC nem o ritmo; Maurício
+    responde 2-3 por hábito. "Esforço baixo" neles é o jeito de responder, não o treino."""
+
+    flat = EffortScale(reports=(3,) * 8 + (2, 2, 4), rho=0.0, pairs=11, kind=effort_scale.FLAT)
+
+    few = EffortScale(reports=(3, 3, 2), kind=effort_scale.FEW)
+
+    rpes = [3, 3, 3, 2, 3, 3]
+
+    assert low_effort("l", rpes, 0, 8, "01:00:00", "a prova", flat) is None
+    assert low_effort("l", rpes, 0, 8, "01:00:00", "a prova", few) is None
+    assert low_effort("l", rpes, 0, 8, "01:00:00", "a prova") is None      # régua desconhecida
+
+    # acompanha o treino, mas a faixa dele é 2-3: 3 É o habitual, não é esforço baixo
+    compressed = EffortScale(
+        reports=(2,) * 12 + (3,) * 10 + (4,), rho=0.8, pairs=23, kind=effort_scale.READS,
+    )
+
+    assert low_effort("m", [2, 3, 2, 3, 3, 2], 0, 8, "01:00:00", "a prova", compressed) is None
 
 
 # --- pediu mais e a dose não mudou ----------------------------------------------------------------
@@ -525,7 +561,7 @@ def test_every_upcoming_race_counts_not_only_the_main_one():
 
 def test_low_effort_is_judged_against_the_nearest_race_even_if_it_is_preparatory():
 
-    data = SimpleNamespace(profile="renato2", today=TODAY, goal=None)
+    data = SimpleNamespace(profile="renato2", today=TODAY, goal=None, activities=[])
 
     races = [
         _race(date(2027, 4, 4), 21.0975, "1:59:59", "A"),
@@ -536,7 +572,9 @@ def test_low_effort_is_judged_against_the_nearest_race_even_if_it_is_preparatory
         "app.application.coach.context.athlete_dossier.AthleteDossier._races", return_value=races,
     ), patch(
         "app.application.coach.context.athlete_dossier.AthleteDossier._hard_pct", return_value=0,
-    ), patch.object(CoachSanityAudit, "_rpes", return_value=[2, 3, 2, 3, 3, 2]):
+    ), patch.object(CoachSanityAudit, "_rpes", return_value=[2, 3, 2, 3, 3, 2]), patch.object(
+        effort_scale, "for_data", return_value=HABIT,
+    ):
 
         finding = CoachSanityAudit._check_effort(data)
 
