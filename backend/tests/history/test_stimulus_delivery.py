@@ -226,7 +226,7 @@ def test_the_audit_stays_quiet_when_a_forte_was_delivered_recently_or_there_is_l
     assert strong_not_delivered("l", few, TODAY) is None
 
 
-def test_the_audit_is_a_watch_when_the_last_delivered_forte_is_weeks_old():
+def test_the_audit_stays_high_when_the_last_delivered_forte_is_weeks_old():
 
     plans, runs, log, rpes = _leonardo()
 
@@ -236,7 +236,7 @@ def test_the_audit_is_a_watch_when_the_last_delivered_forte_is_weeks_old():
 
     found = strong_not_delivered("leonardo", summary, date(2026, 11, 20))
 
-    assert found is not None and found.level == audit.WATCH
+    assert found is not None and found.level == audit.HIGH
     assert "Há 4 semanas sem um treino forte que bata o alvo (o último foi em 23/10)" in found.text
 
 

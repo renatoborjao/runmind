@@ -567,7 +567,7 @@ def strong_not_delivered(profile: str, summary, today: date) -> Finding | None:
     extra = f" {tail[0].upper()}{tail[1:]}." if tail else ""
 
     return Finding(
-        profile, "forte_sem_intensidade", HIGH if not summary.delivered else WATCH,
+        profile, "forte_sem_intensidade", HIGH,
         f"{since}: {delivery.headline(summary)}.{extra}"
         " Ele corre o forte em ritmo de leve — o coach prescreve, mas o estímulo não chega. "
         "Mais um forte igual não resolve: o coach precisa tratar a causa (alvo alto demais ou "
