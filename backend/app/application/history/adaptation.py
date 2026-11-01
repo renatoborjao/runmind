@@ -25,12 +25,18 @@ _FLAGGED = {"STRAINED", "RECOVERY_FLAG"}
 # semana pesada dele = a partir desta fração da maior semana fechada da janela
 _HEAVY_SHARE = 0.85
 
-# cumprimento do plano (sessões feitas ÷ prescritas) a partir do qual "ele cumpre"
+# cumprimento do plano (sessões feitas ÷ prescritas): a partir de _CUMPRE "ele cumpre"; abaixo de
+# _NAO_CUMPRE "cumpre pouco"; entre os dois o histórico NÃO decide (Renato 01/11: 5 de 6 = 83% virou
+# "cumpre pouco" por um corte único em 85%, e a causa era chuva e frio, não falta de vontade)
 _CUMPRE = 0.85
+_NAO_CUMPRE = 0.6
 
 # dos sinais que ele já deu, a fração que voltou ao normal na semana seguinte pra "ele se recupera
-# rápido"
+# rápido" (_RECOVERS) ou pra "NÃO se recupera" (_STUCK, no máximo esta fração). Só fala com pelo
+# menos _MIN_DIPS sinais: com 1 amostra não há padrão, é um fato só
 _RECOVERS = 0.6
+_STUCK = 0.34
+_MIN_DIPS = 2
 
 
 @dataclass(slots=True)
@@ -42,9 +48,20 @@ class Adaptation:
     dips: list[tuple[date, bool]]                    # (semana do sinal, voltou ao normal depois?)
 
     @property
+    def adherence(self) -> float | None:
+
+        return self.fulfilled / self.planned if self.planned else None
+
+    @property
     def complies(self) -> bool:
 
         return self.planned == 0 or self.fulfilled >= _CUMPRE * self.planned
+
+    @property
+    def barely_complies(self) -> bool:
+        """Cumpre claramente pouco (abaixo de _NAO_CUMPRE) — a zona cinza não entra."""
+
+        return bool(self.planned) and self.fulfilled < _NAO_CUMPRE * self.planned
 
     @property
     def recovered(self) -> int:
@@ -54,15 +71,28 @@ class Adaptation:
     @property
     def recovers_fast(self) -> bool:
         """Dos sinais que já deu, voltou ao normal na semana seguinte na maioria. Sem sinais
-        anteriores não há o que provar: não conta contra nem a favor."""
+        anteriores (ou só 1: amostra pequena) não há o que provar: não conta contra nem a favor."""
 
-        return not self.dips or self.recovered >= _RECOVERS * len(self.dips)
+        return len(self.dips) < _MIN_DIPS or self.recovered >= _RECOVERS * len(self.dips)
+
+    @property
+    def stuck(self) -> bool:
+        """Com amostra (≥ _MIN_DIPS sinais), quase nenhum voltou ao normal na semana seguinte."""
+
+        return len(self.dips) >= _MIN_DIPS and self.recovered <= _STUCK * len(self.dips)
 
     @property
     def adapts(self) -> bool:
         """Cumpre o plano e se recupera rápido — o sinal curto de agora tende a ser passageiro."""
 
         return self.complies and self.recovers_fast
+
+    @property
+    def weighs_signal(self) -> bool:
+        """O histórico pede mais peso ao sinal: cumpre claramente pouco OU os sinais anteriores
+        claramente não voltaram ao normal. O resto é zona cinza — não decide."""
+
+        return self.barely_complies or self.stuck
 
 
 def _is_flagged(week: WeekStat) -> bool:
@@ -178,20 +208,41 @@ def _knowledge(found: Adaptation) -> str:
             "cheio é dente de serra: o corpo dele responde melhor a degraus do que a vales."
         )
 
-    reasons = []
+    if found.weighs_signal:
 
-    if not found.complies:
+        reasons = []
 
-        reasons.append("ele cumpre pouco do plano")
+        if found.barely_complies:
 
-    if not found.recovers_fast:
+            reasons.append("ele cumpre pouco do plano")
 
-        reasons.append("os sinais anteriores NÃO voltaram ao normal na semana seguinte")
+        if found.stuck:
+
+            reasons.append("os sinais anteriores NÃO voltaram ao normal na semana seguinte")
+
+        return (
+            f"CONHECIMENTO, não regra: aqui o histórico dele pede mais peso ao sinal de corpo "
+            f"({'; '.join(reasons)}). Um recuo maior é coerente — mas proporcional, e ancorado no "
+            "que ele de fato cumpre. Antes, confirme se o que ele deixou de cumprir foi falta de "
+            "capacidade ou motivo de fora (clima, doença, agenda): motivo de fora não é incapacidade."
+        )
+
+    gaps = []
+
+    if found.planned and not found.complies:
+
+        gaps.append(f"cumpriu {found.fulfilled} de {found.planned}")
+
+    if found.dips and len(found.dips) < _MIN_DIPS:
+
+        gaps.append("só um sinal anterior, amostra pequena")
+
+    why = f" ({'; '.join(gaps)})" if gaps else ""
 
     return (
-        f"CONHECIMENTO, não regra: aqui o histórico dele pede mais peso ao sinal de corpo "
-        f"({'; '.join(reasons)}). Um recuo maior é coerente — mas proporcional, e ancorado no que "
-        "ele de fato cumpre."
+        f"CONHECIMENTO, não regra: o histórico dele NÃO decide sozinho{why} — nem prova que ele "
+        "aguenta nem que não aguenta. Pese o resto do quadro; o recuo, se houver, é o MENOR que o "
+        "sinal justifica (segurar a rampa, ou ≈10-20%), mantendo os dias e a qualidade dele."
     )
 
 

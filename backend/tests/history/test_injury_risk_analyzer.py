@@ -108,3 +108,31 @@ def test_chat_line_present_when_elevated():
 
     assert line.startswith("- Risco de lesão")
     assert "elevado" in line
+
+
+def test_coming_back_from_a_weak_week_is_not_a_ramp():
+    """Renato 01/11: 46 → 156 min (a semana fraca era a chuva) com a recuperação caindo somava
+    "rampa" + recuperação = risco ELEVADO e o coach cortou o treino forte. Com o rebote
+    reconhecido pelo analisador da carga (a semana é 77% do que ele sustentava) a rampa não conta."""
+
+    spiky = [380.0, 480.0, 163.0, 590.0]
+
+    ramp = TrainingLoad(
+        acute_load=590.0, chronic_load=766.0, acwr=0.77, status=LOAD_OPTIMAL,
+        days_of_history=22, weekly_loads=spiky, rebound=(202.0, 156.0),
+    )
+
+    risk = InjuryRiskAnalyzer.assess(ramp, _recovery(hrv=FALLING), [])
+
+    assert risk.level == RISK_LOW
+    assert not any("pulou" in r for r in risk.reasons)
+
+    no_rebound = TrainingLoad(
+        acute_load=590.0, chronic_load=766.0, acwr=0.77, status=LOAD_OPTIMAL,
+        days_of_history=22, weekly_loads=spiky,
+    )
+
+    assert any(
+        "pulou" in r
+        for r in InjuryRiskAnalyzer.assess(no_rebound, _recovery(hrv=FALLING), []).reasons
+    )

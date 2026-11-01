@@ -33,6 +33,23 @@ def _span(source) -> str:
     return f"há {source.alert_streak} leituras seguidas"
 
 
+# O que os sinais do corpo (FC de repouso, HRV, sono, FC nos treinos) NÃO medem sozinhos: o que ele
+# mesmo contou. Renato 01/11: contou que usa androgênicos (FC mais alta) e que voltou a fumar, tinha
+# acabado de voltar de duas semanas de pausa médica, e o coach leu "FC alta + sono curto" como
+# excesso de treino e cortou o plano todo, até o treino forte. É CONHECIMENTO pra IA pesar: a
+# cautela com SALTO de carga continua valendo (tendão não acompanha), o que muda é não tratar sinal
+# explicado como fadiga de treino.
+_CONFOUNDERS = (
+    " ANTES de ler isto como excesso de treino, confira nos fatos que ele mesmo contou (memória "
+    "do corredor) o que pode estar DESLOCANDO esses sinais: substância ou medicação, cigarro, "
+    "doença, noites ruins por vida ou trabalho, clima. Sinal com explicação conhecida não é "
+    "fadiga de carga — não é motivo pra encolher o volume nem pra matar o treino de qualidade; "
+    "ancore a dose no que ele já SUSTENTOU e no que ele sente. A cautela que continua valendo é "
+    "com SALTO de carga. Com a FC deslocada, guie os leves por ritmo/esforço conversável e use "
+    "a FC só como teto com folga."
+)
+
+
 _LIMITER = {
     "sono": "o sono (noites curtas)",
     "fc_repouso": "a FC de repouso, que vem subindo",
@@ -83,6 +100,7 @@ def body_plan_directive(
             "volume/intensidade desta semana, ou remaneje o treino mais forte, "
             "conforme a meta e o momento dele. Recuperar bem AGORA é o que "
             "sustenta a evolução — não mantenha a carga cega."
+            f"{_CONFOUNDERS}"
         )
 
     # RECOVERY_FLAG com PIORA OBJETIVA (FC de repouso subindo / HRV caindo vs a
@@ -115,6 +133,7 @@ def body_plan_directive(
         "a carga está tranquila, NÃO trave a progressão por isto — é o normal "
         "dele, não um alerta. Só segure a subida se a recuperação estiver caindo "
         "DE VERDADE agora (agudo). Nunca corte volume à toa."
+        f"{_CONFOUNDERS}"
     )
 
 
@@ -157,4 +176,5 @@ def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> s
         "se o quadro também trouxer sinal de descarga, escolha entre as duas. "
         "Pese com o resto e decida; o que escolher, diga no purpose/mensagem com "
         "franqueza — e que o sono é a alavanca dele."
+        f"{_CONFOUNDERS}"
     )

@@ -59,6 +59,17 @@ _TAPER_DIP_RATIO = 0.7
 _BASELINE_WEEKS = 4                # semanas de carga REAL que formam a base
 _BASELINE_LOOKBACK_WEEKS = 10      # até onde vasculhar pra achar essas 4
 
+# REBOTE DE PARADA: o último mês tem semanas zeradas ou fracas (pausa médica, gripe, chuva e
+# frio) e a semana de agora, que VOLTA ao que ele já sustentava, parece pico contra essa base
+# rasa. Renato 01/11: ACWR 1,46 com 25 km na semana, quando sustentava 28-31 km — o coach leu
+# "risco alto" e cortou o plano 30%. Se a aguda não passa do que ele SUSTENTOU (média das
+# melhores semanas nas ~9 anteriores), o mês tem uma interrupção e a aguda não é um salto sobre a
+# melhor semana do mês (≤ 30% acima), a razão é retorno ao normal dele. (Fernanda 1,43 e
+# Leonardo 1,62 foram a mesma classe.)
+_SUSTAINED_LOOKBACK_WEEKS = 9      # semanas ANTERIORES à aguda onde procurar o que ele sustentava
+_GAP_SHARE = 0.5                   # semana abaixo desta fração do sustentado = interrupção
+_MAX_STEP = 1.3                    # a aguda não passa disto vezes a MELHOR semana do último mês
+
 # fator de intensidade da sessão SEM FC (raro): usa a mediana do próprio
 # atleta; sem nenhuma sessão com FC, cai neste moderado
 _DEFAULT_INTENSITY = 0.65
@@ -182,6 +193,27 @@ class TrainingLoadAnalyzer:
 
             low_base = (round(base_minutes), round(minutes[-1] - base_minutes))
 
+        rebound = None
+
+        if status in (LOAD_CAUTION, LOAD_HIGH) and race_aware is None:
+
+            sustained = TrainingLoadAnalyzer._rebound_base(history, ref, minutes)
+
+            if sustained is not None:
+
+                rebound = (round(sustained), minutes[-1])
+
+                # a razão passa a ser sobre o que ele SUSTENTAVA, em tempo de treino (existe pro
+                # histórico inteiro, a carga por FC só pros últimos 28 dias — e a duração não
+                # sofre com a FC deslocada por substância/cigarro/calor)
+                acwr = round(minutes[-1] / sustained, 2)
+
+                chronic = round(acute / acwr, 1) if acwr > 0 else chronic
+
+                status = TrainingLoadAnalyzer._status(
+                    acwr, days_of_history, light_confirmed
+                )
+
         return TrainingLoad(
             acute_load=acute,
             chronic_load=chronic,
@@ -191,6 +223,7 @@ class TrainingLoadAnalyzer:
             weekly_loads=weekly,
             weekly_minutes=minutes,
             low_base=low_base,
+            rebound=rebound,
         )
 
     # ------------------------------------------------------------------
@@ -490,6 +523,65 @@ class TrainingLoadAnalyzer:
             return None
 
         return round(sum(base) / len(base), 1)
+
+    @staticmethod
+    def _rebound_base(
+        history: TrainingHistory,
+        ref: date,
+        minutes: list[float],
+    ) -> float | None:
+        """Os minutos semanais que ele SUSTENTAVA, quando a razão alta é só o retorno a eles —
+        None quando é salto de verdade (ou não dá pra afirmar o contrário).
+
+        Sustentado = média das `_BASELINE_WEEKS` melhores semanas das `_SUSTAINED_LOOKBACK_WEEKS`
+        ANTERIORES à aguda (precisa de 4 semanas com treino, senão não há o que sustentar).
+        Rebote só quando (1) a aguda não passa do sustentado, (2) as semanas anteriores da janela
+        crônica têm interrupção (abaixo de metade do sustentado — a base rasa vem de parada, não de
+        mês fraco inteiro) e (3) a aguda não é um salto sobre a MELHOR semana do último mês (até
+        30% acima): quem volta de meses fracos direto pra perto do pico antigo continua sendo
+        salto, e quem sobe de 128 pra 156 min na volta de uma parada não é."""
+
+        acute = minutes[-1]
+
+        if acute <= 0:
+
+            return None
+
+        loads = []
+
+        for w in range(1, _SUSTAINED_LOOKBACK_WEEKS + 1):
+
+            end = ref - timedelta(days=7 * w)
+
+            start = end - timedelta(days=6)
+
+            loads.append(
+                sum(
+                    (a.moving_time or 0) / 60
+                    for a in history.activities
+                    if start <= a.start_date.date() <= end
+                )
+            )
+
+        best = sorted((load for load in loads if load > 0), reverse=True)[:_BASELINE_WEEKS]
+
+        if len(best) < _BASELINE_WEEKS:
+
+            return None
+
+        sustained = sum(best) / len(best)
+
+        if acute > sustained:
+
+            return None
+
+        before = minutes[:-1]
+
+        has_gap = any(load < _GAP_SHARE * sustained for load in before)
+
+        small_step = acute <= _MAX_STEP * max(before)
+
+        return sustained if has_gap and small_step else None
 
     @staticmethod
     def _weekly_loads(per_day: dict[date, float], ref: date) -> list[float]:

@@ -898,6 +898,17 @@ class AthleteDossier:
                         "de carga"
                     )
 
+                rebound = getattr(reading.load, "rebound", None)
+
+                if isinstance(rebound, tuple) and rebound[0] > 0:
+
+                    extra += (
+                        f" — a razão já é sobre o que ele SUSTENTAVA (~{rebound[0]} min/semana): a carga desta semana "
+                        f"({rebound[1]} min) é {rebound[1] / rebound[0]:.0%} da que ele aguentava antes das "
+                        "paradas (doença, chuva, viagem). Contra o último mês, raso por "
+                        "causa delas, pareceria pico: é RETORNO ao normal dele, não salto"
+                    )
+
                 if reading.body_state == "ABSORBING" and acwr and acwr > 1.3:
 
                     # absorvendo = a RECUPERAÇÃO está em dia; com a carga subindo
@@ -1081,7 +1092,13 @@ class AthleteDossier:
                 # descarregar, nem pra travar o puxar)
                 low_base = AthleteDossier._is_low_base(reading)
 
-                say_deload = deload_directive if plan_voice else deload_chat_line
+                def say_deload(decision):
+
+                    if not plan_voice:
+
+                        return deload_chat_line(decision)
+
+                    return deload_directive(decision, weeks_to_race)
 
                 decision = DeloadAnalyzer.assess(
                     reading.load.weekly_loads,

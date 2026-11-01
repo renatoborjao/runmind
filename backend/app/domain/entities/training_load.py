@@ -71,3 +71,7 @@ class TrainingLoad:
     # BASE BAIXA: a razão alta não virou pico porque o aumento REAL de tempo
     # foi pequeno — (minutos/semana da base, minutos a mais nesta semana)
     low_base: tuple[int, int] | None = None
+    # REBOTE DE PARADA: a razão contra o último mês era alta só porque o mês tem paradas
+    # (doença, chuva, viagem) — o ACWR/crônica acima já estão sobre o que ele SUSTENTAVA.
+    # (minutos/semana que ele sustentava, minutos desta semana)
+    rebound: tuple[float, float] | None = None

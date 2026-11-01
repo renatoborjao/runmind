@@ -135,3 +135,35 @@ def test_no_closed_week_with_a_run_gives_no_history():
 def test_constants_make_sense():
 
     assert 0.5 < adaptation._HEAVY_SHARE < 1.0 and 0.5 < adaptation._RECOVERS <= 1.0
+
+
+def test_five_of_six_is_not_labelled_as_barely_following_the_plan():
+    """Renato 01/11: 5 de 6 sessões (83%) caía no corte único de 85% e virava "ele cumpre pouco"
+    — a causa era chuva e frio. A zona cinza (60-85%) não decide: nem prova, nem acusa."""
+
+    found = assess(LEONARDO, fulfilled=5, planned=6, current=CURRENT)
+
+    assert not found.complies and not found.barely_complies and not found.weighs_signal
+
+    text = render(found, directive=True)
+
+    assert "cumpre pouco" not in text and "pede mais peso ao sinal de corpo" not in text
+    assert "NÃO decide sozinho" in text and "cumpriu 5 de 6" in text
+    assert "o MENOR que o sinal justifica" in text
+
+
+def test_a_single_past_signal_is_a_fact_not_a_pattern():
+    """Um sinal anterior que não passou é UMA amostra: não prova que ele não se recupera."""
+
+    one = _weeks([(20.0, "ABSORBING"), (22.0, "ABSORBING"), (21.0, "STRAINED"), (20.0, "STRAINED")])
+
+    found = assess(one, 6, 6, CURRENT)
+
+    assert found.dips == [(date(2026, 10, 19), False)]
+    assert found.recovers_fast and not found.stuck and found.adapts
+    assert "SEGURAR a rampa" in render(found, directive=True)  # cumpre + sem padrão: caminho leve
+
+
+def test_clearly_not_following_or_clearly_stuck_still_weigh_the_signal():
+
+    assert assess(LEONARDO, fulfilled=3, planned=6, current=CURRENT).weighs_signal  # 50% < 60%

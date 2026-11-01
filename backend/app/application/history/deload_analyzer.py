@@ -243,7 +243,11 @@ class DeloadAnalyzer:
         return streak
 
 
-def deload_directive(decision: DeloadDecision) -> str:
+# longe da prova não há pico de prova pra dissipar: a fase é de CONSTRUIR e a descarga é exceção
+_FAR_FROM_RACE_WEEKS = 8
+
+
+def deload_directive(decision: DeloadDecision, weeks_to_race: int | None = None) -> str:
     """Sinal COACH-facing pro plano: o corpo está pedindo descarga. É
     CONHECIMENTO, não ordem — a IA pesa com o resto do quadro e decide
     (descarregar, segurar ou seguir). Vazio quando não é hora — sem ruído."""
@@ -267,6 +271,15 @@ def deload_directive(decision: DeloadDecision) -> str:
 
         return ""
 
+    far = (
+        f" Faltam {weeks_to_race} semanas pra prova: ainda é fase de CONSTRUIR, não há pico de "
+        "prova pra dissipar — descarga aqui é exceção (sinal forte e que PERSISTE por semanas, "
+        "dor, doença). Sinal curto: segure a rampa, mantenha os dias e UM estímulo de qualidade "
+        "de verdade, e ancore a dose no que ele já sustentou."
+        if weeks_to_race is not None and weeks_to_race >= _FAR_FROM_RACE_WEEKS
+        else ""
+    )
+
     return (
         f"SINAL DE DESCARGA ({decision.reason}). Não é calendário: é o corpo "
         "pedindo. O TAMANHO do recuo acompanha o sinal e a adaptação dele "
@@ -283,6 +296,7 @@ def deload_directive(decision: DeloadDecision) -> str:
         "NÚMEROS DELE (os km das últimas semanas — sem jargão, nada de "
         "ACWR/carga aguda), dizendo por que esta semana é mais leve e o que "
         "ela prepara. É o que ele lê pra não achar que é recuo."
+        f"{far}"
     )
 
 

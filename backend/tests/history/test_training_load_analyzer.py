@@ -547,3 +547,65 @@ def test_beginner_big_jump_is_still_a_spike():
 
     assert load.status == LOAD_HIGH
     assert load.low_base is None
+
+
+# ---------------- REBOTE DE PARADA (Renato 01/11) ----------------
+
+
+def _week_loads(loads_old_to_new: list[int]):
+    """Uma corrida por semana (min), a semana de mais à direita = a aguda (REF-6..REF)."""
+
+    count = len(loads_old_to_new)
+
+    return [
+        _act(7 * (count - 1 - index) + 3, minutes * 10)
+        for index, minutes in enumerate(loads_old_to_new) if minutes
+    ]
+
+
+def test_coming_back_to_what_he_sustained_is_a_rebound_not_a_spike():
+    """Sustentava 30/sem, 2 semanas paradas (médico/gripe), uma fraca (chuva) e agora 28: contra
+    o último mês isso é 1,38 ("risco"), mas é o normal dele de volta."""
+
+    load = _analyze(_week_loads([30, 30, 30, 30, 0, 4, 25, 8, 28]))
+
+    assert load.rebound is not None
+    assert load.status == LOAD_OPTIMAL
+    assert load.acwr == 0.93 and load.rebound == (300, 280)
+
+
+def test_the_same_week_without_the_stops_in_history_would_have_flagged():
+    """Sem o histórico que prova que ele sustentava 30, o salto contra o mês raso é pico."""
+
+    load = _analyze(_week_loads([0, 0, 0, 0, 0, 4, 25, 8, 28]))
+
+    assert load.rebound is None
+    assert load.acwr > 1.3
+
+
+def test_an_old_peak_after_months_of_low_load_is_not_a_rebound():
+    """Pico antigo (40) e depois só 10/sem: 30 agora é 3x a melhor semana do mês, é salto."""
+
+    load = _analyze(_week_loads([40, 40, 40, 40, 10, 10, 10, 10, 30]))
+
+    assert load.rebound is None
+    assert load.status == LOAD_HIGH
+
+
+def test_above_what_he_sustained_is_a_real_spike_even_after_stops():
+
+    load = _analyze(_week_loads([30, 30, 30, 30, 0, 4, 25, 8, 45]))
+
+    assert load.rebound is None
+    assert load.acwr > 1.3
+
+
+def test_a_step_up_on_the_way_back_from_a_medical_stop_is_not_a_spike():
+    """Renato 01/11: setembro com ~200 min/sem, parada médica, e na volta 93 → 128 → 46 (chuva) →
+    156. Contra o mês (média 106) é 1,46; contra o que ele sustentava e contra a melhor semana do
+    mês (+22%) é retorno, não salto."""
+
+    load = _analyze(_week_loads([14, 19, 26, 19, 17, 0, 9, 13, 5, 16]))
+
+    assert load.rebound is not None and load.rebound[1] == 160
+    assert load.acwr < 1.0 and load.status != LOAD_HIGH

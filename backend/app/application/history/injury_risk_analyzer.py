@@ -71,8 +71,14 @@ class InjuryRiskAnalyzer:
 
                 reasons.append(f"carga na faixa de atenção (ACWR {load.acwr:.1f})")
 
-        # RAMPA de volume (última semana muito acima da anterior)
-        if load.low_base is None and InjuryRiskAnalyzer._ramped(load.weekly_loads):
+        # RAMPA de volume (última semana muito acima da anterior) — voltar ao que ele sustentava
+        # depois de uma semana fraca (chuva, doença) não é rampa: o analisador da carga já decidiu
+        # (rebound). Renato 01/11: 46 → 156 min, a semana fraca era a chuva.
+        if (
+            load.low_base is None
+            and load.rebound is None
+            and InjuryRiskAnalyzer._ramped(load.weekly_loads)
+        ):
 
             points += 1
 
