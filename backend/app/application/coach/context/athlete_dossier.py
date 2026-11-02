@@ -626,6 +626,50 @@ class AthleteDossier:
 
         return lines
 
+    # a capacidade que os ritmos usam passa do melhor esforço REAL em pelo menos esta fração: aí ela vem de
+    # estimativa (relógio, fortes entregues), não de um esforço medido
+    _ANCHOR_GAP = 0.10
+
+    @staticmethod
+    def _capacity_anchor(data: _Inputs, model) -> str:
+        """ÂNCORA DA CAPACIDADE: o melhor esforço real dele × a capacidade que os ritmos de hoje usam.
+        Quando a segunda passa bem da primeira e não há prova recente, a capacidade é ESTIMADA —
+        é o que explica a faixa larga da projeção (Leonardo: 55:29 do Garmin a 1:05:32 dos treinos,
+        porque nunca houve um esforço máximo). DADO + conhecimento: o teste está no repertório."""
+
+        from app.application.history.pace_calibration import recent_race
+        from app.application.history.pace_model_builder import PaceModelBuilder
+        from app.application.planner.pace_formatter import PaceFormatter
+
+        best = PaceModelBuilder.best_real_effort(data.history)
+
+        vdot = getattr(model, "vdot", None)
+
+        if best is None or not vdot or vdot < best["vdot"] * (1 + AthleteDossier._ANCHOR_GAP):
+
+            return ""
+
+        if recent_race(data.profile, data.today):
+
+            return ""
+
+        total = round(best["seconds"])
+
+        clock = f"{total // 3600}:{total % 3600 // 60:02d}:{total % 60:02d}" if total >= 3600 else f"{total // 60}:{total % 60:02d}"
+
+        heart = f", FC média {best['heart_rate']:.0f}" if best["heart_rate"] else ""
+
+        return (
+            f"ÂNCORA DA CAPACIDADE: o melhor esforço real dele foi {best['km']:.1f} km em {clock} "
+            f"({PaceFormatter.format(best['pace'])}/km{heart}) em {best['day']:%d/%m} — VDOT "
+            f"{best['vdot']:.0f}; os ritmos de hoje usam VDOT {vdot:.0f}, vindo do relógio e dos "
+            "fortes que ele entregou, não de um esforço máximo medido, e não há prova nos últimos "
+            "180 dias. CONHECIMENTO, não regra: quando a capacidade é estimada e a faixa é larga, "
+            "um teste de 3-5 km no máximo sustentável (está no seu repertório) ou uma prova-teste "
+            "MEDE em vez de supor, e calibra os ritmos de verdade; o momento depende do corpo, da "
+            "semana e da fase."
+        )
+
     @staticmethod
     def _capacity(data: _Inputs) -> list[str]:
 
@@ -643,11 +687,13 @@ class AthleteDossier:
 
                 from app.application.history.pace_model_builder import PaceModelBuilder
 
-                note = PaceModelBuilder.build(data.history, data.runner).calibration_note
+                model = PaceModelBuilder.build(data.history, data.runner)
 
-                if note:
+                if model.calibration_note:
 
-                    lines.append(note)
+                    lines.append(model.calibration_note)
+
+                lines.append(AthleteDossier._capacity_anchor(data, model))
 
             except Exception as e:
 

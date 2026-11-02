@@ -429,6 +429,46 @@ class PaceModelBuilder:
         return paces
 
     @staticmethod
+    def best_real_effort(history: TrainingHistory) -> dict | None:
+        """O melhor esforço REAL do atleta (o de maior VDOT), como fato: distância, tempo, pace,
+        FC média, dia e VDOT. É a âncora de capacidade do histórico. None sem corrida utilizável."""
+
+        best = None
+
+        for a in history.activities:
+
+            if not is_run_sport(a.sport) or a.average_speed <= 0 or gps_broken(a):
+
+                continue
+
+            if a.distance / 1000 < _ANCHOR_MIN_KM:
+
+                continue
+
+            pace = (1000 / a.average_speed) / 60
+
+            if not (_MIN_PACE <= pace <= _MAX_PACE):
+
+                continue
+
+            seconds = a.distance / a.average_speed
+
+            vdot = VdotCalculator.vdot(a.distance, seconds)
+
+            if best is None or vdot > best["vdot"]:
+
+                best = {
+                    "km": a.distance / 1000,
+                    "seconds": seconds,
+                    "pace": pace,
+                    "heart_rate": a.average_heartrate,
+                    "day": a.start_date.date(),
+                    "vdot": vdot,
+                }
+
+        return best
+
+    @staticmethod
     def _best_vdot(history: TrainingHistory) -> float | None:
         """O MAIOR VDOT entre as corridas reais — o melhor esforço que o atleta
         já demonstrou. É a âncora de capacidade (grounded no que ele fez).

@@ -437,3 +437,57 @@ def test_the_clean_runs_are_the_easy_and_long_ones_inside_the_ceiling_with_low_e
         paces = PaceModelBuilder._clean_easy_paces(history, _Runner())
 
     assert [round(p, 2) for p in paces] == [6.2, 6.1]
+
+
+# --- âncora da capacidade (nº 94) -----------------------------------------------------------------
+
+
+def test_the_best_real_effort_is_the_run_with_the_highest_vdot():
+    """Leonardo 01/11: o melhor esforço real foi um 10 km de leve (65:30, FC 144) — não um esforço
+    máximo. A âncora de capacidade é o fato; o coach lê e decide."""
+
+    slow_long = _run(10, 6.55)
+    slow_long.average_heartrate = 144.0
+    slow_long.start_date = datetime(2026, 11, 1)
+
+    short_slow = _run(3, 8.0)
+    walk = _run(4, 12.0, sport="Walk")
+
+    best = PaceModelBuilder.best_real_effort(_history(slow_long, short_slow, walk))
+
+    assert best["km"] == 10.0 and best["heart_rate"] == 144.0 and best["day"].isoformat() == "2026-11-01"
+    assert abs(best["pace"] - 6.55) < 0.01 and best["vdot"] > 0
+
+    assert PaceModelBuilder.best_real_effort(_history(walk)) is None
+    assert PaceModelBuilder.best_real_effort(_history()) is None
+
+
+def test_the_anchor_line_only_shows_when_the_capacity_in_use_is_estimated_and_far_from_the_best_effort():
+
+    from datetime import date
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from app.application.coach.context.athlete_dossier import AthleteDossier
+
+    run = _run(10, 6.55)
+    run.average_heartrate = 144.0
+    run.start_date = datetime(2026, 11, 1)
+    best = PaceModelBuilder.best_real_effort(_history(run))["vdot"]
+
+    data = SimpleNamespace(history=_history(run), profile="atleta", today=date(2026, 11, 2))
+
+    with patch("app.application.history.pace_calibration.recent_race", return_value=False):
+
+        far = AthleteDossier._capacity_anchor(data, SimpleNamespace(vdot=best * 1.17))
+
+        assert "ÂNCORA DA CAPACIDADE" in far and "10.0 km em 1:05:30 (6:33/km, FC média 144)" in far
+        assert "CONHECIMENTO, não regra" in far and "MEDE em vez de supor" in far
+
+        # perto do melhor esforço: a capacidade é medida, nada a dizer
+        assert AthleteDossier._capacity_anchor(data, SimpleNamespace(vdot=best * 1.05)) == ""
+
+    # prova recente ancora a capacidade de verdade
+    with patch("app.application.history.pace_calibration.recent_race", return_value=True):
+
+        assert AthleteDossier._capacity_anchor(data, SimpleNamespace(vdot=best * 1.17)) == ""
