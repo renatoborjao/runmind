@@ -2019,6 +2019,18 @@ class AthleteDossier:
 
                 print(f"Dossiê: placar da prescrição falhou p/ '{data.profile}': {e}")
 
+            # o que ELE costuma pedir e o que o coach fez (log do cérebro, vivo + arquivo): o plano
+            # nasce sabendo a rotina e a preferência real, não só o que mandou na última semana
+            try:
+
+                from app.application.history import coach_decisions
+
+                lines.append(coach_decisions.for_profile(data.profile, data.today))
+
+            except Exception as e:
+
+                print(f"Dossiê: decisões do coach falharam p/ '{data.profile}': {e}")
+
         return lines
 
     @staticmethod
