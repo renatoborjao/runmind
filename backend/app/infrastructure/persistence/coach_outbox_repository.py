@@ -7,7 +7,9 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-# quantas mensagens enviadas guardar por atleta
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
+# quantas mensagens enviadas na JANELA por atleta (o resto vai pro arquivo permanente)
 _MAX_ENTRIES = 10
 
 
@@ -52,7 +54,9 @@ class CoachOutboxRepository:
             }
         )
 
-        entries = entries[-_MAX_ENTRIES:]
+        entries = PermanentArchive.trim_list(
+            self.storage, "coach_outbox", profile, entries, _MAX_ENTRIES,
+        )
 
         self._file(profile).write_text(
             json.dumps(entries, ensure_ascii=False, indent=2),

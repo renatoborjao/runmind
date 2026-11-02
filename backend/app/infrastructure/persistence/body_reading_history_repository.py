@@ -3,6 +3,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.domain.entities.body_reading_snapshot import BodyReadingSnapshot
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
 
 
 class BodyReadingHistoryRepository:
@@ -60,13 +61,23 @@ class BodyReadingHistoryRepository:
 
         if snapshots and snapshots[-1].day == snapshot.day:
 
+            # a leitura que o dia perdeu também fica guardada
+            PermanentArchive.append(
+                self.storage, "body_readings", profile, [asdict(snapshots[-1])],
+                "substituída no mesmo dia",
+            )
+
             snapshots[-1] = snapshot
 
         else:
 
             snapshots.append(snapshot)
 
-        self._save(profile, snapshots[-self._MAX:])
+        snapshots = PermanentArchive.trim_list(
+            self.storage, "body_readings", profile, snapshots, self._MAX, serialize=asdict,
+        )
+
+        self._save(profile, snapshots)
 
     def _save(
         self,

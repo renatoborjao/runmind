@@ -9,6 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.domain.entities.daily_checkin import DailyCheckin
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
 
 # quantos check-ins guardar (histórico curto basta; o valor é o estado recente)
 _MAX = 60
@@ -53,7 +54,11 @@ class CheckinRepository:
 
             checkins.append(checkin)
 
-        self._save(profile, checkins[-_MAX:])
+        checkins = PermanentArchive.trim_list(
+            self.storage, "checkins", profile, checkins, _MAX, serialize=asdict,
+        )
+
+        self._save(profile, checkins)
 
     def latest_recent(
         self, profile: str, today: str, within_days: int = 2

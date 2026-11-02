@@ -12,6 +12,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 _STORAGE = (
     Path(__file__).resolve().parents[3] / "storage" / "workout_analysis"
 )
@@ -69,6 +71,16 @@ class WorkoutAnalysisRepository:
 
         data = self._load(profile)
 
+        previous = data.get(str(activity_id))
+
+        # reprocessar o treino sobrescreve: a análise anterior fica guardada
+        if previous and previous.get("analysis") != analysis:
+
+            PermanentArchive.append(
+                self.storage, "workout_analysis", profile,
+                [{"key": str(activity_id), "value": previous}], "substituída (reanálise)",
+            )
+
         data[str(activity_id)] = {
             "date": date,
             "distance_km": round(distance_km, 2),
@@ -77,16 +89,10 @@ class WorkoutAnalysisRepository:
             "created_at": datetime.now(UTC).isoformat(),
         }
 
-        # poda por data: mantém as _MAX_ENTRIES mais recentes
-        if len(data) > _MAX_ENTRIES:
-
-            ordered = sorted(
-                data.items(),
-                key=lambda kv: kv[1].get("date", ""),
-                reverse=True,
-            )
-
-            data = dict(ordered[:_MAX_ENTRIES])
+        # a janela mantém as _MAX_ENTRIES mais recentes; o resto vai pro arquivo permanente
+        data = PermanentArchive.trim_dict(
+            self.storage, "workout_analysis", profile, data, _MAX_ENTRIES,
+        )
 
         with open(self._file(profile), "w", encoding="utf-8") as f:
 

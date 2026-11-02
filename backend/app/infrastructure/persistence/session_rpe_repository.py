@@ -10,6 +10,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.domain.entities.session_rpe import SessionRpe
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
 
 _MAX = 60
 
@@ -89,7 +90,9 @@ class SessionRpeRepository:
 
         sessions.append(asdict(session))
 
-        data["sessions"] = sessions[-_MAX:]
+        data["sessions"] = PermanentArchive.trim_list(
+            self.storage, "session_rpe", profile, sessions, _MAX,
+        )
 
         data["pending"] = None
 

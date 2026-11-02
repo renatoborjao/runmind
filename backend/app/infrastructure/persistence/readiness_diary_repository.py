@@ -10,6 +10,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.domain.entities.readiness_diary_entry import ReadinessDiaryEntry
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
 
 # histórico curto basta — o valor está no estado recente e na virada
 _MAX = 60
@@ -58,13 +59,23 @@ class ReadinessDiaryRepository:
 
         if entries and entries[-1].day == entry.day:
 
+            # a leitura que o dia perdeu também fica guardada
+            PermanentArchive.append(
+                self.storage, "readiness_diary", profile, [asdict(entries[-1])],
+                "substituída no mesmo dia",
+            )
+
             entries[-1] = entry
 
         else:
 
             entries.append(entry)
 
-        self._save(profile, entries[-_MAX:])
+        entries = PermanentArchive.trim_list(
+            self.storage, "readiness_diary", profile, entries, _MAX, serialize=asdict,
+        )
+
+        self._save(profile, entries)
 
     def _save(self, profile: str, entries: list[ReadinessDiaryEntry]) -> None:
 

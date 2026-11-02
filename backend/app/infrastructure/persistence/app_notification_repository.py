@@ -4,6 +4,8 @@ import json
 import uuid
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 from app.core.clock import now_local
 
 # quantas notificações guardar por atleta (as mais novas). A central do app é
@@ -57,7 +59,13 @@ class AppNotificationRepository:
 
         with open(self._file(profile), "w", encoding="utf-8") as f:
 
-            json.dump(items[:_MAX_ITEMS], f, ensure_ascii=False, indent=2)
+            json.dump(
+                PermanentArchive.trim_list(
+                    self.storage, "app_notifications", profile, items, _MAX_ITEMS,
+                    newest_first=True,
+                ),
+                f, ensure_ascii=False, indent=2,
+            )
 
     def append(
         self,

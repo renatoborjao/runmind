@@ -2,6 +2,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 MAX_TURNS_PERSISTED = 200
 
 
@@ -73,7 +75,11 @@ class ConversationRepository:
 
         turns.append(turn)
 
-        turns = turns[-MAX_TURNS_PERSISTED:]
+        # o que sai da janela vai pro arquivo permanente (nada se perde)
+        turns = PermanentArchive.trim_list(
+            self.storage, "conversations", profile, turns, MAX_TURNS_PERSISTED,
+            reason="saiu da janela de turnos",
+        )
 
         file = self.storage / f"{profile}.json"
 

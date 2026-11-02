@@ -7,6 +7,8 @@ depois). Mapa activity_id -> {date, on_target, total, verdict}. Ver
 import json
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 _STORAGE = (
     Path(__file__).resolve().parents[3] / "storage" / "stimulus_results"
 )
@@ -59,16 +61,8 @@ class StimulusResultStore:
 
         data[str(activity_id)] = {"date": date, **result}
 
-        # poda por data: mantém as _MAX_ENTRIES mais recentes
-        if len(data) > _MAX_ENTRIES:
-
-            ordered = sorted(
-                data.items(),
-                key=lambda kv: kv[1].get("date", ""),
-                reverse=True,
-            )
-
-            data = dict(ordered[:_MAX_ENTRIES])
+        # a janela mantém as _MAX_ENTRIES mais recentes; o resto vai pro arquivo permanente
+        data = PermanentArchive.trim_dict(_STORAGE, "stimulus_results", profile, data, _MAX_ENTRIES)
 
         with open(self._file(profile), "w", encoding="utf-8") as f:
 

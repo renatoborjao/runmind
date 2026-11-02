@@ -11,6 +11,8 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 _STORAGE = Path(__file__).resolve().parents[3] / "storage" / "coach_attention"
 
 _MAX_ENTRIES = 30
@@ -66,7 +68,12 @@ class CoachAttentionLog:
             _STORAGE.mkdir(parents=True, exist_ok=True)
 
             CoachAttentionLog._file(profile).write_text(
-                json.dumps(entries[-_MAX_ENTRIES:], ensure_ascii=False, indent=1),
+                json.dumps(
+                    PermanentArchive.trim_list(
+                        _STORAGE, "coach_attention", profile, entries, _MAX_ENTRIES,
+                    ),
+                    ensure_ascii=False, indent=1,
+                ),
                 encoding="utf-8",
             )
 

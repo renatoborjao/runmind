@@ -11,6 +11,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 # quantas entradas guardar por atleta (alguns dias de histórico bastam pro
 # orçamento do dia + observabilidade; não é arquivo de auditoria eterno)
 _MAX_ENTRIES = 40
@@ -68,7 +70,9 @@ class ProactiveLedgerRepository:
             }
         )
 
-        entries = entries[-_MAX_ENTRIES:]
+        entries = PermanentArchive.trim_list(
+            self.storage, "proactive_ledger", profile, entries, _MAX_ENTRIES,
+        )
 
         self._file(profile).write_text(
             json.dumps(entries, ensure_ascii=False, indent=2),

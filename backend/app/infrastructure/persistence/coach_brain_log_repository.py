@@ -9,6 +9,8 @@ Ver [[project_roteador_acao_ia]]."""
 import json
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 # janela recente basta — o valor está em ver o padrão dos últimos dias
 _MAX = 200
 
@@ -53,4 +55,9 @@ class CoachBrainLogRepository:
 
         with open(file, "w", encoding="utf-8") as f:
 
-            json.dump(entries[-_MAX:], f, ensure_ascii=False, indent=2)
+            json.dump(
+                PermanentArchive.trim_list(
+                    self.storage, "coach_brain_log", profile, entries, _MAX,
+                ),
+                f, ensure_ascii=False, indent=2,
+            )

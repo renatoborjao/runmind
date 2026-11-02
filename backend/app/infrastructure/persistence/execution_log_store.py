@@ -7,6 +7,8 @@ não guarda voltas, então não dá pra recalcular depois. Mapa activity_id ->
 import json
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 _STORAGE = Path(__file__).resolve().parents[3] / "storage" / "execution_log"
 
 # teto de atividades guardadas (poda as mais antigas por data) — cobre com
@@ -54,15 +56,21 @@ class ExecutionLogStore:
 
         data = self._load(profile)
 
-        data[str(activity_id)] = {"date": day, "km": round(km, 2), **entry}
+        new = {"date": day, "km": round(km, 2), **entry}
 
-        if len(data) > _MAX_ENTRIES:
+        previous = data.get(str(activity_id))
 
-            ordered = sorted(
-                data.items(), key=lambda kv: kv[1].get("date", ""), reverse=True,
+        # reanalisar o mesmo treino sobrescreve: a leitura anterior fica guardada
+        if previous and previous != new:
+
+            PermanentArchive.append(
+                _STORAGE, "execution_log", profile,
+                [{"key": str(activity_id), "value": previous}], "substituída (reanálise)",
             )
 
-            data = dict(ordered[:_MAX_ENTRIES])
+        data[str(activity_id)] = new
+
+        data = PermanentArchive.trim_dict(_STORAGE, "execution_log", profile, data, _MAX_ENTRIES)
 
         with open(self._file(profile), "w", encoding="utf-8") as f:
 

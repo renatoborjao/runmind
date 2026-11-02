@@ -4,6 +4,8 @@ de bioimpedância (histórico), preferências e o último plano alimentar gerado
 import json
 from pathlib import Path
 
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
+
 MAX_READINGS = 60
 
 
@@ -51,7 +53,9 @@ class NutritionRepository:
 
     def save(self, profile: str, data: dict) -> None:
 
-        data["readings"] = data.get("readings", [])[-MAX_READINGS:]
+        data["readings"] = PermanentArchive.trim_list(
+            self.storage, "nutrition_readings", profile, data.get("readings", []), MAX_READINGS,
+        )
 
         tmp = self._file(profile).with_suffix(".tmp")
 

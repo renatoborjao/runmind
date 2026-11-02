@@ -6,6 +6,7 @@ from pathlib import Path
 from app.domain.entities.planned_session import PlannedSession
 from app.domain.entities.training_plan import TrainingPlan
 from app.domain.entities.workout_step import parse_steps
+from app.infrastructure.persistence.permanent_archive import PermanentArchive
 
 
 class WeeklyPlanRepository:
@@ -142,6 +143,15 @@ class WeeklyPlanRepository:
             if not data.get("generated_at") or data["generated_at"] > earliest:
 
                 data = {**data, "generated_at": earliest}
+
+        # a versão que sai (plano refeito, ajustado, movido) fica guardada: é o que o coach
+        # decidiu e depois mudou — de onde ele aprende. Só quando a nova de fato difere.
+        if previous and previous != data:
+
+            PermanentArchive.append(
+                self.storage, "plan_versions", profile, [previous],
+                "versão substituída (refeito/ajustado)",
+            )
 
         entries = [
             entry
