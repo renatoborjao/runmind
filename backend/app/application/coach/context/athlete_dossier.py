@@ -1117,8 +1117,15 @@ class AthleteDossier:
 
                 lines.append(say_deload(decision))
 
-                # com sinal de descarga, o que pesa MAIS que o sinal curto: a adaptação dele
-                if getattr(decision, "due", False) is True:
+                # com qualquer freio de corpo (descarga, estado sobrecarregado ou piora real
+                # da recuperação), o que pesa MAIS que o sinal curto: a adaptação dele
+                braking = (
+                    getattr(decision, "due", False) is True
+                    or reading.body_state == "STRAINED"
+                    or (data.drift is not None and getattr(data.drift, "worsening", False))
+                )
+
+                if braking:
 
                     lines.append(AthleteDossier._adaptation(data, plan_voice))
 
@@ -1623,7 +1630,26 @@ class AthleteDossier:
             layoff_days=(data.today - last_run).days if last_run else 0,
             slack=AthleteDossier._route_slack(data, ledger),
             low_delivery=week_ledger.low_delivery(ledger) is not None,
+            delivered_last=AthleteDossier._delivered_last(ledger, ref),
         )
+
+    @staticmethod
+    def _delivered_last(ledger, ref: date) -> float | None:
+        """Os km da semana ANTERIOR à da rota quando ele a cumpriu como prescrita (90% a 115% do
+        planejado, semana fechada e não de descarga): plano cumprido é o que ele sustenta, não um
+        treino extra isolado. None caso contrário."""
+
+        previous = next(
+            (w for w in ledger if w.week_start == ref - timedelta(days=7)), None,
+        )
+
+        if previous is None or previous.in_progress or previous.deload or not previous.planned_km:
+
+            return None
+
+        share = previous.done_km / previous.planned_km
+
+        return previous.done_km if 0.9 <= share <= 1.15 else None
 
     @staticmethod
     def route_for(profile: str, runner, history, week_start: date):

@@ -243,7 +243,10 @@ número. (4) Sem jargão de carga (ACWR, carga aguda): km e semanas dele.
   vem cumprindo bem, o corpo está absorvendo) e ele não recusou isso há pouco
   (veja o que você já disse), PROPONHA em "suggest_extra_day": UMA frase — qual
   dia livre, que treino (curto/leve costuma bastar) e por quê. Senão, null.
-  Com o corpo em alerta ou aderência baixa, não é hora: null.
+  Aderência baixa ou alerta de corpo FORTE (semanas, dor, doença): não é hora: null.
+  Alerta CURTO de recuperação num atleta que ENTREGA e absorve (veja ADAPTAÇÃO
+  DELE) NÃO impede propor: proponha um dia LEVE (30-40 min fáceis, opcional). Se
+  ELE pediu o dia, responda ao pedido com essa proposta em vez de só negar.
 - LONGÃO só quando faz sentido: um "longão" é o treino MAIS LONGO da semana E
   claramente ACIMA da rodagem típica dele. Se o atleta ainda corre pouco (ex.:
   rodagem típica/maior treino ~5 km), NÃO rotule nenhuma corrida de "Longão" —

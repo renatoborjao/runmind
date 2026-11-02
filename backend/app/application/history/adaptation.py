@@ -200,12 +200,15 @@ def _knowledge(found: Adaptation) -> str:
 
         return (
             "CONHECIMENTO, não regra: a evolução e a adaptação dele pesam MAIS que a semana ruim. "
-            "Um sinal de corpo de poucos dias, num atleta que cumpre o plano e costuma voltar ao "
+            "Um sinal de corpo de poucos dias, num atleta que entrega o plano e costuma voltar ao "
             "normal em cerca de uma semana, tende a ser passageiro — a resposta proporcional é "
-            "SEGURAR a rampa (não subir) ou recuar LEVE (≈10-20%), mantendo os dias e o longão "
-            "perto do que ele já correu; corte fundo (30% ou mais) fica pra dor, doença, sinal que "
-            "persiste por semanas ou desempenho piorando. Recuo fundo seguido de volta ao volume "
-            "cheio é dente de serra: o corpo dele responde melhor a degraus do que a vales."
+            "SEGUIR a rota dele (ele entrega e absorve), com cuidado onde o corpo pede: leves de "
+            "verdade (teto de FC, sono), sem empilhar INTENSIDADE a mais. Congelar a semana toda "
+            "vez que o corpo oscila é estagnar, e ele já rejeitou isso. Segurar a rampa só se o "
+            "sinal PERSISTIR por 2 semanas ou piorar; recuo de ≈10-20% só com sinal forte; corte "
+            "fundo (30% ou mais) fica pra dor, doença ou desempenho piorando. Recuo fundo seguido "
+            "de volta ao volume cheio é dente de serra: o corpo dele responde melhor a degraus do "
+            "que a vales."
         )
 
     if found.weighs_signal:

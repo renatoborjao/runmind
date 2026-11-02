@@ -312,3 +312,27 @@ def test_the_rolling_route_says_so():
 def test_the_module_keeps_the_numbers_as_documented_constants():
 
     assert macro_route.BAND == 0.10 and macro_route.ROLLING_WEEKS == 8
+
+
+def test_a_week_delivered_as_prescribed_is_the_floor_not_the_median():
+    """Leonardo 02/11: 8 km do acidente + 22 + 22 + 24 davam base 22 (mediana) e a rota 23,2 km,
+    abaixo dos 24 que ele cumpriu a 102% do prescrito. Plano cumprido não é treino extra isolado."""
+
+    weeks = [10.0, 22.0, 8.0, 22.0, 24.0]
+
+    median_only, _ = baseline_km(weeks)
+
+    floor, basis = baseline_km(weeks, delivered_last=24.0)
+
+    assert median_only == 22.0 and floor == 24.0
+    assert "cumpriu como foi prescrita" in basis
+
+
+def test_the_delivered_floor_never_lowers_the_baseline_nor_beats_low_delivery():
+
+    weeks = [10.0, 22.0, 25.0, 22.0, 24.0]
+
+    assert baseline_km(weeks, delivered_last=20.0) == baseline_km(weeks)
+    assert baseline_km(weeks, low_delivery=True, delivered_last=24.0) == baseline_km(
+        weeks, low_delivery=True
+    )

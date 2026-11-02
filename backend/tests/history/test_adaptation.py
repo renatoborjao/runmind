@@ -84,7 +84,9 @@ def test_the_render_shows_the_numbers_and_the_plan_voice_gets_how_to_weigh_them(
     plan = render(found, directive=True)
 
     assert "a evolução e a adaptação dele pesam MAIS que a semana ruim" in plan
-    assert "SEGURAR a rampa" in plan and "recuar LEVE (≈10-20%)" in plan
+    assert "SEGUIR a rota dele (ele entrega e absorve)" in plan
+    assert "Congelar a semana toda vez que o corpo oscila é estagnar" in plan
+    assert "Segurar a rampa só se o sinal PERSISTIR por 2 semanas" in plan
     assert "dente de serra" in plan
 
 
@@ -103,7 +105,7 @@ def test_when_the_signs_did_not_clear_the_next_week_the_signal_weighs_more():
 
     assert "pede mais peso ao sinal de corpo" in text
     assert "os sinais anteriores NÃO voltaram ao normal na semana seguinte" in text
-    assert "SEGURAR a rampa" not in text
+    assert "SEGUIR a rota dele" not in text
 
 
 def test_who_does_not_follow_the_plan_does_not_get_the_benefit_of_the_doubt():
@@ -161,7 +163,7 @@ def test_a_single_past_signal_is_a_fact_not_a_pattern():
 
     assert found.dips == [(date(2026, 10, 19), False)]
     assert found.recovers_fast and not found.stuck and found.adapts
-    assert "SEGURAR a rampa" in render(found, directive=True)  # cumpre + sem padrão: caminho leve
+    assert "SEGUIR a rota dele" in render(found, directive=True)  # cumpre + sem padrão: segue a rota
 
 
 def test_clearly_not_following_or_clearly_stuck_still_weigh_the_signal():

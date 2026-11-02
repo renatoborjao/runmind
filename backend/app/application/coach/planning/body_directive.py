@@ -175,6 +175,9 @@ def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> s
         f"e longão{cap}. Segurar não é descarregar (o volume pode se manter) — "
         "se o quadro também trouxer sinal de descarga, escolha entre as duas. "
         "Pese com o resto e decida; o que escolher, diga no purpose/mensagem com "
-        "franqueza — e que o sono é a alavanca dele."
+        "franqueza — e que o sono é a alavanca dele. ATENÇÃO ao peso disto: se a "
+        "ADAPTAÇÃO DELE mostra que ele ENTREGA o plano e se recupera rápido, um alerta "
+        "de poucos dias NÃO pede congelar a semana — segurar vira estagnação. Siga a "
+        "rota dele, com leves de verdade; congele só se o alerta durar semanas ou piorar."
         f"{_CONFOUNDERS}"
     )

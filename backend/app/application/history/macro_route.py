@@ -171,13 +171,19 @@ def _quality_peak(distance_km: float) -> float:
 
 
 def baseline_km(
-    executed_weeks: list[float], low_delivery: bool = False,
+    executed_weeks: list[float],
+    low_delivery: bool = False,
+    delivered_last: float | None = None,
 ) -> tuple[float, str] | None:
     """O que ele SUSTENTA, do que ele FEZ: a mediana das 4 últimas semanas com corrida, ou 90% da
     segunda melhor das 6 (o que vier maior) — a melhor semana isolada (treino extra, uma vez) não
     vira chão. Se ele NÃO entrega o plano (`low_delivery`: fecha bem menos do que é prescrito), vale
     só a mediana de TODAS as semanas com corrida: a segunda melhor é um dia bom, não o que ele
     cumpre (João, 29/10: semanas de 5, 10, 5, 5, 10, 5 e 14 km davam base de 9 km; ele fecha 5).
+    `delivered_last`: os km da semana anterior quando ele ENTREGOU o que foi prescrito nela (de 90% a
+    115%) — isso não é treino extra de uma vez, é o plano cumprido, e vira o piso: a mediana atrasa
+    (Leonardo 02/11: 8 km do acidente + 22 + 22 + 24 davam base 22 e a rota 23,2, abaixo dos 24 que
+    ele acabara de cumprir — parar na mediana todo domingo é a estagnação que o dono já rejeitou).
     None sem corrida."""
 
     ran = [w for w in executed_weeks if w > 0]
@@ -207,6 +213,15 @@ def baseline_km(
         f"mediana das últimas semanas com corrida (~{recent:.0f} km) e a segunda melhor "
         f"(~{second:.0f} km)"
     )
+
+    if delivered_last is not None and delivered_last > value:
+
+        value = delivered_last
+
+        basis = (
+            f"a semana passada, que ele cumpriu como foi prescrita (~{delivered_last:.0f} km) — "
+            f"acima da mediana das últimas semanas (~{recent:.0f} km)"
+        )
 
     return value, basis
 
@@ -253,15 +268,16 @@ def build(
     layoff_days: int = 0,
     slack: bool = False,
     low_delivery: bool = False,
+    delivered_last: float | None = None,
 ) -> WeeklyRoute | None:
     """A rota a partir da semana `ref_week`. `phases`: a fase de cada semana até a prova (as do
     mapa até a prova; uma por semana, a última é a da prova); None = sem prova com data → as
     próximas 8 semanas, rolantes. `executed_weeks`/`longest_runs`: as últimas semanas FECHADAS (da
     mais antiga pra mais recente, 0 = sem corrida). `slack`: ele cumpre com folga ou pediu mais.
     `low_delivery`: ele fecha bem menos do que o coach prescreve (a rota parte do que ele
-    entrega)."""
+    entrega). `delivered_last`: km da semana anterior se ele a cumpriu como prescrita (piso)."""
 
-    base = baseline_km(executed_weeks, low_delivery)
+    base = baseline_km(executed_weeks, low_delivery, delivered_last)
 
     if base is None:
 
