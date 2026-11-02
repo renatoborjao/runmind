@@ -1965,6 +1965,18 @@ class AthleteDossier:
 
             print(f"Dossiê: semanas anteriores falhou p/ '{data.profile}': {e}")
 
+        # o atleta INTEIRO, semana a semana, com provas, tempos, paces e o que explica cada fase
+        # (fontes vivas + arquivo permanente): o plano nasce da trajetória toda, não de uma semana
+        # ou de um sinal isolado
+        from app.application.history import athlete_timeline
+
+        lines.append(
+            athlete_timeline.for_profile(
+                data.profile, data.activities, data.today,
+                plan_voice=data.target_week is not None,
+            )
+        )
+
         # sessão a sessão, o alvo × o feito — de onde sai a calibração e a
         # leitura de evolução (a IA lê e decide; nada de viés pronto)
         lines.append(ExecutionLog.for_profile(data.profile))
