@@ -4,11 +4,14 @@ em zona forte e um pedido de "mais" sem resposta. A auditoria semanal só caça 
 mensagens; esta olha o estado do coach contra os dados, todo dia, sem IA."""
 
 from contextlib import ExitStack
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from tests.coach.factories import make_activity
+
 from app.application.history import effort_scale
+from app.application.history.week_ledger import LedgerWeek
 from app.application.history.athlete_asks_more import Ask
 from app.application.history.effort_scale import EffortScale
 from app.application.history.goal_path import assess
@@ -714,6 +717,118 @@ def test_a_reason_does_not_justify_just_any_jump():
 
     assert found.code == "salto_sobre_o_feito" and found.level == audit.WATCH
     assert "+89%" in found.text and "O coach explicou (recuperação excelente" in found.text
+
+
+def _renato_activities():
+    """Os km reais do Renato (02/11): 28-31 km por semana de julho a setembro, 0 na semana de
+    28/09 e só 15, 21, 18 e 15 km nas semanas de chuva, frio e treino cancelado."""
+
+    weeks = {
+        date(2026, 8, 31): [7.5, 8.0, 13.0], date(2026, 9, 7): [8.2, 7.9, 14.1],
+        date(2026, 9, 14): [8.9, 8.3, 10.7], date(2026, 9, 21): [8.3, 8.5, 13.4],
+        date(2026, 10, 5): [15.0], date(2026, 10, 12): [7.1, 14.0],
+        date(2026, 10, 19): [7.7, 10.0], date(2026, 10, 26): [14.7],
+    }
+
+    out, ident = [], 0
+
+    for start, kms in weeks.items():
+
+        for k, km in enumerate(kms):
+
+            ident += 1
+
+            out.append(make_activity(
+                id=ident, distance=km * 1000, moving_time=int(km * 380),
+                start_date=datetime(start.year, start.month, start.day, 9, tzinfo=UTC)
+                + timedelta(days=k),
+            ))
+
+    return out
+
+
+def _ledger_week(week, planned, prev_done, in_progress=False, **extra):
+
+    return LedgerWeek(
+        week_start=week, phase="BUILD", objective="", deload=False, planned_km=planned,
+        planned_sessions=3, planned_long_km=0.0, planned_key=[], done_km=extra.get("done", 0.0),
+        done_runs=0, done_long_km=0.0, fulfilled=0, missed=[], pending=[], extras=0,
+        in_progress=in_progress, prev_done_km=prev_done, quality_done_km=0.0,
+    )
+
+
+def test_going_back_to_what_he_sustained_after_cancelled_weeks_is_not_a_jump():
+    """Renato (02/11): o aviso disse "+69% sobre o que ele fez" — 30 km contra os 15 km de uma semana
+    de treinos cancelados. Mas ele sustentava 28-31 km: o plano só o devolve ao normal dele, e a
+    semana fraca por chuva, frio ou cancelamento não é a capacidade dele."""
+
+    data = SimpleNamespace(profile="renato2", activities=_renato_activities())
+
+    ledger = [
+        _ledger_week(date(2026, 10, 12), 18.1, 15.0, done=21.1),
+        _ledger_week(date(2026, 10, 19), 24.6, 21.1, done=17.7),
+        _ledger_week(date(2026, 10, 26), 20.8, 17.7, done=14.7),
+        _ledger_week(date(2026, 11, 2), 30.0, 14.7, in_progress=True),
+    ]
+
+    with patch.object(CoachSanityAudit, "_ledger", return_value=ledger):
+
+        held = CoachSanityAudit._sustained(data, ledger)
+
+        jump, saw = CoachSanityAudit._route_checks(data)[1], CoachSanityAudit._route_checks(data)[0]
+
+        assert 28 <= held <= 31
+        assert jump(data) is None
+        assert saw(data) is None
+
+
+def test_a_jump_far_above_what_he_ever_sustained_is_still_flagged():
+    """O Leonardo de verdade: sustenta ~11 km e o plano pede 22 — nada do histórico dele segura isso."""
+
+    data = SimpleNamespace(profile="leonardo", activities=[
+        make_activity(
+            id=i, distance=km * 1000, moving_time=int(km * 380),
+            start_date=datetime(2026, 9, 7, 9, tzinfo=UTC) + timedelta(weeks=i // 3, days=i % 3),
+        )
+        for i, km in enumerate([4.0, 4.0, 4.0] * 6)
+    ])
+
+    ledger = [_ledger_week(date(2026, 10, 12), 8.0, 11.0), _ledger_week(date(2026, 10, 19), 22.1, 8.0)]
+
+    with patch.object(CoachSanityAudit, "_ledger", return_value=ledger):
+
+        found = CoachSanityAudit._route_checks(data)[1](data)
+
+    assert found is not None and found.code == "salto_sobre_o_feito"
+
+
+def test_a_rise_up_to_what_he_sustained_is_not_a_sawtooth_but_an_unexplained_drop_is():
+
+    weeks = [
+        (date(2026, 10, 12), 18.1, False), (date(2026, 10, 19), 24.6, False),
+        (date(2026, 10, 26), 20.8, False), (date(2026, 11, 2), 30.0, False),
+    ]
+
+    assert audit.sawtooth("renato2", weeks) is not None            # sem o sustentado, é ruído
+    assert audit.sawtooth("renato2", weeks, sustained=29.5) is None
+
+    # a subida que passa do que ele sustenta continua contando, e a QUEDA sem motivo também
+    jumpy = [
+        (date(2026, 10, 12), 20.0, False), (date(2026, 10, 19), 32.0, False),
+        (date(2026, 10, 26), 18.0, False), (date(2026, 11, 2), 31.0, False),
+    ]
+
+    assert audit.sawtooth("x", jumpy, sustained=25.0) is not None
+
+
+def test_the_sustained_volume_needs_four_weeks_of_running_and_ignores_the_gap_weeks():
+    from app.application.history import week_ledger
+
+    ref = date(2026, 11, 2)
+
+    assert 28 <= week_ledger.sustained_km(_renato_activities(), ref) <= 31
+    assert week_ledger.sustained_km(_renato_activities()[:6], ref) is None
+    assert week_ledger.sustained_km([], ref) is None
 
 
 def test_the_plan_that_left_the_route_without_a_motive_is_flagged():

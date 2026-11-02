@@ -254,6 +254,22 @@ def typical(ledger: list[LedgerWeek]) -> tuple[float, float, float] | None:
     )
 
 
+def sustained_km(activities: list[Activity], ref_week: date) -> float | None:
+    """Os km por semana que ele SUSTENTAVA antes de `ref_week` (a segunda da semana em questão): a
+    média das melhores semanas das últimas 9 — a MESMA definição do retorno de parada da carga
+    (`training_load_analyzer.sustained_average`). `typical` olha só as semanas do livro-razão (as
+    últimas, onde a chuva, o frio e os treinos cancelados puxam a mediana pra baixo) e chama de
+    "salto" o plano que só devolve o atleta ao que ele já fazia (Renato, 02/11: 30 km contra 15
+    feitos numa semana de treinos cancelados, quando sustentava 28-31 km). None sem 4 semanas com
+    corrida."""
+
+    from app.application.history.training_load_analyzer import sustained_average
+
+    by_week = run_km_by_week(activities)
+
+    return sustained_average(lambda w: sum(by_week.get(ref_week - timedelta(weeks=w), [])))
+
+
 @dataclass(slots=True)
 class Delivery:
     """Quanto do volume prescrito ele fecha: a mediana de feito ÷ prescrito + os números."""

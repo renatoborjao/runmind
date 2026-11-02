@@ -103,6 +103,10 @@ SAWTOOTH_MIN_SWINGS = 2
 JUMP_OVER_DONE = 1.40
 JUMP_EXPLAINED_MAX = 1.60
 
+# subir o plano até o que ele SUSTENTAVA (com esta folga) é voltar ao normal, não oscilação
+# (Renato, 02/11: 18 → 25 → 21 → 30 km eram o plano voltando aos 28-31 km que ele sustentava)
+RETURN_TO_SUSTAINED = 1.10
+
 # volume prescrito fora desta faixa da rota, sem o motivo escrito pelo coach
 ROUTE_OFF = 0.20
 
@@ -451,11 +455,17 @@ def low_adherence(profile: str, done: int, planned: int, weeks: int) -> Finding 
     )
 
 
-def sawtooth(profile: str, weeks: list[tuple[date, float, bool]]) -> Finding | None:
+def sawtooth(
+    profile: str, weeks: list[tuple[date, float, bool]], sustained: float | None = None,
+) -> Finding | None:
     """O volume PRESCRITO sobe e desce em dente de serra: `weeks` = (semana, km prescritos, tem
     motivo escrito — descarga ou nota da rota), da mais antiga pra mais recente. Variação acima de
     `SAWTOOTH_SWING` sem motivo, ao menos `SAWTOOTH_MIN_SWINGS` vezes: o plano de cada semana está
     nascendo do ruído da anterior, não de um desenho.
+
+    `sustained` = os km por semana que ele sustentava: uma SUBIDA que só chega até aí (com a folga
+    de `RETURN_TO_SUSTAINED`) é o plano voltando ao normal dele depois de semanas fracas — chuva,
+    frio, treino cancelado —, não oscilação. A queda sem motivo continua contando.
 
     Só vale pra semanas VIZINHAS — um "salto" entre duas semanas com buracos no meio não é salto
     (Renato, 29/10: 29 km em 21/09 e 18 km em 12/10, sem plano guardado nas semanas entre elas) — e
@@ -481,6 +491,10 @@ def sawtooth(profile: str, weeks: list[tuple[date, float, bool]]) -> Finding | N
             continue
 
         change = after / before - 1
+
+        if change > 0 and sustained and after <= sustained * RETURN_TO_SUSTAINED:
+
+            continue
 
         if abs(change) > SAWTOOTH_SWING:
 
@@ -805,20 +819,39 @@ class CoachSanityAudit:
             data.target_week = saved
 
     @staticmethod
+    def _sustained(data, ledger: list) -> float | None:
+        """O que ele SUSTENTA, pra medir o plano: o maior entre a mediana das semanas recentes do
+        livro-razão e o que ele sustentava (a média das melhores semanas das últimas 9, a mesma
+        definição do retorno de parada). Semana fraca por chuva, frio ou treino cancelado não
+        encolhe a capacidade dele: comparar o plano só com ela chamava de salto a volta ao normal
+        (Renato, 02/11: +69% — 30 km contra 15 feitos, quando sustentava 28-31)."""
+
+        from app.application.history import week_ledger
+
+        if not ledger:
+
+            return None
+
+        usual = week_ledger.typical(ledger[:-1])
+
+        held = week_ledger.sustained_km(data.activities, ledger[-1].week_start)
+
+        return max(usual[0] if usual else 0.0, held or 0.0) or None
+
+    @staticmethod
     def _route_checks(data) -> list:
 
         def sawtooth_check(d):
 
+            ledger = CoachSanityAudit._ledger(d)
+
             weeks = [
-                (w.week_start, w.planned_km, bool(w.deload or w.route_note))
-                for w in CoachSanityAudit._ledger(d)
+                (w.week_start, w.planned_km, bool(w.deload or w.route_note)) for w in ledger
             ]
 
-            return sawtooth(d.profile, weeks)
+            return sawtooth(d.profile, weeks, CoachSanityAudit._sustained(d, ledger))
 
         def jump_check(d):
-
-            from app.application.history import week_ledger
 
             ledger = CoachSanityAudit._ledger(d)
 
@@ -828,11 +861,9 @@ class CoachSanityAudit:
 
             last = ledger[-1]
 
-            usual = week_ledger.typical(ledger[:-1])
-
             return jump_over_done(
                 d.profile, last.week_start, last.planned_km, last.prev_done_km,
-                usual[0] if usual else None, bool(last.deload or last.route_note),
+                CoachSanityAudit._sustained(d, ledger), bool(last.deload or last.route_note),
                 last.route_note,
             )
 

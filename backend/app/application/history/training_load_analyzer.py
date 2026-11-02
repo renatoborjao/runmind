@@ -70,6 +70,25 @@ _SUSTAINED_LOOKBACK_WEEKS = 9      # semanas ANTERIORES à aguda onde procurar o
 _GAP_SHARE = 0.5                   # semana abaixo desta fração do sustentado = interrupção
 _MAX_STEP = 1.3                    # a aguda não passa disto vezes a MELHOR semana do último mês
 
+
+def sustained_average(week_load_back) -> float | None:
+    """O que ele SUSTENTAVA: a média das `_BASELINE_WEEKS` melhores semanas das
+    `_SUSTAINED_LOOKBACK_WEEKS` anteriores. `week_load_back(w)` devolve a carga (minutos, km…) da
+    semana que fechou `w` semanas antes da referência. None sem 4 semanas com treino. É a definição
+    ÚNICA de "sustentado": o retorno de parada da carga e a auditoria do plano a usam, pra não
+    chamarem de salto o que o coach lê como volta ao normal."""
+
+    loads = [week_load_back(w) for w in range(1, _SUSTAINED_LOOKBACK_WEEKS + 1)]
+
+    best = sorted((load for load in loads if load > 0), reverse=True)[:_BASELINE_WEEKS]
+
+    if len(best) < _BASELINE_WEEKS:
+
+        return None
+
+    return sum(best) / len(best)
+
+
 # fator de intensidade da sessão SEM FC (raro): usa a mediana do próprio
 # atleta; sem nenhuma sessão com FC, cai neste moderado
 _DEFAULT_INTENSITY = 0.65
@@ -547,29 +566,23 @@ class TrainingLoadAnalyzer:
 
             return None
 
-        loads = []
-
-        for w in range(1, _SUSTAINED_LOOKBACK_WEEKS + 1):
+        def minutes_back(w: int) -> float:
 
             end = ref - timedelta(days=7 * w)
 
             start = end - timedelta(days=6)
 
-            loads.append(
-                sum(
-                    (a.moving_time or 0) / 60
-                    for a in history.activities
-                    if start <= a.start_date.date() <= end
-                )
+            return sum(
+                (a.moving_time or 0) / 60
+                for a in history.activities
+                if start <= a.start_date.date() <= end
             )
 
-        best = sorted((load for load in loads if load > 0), reverse=True)[:_BASELINE_WEEKS]
+        sustained = sustained_average(minutes_back)
 
-        if len(best) < _BASELINE_WEEKS:
+        if sustained is None:
 
             return None
-
-        sustained = sum(best) / len(best)
 
         if acute > sustained:
 
