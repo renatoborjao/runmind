@@ -350,3 +350,90 @@ def test_the_heart_rate_evidence_never_slows_an_athlete_who_already_runs_easy_fa
     with a, b:
 
         assert PaceModelBuilder.build(fast, _Runner()).easy_min <= baseline.easy_min
+
+
+# --- leve por EVIDÊNCIA LIMPA (nº 93) -------------------------------------------------------------
+
+
+def _clean_model(clean):
+    """O modelo de um atleta cujo VDOT sai de um esforço submáximo, com ou sem evidência limpa."""
+
+    runs = [_run(10, 6.7), _run(5, 6.85), _run(5.2, 6.6), _run(5.1, 6.78), _run(9, 6.88)]
+
+    paces = [(1000 / r.average_speed) / 60 for r in runs]
+
+    return PaceModelBuilder._from_vdot(34.0, paces, None, clean)
+
+
+def test_the_clean_easy_evidence_makes_the_fast_edge_faster_never_slower():
+    """Fernanda 01/11: corre o leve a ~6:04-6:10 com FC 127-133 (teto 144, esforço 1-3) contra uma
+    faixa que começava em 6:13. A ponta rápida passa a ser o quartil rápido desses leves."""
+
+    without = _clean_model(None)
+
+    fast_clean = [6.0, 6.05, 6.1, 6.15, 6.2, 6.3]
+
+    with_clean = _clean_model(fast_clean)
+
+    assert with_clean.easy_min < without.easy_min
+    assert abs(with_clean.easy_min - PaceModelBuilder._quantile(fast_clean, 0.25)) < 0.01
+    assert with_clean.easy_max >= with_clean.easy_min + 0.3
+
+    # o resto do modelo (limiar, VO2) segue a fisiologia
+    assert with_clean.threshold == without.threshold and with_clean.interval == without.interval
+
+    # leves limpos MAIS LENTOS que a faixa atual não atrasam o modelo
+    slow_clean = [7.4, 7.5, 7.6, 7.7]
+
+    assert _clean_model(slow_clean).easy_min == without.easy_min
+
+
+def test_with_fewer_than_four_clean_runs_nothing_changes():
+    """Renato: só 3 leves limpos (nos 8 acima do teto ele relatou esforço 5-8): sem amostra."""
+
+    assert _clean_model([6.3, 6.35, 6.4]).easy_min == _clean_model(None).easy_min
+    assert _clean_model([]).easy_min == _clean_model(None).easy_min
+
+
+def test_the_clean_runs_are_the_easy_and_long_ones_inside_the_ceiling_with_low_effort():
+
+    from types import SimpleNamespace
+
+    from app.application.history.stimulus_ledger import EASY, LONG, THRESHOLD
+
+    def act(pace_min, hr, trainer=False):
+
+        run = _run(8, pace_min)
+        run.average_heartrate = hr
+        run.raw = {"trainer": True} if trainer else {}
+        return run
+
+    day = __import__("datetime").date
+
+    ok = [(day(2026, 10, 1), None, EASY, act(6.2, 140)), (day(2026, 10, 3), None, LONG, act(6.1, 145))]
+    out = [
+        (day(2026, 10, 5), None, THRESHOLD, act(5.9, 148)),        # outra família
+        (day(2026, 10, 7), None, EASY, act(6.0, 160)),             # FC acima do teto
+        (day(2026, 10, 9), None, EASY, act(6.0, 140)),             # esforço relatado alto
+        (day(2026, 10, 11), None, EASY, act(6.0, 140, trainer=True)),   # esteira
+        (day(2026, 10, 13), None, EASY, None),                     # não fez
+    ]
+
+    class _Runner:
+
+        id = "atleta"
+
+    efforts = [SimpleNamespace(day="2026-10-09", rpe=8, feel="cansado")]
+
+    history = _history(*[row[3] for row in ok + out if row[3] is not None])
+
+    with patch("app.application.history.hr_zone_resolver.HrZoneResolver.for_profile", return_value=object()), \
+         patch("app.application.history.training_patterns.TrainingPatterns.ceiling_of", return_value=152), \
+         patch("app.application.history.training_patterns.TrainingPatterns._sessions", return_value=ok + out), \
+         patch("app.infrastructure.persistence.weekly_plan_repository.WeeklyPlanRepository.history", return_value=[]), \
+         patch("app.infrastructure.persistence.weekly_plan_repository.WeeklyPlanRepository.load", return_value=None), \
+         patch("app.infrastructure.persistence.session_rpe_repository.SessionRpeRepository.load_sessions", return_value=efforts):
+
+        paces = PaceModelBuilder._clean_easy_paces(history, _Runner())
+
+    assert [round(p, 2) for p in paces] == [6.2, 6.1]

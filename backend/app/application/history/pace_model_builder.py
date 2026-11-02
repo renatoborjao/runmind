@@ -65,6 +65,18 @@ _MIN_RECENT_RUNS = 4
 # amostra mínima de corridas dentro do teto de FC pra o leve pela FC valer
 _MIN_HR_EASY_RUNS = 3
 
+# EVIDÊNCIA LIMPA do leve: leves e longões da família certa (casados com o plano), com a FC média
+# dentro do teto aeróbico e esforço relatado até _CLEAN_MAX_RPE. A ponta rápida do leve passa a ser o
+# quartil rápido DELES quando são pelo menos _MIN_CLEAN_EASY — só acelera, nunca atrasa. Antes a
+# amostra era toda corrida abaixo do teto (inclui o dia do tiro, que puxa a média pra um "leve"
+# que não é leve). Placar de 01/11: Fernanda corre o leve a 6:04-6:10 com FC 127-133 (teto 144,
+# esforço 1-3) contra uma faixa de 6:13-6:50. Renato fica de fora: só 3 leves limpos, e nos 8 acima
+# do teto ele relatou esforço 5-8 (passou do prescrito; o teto não está baixo).
+_CLEAN_WEEKS = 8
+_CLEAN_MAX_RPE = 5
+_MIN_CLEAN_EASY = 4
+_CLEAN_FAST_QUANTILE = 0.25
+
 # default conservador de estreante (nunca correu / não informou)
 _ROOKIE_PACE = 8.0
 
@@ -132,6 +144,7 @@ class PaceModelBuilder:
 
         model = PaceModelBuilder._from_vdot(
             vdot, reference, PaceModelBuilder._hr_confirmed_easy_paces(history, runner),
+            PaceModelBuilder._clean_easy_paces(history, runner),
         )
 
         if calibration is None:
@@ -212,6 +225,115 @@ class PaceModelBuilder:
         except Exception as e:  # noqa: BLE001 — melhor o modelo de sempre do que derrubar o plano
 
             print(f"Leve pela FC falhou p/ '{profile}': {e}")
+
+            return []
+
+    @staticmethod
+    def _quantile(values: list[float], q: float) -> float:
+        """Quantil `q` (0-1) por interpolação linear; o menor valor é o pace mais rápido."""
+
+        ordered = sorted(values)
+
+        position = (len(ordered) - 1) * q
+
+        low = int(position)
+
+        high = min(low + 1, len(ordered) - 1)
+
+        return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+    @staticmethod
+    def _clean_easy_paces(
+        history: TrainingHistory, runner: RunnerProfile | None,
+    ) -> list[float]:
+        """Os paces (min/km) dos leves e longões LIMPOS das últimas semanas: sessão do plano da
+        família leve/longão casada com a corrida, FC média dentro do teto aeróbico e esforço
+        relatado até `_CLEAN_MAX_RPE` (sem relato vale: a FC dentro do teto é a régua do leve).
+        Esteira e GPS quebrado ficam de fora. Vazio sem plano, sem teto de FC ou sem amostra."""
+
+        profile = getattr(runner, "id", None) if runner else None
+
+        if not profile:
+
+            return []
+
+        try:
+
+            from app.application.history.hr_zone_resolver import HrZoneResolver
+            from app.application.history.stimulus_ledger import EASY, LONG
+            from app.application.history.training_patterns import TrainingPatterns
+            from app.core.clock import today_local
+            from app.infrastructure.persistence.session_rpe_repository import (
+                SessionRpeRepository,
+            )
+            from app.infrastructure.persistence.weekly_plan_repository import (
+                WeeklyPlanRepository,
+            )
+
+            zones = HrZoneResolver.for_profile(profile, runner, history.activities)
+
+            ceiling = TrainingPatterns.ceiling_of(zones, profile)
+
+            if not ceiling:
+
+                return []
+
+            repository = WeeklyPlanRepository()
+
+            plans = list(repository.history(profile))
+
+            current = repository.load(profile)
+
+            if current is not None and all(p.week_start != current.week_start for p in plans):
+
+                plans.append(current)
+
+            plans = [p for p in plans if getattr(p, "source", "runmind") == "runmind"]
+
+            efforts = {
+                str(getattr(r, "day", "")): r.rpe
+                for r in SessionRpeRepository().load_sessions(profile)
+                if getattr(r, "rpe", None) is not None
+            }
+
+            runs = [
+                a for a in history.activities
+                if is_run_sport(a.sport) and a.average_speed > 0 and not gps_broken(a)
+                and not (a.raw or {}).get("trainer")
+            ]
+
+            paces = []
+
+            for day, _, family, act in TrainingPatterns._sessions(
+                plans, runs, today_local(), _CLEAN_WEEKS,
+            ):
+
+                if act is None or family not in (EASY, LONG) or not act.average_heartrate:
+
+                    continue
+
+                # esteira: o pace é estimado, não prova nada (e a FC dela idem)
+                if act.average_heartrate > ceiling or (act.raw or {}).get("trainer"):
+
+                    continue
+
+                effort = efforts.get(day.isoformat())
+
+                if effort is not None and effort > _CLEAN_MAX_RPE:
+
+                    continue
+
+                pace = (1000 / act.average_speed) / 60
+
+                if _MIN_PACE <= pace <= _MAX_PACE:
+
+                    paces.append(pace)
+
+            return paces
+
+        except Exception as e:  # noqa: BLE001 — melhor o modelo de sempre do que derrubar o plano
+
+            print(f"Leve limpo falhou p/ '{profile}': {e}")
 
             return []
 
@@ -349,6 +471,7 @@ class PaceModelBuilder:
     @staticmethod
     def _from_vdot(
         vdot: float, paces: list[float], hr_easy_paces: list[float] | None = None,
+        clean_easy_paces: list[float] | None = None,
     ) -> PaceModel:
         """Ritmos E/M/T/I/R do VDOT. O FÁCIL segue o padrão meio-termo: média
         entre a fisiologia (VDOT) e o que o atleta corre de verdade (`paces`,
@@ -401,6 +524,16 @@ class PaceModelBuilder:
         capped = easy_fast < floor
 
         easy_min = floor if capped else easy_fast
+
+        # EVIDÊNCIA LIMPA: o leve de verdade dele (família certa, FC dentro do teto, esforço baixo)
+        # manda na ponta rápida quando é mais rápido que a faixa — a régua do leve é a FC. Só acelera.
+        if clean_easy_paces and len(clean_easy_paces) >= _MIN_CLEAN_EASY:
+
+            easy_min = min(
+                easy_min, PaceModelBuilder._quantile(clean_easy_paces, _CLEAN_FAST_QUANTILE),
+            )
+
+            capped = False
 
         easy_max = max(easy_slow, easy_min + _MIN_EASY_SPREAD)
 
