@@ -1952,7 +1952,51 @@ class AthleteDossier:
 
                 print(f"Dossiê: última dose falhou p/ '{data.profile}': {e}")
 
+            # o erro do próprio coach com este atleta, resumido: o desvio vai sempre pro mesmo lado?
+            try:
+
+                lines.append(AthleteDossier._prescription_scoreboard(data))
+
+            except Exception as e:
+
+                print(f"Dossiê: placar da prescrição falhou p/ '{data.profile}': {e}")
+
         return lines
+
+    @staticmethod
+    def _prescription_scoreboard(data: _Inputs) -> str:
+        """O placar da prescrição (`history/prescription_scoreboard`): o que o coach prescreveu ×
+        o que ele entregou nas últimas semanas, resumido. Só planos DO COACH (o do treinador
+        externo não é erro dele). Vazio sem amostra que fale."""
+
+        from app.application.history import prescription_scoreboard
+        from app.domain.value_objects.sports import is_run_sport
+        from app.infrastructure.persistence.execution_log_store import ExecutionLogStore
+        from app.infrastructure.persistence.weekly_plan_repository import (
+            WeeklyPlanRepository,
+        )
+
+        repository = WeeklyPlanRepository()
+
+        plans = list(repository.history(data.profile))
+
+        current = repository.load(data.profile)
+
+        if current is not None and all(p.week_start != current.week_start for p in plans):
+
+            plans.append(current)
+
+        plans = [p for p in plans if getattr(p, "source", "runmind") == "runmind"]
+
+        board = prescription_scoreboard.assess(
+            plans,
+            [a for a in data.activities if is_run_sport(a.sport)],
+            ExecutionLogStore().all(data.profile),
+            data.ceiling,
+            data.today,
+        )
+
+        return prescription_scoreboard.render(board)
 
     @staticmethod
     def _stimulus_doses(data: _Inputs) -> str:
