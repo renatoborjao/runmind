@@ -148,6 +148,15 @@ class ConversationContextBuilder:
 
             facts = f"{facts}\n{history_digest}\n"
 
+        # LEMBRANÇA DA CONVERSA: o que ele e o coach já disseram, mesmo meses atrás (arquivo
+        # permanente incluído). Só entra quando a mensagem casa de verdade com algo antigo —
+        # "bora" e "valeu" não trazem nada, então o prompt segue enxuto.
+        recall = ConversationContextBuilder._conversation_recall(profile, incoming_text, today)
+
+        if recall:
+
+            facts = f"{facts}\n{recall}\n"
+
         # ARMÁRIO DE TÊNIS: sem isto o coach responde sobre calçado no vácuo e
         # INVENTA pares ("Corre 4" que o atleta não tem — bug real do Renato).
         # Só entra quando o assunto é tênis (portão barato), pra o prompt seguir
@@ -326,6 +335,27 @@ class ConversationContextBuilder:
         except Exception as e:
 
             print(f"Armário de tênis falhou p/ '{profile}': {e}")
+
+            return ""
+
+    @staticmethod
+    def _conversation_recall(profile: str, incoming_text: str, today) -> str:
+        """Trechos antigos da conversa que casam com a mensagem (`history/conversation_recall`).
+        Best-effort: falhar aqui nunca derruba a conversa."""
+
+        if not (incoming_text or "").strip():
+
+            return ""
+
+        try:
+
+            from app.application.history import conversation_recall
+
+            return conversation_recall.for_message(profile, incoming_text, today)
+
+        except Exception as e:
+
+            print(f"Lembrança da conversa falhou p/ '{profile}': {e}")
 
             return ""
 
