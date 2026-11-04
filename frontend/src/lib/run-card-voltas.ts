@@ -44,6 +44,10 @@ function fmtLapTime(s: number): string {
     : `${m}:${String(sec).padStart(2, "0")}`;
 }
 function lapKm(l: ShareLap): string { return km2(l.distance_m / 1000); }
+// pace da volta calculado (tempo ÷ distância) — a string do relógio vinha errada
+function lapPaceSec(l: ShareLap): number | null {
+  return l.distance_m > 0 && l.duration_s > 0 ? l.duration_s / (l.distance_m / 1000) : null;
+}
 // pace médio de um conjunto de voltas (tempo total ÷ distância total)
 function groupPace(laps: ShareLap[]): number | null {
   const d = laps.reduce((a, l) => a + l.distance_m, 0);
@@ -59,7 +63,7 @@ export interface LapGroup { name: string; detail: string; }
 export interface LapRow { n: number; lap: ShareLap; fast: boolean; }
 export interface LapStructure { title: string; groups: LapGroup[]; rows: LapRow[]; hidden: number; }
 
-const MAX_ROWS = 16;
+const MAX_ROWS = 22;
 
 export function lapStructure(laps: ShareLap[], workoutName?: string | null): LapStructure {
   // sem esforço/recuperação (corrida contínua): uma estrutura só + as voltas por km
@@ -68,8 +72,8 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
     let rows: LapRow[] = laps.map((lap, i) => ({ n: i + 1, lap, fast: false }));
     const hidden = Math.max(0, rows.length - MAX_ROWS);
     if (hidden) rows = rows.slice(0, MAX_ROWS);
-    const ranked = rows.filter((r) => paceSecOf(r.lap.pace) != null)
-      .sort((a, b) => paceSecOf(a.lap.pace)! - paceSecOf(b.lap.pace)!);
+    const ranked = rows.filter((r) => lapPaceSec(r.lap) != null)
+      .sort((a, b) => lapPaceSec(a.lap)! - lapPaceSec(b.lap)!);
     if (ranked.length >= 3) ranked.slice(0, Math.max(1, Math.floor(ranked.length / 3))).forEach((r) => { r.fast = true; });
     return {
       title: (workoutName || "").trim() ? workoutName!.trim().toUpperCase() : "VOLTAS DO TREINO",
@@ -113,21 +117,21 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
     if (eff.length) {
       groups.push({
         name: eff.length > 1 ? `Séries (${eff.length}×)` : "Esforço",
-        detail: `${fmtPace(groupPace(eff))}/km em média`,
+        detail: `${eff.length}× ${dist(eff.slice(0, 1))} · ${fmtPace(groupPace(eff))}/km`,
       });
     }
-    if (rec.length) groups.push({ name: "Recuperação", detail: `${fmtPace(groupPace(rec))}/km em média` });
+    if (rec.length) groups.push({ name: "Recuperação", detail: `${rec.length}× ${dist(rec.slice(0, 1))} · ${fmtPace(groupPace(rec))}/km` });
   }
   if (trail.length) groups.push({ name: "Desaquecimento", detail: `${dist(trail)} · ${fmtPace(groupPace(trail))}/km` });
 
   // tabela: as voltas do miolo, numeradas como no relógio
-  let rows: LapRow[] = middle.map((lap, i) => ({ n: midStart + i + 1, lap, fast: false }));
+  let rows: LapRow[] = laps.map((lap, i) => ({ n: i + 1, lap, fast: false }));
   const hidden = Math.max(0, rows.length - MAX_ROWS);
   if (hidden) rows = rows.slice(0, MAX_ROWS);
   // destaque: o terço mais rápido dos esforços (precisa de 3+ pra comparar)
-  const eff = rows.filter((r) => r.lap.kind === "effort" && paceSecOf(r.lap.pace) != null);
+  const eff = rows.filter((r) => r.lap.kind === "effort" && lapPaceSec(r.lap) != null);
   if (eff.length >= 3) {
-    const sorted = [...eff].sort((a, b) => paceSecOf(a.lap.pace)! - paceSecOf(b.lap.pace)!);
+    const sorted = [...eff].sort((a, b) => lapPaceSec(a.lap)! - lapPaceSec(b.lap)!);
     sorted.slice(0, Math.max(1, Math.floor(eff.length / 3))).forEach((r) => { r.fast = true; });
   }
 
@@ -190,6 +194,17 @@ function pill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, te
   ctx.textAlign = "left";
 }
 
+// texto com contorno escuro quando não há painel (foto clara não engole o texto)
+function txt(ctx: CanvasRenderingContext2D, panel: boolean, text: string, x: number, y: number) {
+  if (!panel) {
+    ctx.save();
+    ctx.lineJoin = "round"; ctx.lineWidth = 6; ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.strokeText(text, x, y);
+    ctx.restore();
+  }
+  ctx.fillText(text, x, y);
+}
+
 export function drawVoltas(
   ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras, hasPhoto: boolean, panel: boolean,
 ) {
@@ -215,10 +230,12 @@ export function drawVoltas(
 
   // título + data
   ctx.textAlign = "left"; ctx.fillStyle = ORANGE;
-  ctx.font = `italic 900 50px ${CANVAS_FONT}`;
-  ctx.fillText(fitText(ctx, L.st.title, innerW), inner, py + 84);
+  let ts = 50;
+  ctx.font = `italic 900 ${ts}px ${CANVAS_FONT}`;
+  while (ctx.measureText(L.st.title).width > innerW && ts > 28) { ts -= 2; ctx.font = `italic 900 ${ts}px ${CANVAS_FONT}`; }
+  txt(ctx, panel, fitText(ctx, L.st.title, innerW), inner, py + 84);
   ctx.font = `600 26px ${CANVAS_FONT}`; ctx.fillStyle = MUTED;
-  ctx.fillText(x.date, inner, py + 124);
+  txt(ctx, panel, x.date, inner, py + 124);
 
   // números (2 colunas)
   let y = py + L.head;
@@ -226,8 +243,8 @@ export function drawVoltas(
   L.cells.forEach(([lab, val], i) => {
     const cx0 = inner + (i % 2) * colW;
     const cy0 = y + Math.floor(i / 2) * METRIC_ROW;
-    ctx.fillStyle = MUTED; ctx.font = `600 24px ${CANVAS_FONT}`; ctx.fillText(lab, cx0, cy0 + 24);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 42px ${CANVAS_FONT}`; ctx.fillText(val, cx0, cy0 + 72);
+    ctx.fillStyle = MUTED; ctx.font = `600 24px ${CANVAS_FONT}`; txt(ctx, panel, lab, cx0, cy0 + 24);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = `800 42px ${CANVAS_FONT}`; txt(ctx, panel, val, cx0, cy0 + 72);
   });
   y += L.metricsH + 28;
 
@@ -236,9 +253,9 @@ export function drawVoltas(
   y += 64;
   for (const g of L.st.groups) {
     ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF"; ctx.font = `700 28px ${CANVAS_FONT}`;
-    ctx.fillText(g.name, inner, y + 34);
+    txt(ctx, panel, g.name, inner, y + 34);
     ctx.textAlign = "right"; ctx.fillStyle = MUTED; ctx.font = `600 25px ${CANVAS_FONT}`;
-    ctx.fillText(fitText(ctx, g.detail, innerW * 0.62), innerR, y + 34);
+    txt(ctx, panel, fitText(ctx, g.detail, innerW * 0.62), innerR, y + 34);
     ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(inner, y + GROUP_ROW - 2, innerW, 2);
     y += GROUP_ROW;
   }
@@ -249,33 +266,33 @@ export function drawVoltas(
   y += 64;
   const cN = inner + 4, cD = inner + innerW * 0.36, cT = inner + innerW * 0.62, cP = innerR;
   ctx.fillStyle = MUTED; ctx.font = `600 22px ${CANVAS_FONT}`;
-  ctx.textAlign = "left"; ctx.fillText("Volta", cN, y + 24);
-  ctx.textAlign = "center"; ctx.fillText("Distância", cD + 40, y + 24); ctx.fillText("Tempo", cT, y + 24);
-  ctx.textAlign = "right"; ctx.fillText("Pace", cP, y + 24);
+  ctx.textAlign = "left"; txt(ctx, panel, "Volta", cN, y + 24);
+  ctx.textAlign = "center"; txt(ctx, panel, "Distância", cD + 40, y + 24); txt(ctx, panel, "Tempo", cT, y + 24);
+  ctx.textAlign = "right"; txt(ctx, panel, "Pace", cP, y + 24);
   y += 40;
   for (const r of L.st.rows) {
     const mid = y + LAP_ROW / 2 + 9;
     ctx.fillStyle = "#FFFFFF"; ctx.font = `700 27px ${CANVAS_FONT}`;
-    ctx.textAlign = "left"; ctx.fillText(String(r.n), cN, mid);
+    ctx.textAlign = "left"; txt(ctx, panel, String(r.n), cN, mid);
     ctx.textAlign = "center";
-    ctx.fillText(`${lapKm(r.lap)} km`, cD + 40, mid);
-    ctx.fillText(fmtLapTime(r.lap.duration_s), cT, mid);
-    const paceTxt = `${r.lap.pace ?? "—"}/km`;
+    txt(ctx, panel, `${lapKm(r.lap)} km`, cD + 40, mid);
+    txt(ctx, panel, fmtLapTime(r.lap.duration_s), cT, mid);
+    const paceTxt = `${fmtPace(lapPaceSec(r.lap))}/km`;
     ctx.textAlign = "right";
     if (r.fast) {
       ctx.font = `800 27px ${CANVAS_FONT}`;
       const w = ctx.measureText(paceTxt).width + 26;
       ctx.fillStyle = ORANGE;
       roundRect(ctx, cP + 8 - w, y + 5, w, LAP_ROW - 10, (LAP_ROW - 10) / 2); ctx.fill();
-      ctx.fillStyle = "#06251F"; ctx.fillText(paceTxt, cP - 5, mid);
+      ctx.fillStyle = "#06251F"; txt(ctx, panel, paceTxt, cP - 5, mid);
     } else {
-      ctx.fillStyle = "#FFFFFF"; ctx.fillText(paceTxt, cP, mid);
+      ctx.fillStyle = "#FFFFFF"; txt(ctx, panel, paceTxt, cP, mid);
     }
     y += LAP_ROW;
   }
   if (L.st.hidden) {
     ctx.fillStyle = MUTED; ctx.font = `600 24px ${CANVAS_FONT}`; ctx.textAlign = "center";
-    ctx.fillText(`+ ${L.st.hidden} voltas`, px + PANEL_W / 2, y + 30);
+    txt(ctx, panel, `+ ${L.st.hidden} voltas`, px + PANEL_W / 2, y + 30);
     y += 40;
   }
 
