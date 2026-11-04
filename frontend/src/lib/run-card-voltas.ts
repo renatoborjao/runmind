@@ -1,21 +1,23 @@
 // Cards de compartilhar inspirados nos stories de corrida que o pessoal posta:
 //  - "Treino com voltas": painel escuro com os números, a ESTRUTURA do treino
 //    (aquecimento, séries, recuperação...) e a tabela de VOLTAS do relógio, com
-//    as mais rápidas em laranja. Usa as voltas REAIS do Garmin (share-context).
+//    as mais rápidas na cor da marca. Usa as voltas REAIS do Garmin (share-context).
 //  - "Minimalista": números empilhados e centralizados em branco, com o
-//    percurso rabiscado em laranja por cima (como se fosse feito à mão).
+//    percurso rabiscado na cor da marca por cima (como se fosse feito à mão).
 // Tudo determinístico (sem IA). Cada modelo funciona nas duas versões —
 // Transparente e Card — e o canvas é justo ao conteúdo no Transparente.
 
 import type { FeedItem, ShareLap } from "./api";
 import type { RunExtras } from "./run-card-extras";
 import {
-  CANVAS_FONT, drawBrand, fitText, fmtDur, outlinedText, roundRect, withShadow,
+  CANVAS_FONT, applySoftShadow, drawBrand, fitText, fmtDur, outlinedText, roundRect, withShadow,
 } from "./share-canvas";
 
-const ORANGE = "#FF7A1A";
+const ORANGE = "#1FD9B8"; // teal da marca Ritmind
 const PANEL = "rgba(10,11,16,0.9)";
-const MUTED = "rgba(255,255,255,0.62)";
+const MUTED_PANEL = "rgba(255,255,255,0.62)";
+const MUTED_BARE = "rgba(255,255,255,0.9)";
+const MUTED = MUTED_PANEL;
 
 const CARD_MIN_H = 1350;
 
@@ -168,28 +170,33 @@ export function hasLaps(laps: ShareLap[] | null | undefined): boolean {
 function pill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, text: string) {
   ctx.fillStyle = ORANGE;
   roundRect(ctx, x, y, w, 44, 22); ctx.fill();
-  ctx.fillStyle = "#1A0E05"; ctx.font = `800 24px ${CANVAS_FONT}`; ctx.textAlign = "center";
+  ctx.fillStyle = "#06251F"; ctx.font = `800 24px ${CANVAS_FONT}`; ctx.textAlign = "center";
   ctx.fillText(text, x + w / 2, y + 31);
   ctx.textAlign = "left";
 }
 
 export function drawVoltas(
-  ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras, hasPhoto: boolean,
+  ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras, hasPhoto: boolean, panel: boolean,
 ) {
   if (!hasLaps(x.laps)) return;
+  const MUTED = panel ? MUTED_PANEL : MUTED_BARE;
+  ctx.save();
+  if (!panel) applySoftShadow(ctx); // sem painel: sombra no texto garante a leitura
   const L = voltasLayout(it, x);
   const px = hasPhoto ? W - PANEL_W - 48 : (W - PANEL_W) / 2;
   const py = Math.max(40, (H - L.panelH) / 2);
   const inner = px + PAD, innerR = px + PANEL_W - PAD, innerW = PANEL_W - 2 * PAD;
 
-  // painel
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
-  ctx.fillStyle = PANEL;
-  roundRect(ctx, px, py, PANEL_W, L.panelH, 40); ctx.fill();
-  ctx.restore();
-  ctx.lineWidth = 3; ctx.strokeStyle = ORANGE;
-  roundRect(ctx, px, py, PANEL_W, L.panelH, 40); ctx.stroke();
+  // painel escuro (só no Card); no Transparente fica só o texto, solto
+  if (panel) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
+    ctx.fillStyle = PANEL;
+    roundRect(ctx, px, py, PANEL_W, L.panelH, 40); ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = 3; ctx.strokeStyle = ORANGE;
+    roundRect(ctx, px, py, PANEL_W, L.panelH, 40); ctx.stroke();
+  }
 
   // título + data
   ctx.textAlign = "left"; ctx.fillStyle = ORANGE;
@@ -217,7 +224,7 @@ export function drawVoltas(
     ctx.fillText(g.name, inner, y + 34);
     ctx.textAlign = "right"; ctx.fillStyle = MUTED; ctx.font = `600 25px ${CANVAS_FONT}`;
     ctx.fillText(fitText(ctx, g.detail, innerW * 0.62), innerR, y + 34);
-    ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fillRect(inner, y + GROUP_ROW - 2, innerW, 2);
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(inner, y + GROUP_ROW - 2, innerW, 2);
     y += GROUP_ROW;
   }
   y += 24;
@@ -245,7 +252,7 @@ export function drawVoltas(
       const w = ctx.measureText(paceTxt).width + 26;
       ctx.fillStyle = ORANGE;
       roundRect(ctx, cP + 8 - w, y + 5, w, LAP_ROW - 10, (LAP_ROW - 10) / 2); ctx.fill();
-      ctx.fillStyle = "#1A0E05"; ctx.fillText(paceTxt, cP - 5, mid);
+      ctx.fillStyle = "#06251F"; ctx.fillText(paceTxt, cP - 5, mid);
     } else {
       ctx.fillStyle = "#FFFFFF"; ctx.fillText(paceTxt, cP, mid);
     }
@@ -260,10 +267,11 @@ export function drawVoltas(
   // marca, dentro do painel
   ctx.textAlign = "left";
   drawBrand(ctx, px + PANEL_W / 2, py + L.panelH - 46, 40, true);
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------
-// MINIMALISTA — números empilhados + rabisco laranja do percurso
+// MINIMALISTA — números empilhados + rabisco da marca do percurso
 // ---------------------------------------------------------------------------
 
 const MIN_STEP = 134;
@@ -339,7 +347,7 @@ export function drawMinimal(
     });
   });
 
-  // rabisco laranja por cima, cobrindo a pilha
+  // rabisco da marca por cima, cobrindo a pilha
   ctx.save();
   ctx.strokeStyle = ORANGE; ctx.lineWidth = 9; ctx.lineJoin = "round"; ctx.lineCap = "round";
   ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
