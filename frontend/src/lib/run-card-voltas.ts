@@ -65,11 +65,56 @@ export interface LapStructure { unit: "Bloco" | "Km"; title: string; groups: Lap
 
 const MAX_ROWS = 22;
 
-export function lapStructure(laps: ShareLap[], workoutName?: string | null): LapStructure {
+// pace real de cada km da corrida (das parciais) — usado pra quebrar blocos longos
+export interface KmPace { len: number; paceSec: number; }
+const SPLIT_OVER_KM = 1.5;
+
+// Blocos longos (um "10 km no pace alvo") não dizem nada numa linha só: quebra
+// por km, com o tempo de cada km tirado do pace real da corrida (reescalado
+// pra fechar com o tempo do bloco). Blocos curtos ficam como o relógio gravou.
+function buildRows(laps: ShareLap[], kmPaces: KmPace[] | null | undefined): LapRow[] {
+  const ints: { a: number; b: number; pace: number }[] = [];
+  let cum = 0;
+  for (const k of kmPaces ?? []) { ints.push({ a: cum, b: cum + k.len, pace: k.paceSec }); cum += k.len; }
+  const out: { lap: ShareLap; chunked: boolean }[] = [];
+  let start = 0;
+  for (const lap of laps) {
+    const d = lap.distance_m / 1000;
+    if (d < SPLIT_OVER_KM || !ints.length) { out.push({ lap, chunked: false }); start += d; continue; }
+    const chunks: { len: number; dur: number }[] = [];
+    let a = start;
+    const end = start + d;
+    while (a < end - 1e-6) {
+      let b = Math.min(a + 1, end);
+      if (end - b < 0.3) b = end; // sobra mínima gruda no último km
+      let dur = 0;
+      for (const it of ints) dur += Math.max(0, Math.min(b, it.b) - Math.max(a, it.a)) * it.pace;
+      chunks.push({ len: b - a, dur });
+      a = b;
+    }
+    const sum = chunks.reduce((x, c) => x + c.dur, 0);
+    const f = sum > 0 ? lap.duration_s / sum : 0;
+    for (const c of chunks) {
+      out.push({
+        lap: {
+          kind: lap.kind, distance_m: Math.round(c.len * 1000),
+          duration_s: f > 0 ? Math.round(c.dur * f) : Math.round(lap.duration_s * (c.len / d)),
+          pace: null, avg_hr: lap.avg_hr,
+        },
+        chunked: true,
+      });
+    }
+    start = end;
+  }
+  // tiro = esforço curto do relógio; km de um bloco longo não é tiro
+  return out.map((e, i) => ({ n: i + 1, lap: e.lap, fast: !e.chunked && e.lap.kind === "effort" }));
+}
+
+export function lapStructure(laps: ShareLap[], workoutName?: string | null, kmPaces?: KmPace[] | null): LapStructure {
   // sem esforço/recuperação (corrida contínua): uma estrutura só + as voltas por km
   if (!laps.some((l) => l.kind !== "other")) {
     const total = laps.reduce((a, l) => a + l.distance_m, 0) / 1000;
-    let rows: LapRow[] = laps.map((lap, i) => ({ n: i + 1, lap, fast: false }));
+    let rows: LapRow[] = buildRows(laps, kmPaces).map((r) => ({ ...r, fast: false }));
     const hidden = Math.max(0, rows.length - MAX_ROWS);
     if (hidden) rows = rows.slice(0, MAX_ROWS);
     return {
@@ -123,11 +168,10 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
   if (trail.length) groups.push({ name: "Desaquecimento", detail: `${dist(trail)} · ${fmtPace(groupPace(trail))}/km` });
 
   // tabela: as voltas do miolo, numeradas como no relógio
-  let rows: LapRow[] = laps.map((lap, i) => ({ n: i + 1, lap, fast: false }));
+  let rows: LapRow[] = buildRows(laps, kmPaces);
   const hidden = Math.max(0, rows.length - MAX_ROWS);
   if (hidden) rows = rows.slice(0, MAX_ROWS);
   // destaque: todo bloco de ESFORÇO (os tiros), como nos stories de referência
-  rows.forEach((r) => { r.fast = r.lap.kind === "effort"; });
 
   const hasSeries = middle.filter((l) => l.kind === "effort").length > 1;
   const named = (workoutName || "").trim().toUpperCase();
@@ -158,7 +202,7 @@ function metricCells(it: FeedItem, x: RunExtras): [string, string][] {
 }
 
 function voltasLayout(it: FeedItem, x: RunExtras) {
-  const st = lapStructure(x.laps ?? [], x.planned?.workout_type);
+  const st = lapStructure(x.laps ?? [], x.planned?.workout_type, x.kmPaces);
   const cells = metricCells(it, x);
   const metricsH = Math.ceil(cells.length / 2) * METRIC_ROW;
   const head = 164;

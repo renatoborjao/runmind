@@ -421,9 +421,13 @@ function AtividadesInner() {
       avg_hr: s.hr ?? null,
     }));
   }, [shareCtx, track]);
+  const kmPaces = useMemo(
+    () => (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({ len: s.partial_km || 1, paceSec: s.sec / (s.partial_km || 1) })),
+    [track],
+  );
   const styles = useMemo(
     () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : st.needs === "laps" ? hasLaps(cardLaps) : shareCtx?.quote)),
-    [shareCtx, cardLaps],
+    [shareCtx, cardLaps, kmPaces],
   );
   const styleIdx = Math.max(0, styles.findIndex((st) => st.key === styleKey));
   const style = styles[styleIdx];
@@ -578,7 +582,7 @@ function AtividadesInner() {
     : typeof style.height === "number" ? style.height
     : style.height({ it: sel, pts: track?.points ?? [], splits: track?.splits ?? [], transparent, extras: {
         date: sel ? shortDate(sel.date_iso) : "", planned: shareCtx?.planned ?? null,
-        quote: shareCtx?.quote ?? null, laps: cardLaps, cal: track?.metrics?.calories ?? null,
+        quote: shareCtx?.quote ?? null, laps: cardLaps, kmPaces, cal: track?.metrics?.calories ?? null,
       } } as CardData, transparent);
 
   // monta o mapa REAL de fundo (tiles + rota) no Card sem foto — no tamanho do
@@ -642,6 +646,7 @@ function AtividadesInner() {
           planned: shareCtx?.planned ?? null,
           quote: shareCtx?.quote ?? null,
           laps: cardLaps,
+          kmPaces,
           cal: track?.metrics?.calories ?? null,
         },
       };

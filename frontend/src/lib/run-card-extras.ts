@@ -32,6 +32,7 @@ export interface RunExtras {
   planned: PlannedSession | null;
   quote: string | null;            // frase curta do coach sobre o treino
   laps?: ShareLap[] | null;        // voltas cruas do relógio (card "Treino com voltas")
+  kmPaces?: { len: number; paceSec: number }[] | null; // pace real de cada km (quebra blocos longos)
   cal?: number | null;             // calorias da atividade, quando o relógio manda
 }
 
