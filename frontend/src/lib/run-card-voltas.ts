@@ -76,7 +76,7 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
       .sort((a, b) => lapPaceSec(a.lap)! - lapPaceSec(b.lap)!);
     if (ranked.length >= 3) ranked.slice(0, Math.max(1, Math.floor(ranked.length / 3))).forEach((r) => { r.fast = true; });
     return {
-      title: (workoutName || "").trim() ? workoutName!.trim().toUpperCase() : "VOLTAS DO TREINO",
+      title: "TREINO COM VOLTAS",
       groups: [{ name: "Corrida contínua", detail: `${km2(total)} km · ${fmtPace(groupPace(laps))}/km` }],
       rows, hidden,
     };
@@ -136,9 +136,7 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
   }
 
   const hasSeries = middle.filter((l) => l.kind === "effort").length > 1;
-  const title = (workoutName || "").trim()
-    ? workoutName!.trim().toUpperCase()
-    : hasSeries ? "TREINO DE SÉRIES" : "TREINO COM VOLTAS";
+  const title = hasSeries ? "TREINO DE SÉRIES" : "TREINO COM VOLTAS";
   return { title, groups, rows, hidden };
 }
 
@@ -168,7 +166,7 @@ function voltasLayout(it: FeedItem, x: RunExtras) {
   const st = lapStructure(x.laps ?? [], x.planned?.workout_type);
   const cells = metricCells(it, x);
   const metricsH = Math.ceil(cells.length / 2) * METRIC_ROW;
-  const head = 150;
+  const head = 164;
   const structH = 64 + st.groups.length * GROUP_ROW;
   const tableH = 64 + 40 + st.rows.length * LAP_ROW + (st.hidden ? 40 : 0);
   const foot = 120;
@@ -234,8 +232,14 @@ export function drawVoltas(
   ctx.font = `italic 900 ${ts}px ${CANVAS_FONT}`;
   while (ctx.measureText(L.st.title).width > innerW && ts > 28) { ts -= 2; ctx.font = `italic 900 ${ts}px ${CANVAS_FONT}`; }
   txt(ctx, panel, fitText(ctx, L.st.title, innerW), inner, py + 84);
+  // traço curvo sob o título, como nos stories de referência
+  ctx.save();
+  ctx.strokeStyle = ORANGE; ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(inner, py + 104);
+  ctx.quadraticCurveTo(inner + innerW * 0.5, py + 92, inner + innerW * 0.72, py + 100);
+  ctx.stroke(); ctx.restore();
   ctx.font = `600 26px ${CANVAS_FONT}`; ctx.fillStyle = MUTED;
-  txt(ctx, panel, x.date, inner, py + 124);
+  txt(ctx, panel, x.date, inner, py + 138);
 
   // números (2 colunas)
   let y = py + L.head;
@@ -284,7 +288,7 @@ export function drawVoltas(
       const w = ctx.measureText(paceTxt).width + 26;
       ctx.fillStyle = ORANGE;
       roundRect(ctx, cP + 8 - w, y + 5, w, LAP_ROW - 10, (LAP_ROW - 10) / 2); ctx.fill();
-      ctx.fillStyle = "#06251F"; txt(ctx, panel, paceTxt, cP - 5, mid);
+      ctx.fillStyle = "#06251F"; ctx.fillText(paceTxt, cP - 5, mid);
     } else {
       ctx.fillStyle = "#FFFFFF"; txt(ctx, panel, paceTxt, cP, mid);
     }
