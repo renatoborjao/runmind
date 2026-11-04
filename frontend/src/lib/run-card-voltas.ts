@@ -72,9 +72,6 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
     let rows: LapRow[] = laps.map((lap, i) => ({ n: i + 1, lap, fast: false }));
     const hidden = Math.max(0, rows.length - MAX_ROWS);
     if (hidden) rows = rows.slice(0, MAX_ROWS);
-    const ranked = rows.filter((r) => lapPaceSec(r.lap) != null)
-      .sort((a, b) => lapPaceSec(a.lap)! - lapPaceSec(b.lap)!);
-    if (ranked.length >= 3) ranked.slice(0, Math.max(1, Math.floor(ranked.length / 3))).forEach((r) => { r.fast = true; });
     return {
       unit: "Km",
       title: (workoutName || "").trim().toUpperCase() || "TREINO COM PARCIAIS",
@@ -129,12 +126,8 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
   let rows: LapRow[] = laps.map((lap, i) => ({ n: i + 1, lap, fast: false }));
   const hidden = Math.max(0, rows.length - MAX_ROWS);
   if (hidden) rows = rows.slice(0, MAX_ROWS);
-  // destaque: o terço mais rápido dos esforços (precisa de 3+ pra comparar)
-  const eff = rows.filter((r) => r.lap.kind === "effort" && lapPaceSec(r.lap) != null);
-  if (eff.length >= 3) {
-    const sorted = [...eff].sort((a, b) => lapPaceSec(a.lap)! - lapPaceSec(b.lap)!);
-    sorted.slice(0, Math.max(1, Math.floor(eff.length / 3))).forEach((r) => { r.fast = true; });
-  }
+  // destaque: todo bloco de ESFORÇO (os tiros), como nos stories de referência
+  rows.forEach((r) => { r.fast = r.lap.kind === "effort"; });
 
   const hasSeries = middle.filter((l) => l.kind === "effort").length > 1;
   const named = (workoutName || "").trim().toUpperCase();
