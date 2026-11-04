@@ -320,9 +320,29 @@ function scribbleFallback(ctx: CanvasRenderingContext2D, bx: number, by: number,
   ctx.stroke();
 }
 
+function scribbleRoute(ctx: CanvasRenderingContext2D, pts: { lat: number; lon: number }[], bx: number, by: number, bw: number, bh: number) {
+  const good = pts.filter((p) => p.lat && p.lon);
+  if (good.length < 2) { scribbleFallback(ctx, bx, by, bw, bh); return; }
+  let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+  for (const p of good) { minLa = Math.min(minLa, p.lat); maxLa = Math.max(maxLa, p.lat); minLo = Math.min(minLo, p.lon); maxLo = Math.max(maxLo, p.lon); }
+  const kx = Math.cos(((minLa + maxLa) / 2 * Math.PI) / 180);
+  const spanLo = Math.max(1e-6, (maxLo - minLo) * kx), spanLa = Math.max(1e-6, maxLa - minLa);
+  const scale = Math.min(bw / spanLo, bh / spanLa);
+  const ox = bx + (bw - spanLo * scale) / 2, oy = by + (bh - spanLa * scale) / 2;
+  // amostra ~160 pontos: traçado leve, "de mão"
+  const step = Math.max(1, Math.floor(good.length / 160));
+  ctx.beginPath();
+  good.forEach((p, i) => {
+    if (i % step && i !== good.length - 1) return;
+    const X = ox + (p.lon - minLo) * kx * scale, Y = oy + (maxLa - p.lat) * scale;
+    if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+  });
+  ctx.stroke();
+}
+
 export function drawMinimal(
   ctx: CanvasRenderingContext2D, W: number, H: number, it: FeedItem, x: RunExtras,
-  _pts: { lat: number; lon: number }[],
+  pts: { lat: number; lon: number }[],
 ) {
   const cells = minimalCells(it, x);
   const stackH = cells.length * MIN_STEP;
@@ -347,8 +367,9 @@ export function drawMinimal(
   ctx.strokeStyle = ORANGE; ctx.lineWidth = 6; ctx.lineJoin = "round"; ctx.lineCap = "round";
   ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
   ctx.globalAlpha = 0.95; ctx.translate(0, 0);
-  // rabisco pequeno, solto, sobre as linhas do meio (como à mão)
-  scribbleFallback(ctx, cx - 40, y0 + stackH * 0.2, 250, 190);
+  // 
+  // percurso REAL, em escala moderada, fino, centrado sobre a pilha
+  scribbleRoute(ctx, pts, cx - 150, y0 + stackH / 2 - 150, 300, 300);
   ctx.restore();
 
   withShadow(ctx, () => drawBrand(ctx, cx, y0 + stackH + 60, 44, true));
