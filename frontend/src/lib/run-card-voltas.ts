@@ -194,14 +194,9 @@ function pill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, te
   ctx.textAlign = "left";
 }
 
-// texto com contorno escuro quando não há painel (foto clara não engole o texto)
-function txt(ctx: CanvasRenderingContext2D, panel: boolean, text: string, x: number, y: number) {
-  if (!panel) {
-    ctx.save();
-    ctx.lineJoin = "round"; ctx.lineWidth = 6; ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.strokeText(text, x, y);
-    ctx.restore();
-  }
+// texto do card: só o preenchimento (mesmo padrão dos outros modelos — sem
+// contorno; a leitura sem painel vem da sombra suave padrão)
+function txt(ctx: CanvasRenderingContext2D, _panel: boolean, text: string, x: number, y: number) {
   ctx.fillText(text, x, y);
 }
 
