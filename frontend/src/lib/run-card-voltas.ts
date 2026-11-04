@@ -374,12 +374,13 @@ export function drawMinimal(
   const cx = W / 2;
   const y0 = top + MIN_TOP;
 
-  // percurso REAL por TRÁS dos números, fino e deslocado pra direita: pega só
-  // uma parte do texto, como nos stories de referência
+  // percurso REAL por TRÁS dos números, fino e CENTRALIZADO na pilha: cobre só
+  // o miolo do texto, como nos stories de referência
   ctx.save();
   ctx.strokeStyle = ORANGE; ctx.lineWidth = 6; ctx.lineJoin = "round"; ctx.lineCap = "round";
   ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 2;
-  scribbleRoute(ctx, pts, cx - 30, y0 + stackH * 0.16, 340, 320);
+  const rh = stackH * 0.46;
+  scribbleRoute(ctx, pts, cx - 150, y0 + stackH * 0.47 - rh / 2, 300, rh);
   ctx.restore();
 
   withShadow(ctx, () => {
