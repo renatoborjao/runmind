@@ -410,9 +410,20 @@ function AtividadesInner() {
   // chegam — índice apontaria pra outro estilo)
   const [styleKey, setStyleKey] = useState(CARD_STYLES[0].key);
   const [shareCtx, setShareCtx] = useState<ShareContext | null>(null);
+  // voltas do card: as do relógio (treino estruturado) ou, sem elas, as parciais por km
+  const cardLaps = useMemo(() => {
+    if (shareCtx?.laps && shareCtx.laps.length >= 2) return shareCtx.laps;
+    return (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({
+      kind: "other" as const,
+      distance_m: Math.round((s.partial_km ?? 1) * 1000),
+      duration_s: s.sec,
+      pace: s.pace,
+      avg_hr: s.hr ?? null,
+    }));
+  }, [shareCtx, track]);
   const styles = useMemo(
-    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : st.needs === "laps" ? hasLaps(shareCtx?.laps) : shareCtx?.quote)),
-    [shareCtx],
+    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : st.needs === "laps" ? hasLaps(cardLaps) : shareCtx?.quote)),
+    [shareCtx, cardLaps],
   );
   const styleIdx = Math.max(0, styles.findIndex((st) => st.key === styleKey));
   const style = styles[styleIdx];
@@ -567,7 +578,7 @@ function AtividadesInner() {
     : typeof style.height === "number" ? style.height
     : style.height({ it: sel, pts: track?.points ?? [], splits: track?.splits ?? [], transparent, extras: {
         date: sel ? shortDate(sel.date_iso) : "", planned: shareCtx?.planned ?? null,
-        quote: shareCtx?.quote ?? null, laps: shareCtx?.laps ?? null, cal: track?.metrics?.calories ?? null,
+        quote: shareCtx?.quote ?? null, laps: cardLaps, cal: track?.metrics?.calories ?? null,
       } } as CardData, transparent);
 
   // monta o mapa REAL de fundo (tiles + rota) no Card sem foto — no tamanho do
@@ -630,7 +641,7 @@ function AtividadesInner() {
           date: shortDate(sel.date_iso),
           planned: shareCtx?.planned ?? null,
           quote: shareCtx?.quote ?? null,
-          laps: shareCtx?.laps ?? null,
+          laps: cardLaps,
           cal: track?.metrics?.calories ?? null,
         },
       };
@@ -639,7 +650,7 @@ function AtividadesInner() {
     // cleanup cancela a repintura agendada deste modelo ao trocar (senão o
     // modelo anterior pinta por cima — "fundo preso")
     return paintWhenFontsReady(paint);
-  }, [editor, style, cardH, transparent, photoImg, sel, track, mapCard, shareCtx]);
+  }, [editor, style, cardH, transparent, photoImg, sel, track, mapCard, shareCtx, cardLaps]);
 
   // PNG (mantém a transparência) do card atual
   const makeBlob = () => canvasBlob(previewRef.current);
