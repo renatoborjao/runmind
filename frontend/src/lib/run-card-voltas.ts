@@ -77,7 +77,7 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
     if (ranked.length >= 3) ranked.slice(0, Math.max(1, Math.floor(ranked.length / 3))).forEach((r) => { r.fast = true; });
     return {
       unit: "Km",
-      title: "TREINO COM PARCIAIS",
+      title: (workoutName || "").trim().toUpperCase() || "TREINO COM PARCIAIS",
       groups: [{ name: "Corrida contínua", detail: `${km2(total)} km · ${fmtPace(groupPace(laps))}/km` }],
       rows, hidden,
     };
@@ -137,7 +137,8 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
   }
 
   const hasSeries = middle.filter((l) => l.kind === "effort").length > 1;
-  const title = hasSeries ? "TREINO DE SÉRIES" : "TREINO COM BLOCOS";
+  const named = (workoutName || "").trim().toUpperCase();
+  const title = named || (hasSeries ? "TREINO DE SÉRIES" : "TREINO COM BLOCOS");
   return { unit: "Bloco", title, groups, rows, hidden };
 }
 
