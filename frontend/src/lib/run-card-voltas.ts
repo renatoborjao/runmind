@@ -374,6 +374,14 @@ export function drawMinimal(
   const cx = W / 2;
   const y0 = top + MIN_TOP;
 
+  // percurso REAL por TRÁS dos números, fino e deslocado pra direita: pega só
+  // uma parte do texto, como nos stories de referência
+  ctx.save();
+  ctx.strokeStyle = ORANGE; ctx.lineWidth = 6; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 2;
+  scribbleRoute(ctx, pts, cx - 30, y0 + stackH * 0.16, 340, 320);
+  ctx.restore();
+
   withShadow(ctx, () => {
     ctx.textAlign = "center";
     cells.forEach(([lab, val], i) => {
@@ -384,16 +392,6 @@ export function drawMinimal(
       outlinedText(ctx, val, cx, y + 52, 4);
     });
   });
-
-  // rabisco da marca por cima, cobrindo a pilha
-  ctx.save();
-  ctx.strokeStyle = ORANGE; ctx.lineWidth = 6; ctx.lineJoin = "round"; ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
-  ctx.globalAlpha = 0.95; ctx.translate(0, 0);
-  // 
-  // percurso REAL, em escala moderada, fino, centrado sobre a pilha
-  scribbleRoute(ctx, pts, cx - 150, y0 + stackH / 2 - 150, 300, 300);
-  ctx.restore();
 
   withShadow(ctx, () => drawBrand(ctx, cx, y0 + stackH + 60, 44, true));
 }
