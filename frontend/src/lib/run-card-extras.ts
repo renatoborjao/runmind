@@ -2,7 +2,7 @@
 // coach) + o "número de peito". Mesma linguagem visual dos demais (contorno no
 // texto, marca única) — peças em share-canvas.
 
-import type { FeedItem, PlanPhase } from "./api";
+import type { FeedItem, PlanPhase, ShareLap } from "./api";
 import {
   CANVAS_FONT, drawBrand, drawBrandOnLight, drawPill, drawStatsSpread, fitText,
   fmtDur, outlinedText, roundRect, withShadow, wrapLines,
@@ -31,6 +31,8 @@ export interface RunExtras {
   date: string;                    // "26 set 2026"
   planned: PlannedSession | null;
   quote: string | null;            // frase curta do coach sobre o treino
+  laps?: ShareLap[] | null;        // voltas cruas do relógio (card "Treino com voltas")
+  cal?: number | null;             // calorias da atividade, quando o relógio manda
 }
 
 function paceToSec(p: string | null | undefined): number | null {

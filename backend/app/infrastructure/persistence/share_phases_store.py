@@ -19,9 +19,11 @@ _MAX_ENTRIES = 200
 class SharePhasesStore:
 
     @staticmethod
-    def _file(profile: str) -> Path:
+    def _file(profile: str, ns: str = "") -> Path:
 
-        return _STORAGE / f"{profile}.json"
+        # ns "" = fases do Plano × feito; "laps" = voltas cruas do relógio
+        # (cards "Treino com voltas") — mesmo cache, arquivo separado
+        return _STORAGE / (f"{profile}.{ns}.json" if ns else f"{profile}.json")
 
     @staticmethod
     def key(date_iso: str, km: float) -> str:
@@ -29,9 +31,9 @@ class SharePhasesStore:
         return f"{date_iso[:10]}|{round(km, 1)}"
 
     @staticmethod
-    def _load(profile: str) -> dict:
+    def _load(profile: str, ns: str = "") -> dict:
 
-        file = SharePhasesStore._file(profile)
+        file = SharePhasesStore._file(profile, ns)
 
         if not file.exists():
 
@@ -48,10 +50,10 @@ class SharePhasesStore:
         return data if isinstance(data, dict) else {}
 
     @staticmethod
-    def get(profile: str, date_iso: str, km: float) -> tuple[bool, list | None]:
+    def get(profile: str, date_iso: str, km: float, ns: str = "") -> tuple[bool, list | None]:
         """(achou_no_cache, fases). Fases None = já sabemos que não dá."""
 
-        data = SharePhasesStore._load(profile)
+        data = SharePhasesStore._load(profile, ns)
 
         key = SharePhasesStore.key(date_iso, km)
 
@@ -62,9 +64,9 @@ class SharePhasesStore:
         return True, data[key]
 
     @staticmethod
-    def put(profile: str, date_iso: str, km: float, phases: list | None) -> None:
+    def put(profile: str, date_iso: str, km: float, phases: list | None, ns: str = "") -> None:
 
-        data = SharePhasesStore._load(profile)
+        data = SharePhasesStore._load(profile, ns)
 
         data[SharePhasesStore.key(date_iso, km)] = phases
 
@@ -74,6 +76,6 @@ class SharePhasesStore:
 
         _STORAGE.mkdir(parents=True, exist_ok=True)
 
-        SharePhasesStore._file(profile).write_text(
+        SharePhasesStore._file(profile, ns).write_text(
             json.dumps(data, ensure_ascii=False), encoding="utf-8",
         )

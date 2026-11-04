@@ -425,10 +425,10 @@ def build_phases(blocks) -> list[dict] | None:
     return phases
 
 
-def _garmin_phases(profile: str, date_iso: str, km: float, session) -> list[dict] | None:
-    """Busca as voltas ROTULADAS da corrida no Garmin (lista recente → casa por
-    data + km → typed splits) e pareia com os passos do plano. Síncrono (lib
-    do Garmin) — chamar via asyncio.to_thread."""
+def _garmin_activity_and_typed(profile: str, date_iso: str, km: float):
+    """Acha a corrida no Garmin (lista recente → casa por data + km) e devolve
+    (typed splits, blocos classificados) ou None. Síncrono (lib do Garmin) —
+    chamar via asyncio.to_thread."""
 
     candidates = [
         a for a in GarminActivitySource.recent(profile, limit=40)
@@ -444,13 +444,92 @@ def _garmin_phases(profile: str, date_iso: str, km: float, session) -> list[dict
 
     typed = GarminClient.connect(profile).get_activity_typed_splits(act.id)
 
-    blocks = GarminActivitySource._classify_splits(typed)
+    return GarminActivitySource._classify_splits(typed)
+
+
+def _garmin_phases(profile: str, date_iso: str, km: float, session) -> list[dict] | None:
+    """Busca as voltas ROTULADAS da corrida no Garmin e pareia com os passos do
+    plano. Síncrono (lib do Garmin) — chamar via asyncio.to_thread."""
+
+    blocks = _garmin_activity_and_typed(profile, date_iso, km)
+
+    if blocks is None:
+
+        return None
 
     cmp = PlannedExecutionMatcher.match(
         session, SimpleNamespace(raw={"_garmin_typed_blocks": blocks}),
     )
 
     return build_phases(cmp.blocks) if cmp else None
+
+
+def _garmin_laps(profile: str, date_iso: str, km: float) -> list[dict] | None:
+    """Voltas cruas do relógio (aquecimento/esforço/recuperação...) — o card
+    "Treino com voltas" mostra a tabela real, sem depender de plano."""
+
+    blocks = _garmin_activity_and_typed(profile, date_iso, km)
+
+    return clean_laps(blocks) if blocks else None
+
+
+# voltas minúsculas (botão apertado sem querer) não rendem linha no card
+_MIN_LAP_M = 20
+_MAX_LAPS = 60
+
+
+def clean_laps(blocks: list[dict]) -> list[dict] | None:
+    """Enxuga as voltas classificadas pro card: só o que a tela usa (tipo,
+    distância, tempo, pace, FC), sem voltas vazias. None quando não há estrutura
+    que valha card (menos de 3 voltas, ou nenhuma de esforço/recuperação — um
+    treino contínuo não tem "voltas" a mostrar)."""
+
+    laps = [
+        {
+            "kind": b["kind"],
+            "distance_m": b["distance_m"],
+            "duration_s": b["duration_s"],
+            "pace": b.get("pace"),
+            "avg_hr": b.get("avg_hr"),
+        }
+        for b in blocks
+        if b.get("distance_m", 0) >= _MIN_LAP_M and b.get("duration_s", 0) > 0
+    ][:_MAX_LAPS]
+
+    if len(laps) < 3 or not any(lp["kind"] in ("effort", "recovery") for lp in laps):
+
+        return None
+
+    return laps
+
+
+async def execution_laps(profile: str, date_iso: str, km: float) -> list[dict] | None:
+    """Voltas do relógio da corrida (cacheadas por corrida, como as fases).
+    None sem Garmin / sem estrutura / sem como achar a corrida."""
+
+    if not GarminClient.is_connected(profile):
+
+        return None
+
+    hit, cached = SharePhasesStore.get(profile, date_iso, km, "laps")
+
+    if hit:
+
+        return cached
+
+    try:
+
+        laps = await asyncio.to_thread(_garmin_laps, profile, date_iso, km)
+
+    except Exception as e:
+
+        print(f"share: voltas cruas do Garmin falharam p/ '{profile}' {date_iso}: {e}")
+
+        return None
+
+    SharePhasesStore.put(profile, date_iso, km, laps, "laps")
+
+    return laps
 
 
 async def execution_phases(profile: str, date_iso: str, km: float, session) -> list[dict] | None:

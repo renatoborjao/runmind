@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { GPS_RUN_ENABLED } from "@/lib/features";
 import { drawCoachDiz, drawPeito, drawPlanoFeito, planHasTargets, type RunExtras } from "@/lib/run-card-extras";
+import { drawMinimal, drawVoltas, hasLaps, minimalHeight, voltasHeight } from "@/lib/run-card-voltas";
 import { ActivityDetailBody, CommentsSection, fmtDate, fmtTime, km, RouteThumb } from "../activity-detail";
 import {
   CANVAS_FONT, drawCardBackground, canvasBlob, copyBlob, drawBrand,
@@ -376,7 +377,7 @@ function drawParciais(ctx: CanvasRenderingContext2D, W: number, H: number, d: Ca
 // modelo funciona nos dois. `height`: modelo compacto tem canvas justo ao
 // conteúdo (faixa), senão 1350. `needs`: modelo que depende de dado do backend
 // (sessão do plano / frase do coach) só aparece quando esse dado existe.
-interface CardStyle { key: string; label: string; height?: number | ((d: CardData) => number); needs?: "planned" | "quote"; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
+interface CardStyle { key: string; label: string; height?: number | ((d: CardData, transparent: boolean) => number); needs?: "planned" | "quote" | "laps"; draw: (c: CanvasRenderingContext2D, W: number, H: number, d: CardData) => void; }
 const CARD_STYLES: CardStyle[] = [
   { key: "centralizado", label: "Central", draw: styleCentralizado },
   { key: "rota", label: "Rota", draw: styleRota },
@@ -385,6 +386,8 @@ const CARD_STYLES: CardStyle[] = [
   { key: "completo", label: "Parciais + dados", height: (d) => parciaisHeight(d, true), draw: styleCompleto },
   { key: "plano", label: "Plano × feito", needs: "planned", draw: (c, W, H, d) => drawPlanoFeito(c, W, H, d.it, d.extras) },
   { key: "coach", label: "Coach diz", needs: "quote", draw: (c, W, H, d) => drawCoachDiz(c, W, H, d.it, d.extras) },
+  { key: "voltas", label: "Treino com voltas", needs: "laps", height: (d, t) => voltasHeight(d.it, d.extras, t), draw: (c, W, H, d) => drawVoltas(c, W, H, d.it, d.extras, !!d.photo) },
+  { key: "minimal", label: "Minimalista", height: (d, t) => minimalHeight(d.it, d.extras, t), draw: (c, W, H, d) => drawMinimal(c, W, H, d.it, d.extras, d.pts) },
   { key: "peito", label: "Número de peito", draw: (c, W, H, d) => drawPeito(c, W, H, d.it, d.extras) },
   { key: "classico", label: "Clássico", draw: styleClassico },
 ];
@@ -408,7 +411,7 @@ function AtividadesInner() {
   const [styleKey, setStyleKey] = useState(CARD_STYLES[0].key);
   const [shareCtx, setShareCtx] = useState<ShareContext | null>(null);
   const styles = useMemo(
-    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : shareCtx?.quote)),
+    () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : st.needs === "laps" ? hasLaps(shareCtx?.laps) : shareCtx?.quote)),
     [shareCtx],
   );
   const styleIdx = Math.max(0, styles.findIndex((st) => st.key === styleKey));
@@ -562,7 +565,10 @@ function AtividadesInner() {
   const transparent = bg === "transparent";
   const cardH = style.height === undefined ? 1350
     : typeof style.height === "number" ? style.height
-    : style.height({ splits: track?.splits ?? [] } as CardData);
+    : style.height({ it: sel, pts: track?.points ?? [], splits: track?.splits ?? [], extras: {
+        date: sel ? shortDate(sel.date_iso) : "", planned: shareCtx?.planned ?? null,
+        quote: shareCtx?.quote ?? null, laps: shareCtx?.laps ?? null, cal: track?.metrics?.calories ?? null,
+      } } as CardData, transparent);
 
   // monta o mapa REAL de fundo (tiles + rota) no Card sem foto — no tamanho do
   // modelo. O modelo "Rota" já desenha o traçado grande: lá o fundo fica escuro
@@ -623,6 +629,8 @@ function AtividadesInner() {
           date: shortDate(sel.date_iso),
           planned: shareCtx?.planned ?? null,
           quote: shareCtx?.quote ?? null,
+          laps: shareCtx?.laps ?? null,
+          cal: track?.metrics?.calories ?? null,
         },
       };
       style.draw(ctx, 1080, cardH, d);

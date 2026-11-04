@@ -426,3 +426,63 @@ def test_execution_phases_skips_without_garmin(tmp_path, monkeypatch):
     monkeypatch.setattr(share_context, "_garmin_phases", lambda *a: (_ for _ in ()).throw(AssertionError("não devia chamar")))
 
     assert asyncio.run(share_context.execution_phases("renato", "2026-09-22", 8.3, _session_with_steps())) is None
+
+
+# ---- voltas cruas do relógio (cards "Treino com voltas") --------------------
+
+
+def _lap(kind, dist, dur, pace="5:00", hr=150):
+
+    return {"kind": kind, "distance_m": dist, "duration_s": dur, "pace": pace,
+            "avg_hr": hr, "peak_hr": hr, "_speed": 3.0}
+
+
+def test_clean_laps_keeps_structure_and_drops_internal_fields():
+
+    laps = share_context.clean_laps([
+        _lap("other", 2000, 800, "6:48"),
+        _lap("effort", 260, 90, "5:45"),
+        _lap("recovery", 60, 20, "5:19"),
+        _lap("other", 1000, 370, "6:12"),
+    ])
+
+    assert [lp["kind"] for lp in laps] == ["other", "effort", "recovery", "other"]
+    assert set(laps[0]) == {"kind", "distance_m", "duration_s", "pace", "avg_hr"}
+
+
+def test_clean_laps_none_for_continuous_run():
+
+    # só "other" (rodagem contínua) ou poucas voltas: não rende card de voltas
+    assert share_context.clean_laps([_lap("other", 5000, 1800)] * 5) is None
+    assert share_context.clean_laps([_lap("effort", 500, 120), _lap("recovery", 200, 90)]) is None
+
+
+def test_clean_laps_drops_tiny_laps():
+
+    laps = share_context.clean_laps([
+        _lap("other", 2000, 800), _lap("effort", 5, 2), _lap("effort", 300, 90),
+        _lap("recovery", 100, 40), _lap("other", 1000, 300),
+    ])
+
+    assert len(laps) == 4
+
+
+def test_execution_laps_caches_and_skips_without_garmin(tmp_path, monkeypatch):
+
+    _isolate_phase_cache(tmp_path, monkeypatch)
+    calls = []
+
+    def fake(profile, date_iso, km):
+
+        calls.append(date_iso)
+        return [{"kind": "effort"}]
+
+    monkeypatch.setattr(share_context, "_garmin_laps", fake)
+
+    a = asyncio.run(share_context.execution_laps("renato", "2026-09-22", 8.3))
+    b = asyncio.run(share_context.execution_laps("renato", "2026-09-22", 8.3))
+    assert a == b == [{"kind": "effort"}] and len(calls) == 1
+
+    monkeypatch.setattr(share_context.GarminClient, "is_connected", staticmethod(lambda p: False))
+    assert asyncio.run(share_context.execution_laps("renato", "2026-09-30", 5.0)) is None
+    assert len(calls) == 1

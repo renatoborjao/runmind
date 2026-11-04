@@ -24,6 +24,7 @@ from app.infrastructure.persistence.workout_analysis_repository import (
 )
 from app.application.share.share_context import (
     coach_quote,
+    execution_laps,
     execution_phases,
     match_session,
     period_goal_km,
@@ -329,7 +330,8 @@ async def share_context(
     """Extras dos cards de compartilhar de UMA corrida: a sessão do plano que
     ela cumpriu + o executado fase a fase pelas voltas do relógio (card "Plano
     × feito") e a frase curta do coach (card "Coach diz"). Cada um vem null
-    quando não se aplica."""
+    quando não se aplica. `laps` = voltas cruas do relógio (cards "Treino com
+    voltas"), independente de haver plano."""
 
     planned = None
 
@@ -349,6 +351,7 @@ async def share_context(
 
     return {
         "planned": planned,
+        "laps": await execution_laps(profile, date, km),
         "quote": await coach_quote(profile, date, km),
     }
 

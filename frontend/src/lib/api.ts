@@ -1287,6 +1287,15 @@ export interface PlanPhase {
 }
 
 
+/** Volta crua do relógio (Garmin): aquecimento/esforço/recuperação. */
+export interface ShareLap {
+  kind: "effort" | "recovery" | "other";
+  distance_m: number;
+  duration_s: number;
+  pace: string | null;
+  avg_hr: number | null;
+}
+
 export interface ShareContext {
   planned: {
     workout_type: string;
@@ -1298,6 +1307,7 @@ export interface ShareContext {
     pace_structured?: boolean;
     phases?: PlanPhase[] | null;
   } | null;
+  laps?: ShareLap[] | null;
   quote: string | null;
 }
 
