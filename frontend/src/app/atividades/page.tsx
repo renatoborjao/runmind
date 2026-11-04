@@ -386,7 +386,7 @@ const CARD_STYLES: CardStyle[] = [
   { key: "completo", label: "Parciais + dados", height: (d) => parciaisHeight(d, true), draw: styleCompleto },
   { key: "plano", label: "Plano × feito", needs: "planned", draw: (c, W, H, d) => drawPlanoFeito(c, W, H, d.it, d.extras) },
   { key: "coach", label: "Coach diz", needs: "quote", draw: (c, W, H, d) => drawCoachDiz(c, W, H, d.it, d.extras) },
-  { key: "voltas", label: "Treino com voltas", needs: "laps", height: (d, t) => voltasHeight(d.it, d.extras, t), draw: (c, W, H, d) => drawVoltas(c, W, H, d.it, d.extras, !!d.photo, !d.transparent) },
+  { key: "voltas", label: "Treino em blocos", needs: "laps", height: (d, t) => voltasHeight(d.it, d.extras, t), draw: (c, W, H, d) => drawVoltas(c, W, H, d.it, d.extras, !!d.photo, !d.transparent) },
   { key: "minimal", label: "Minimalista", height: (d, t) => minimalHeight(d.it, d.extras, t), draw: (c, W, H, d) => drawMinimal(c, W, H, d.it, d.extras, d.pts) },
   { key: "peito", label: "Número de peito", draw: (c, W, H, d) => drawPeito(c, W, H, d.it, d.extras) },
   { key: "classico", label: "Clássico", draw: styleClassico },

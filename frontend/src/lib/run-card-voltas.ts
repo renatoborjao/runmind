@@ -61,7 +61,7 @@ function groupPace(laps: ShareLap[]): number | null {
 
 export interface LapGroup { name: string; detail: string; }
 export interface LapRow { n: number; lap: ShareLap; fast: boolean; }
-export interface LapStructure { title: string; groups: LapGroup[]; rows: LapRow[]; hidden: number; }
+export interface LapStructure { unit: "Bloco" | "Km"; title: string; groups: LapGroup[]; rows: LapRow[]; hidden: number; }
 
 const MAX_ROWS = 22;
 
@@ -76,7 +76,8 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
       .sort((a, b) => lapPaceSec(a.lap)! - lapPaceSec(b.lap)!);
     if (ranked.length >= 3) ranked.slice(0, Math.max(1, Math.floor(ranked.length / 3))).forEach((r) => { r.fast = true; });
     return {
-      title: "TREINO COM VOLTAS",
+      unit: "Km",
+      title: "TREINO COM PARCIAIS",
       groups: [{ name: "Corrida contínua", detail: `${km2(total)} km · ${fmtPace(groupPace(laps))}/km` }],
       rows, hidden,
     };
@@ -136,8 +137,8 @@ export function lapStructure(laps: ShareLap[], workoutName?: string | null): Lap
   }
 
   const hasSeries = middle.filter((l) => l.kind === "effort").length > 1;
-  const title = hasSeries ? "TREINO DE SÉRIES" : "TREINO COM VOLTAS";
-  return { title, groups, rows, hidden };
+  const title = hasSeries ? "TREINO DE SÉRIES" : "TREINO COM BLOCOS";
+  return { unit: "Bloco", title, groups, rows, hidden };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,11 +267,11 @@ export function drawVoltas(
   y += 24;
 
   // voltas
-  pill(ctx, inner, y, innerW, "VOLTAS");
+  pill(ctx, inner, y, innerW, L.st.unit === "Km" ? "PARCIAIS POR KM" : "BLOCOS");
   y += 64;
   const cN = inner + 4, cD = inner + innerW * 0.36, cT = inner + innerW * 0.62, cP = innerR;
   ctx.fillStyle = MUTED; ctx.font = `600 22px ${CANVAS_FONT}`;
-  ctx.textAlign = "left"; txt(ctx, panel, "Volta", cN, y + 24);
+  ctx.textAlign = "left"; txt(ctx, panel, L.st.unit, cN, y + 24);
   ctx.textAlign = "center"; txt(ctx, panel, "Distância", cD + 40, y + 24); txt(ctx, panel, "Tempo", cT, y + 24);
   ctx.textAlign = "right"; txt(ctx, panel, "Pace", cP, y + 24);
   y += 40;
@@ -296,7 +297,7 @@ export function drawVoltas(
   }
   if (L.st.hidden) {
     ctx.fillStyle = MUTED; ctx.font = `600 24px ${CANVAS_FONT}`; ctx.textAlign = "center";
-    txt(ctx, panel, `+ ${L.st.hidden} voltas`, px + PANEL_W / 2, y + 30);
+    txt(ctx, panel, `+ ${L.st.hidden} ${L.st.unit === "Km" ? "km" : "blocos"}`, px + PANEL_W / 2, y + 30);
     y += 40;
   }
 
