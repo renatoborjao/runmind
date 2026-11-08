@@ -46,11 +46,38 @@ export default function PWARegister() {
       try { sessionStorage.removeItem("rm_chunk_reload"); } catch { /* ok */ }
     }, 5000);
 
+    // ATUALIZAÇÃO GARANTIDA: cada deploy grava um carimbo (version.json) e o app
+    // leva o carimbo do build dele. Se divergirem (app instalado preso numa
+    // versão velha — SW/cache), limpa tudo e recarrega. Não depende do service
+    // worker nem de ninguém "fechar o app".
+    const MY_BUILD = process.env.NEXT_PUBLIC_BUILD_ID;
+    const checkBuild = async () => {
+      if (!MY_BUILD) return;
+      try {
+        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const live = String((await r.json())?.build ?? "");
+        if (!live || live === MY_BUILD) return;
+        if (sessionStorage.getItem("rm_build_reload") === live) return; // já tentou esta
+        sessionStorage.setItem("rm_build_reload", live);
+        const regs = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+        await Promise.all(regs.map((g) => g.unregister()));
+        if ("caches" in window) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+        window.location.reload();
+      } catch { /* offline: tenta na próxima */ }
+    };
+    checkBuild();
+    const buildTimer = setInterval(checkBuild, 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === "visible") checkBuild(); };
+    document.addEventListener("visibilitychange", onVisible);
+
     if (!("serviceWorker" in navigator)) {
       return () => {
         window.removeEventListener("error", onErr, true);
         window.removeEventListener("unhandledrejection", onRej);
         clearTimeout(clearGuard);
+        clearInterval(buildTimer);
+        document.removeEventListener("visibilitychange", onVisible);
       };
     }
 
@@ -104,6 +131,8 @@ export default function PWARegister() {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("load", register);
       clearTimeout(clearGuard);
+      clearInterval(buildTimer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
 
     // a página estática carrega rápido: o evento 'load' pode já ter disparado

@@ -62,7 +62,7 @@ self.addEventListener("fetch", (e) => {
   // navegação: rede primeiro, casca cacheada como reserva offline
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req).catch(() => caches.match(req).then((hit) => hit || caches.match("/inicio/")))
+      fetch(req, { cache: "reload" }).catch(() => caches.match(req).then((hit) => hit || caches.match("/inicio/")))
     );
     return;
   }

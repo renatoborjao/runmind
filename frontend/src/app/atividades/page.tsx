@@ -790,10 +790,7 @@ function AtividadesInner() {
               </div>
 
               {transparent ? (
-                <><p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
-                <p className="se-hint" style={{ opacity: 0.5, fontSize: 11 }}>
-                  diag v96 · voltas {cardLaps.length} (relógio {shareCtx?.laps?.length ?? 0}, km {track?.splits?.length ?? 0}) · {sel ? `${sel.distance_km} km · ${sel.duration_s || sel.duration_min}` : ""} · plano {shareCtx?.planned ? "sim" : "não"}
-                </p></>
+                <p className="se-hint">Fundo transparente — copie e cole por cima da sua foto no story do Instagram 📲</p>
               ) : (
                 <div className="se-photo">
                   <button className="btn-ghost" onClick={() => fileRef.current?.click()}>

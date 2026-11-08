@@ -16,7 +16,11 @@ cd "$ROOT/frontend"
 
 echo "==> build de produção"
 rm -rf out
-NEXT_PUBLIC_API_URL= npm run build
+BUILD_ID="$(date +%Y%m%d%H%M%S)"   # carimbo do deploy: o app compara com /version.json
+NEXT_PUBLIC_BUILD_ID="$BUILD_ID" NEXT_PUBLIC_API_URL= npm run build
+printf '{"build":"%s"}\n' "$BUILD_ID" > out/version.json
+# o service worker muda a CADA deploy (não depende de alguém lembrar de subir a versão)
+sed -i -E "s/const CACHE = \"(ritmind-v[0-9]+)\"/const CACHE = \"\1-$BUILD_ID\"/" out/sw.js
 
 echo "==> trava: nada de localhost no build"
 if grep -rlE "https?://(localhost|127.0.0.1)" out/_next out/*.html >/dev/null 2>&1; then
@@ -37,8 +41,10 @@ ssh -i "$KEY" "$VM" 'set -e
   sudo rsync -a /tmp/ritmind-front/_next/ /var/www/ritmind/_next/'
 
 echo "==> conferindo o que o site entrega de verdade"
-expected="$(grep -o 'ritmind-v[0-9]*' out/sw.js)"
-served="$(curl -s "$SITE/sw.js" | grep -o 'ritmind-v[0-9]*')"
+expected="$(grep -o 'ritmind-v[0-9]*-[0-9]*' out/sw.js)"
+served="$(curl -s "$SITE/sw.js" | grep -o 'ritmind-v[0-9]*-[0-9]*')"
+live_build="$(curl -s "$SITE/version.json" | grep -oE '[0-9]{14}')"
+[ "$live_build" = "$BUILD_ID" ] || { echo "FALHOU: version.json serve $live_build, esperado $BUILD_ID" >&2; exit 1; }
 [ "$served" = "$expected" ] || { echo "FALHOU: site serve $served, esperado $expected" >&2; exit 1; }
 for c in $(curl -s "$SITE/inicio/" | grep -o '/_next/static/chunks/[^"]*\.js' | sort -u); do
   if curl -s "$SITE$c" | grep -qE "https?://(localhost|127.0.0.1)"; then
