@@ -25,6 +25,8 @@ export interface PlannedSession {
   // o EXECUTADO fase a fase (voltas do relógio × passos do plano); null sem
   // Garmin — aí o card não inventa comparação de ritmo
   phases?: PlanPhase[] | null;
+  // ESTRUTURA planejada, passo a passo (aquecimento, bloco, séries...)
+  structure?: { name: string; detail: string }[] | null;
 }
 
 export interface RunExtras {

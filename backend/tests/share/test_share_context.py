@@ -57,7 +57,7 @@ def test_planned_session_matches_same_day(monkeypatch):
     assert got == {
         "workout_type": "Longão Progressivo", "distance_km": 14.5,
         "pace_min": "6:15", "pace_max": "6:25", "duration_min": None,
-        "pace_label": "6:15–6:25", "pace_structured": False,
+        "pace_label": "6:15–6:25", "pace_structured": False, "structure": [],
     }
 
 

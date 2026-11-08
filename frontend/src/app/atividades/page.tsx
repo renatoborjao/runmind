@@ -16,6 +16,7 @@ import {
   type FeedItem,
   type RunSplit,
   type ShareContext,
+  type ShareLap,
   type TrackData,
 } from "@/lib/api";
 import { GPS_RUN_ENABLED } from "@/lib/features";
@@ -412,15 +413,16 @@ function AtividadesInner() {
   const [shareCtx, setShareCtx] = useState<ShareContext | null>(null);
   // voltas do card: as do relógio (treino estruturado) ou, sem elas, as parciais por km
   const cardLaps = useMemo(() => {
-    if (shareCtx?.laps && shareCtx.laps.length >= 2) return shareCtx.laps;
-    const out = (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({
-      kind: "other" as const,
-      distance_m: Math.round((s.partial_km ?? 1) * 1000),
-      duration_s: s.sec,
-      pace: s.pace,
-      avg_hr: s.hr ?? null,
-    }));
-    // as parciais do Garmin só trazem km COMPLETOS: o trecho final (ex.: 0,51 km)
+    const out: ShareLap[] = shareCtx?.laps && shareCtx.laps.length >= 2
+      ? [...shareCtx.laps]
+      : (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({
+        kind: "other" as const,
+        distance_m: Math.round((s.partial_km ?? 1) * 1000),
+        duration_s: s.sec,
+        pace: s.pace,
+        avg_hr: s.hr ?? null,
+      }));
+    // as parciais/voltas podem vir só com km COMPLETOS: o trecho final (ex.: 0,51 km)
     // sai da diferença pro total da corrida
     if (out.length && sel) {
       const gapM = Math.round(sel.distance_km * 1000) - out.reduce((a, l) => a + l.distance_m, 0);

@@ -127,7 +127,48 @@ def session_card(session) -> dict:
         "distance_km": session.planned_distance_km,
         "duration_min": session.planned_duration_minutes,
         **_planned_pace(session),
+        "structure": plan_structure(session.steps or []),
     }
+
+
+_STEP_NAMES = {
+    "warmup": "Aquecimento", "cooldown": "Desaquecimento", "run": "Corrida",
+    "interval": "Tiro", "recovery": "Recuperação", "rest": "Parado",
+}
+
+
+def _step_detail(step: WorkoutStep) -> str:
+
+    amount = _amount(step.distance_m, step.duration_sec)
+    pace = _range(step.pace_min, step.pace_max)
+    parts = [p for p in (amount, f"{pace}/km" if pace else "") if p]
+
+    return " · ".join(parts)
+
+
+def plan_structure(steps: list[WorkoutStep]) -> list[dict]:
+    """ESTRUTURA PLANEJADA do treino pro card ("Treino em blocos"): uma linha por
+    passo, na ordem prescrita; repetição vira "8× (1 km · 5:00/km + 2min)"."""
+
+    out: list[dict] = []
+
+    for step in steps:
+
+        if step.is_repeat:
+
+            inner = " + ".join(
+                d for d in (_step_detail(s).replace("/km", "") for s in step.steps) if d
+            )
+            out.append({"name": f"Séries ({step.reps or 1}×)", "detail": inner})
+
+        else:
+
+            out.append({
+                "name": _STEP_NAMES.get(step.kind, step.kind.capitalize()),
+                "detail": _step_detail(step),
+            })
+
+    return out[:8]
 
 
 def match_session(profile: str, feed: list[dict], date_iso: str, km: float):

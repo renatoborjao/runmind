@@ -110,7 +110,15 @@ function buildRows(laps: ShareLap[], kmPaces: KmPace[] | null | undefined): LapR
   return out.map((e, i) => ({ n: i + 1, lap: e.lap, fast: !e.chunked && e.lap.kind === "effort" }));
 }
 
-export function lapStructure(laps: ShareLap[], workoutName?: string | null, kmPaces?: KmPace[] | null): LapStructure {
+export function lapStructure(
+  laps: ShareLap[], workoutName?: string | null, kmPaces?: KmPace[] | null, planned?: LapGroup[] | null,
+): LapStructure {
+  const st = lapStructureFromLaps(laps, workoutName, kmPaces);
+  // o treino PLANEJADO manda na estrutura; sem plano, o que as voltas mostram
+  return planned && planned.length ? { ...st, groups: planned } : st;
+}
+
+function lapStructureFromLaps(laps: ShareLap[], workoutName?: string | null, kmPaces?: KmPace[] | null): LapStructure {
   // sem esforço/recuperação (corrida contínua): uma estrutura só + as voltas por km
   if (!laps.some((l) => l.kind !== "other")) {
     const total = laps.reduce((a, l) => a + l.distance_m, 0) / 1000;
@@ -201,8 +209,17 @@ function metricCells(it: FeedItem, x: RunExtras): [string, string][] {
   return c;
 }
 
+// estrutura do treino PLANEJADO: passos do plano; sem passos, o resumo da sessão
+function plannedGroups(x: RunExtras): LapGroup[] | null {
+  const p = x.planned;
+  if (!p) return null;
+  if (p.structure && p.structure.length) return p.structure;
+  const bits = [p.distance_km ? `${km2(p.distance_km)} km` : "", p.pace_label ? `${p.pace_label}/km` : ""].filter(Boolean);
+  return bits.length ? [{ name: p.workout_type, detail: bits.join(" · ") }] : null;
+}
+
 function voltasLayout(it: FeedItem, x: RunExtras) {
-  const st = lapStructure(x.laps ?? [], x.planned?.workout_type || it.name, x.kmPaces);
+  const st = lapStructure(x.laps ?? [], x.planned?.workout_type || it.name, x.kmPaces, plannedGroups(x));
   const cells = metricCells(it, x);
   const metricsH = Math.ceil(cells.length / 2) * METRIC_ROW;
   const head = 164;
