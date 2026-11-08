@@ -291,3 +291,53 @@ def test_recovery_flag_with_low_load_is_not_a_deload():
     )
 
     assert d.due is False
+
+
+# ---- quem ENTREGA absorve: sinal curto de corpo não corta (Renato, 08/11) ---------
+
+
+def test_delivering_athlete_with_falling_recovery_gets_no_deload():
+    """Entregou 30,5 km + longão e a recuperação oscila (sono curto): não vira descarga."""
+
+    d = DeloadAnalyzer.assess(
+        [60, 70, 90], _recovery(hrv=FALLING), acwr=1.2,
+        body_state=BODY_RECOVERY_FLAG, delivering=True, weeks_to_race=21,
+    )
+
+    assert d.due is False
+    assert d.delivery_held is True
+    text = deload_directive(d, 21)
+    assert "ENTREGOU" in text and "NÃO reduza volume" in text
+    assert deload_chat_line(d) == ""
+
+
+def test_same_signal_without_delivery_still_brings_the_deload_signal():
+    """Sem entrega comprovada, o sinal continua valendo (comportamento anterior)."""
+
+    d = DeloadAnalyzer.assess(
+        [60, 70, 90], _recovery(hrv=FALLING), acwr=1.2,
+        body_state=BODY_RECOVERY_FLAG, delivering=False, weeks_to_race=21,
+    )
+
+    assert d.due is True and d.delivery_held is False
+
+
+def test_strained_body_still_triggers_even_when_delivering():
+    """Corpo SOBRECARREGADO é sinal agudo: entregar não apaga."""
+
+    d = DeloadAnalyzer.assess(
+        [60, 70, 90], _recovery(), acwr=1.4,
+        body_state=BODY_STRAINED, delivering=True, weeks_to_race=21,
+    )
+
+    assert d.due is True
+
+
+def test_delivering_with_no_body_signal_changes_nothing():
+
+    d = DeloadAnalyzer.assess(
+        [60, 70, 90], _recovery(), acwr=1.1, body_state=BODY_BALANCED, delivering=True,
+    )
+
+    assert d.due is False and d.delivery_held is False
+    assert deload_directive(d) == ""

@@ -140,7 +140,8 @@ class StravaActivityCatchup:
 
         except Exception as e:
 
-            # solta a marca pra tentar de novo na próxima passada
-            ProcessedActivityGuard().unmark(activity_id)
+            # solta a marca pra tentar de novo na próxima passada — com TETO de
+            # tentativas (cada uma repete a análise paga)
+            ProcessedActivityGuard().release_for_retry(activity_id)
 
             print(f"Strava catch-up: falha ao analisar {activity_id}: {e}")

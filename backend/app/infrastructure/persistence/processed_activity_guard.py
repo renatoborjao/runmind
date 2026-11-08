@@ -105,3 +105,48 @@ class ProcessedActivityGuard:
         ]
 
         self._save(ids)
+
+    # quantas vezes uma MESMA atividade pode voltar pra fila depois de falhar. Cada
+    # tentativa repete a análise paga (Gemini): sem teto, uma falha depois da IA
+    # (ex.: envio da mensagem) reanalisa a cada passada do poller — Hélio, noite de
+    # 06/11: 340 análises em 8 h.
+    MAX_RETRIES = 3
+
+    def release_for_retry(self, activity_id: int) -> bool:
+        """Solta a marca pra o poller tentar de novo, MAS só até `MAX_RETRIES`
+        vezes por atividade. Devolve True se soltou; False se desistiu (a marca
+        fica — não analisa mais, o erro está no log pra investigar)."""
+
+        counts_file = self.storage / "analysis_retries.json"
+
+        try:
+
+            counts = json.loads(counts_file.read_text(encoding="utf-8"))
+
+        except Exception:
+
+            counts = {}
+
+        key = str(activity_id)
+
+        tries = int(counts.get(key, 0)) + 1
+
+        counts[key] = tries
+
+        # só os mais recentes: o arquivo não cresce sem fim
+        counts = dict(list(counts.items())[-self.MAX_IDS:])
+
+        counts_file.write_text(json.dumps(counts), encoding="utf-8")
+
+        if tries > self.MAX_RETRIES:
+
+            print(
+                f"Atividade {activity_id}: {tries - 1} tentativas falharam — "
+                "desisti (não reanalisa pra não queimar IA); ver o erro acima"
+            )
+
+            return False
+
+        self.unmark(activity_id)
+
+        return True

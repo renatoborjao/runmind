@@ -1149,6 +1149,7 @@ class AthleteDossier:
                 decision = DeloadAnalyzer.assess(
                     reading.load.weekly_loads,
                     reading.recovery,
+                    delivering=AthleteDossier._is_delivering(data),
                     weeks_to_race=weeks_to_race,
                     acwr=acwr,
                     weeks_since_race=weeks_since_race,
@@ -1678,6 +1679,39 @@ class AthleteDossier:
             low_delivery=week_ledger.low_delivery(ledger) is not None,
             delivered_last=AthleteDossier._delivered_last(ledger, ref),
         )
+
+    @staticmethod
+    def _is_delivering(data: _Inputs) -> bool:
+        """O atleta ENTREGOU o plano? A semana fechada mais recente com volume
+        prescrito saiu ~cheia (>= 90%) E ele não vem de não-entrega (mediana das
+        últimas semanas acima do piso `DELIVERY_LOW`). Alimenta a descarga: quem
+        entrega absorve — sinal curto de corpo não corta volume dele."""
+
+        try:
+
+            from app.application.history import week_ledger
+
+            ledger = AthleteDossier._ledger(data)
+
+            closed = [w for w in ledger if not w.in_progress and w.planned_km > 0]
+
+            if not closed:
+
+                return False
+
+            last = closed[-1]
+
+            if last.done_km / last.planned_km < 0.9:
+
+                return False
+
+            return week_ledger.low_delivery(ledger) is None
+
+        except Exception as e:
+
+            print(f"Dossiê: entrega falhou p/ '{data.profile}': {e}")
+
+            return False
 
     @staticmethod
     def _delivered_last(ledger, ref: date) -> float | None:

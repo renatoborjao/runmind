@@ -69,6 +69,12 @@ class DeloadDecision:
     # absorvendo — descarga ali só destreina)
     block_skipped: bool = False
 
+    # o corpo deu sinal curto de cansaço, mas o atleta ENTREGOU o plano (semana
+    # passada ~cheia): não é hora de cortar — ele absorve. O coach é avisado pra
+    # NÃO aliviar volume por sono curto / recuperação oscilando num atleta que cumpre
+    # (Renato 08/11: entregou 30,5 km + longão de 15,5 e a semana veio com −18%/−23%).
+    delivery_held: bool = False
+
 
 def is_deload_role(role: str | None) -> bool:
     """O papel desta semana NO BLOCO é de descarga/alívio?"""
@@ -143,6 +149,7 @@ class DeloadAnalyzer:
         body_state: str | None = None,
         form: str | None = None,
         low_base: bool = False,
+        delivering: bool = False,
     ) -> DeloadDecision:
         """Decide se a PRÓXIMA semana (a que estamos gerando) deve ser de
         descarga: só se o atleta está SENTINDO a carga. O taper e a janela
@@ -159,7 +166,13 @@ class DeloadAnalyzer:
         `low_base`: o analisador da carga marcou "razão alta só pela base
         BAIXA" (João Soares: 40 → 90 de carga, ACWR 1,42 sobre ~46 min/semana):
         a razão não é pico, então NÃO há carga em alta pra dissipar — mesma
-        convenção do alerta de lesão (`load.low_base is None`)."""
+        convenção do alerta de lesão (`load.low_base is None`).
+
+        `delivering`: o atleta ENTREGOU o plano (a semana fechada mais recente ~cheia e
+        sem histórico de não-entrega). Entregar é a prova de que ele absorve: sinal CURTO
+        de recuperação (sono, HRV/FC oscilando) ou de forma NÃO vira descarga — todo
+        mundo é humano e tem semana de pouco sono; cortar quem cumpre só destreina e
+        vira dente de serra. Só o corpo SOBRECARREGADO (STRAINED) ainda dispara."""
 
         streak = DeloadAnalyzer._consecutive_load_weeks(weekly_loads)
 
@@ -184,6 +197,14 @@ class DeloadAnalyzer:
         if form == EVO_DECLINING and loaded:
 
             signs.append("a forma recuou com a carga em alta")
+
+        if signs and delivering and body_state != BODY_STRAINED:
+
+            return DeloadDecision(
+                False, streak,
+                " e ".join(signs) + ", mas ele entregou o plano — absorve",
+                delivery_held=True,
+            )
 
         if signs:
 
@@ -265,6 +286,17 @@ def deload_directive(decision: DeloadDecision, weeks_to_race: int | None = None)
             "nada sobre 'descarga' na semana, a não ser que você mesmo decida "
             "aliviar por outro motivo do quadro (aí marque \"is_deload\" e "
             "explique)."
+        )
+
+    if decision.delivery_held:
+
+        return (
+            f"SINAL CURTO DE CORPO ({decision.reason}). Ele ENTREGOU o plano: quem cumpre "
+            "a semana está provando que absorve a carga — sono curto e recuperação "
+            "oscilando são a vida real de qualquer atleta (trabalho, preocupações), não "
+            "motivo pra cortar. NÃO reduza volume nem longão por isso: siga a rota. O "
+            "cuidado vai pra QUALIDADE do leve (leve de verdade, pela FC) e pra não "
+            "empilhar intensidade nova. Só recue por dor, doença ou sobrecarga real."
         )
 
     if not decision.due:
