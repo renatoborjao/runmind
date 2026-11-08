@@ -413,18 +413,28 @@ function AtividadesInner() {
   // voltas do card: as do relógio (treino estruturado) ou, sem elas, as parciais por km
   const cardLaps = useMemo(() => {
     if (shareCtx?.laps && shareCtx.laps.length >= 2) return shareCtx.laps;
-    return (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({
+    const out = (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({
       kind: "other" as const,
       distance_m: Math.round((s.partial_km ?? 1) * 1000),
       duration_s: s.sec,
       pace: s.pace,
       avg_hr: s.hr ?? null,
     }));
-  }, [shareCtx, track]);
-  const kmPaces = useMemo(
-    () => (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({ len: s.partial_km || 1, paceSec: s.sec / (s.partial_km || 1) })),
-    [track],
-  );
+    // as parciais do Garmin só trazem km COMPLETOS: o trecho final (ex.: 0,51 km)
+    // sai da diferença pro total da corrida
+    if (out.length && sel) {
+      const gapM = Math.round(sel.distance_km * 1000) - out.reduce((a, l) => a + l.distance_m, 0);
+      const gapS = (sel.duration_s || (sel.duration_min || 0) * 60) - out.reduce((a, l) => a + l.duration_s, 0);
+      if (gapM >= 100 && gapS > 0) out.push({ kind: "other" as const, distance_m: gapM, duration_s: gapS, pace: null, avg_hr: null });
+    }
+    return out;
+  }, [shareCtx, track, sel]);
+  const kmPaces = useMemo(() => {
+    const ks = (track?.splits ?? []).filter((s) => s.sec > 0).map((s) => ({ len: s.partial_km || 1, paceSec: s.sec / (s.partial_km || 1) }));
+    const tail = shareCtx?.laps && shareCtx.laps.length >= 2 ? null : cardLaps[cardLaps.length - 1];
+    if (tail && ks.length && cardLaps.length > ks.length) ks.push({ len: tail.distance_m / 1000, paceSec: tail.duration_s / (tail.distance_m / 1000) });
+    return ks;
+  }, [track, shareCtx, cardLaps]);
   const styles = useMemo(
     () => CARD_STYLES.filter((st) => !st.needs || (st.needs === "planned" ? planHasTargets(shareCtx?.planned) : st.needs === "laps" ? hasLaps(cardLaps) : shareCtx?.quote)),
     [shareCtx, cardLaps, kmPaces],

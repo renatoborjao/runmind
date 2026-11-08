@@ -63,7 +63,7 @@ export interface LapGroup { name: string; detail: string; }
 export interface LapRow { n: number; lap: ShareLap; fast: boolean; }
 export interface LapStructure { unit: "Bloco" | "Km"; title: string; groups: LapGroup[]; rows: LapRow[]; hidden: number; }
 
-const MAX_ROWS = 22;
+const MAX_ROWS = 60; // mostra TODOS os km (até os 0,5 finais)
 
 // pace real de cada km da corrida (das parciais) — usado pra quebrar blocos longos
 export interface KmPace { len: number; paceSec: number; }
@@ -202,7 +202,7 @@ function metricCells(it: FeedItem, x: RunExtras): [string, string][] {
 }
 
 function voltasLayout(it: FeedItem, x: RunExtras) {
-  const st = lapStructure(x.laps ?? [], x.planned?.workout_type, x.kmPaces);
+  const st = lapStructure(x.laps ?? [], x.planned?.workout_type || it.name, x.kmPaces);
   const cells = metricCells(it, x);
   const metricsH = Math.ceil(cells.length / 2) * METRIC_ROW;
   const head = 164;
