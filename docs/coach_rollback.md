@@ -187,3 +187,10 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 
 - **Obrigatório** ao aplicar o stamp 20260927-021547: copiar também `$RP/20260927-021547-plan_guard/plan_guard.py` pra `app/application/coach/planning/` (o stamp só tem os arquivos editados; sem ele o `ai_plan_service` antigo não acha o guardião e o plano cai no fallback determinístico).
 - Depois de uma emergência, **trazer o git pro mesmo estado** (caminho A) — a VM não pode ficar com código fora de branch.
+
+## 08/11/2026 — quem entrega não é cortado por sinal curto de corpo + teto de reanálise
+
+- **O que mudou:** `DeloadAnalyzer.assess(delivering=...)`: se a semana fechada mais recente saiu >= 90% do prescrito e ele não vem de não-entrega, sinal curto de recuperação/forma NÃO vira descarga (o coach recebe a diretriz "ele ENTREGOU: não reduza volume"). Corpo STRAINED ainda dispara. `ProcessedActivityGuard.release_for_retry`: poller Garmin e catch-up Strava soltam a atividade pra reanálise no máximo 3 vezes.
+- **Backup na VM:** `~/deploy_backups/20261108-203811` (stamp do deploy).
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service` (mesmo roteiro acima, com este stamp).
+- **Motivo:** Renato 08/11 (entregou 30,5 km + longão 15,5 e o plano veio −18%/−23%, a 21 semanas da meia); Hélio 06/11 (340 reanálises numa noite).
