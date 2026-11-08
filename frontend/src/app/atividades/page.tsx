@@ -427,7 +427,11 @@ function AtividadesInner() {
     if (out.length && sel) {
       const gapM = Math.round(sel.distance_km * 1000) - out.reduce((a, l) => a + l.distance_m, 0);
       const gapS = (sel.duration_s || (sel.duration_min || 0) * 60) - out.reduce((a, l) => a + l.duration_s, 0);
-      if (gapM >= 100 && gapS > 0) out.push({ kind: "other" as const, distance_m: gapM, duration_s: gapS, pace: null, avg_hr: null });
+      if (gapM >= 100) {
+        // sem tempo sobrando (relógio e parciais medem tempo diferente): usa o pace médio dos km
+        const avg = out.reduce((a, l) => a + l.duration_s, 0) / (out.reduce((a, l) => a + l.distance_m, 0) / 1000);
+        out.push({ kind: "other" as const, distance_m: gapM, duration_s: gapS > 0 ? gapS : avg * (gapM / 1000), pace: null, avg_hr: null });
+      }
     }
     return out;
   }, [shareCtx, track, sel]);
