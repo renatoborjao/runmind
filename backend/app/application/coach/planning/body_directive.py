@@ -62,6 +62,7 @@ def body_plan_directive(
     trajectory: BodyTrajectory | None = None,
     drift=None,
     aerobic_ceiling: int | None = None,
+    delivering: bool = False,
 ) -> str:
     """Diretriz pro prompt do plano. Só fala quando o corpo pede atenção
     (STRAINED = sobrecarga real; RECOVERY_FLAG = recuperação caindo); senão
@@ -77,6 +78,23 @@ def body_plan_directive(
 
     lim = f" (limitador: {limiter})" if limiter else ""
 
+    # a queda da recuperação veio ANTES da carga subir: a carga desta semana não a causou
+    before = ""
+
+    if getattr(reading, "alert_preceded_load", False):
+
+        since = getattr(reading, "alert_since", None)
+
+        when = f" ({since:%d/%m})" if since else ""
+
+        before = (
+            f" Atenção à ORDEM: a recuperação começou a cair{when}, quando a carga dele ainda "
+            "era normal/leve — o que subiu DEPOIS não a causou (doença, sono, vida, "
+            "confundidores). Não use a carga como explicação nem como motivo pra cortar volume "
+            "por isso: o cuidado é com o sono e com o leve ser leve. Doença ou dor que ele "
+            "declarou são outra conversa — aí a conduta vem do que ele contou."
+        )
+
     persisting = (
         trajectory is not None
         and trajectory.movement == TRAJ_PERSISTING
@@ -91,6 +109,24 @@ def body_plan_directive(
             if persisting
             else ""
         )
+
+        if delivering:
+
+            # ENTREGA é a prova de que ele absorve: o sinal pede CUIDADO, não corte. Quem corta
+            # quem cumpre destreina e cria o dente de serra (cortar → voltar → alerta → cortar).
+            return (
+                "STATUS DO CORPO (você é o COACH — pese isto na dose desta semana; "
+                "NÃO pergunte ao atleta, a decisão é sua): a carga subiu e a recuperação "
+                f"caiu{lim}.{persist} MAS ele ENTREGOU o plano: cumprir a semana é a prova de que "
+                "ele absorve, e cortar quem cumpre só destreina (e cria o dente de serra: corta, "
+                "volta, dá alerta, corta). O que um bom treinador faz aqui é SEGURAR o que ele "
+                "absorveu — mesmo volume (±10%), UM estímulo de qualidade encurtado (a qualidade "
+                "é o que mais se protege num recuo; volume cede antes), longão perto do que ele "
+                "acabou de correr, leves e longão de verdade leves (pelo teto de FC) — e voltar a "
+                "subir aos poucos. Recuo de verdade (−35 a −45%) só com dor, doença ou sinal que "
+                "dura semanas."
+                f"{_CONFOUNDERS}"
+            )
 
         return (
             "STATUS DO CORPO (você é o COACH — pese isto na dose desta semana; "
@@ -111,7 +147,7 @@ def body_plan_directive(
     # segura a intensidade". Segurar ≠ descarregar: mantém o volume, não sobe.
     if drift is not None and getattr(drift, "worsening", False):
 
-        return _hold_directive(reading, drift, aerobic_ceiling, lim)
+        return _hold_directive(reading, drift, aerobic_ceiling, lim, before)
 
     # RECOVERY_FLAG: a recuperação deu um sinal, mas a CARGA está tranquila.
     # NÃO é freio automático — o coach pesa contra a CAPACIDADE do atleta. Um
@@ -128,7 +164,7 @@ def body_plan_directive(
     return (
         "STATUS DO CORPO (você é o COACH — decide a dose pesando o QUADRO "
         f"INTEIRO): a carga está tranquila, mas a recuperação deu um sinal{lim}."
-        f"{recur} PESE contra a capacidade dele: se esse limitador é o "
+        f"{before}{recur} PESE contra a capacidade dele: se esse limitador é o "
         "normal/baseline dele (os aprendizados mostram que ele SUSTENTA assim) e "
         "a carga está tranquila, NÃO trave a progressão por isto — é o normal "
         "dele, não um alerta. Só segure a subida se a recuperação estiver caindo "
@@ -137,7 +173,9 @@ def body_plan_directive(
     )
 
 
-def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> str:
+def _hold_directive(
+    reading: BodyReading, drift, aerobic_ceiling, lim: str, before: str = "",
+) -> str:
     """Recuperação PIORANDO de verdade: segura a progressão com instruções
     concretas (sem subir, qualidade controlada, leve pela FC)."""
 
@@ -168,7 +206,7 @@ def _hold_directive(reading: BodyReading, drift, aerobic_ceiling, lim: str) -> s
         "STATUS DO CORPO — PIORA REAL DA RECUPERAÇÃO (não é o normal dele; "
         f"você é o COACH, a decisão é sua){lim}: em alerta "
         f"{_span(drift)}, {', '.join(evidence)} — contra "
-        "a própria base de semanas atrás. O que um bom treinador costuma fazer "
+        f"a própria base de semanas atrás.{before} O que um bom treinador costuma fazer "
         "nesse quadro: SEGURAR a progressão (sem subir volume nem intensidade "
         "sobre a semana passada), qualidade enxuta e controlada (limite de baixo "
         "da faixa, menos repetições), longão sem progressão/blocos fortes, leves "

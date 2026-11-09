@@ -169,3 +169,36 @@ def test_a_single_past_signal_is_a_fact_not_a_pattern():
 def test_clearly_not_following_or_clearly_stuck_still_weigh_the_signal():
 
     assert assess(LEONARDO, fulfilled=3, planned=6, current=CURRENT).weighs_signal  # 50% < 60%
+
+
+def test_stuck_signals_that_started_before_the_load_do_not_justify_a_bigger_cut():
+    """Renato 08/11: "0 de 2" eram semanas seguidas do MESMO episódio, que começou numa semana
+    leve. Não voltar ao normal não prova que o volume é demais; recuo de volume só destreina."""
+
+    stuck = _weeks([
+        (20.0, "ABSORBING"), (22.0, "RECOVERY_FLAG"), (21.0, "STRAINED"), (20.0, "RECOVERY_FLAG"),
+        (19.0, "RECOVERY_FLAG"), (18.0, "STRAINED"),
+    ])
+
+    found = assess(stuck, 6, 6, CURRENT)
+
+    assert found.stuck
+
+    assert "pede mais peso ao sinal de corpo" in render(found, directive=True)
+
+    unrelated = render(found, directive=True, load_unrelated=True)
+
+    assert "pede mais peso ao sinal de corpo" not in unrelated
+    assert "ANTES de a carga subir" in unrelated and "só destreina" in unrelated
+
+
+def test_barely_following_the_plan_still_weighs_even_if_the_signal_is_load_unrelated():
+
+    stuck = _weeks([
+        (20.0, "ABSORBING"), (22.0, "RECOVERY_FLAG"), (21.0, "STRAINED"), (20.0, "RECOVERY_FLAG"),
+        (19.0, "RECOVERY_FLAG"), (18.0, "STRAINED"),
+    ])
+
+    found = assess(stuck, fulfilled=2, planned=9, current=CURRENT)
+
+    assert "ele cumpre pouco do plano" in render(found, directive=True, load_unrelated=True)

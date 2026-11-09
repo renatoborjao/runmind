@@ -5,8 +5,10 @@ leva, em números e em faixa (hipótese de treinador, nunca decreto)."""
 
 from app.application.history.goal_path import (
     assess,
+    cycle_sentence,
     goal_path_directive,
     goal_path_fact,
+    prep_window,
     reference_for,
 )
 
@@ -148,3 +150,85 @@ def test_the_aim_follows_the_runs_per_week():
 
     assert "mire no piso" in goal_path_fact(_leonardo(runs_per_week=3))
     assert "mire no meio da faixa" in goal_path_fact(_leonardo(runs_per_week=4))
+
+
+# ---- JANELA DE PREPARO: onde ele está no ciclo (Renato 08/11: meia em 04/04, 21 semanas) ----
+
+_RENATO_WEEKLY = [30.3, 15.0, 21.1, 17.7, 14.7, 30.5, 28.6, 31.2]
+_RENATO_LONGEST = [13.4, 15.0, 14.0, 10.0, 14.7, 15.5, 13.0, 14.1]
+
+
+def _half(weeks_left, **overrides):
+
+    args = dict(
+        distance_km=21.0975, target_time="1:59:59", weeks_left=weeks_left,
+        weekly_km=_RENATO_WEEKLY, longest_km=_RENATO_LONGEST, runs_per_week=3,
+    )
+
+    args.update(overrides)
+
+    return assess(**args)
+
+
+def test_the_half_marathon_window_is_16_20_with_base_and_24_26_building_it():
+
+    assert prep_window(21.1, True) == ("meia maratona", (16, 20))
+    assert prep_window(21.1, False) == ("meia maratona", (24, 26))
+    assert prep_window(10.0, True)[1] == (8, 12)
+
+
+def test_who_already_ran_near_the_distance_has_the_base():
+
+    path = _half(21)
+
+    assert path.has_base and path.window == (16, 20)
+
+
+def test_inside_the_window_a_lost_week_is_called_out():
+
+    text = cycle_sentence(_half(19))
+
+    assert "16-20 semanas" in text and "DENTRO da janela" in text
+    assert "SEGURAR o que ele absorveu a cortar" in text
+    assert "faltam 19 semanas" in text
+
+
+def test_with_time_to_spare_the_base_can_be_built_calmly():
+
+    assert "sobra tempo" in cycle_sentence(_half(24))
+
+
+def test_below_the_window_the_cycle_is_short_and_he_hears_it_honestly():
+
+    text = cycle_sentence(_half(9))
+
+    assert "ABAIXO da janela" in text and "ciclo é CURTO" in text
+
+
+def test_who_is_still_building_the_base_gets_the_longer_window():
+
+    path = _half(21, weekly_km=[8, 10, 12, 10, 9, 12, 11, 10], longest_km=[5, 6, 7, 6, 6, 8, 7, 8])
+
+    assert not path.has_base and path.window == (24, 26)
+
+    text = cycle_sentence(path)
+
+    assert "CONSTRUINDO a base" in text and "ABAIXO da janela" in text
+
+
+def test_the_cycle_is_in_the_directive_and_in_the_short_fact():
+
+    path = _half(20)
+
+    assert "JANELA DE PREPARO" in goal_path_directive(path)
+    assert "JANELA DE PREPARO" in goal_path_fact(path)
+
+
+def test_a_15k_race_is_not_filed_under_the_half_marathon_window():
+    """Maurício: 15 km em 20/12 caía na janela da meia (16-20 semanas) — errado."""
+
+    name, window = prep_window(15.0, True)
+
+    assert name == "15 km" and window == (10, 14)
+    assert prep_window(15.0, False)[1] == (14, 18)
+    assert prep_window(21.1, True)[0] == "meia maratona"

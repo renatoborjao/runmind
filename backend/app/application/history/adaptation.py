@@ -145,8 +145,12 @@ def _day(day: date) -> str:
     return f"{day:%d/%m}"
 
 
-def render(found: Adaptation, *, directive: bool = False) -> str:
-    """O bloco do dossiê. `directive` (só a voz do plano) acrescenta como pesar o que ele mostra."""
+def render(
+    found: Adaptation, *, directive: bool = False, load_unrelated: bool = False,
+) -> str:
+    """O bloco do dossiê. `directive` (só a voz do plano) acrescenta como pesar o que ele mostra.
+    `load_unrelated`: a queda da recuperação de agora COMEÇOU antes da carga subir (leitura do
+    corpo) — "não voltou ao normal" então não prova que o volume é demais."""
 
     lines = [
         "ADAPTAÇÃO DELE (o histórico que pesa MAIS que um sinal curto de corpo de poucos dias):"
@@ -189,12 +193,27 @@ def render(found: Adaptation, *, directive: bool = False) -> str:
 
     if directive:
 
-        lines.append(_knowledge(found))
+        lines.append(_knowledge(found, load_unrelated))
 
     return "\n".join(lines)
 
 
-def _knowledge(found: Adaptation) -> str:
+def _knowledge(found: Adaptation, load_unrelated: bool = False) -> str:
+
+    # os sinais não normalizaram, MAS a queda atual veio antes da carga subir: a causa não é o
+    # volume (doença, sono, vida, confundidores) — recuo de volume não a corrige, só destreina
+    # (Renato 08/11: "0 de 2" eram semanas seguidas do MESMO episódio, que começou na semana de
+    # 14,7 km). Cumprir pouco continua pesando; "não voltou ao normal" sozinho, não.
+    if found.stuck and load_unrelated and not found.barely_complies:
+
+        return (
+            "CONHECIMENTO, não regra: os sinais de corpo dele não voltaram ao normal na semana "
+            "seguinte — MAS a queda da recuperação começou ANTES de a carga subir (era uma "
+            "semana leve): a causa não é o volume (doença, sono, vida), e recuo de volume não a "
+            "corrige, só destreina. Trate como sinal de RECUPERAÇÃO — sono, leves de verdade — e "
+            "não como motivo pra um recuo maior; ancore a dose no que ele de fato cumpre e "
+            "absorve. Dor, doença declarada ou queda de desempenho mudam isto."
+        )
 
     if found.adapts:
 

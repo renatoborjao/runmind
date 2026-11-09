@@ -29,6 +29,7 @@ from app.domain.entities.body_reading import (
 from app.domain.entities.training_history import TrainingHistory
 from app.domain.value_objects.sports import is_foot_sport
 from app.domain.entities.training_load import (
+    ACWR_OPTIMAL_MAX,
     LOAD_CAUTION,
     LOAD_HIGH,
     LOAD_INSUFFICIENT,
@@ -111,6 +112,32 @@ class BodyReadingBuilder:
 
         body_state = BodyReadingBuilder._verdict(load.status, recovery)
 
+        # "carga alta E recuperação caindo" só é sobrecarga de treino se a carga veio ANTES da
+        # queda (ou junto dela). Se a recuperação já vinha caindo quando a carga ainda era normal
+        # ou leve (doença, sono, vida), a carga que subiu depois não foi a causa: é um sinal de
+        # recuperação, não de sobrecarga — senão todo retorno de parada vira "sobrecarregado" e o
+        # coach corta justo a semana em que o atleta volta (o dente de serra).
+        alert_since = None
+
+        alert_preceded = False
+
+        if body_state in (BODY_STRAINED, BODY_RECOVERY_FLAG):
+
+            alert_since, alert_preceded = BodyReadingBuilder._alert_preceded_load(
+                series=series,
+                activities=activities,
+                reference_date=reference_date,
+                resting_hr=resting_hr,
+                max_hr=max_hr,
+                sex=getattr(runner, "sex", None),
+                recent_race_date=recent_race_date,
+                zones=zones,
+            )
+
+            if alert_preceded and body_state == BODY_STRAINED:
+
+                body_state = BODY_RECOVERY_FLAG
+
         limiter = BodyReadingBuilder._limiter(recovery)
 
         return BodyReading(
@@ -118,7 +145,59 @@ class BodyReadingBuilder:
             recovery=recovery,
             body_state=body_state,
             limiter=limiter,
+            alert_preceded_load=alert_preceded,
+            alert_since=alert_since,
         )
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _alert_preceded_load(
+        *, series, activities, reference_date, resting_hr, max_hr, sex, recent_race_date, zones,
+    ):
+        """(início do alerta, a recuperação começou a cair ANTES da carga subir?). Só afirma com o
+        alerta mais antigo que a janela aguda (7 dias) e a carga DAQUELE dia lida como normal ou
+        leve — qualquer dúvida (sem série, sem dado de carga) devolve False e o veredito fica como
+        estava. Best-effort: nunca derruba a leitura."""
+
+        try:
+
+            from app.application.history.recovery_alert_run import RecoveryAlertRun
+            from app.core.clock import today_local
+
+            today = reference_date or today_local()
+
+            since = RecoveryAlertRun.since(series, today)
+
+            if since is None or (today - since).days < 7:
+
+                return since, False
+
+            earlier = TrainingLoadAnalyzer.analyze(
+                TrainingHistory(activities=activities),
+                reference_date=since,
+                resting_hr=resting_hr,
+                max_hr=max_hr,
+                sex=sex,
+                recent_race_date=recent_race_date,
+                zones=zones,
+            )
+
+            # com pouco histórico a razão fica instável pra CIMA (divisor pequeno), nunca pra baixo:
+            # uma razão baixa mesmo sem histórico suficiente é leitura segura de "carga leve"
+            # (Renato em 29/10: 20 dias de histórico por causa da parada, razão 0,59)
+            unknown_or_high = earlier.status in (LOAD_CAUTION, LOAD_HIGH) or (
+                earlier.status == LOAD_INSUFFICIENT
+                and (earlier.acwr is None or earlier.acwr > ACWR_OPTIMAL_MAX)
+            )
+
+            return since, not unknown_or_high
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Alerta × carga (leitura de corpo) falhou: {e}")
+
+            return None, False
 
     # ------------------------------------------------------------------
 

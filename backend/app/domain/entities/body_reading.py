@@ -82,3 +82,9 @@ class BodyReading:
     recovery: RecoveryTrend
     body_state: str
     limiter: str | None = None   # o que mais merece atenção (ex.: "sono")
+    # A QUEDA da recuperação começou ANTES de a carga subir (a carga daquele dia era normal/leve):
+    # então a carga de agora não a causou — o veredito vira RECOVERY_FLAG em vez de STRAINED.
+    # Renato 08/11: recuperação caindo desde 29/10 (semana de 14,7 km), a semana de 30 km veio
+    # DEPOIS; "carga alta + recuperação caindo" era um cruzamento no tempo, não causa e efeito.
+    alert_preceded_load: bool = False
+    alert_since: object = None   # date do início da sequência de alerta (quando se sabe)

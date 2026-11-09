@@ -26,6 +26,24 @@ _REFERENCE = (
     (99.0, (30, 35), (55, 75)),
 )
 
+# JANELA DE PREPARAÇÃO por distância, em semanas: (distância até, nome, quem JÁ TEM a base da
+# distância, quem ainda está CONSTRUINDO a base — intermediário/iniciante com alguma base).
+# Meia: 16-20 semanas pra quem tem base de meia e 24-26 pra intermediário/iniciante (a referência
+# que o Renato trouxe, GPA Assessoria Esportiva / ge). As demais distâncias são a faixa típica de
+# treinador — hipótese em faixa, ajuste aqui num lugar só.
+_PREP_WINDOWS = (
+    (5.5, "5 km", (6, 8), (8, 12)),
+    (10.5, "10 km", (8, 12), (12, 16)),
+    (16.0, "15 km", (10, 14), (14, 18)),
+    (22.0, "meia maratona", (16, 20), (24, 26)),
+    (99.0, "maratona", (16, 20), (24, 30)),
+)
+
+# "tem a base da distância": já correu perto da distância num treino só e já teve semana perto do
+# piso do volume de pico (sem isso ainda está construindo a base)
+_BASE_LONG_SHARE = 0.7
+_BASE_WEEK_SHARE = 0.7
+
 # a prova mais perto que isto está no taper: não há mais "rota", o recuo é quem manda
 _MIN_WEEKS_LEFT = 3
 
@@ -58,6 +76,10 @@ class GoalPath:
     week_gap: float
     runs_per_week: int
     hard_pct: int | None
+    # a janela de preparo da distância pra ele (já tem a base? quantas semanas esse preparo leva)
+    has_base: bool = False
+    window: tuple[int, int] = (0, 0)
+    window_name: str = ""
 
 
 def reference_for(distance_km: float) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -70,6 +92,21 @@ def reference_for(distance_km: float) -> tuple[tuple[int, int], tuple[int, int]]
             return long_run, weekly
 
     return _REFERENCE[-1][1], _REFERENCE[-1][2]
+
+
+def prep_window(distance_km: float, has_base: bool) -> tuple[str, tuple[int, int]]:
+    """(nome da distância, janela de preparo em semanas) pra quem já tem a base da distância ou
+    ainda está construindo."""
+
+    for limit, name, with_base, building in _PREP_WINDOWS:
+
+        if distance_km <= limit:
+
+            return name, with_base if has_base else building
+
+    _, name, with_base, building = _PREP_WINDOWS[-1]
+
+    return name, with_base if has_base else building
 
 
 def _running_mean(values: list[float]) -> float | None:
@@ -137,6 +174,13 @@ def assess(
     # com 3 corridas ou menos por semana o volume de referência é o piso da faixa
     week_target = week_ref[0] if runs_per_week <= 3 else (week_ref[0] + week_ref[1]) / 2
 
+    has_base = (
+        max(recent_long, best_long) >= _BASE_LONG_SHARE * distance_km
+        and best_week >= _BASE_WEEK_SHARE * week_ref[0]
+    )
+
+    window_name, window = prep_window(distance_km, has_base)
+
     return GoalPath(
         weeks_left=weeks_left,
         distance_km=distance_km,
@@ -153,6 +197,9 @@ def assess(
         week_gap=max(0.0, week_target - projected_week),
         runs_per_week=runs_per_week,
         hard_pct=hard_pct,
+        has_base=has_base,
+        window=window,
+        window_name=window_name,
     )
 
 
@@ -164,6 +211,65 @@ def _km(value: float) -> str:
 def _distance(km: float) -> str:
 
     return f"{round(km, 1):g}".replace(".", ",")
+
+
+def cycle_sentence(path: GoalPath) -> str:
+    """ONDE ele está no ciclo de preparo da prova: a janela típica da distância pro nível dele e se
+    cabe folgado, dentro ou abaixo. É o que dá PESO a cada semana — o coach que sabe que o ciclo é
+    curto não gasta semana com recuo sem motivo real nem com o dente de serra."""
+
+    low, high = path.window
+
+    if not high:
+
+        return ""
+
+    from_base = (
+        f"ele já tem a base da distância (maior treino {_km(path.best_long)} km, melhor semana "
+        f"{_km(path.best_week)} km)"
+        if path.has_base
+        else (
+            f"ele ainda está CONSTRUINDO a base da distância (maior treino {_km(path.best_long)} km, "
+            f"melhor semana {_km(path.best_week)} km)"
+        )
+    )
+
+    other = _PREP_WINDOWS[[w[1] for w in _PREP_WINDOWS].index(path.window_name)]
+
+    other_range = other[3] if path.has_base else other[2]
+
+    other_who = (
+        "quem ainda está construindo a base" if path.has_base else "quem já tem a base da distância"
+    )
+
+    if path.weeks_left > high:
+
+        where = (
+            "sobra tempo: dá pra construir a base com calma — mas toda semana precisa ter uma "
+            "função no ciclo"
+        )
+
+    elif path.weeks_left >= low:
+
+        where = (
+            "está DENTRO da janela, sem muita folga: cada semana de recuo sem motivo real (corte "
+            "por sinal curto, dente de serra) é semana que não volta — prefira SEGURAR o que ele "
+            "absorveu a cortar, e só corte por dor, doença ou sinal que dura semanas"
+        )
+
+    else:
+
+        where = (
+            "está ABAIXO da janela: o ciclo é CURTO pra esse nível — priorize a consistência e o "
+            "que a prova mais cobra, não gaste semana, e seja honesto com ele sobre o que cabe"
+        )
+
+    return (
+        f"JANELA DE PREPARO (referência de treinador, não regra): pra {path.window_name}, o "
+        f"preparo costuma levar {low}-{high} semanas pra esse perfil ({other_who}: "
+        f"{other_range[0]}-{other_range[1]}). {from_base[0].upper()}{from_base[1:]}; faltam "
+        f"{path.weeks_left} semanas — {where}."
+    )
 
 
 def _facts(path: GoalPath) -> str:
@@ -188,7 +294,7 @@ def _facts(path: GoalPath) -> str:
         f"semanas, {_km(path.best_long)}), ~{_km(path.recent_week)} km por semana em semana de "
         f"corrida (a melhor, {_km(path.best_week)}).{hard} Se seguir no passo das últimas "
         f"semanas chega na prova com longão de ~{_km(path.projected_long)} km e "
-        f"~{_km(path.projected_week)} km/semana"
+        f"~{_km(path.projected_week)} km/semana. {cycle_sentence(path)}"
     )
 
 

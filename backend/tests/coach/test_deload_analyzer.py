@@ -307,7 +307,8 @@ def test_delivering_athlete_with_falling_recovery_gets_no_deload():
     assert d.due is False
     assert d.delivery_held is True
     text = deload_directive(d, 21)
-    assert "ENTREGOU" in text and "NÃO reduza volume" in text
+    assert "ENTREGOU" in text and "SEGURAR não é cortar" in text
+    assert 'NÃO marque "is_deload"' in text
     assert deload_chat_line(d) == ""
 
 
@@ -341,3 +342,20 @@ def test_delivering_with_no_body_signal_changes_nothing():
 
     assert d.due is False and d.delivery_held is False
     assert deload_directive(d) == ""
+
+
+def test_the_hold_directive_carries_his_numbers_and_the_cycle():
+
+    d = DeloadAnalyzer.assess(
+        [60, 70, 90], _recovery(hrv=FALLING), acwr=1.2,
+        body_state=BODY_RECOVERY_FLAG, delivering=True, weeks_to_race=20,
+    )
+
+    text = deload_directive(
+        d, 20,
+        held=" — na última semana fechada ele correu 31 km, maior treino 16 km (prescrito 30 km)",
+    )
+
+    assert "correu 31 km, maior treino 16 km" in text
+    assert "ciclo de preparo da prova" in text
+    assert "maior dos últimos 30 dias" in text           # o salto de UMA corrida é o que pesa

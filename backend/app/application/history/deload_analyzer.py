@@ -268,7 +268,9 @@ class DeloadAnalyzer:
 _FAR_FROM_RACE_WEEKS = 8
 
 
-def deload_directive(decision: DeloadDecision, weeks_to_race: int | None = None) -> str:
+def deload_directive(
+    decision: DeloadDecision, weeks_to_race: int | None = None, held: str = "",
+) -> str:
     """Sinal COACH-facing pro plano: o corpo está pedindo descarga. É
     CONHECIMENTO, não ordem — a IA pesa com o resto do quadro e decide
     (descarregar, segurar ou seguir). Vazio quando não é hora — sem ruído."""
@@ -290,13 +292,26 @@ def deload_directive(decision: DeloadDecision, weeks_to_race: int | None = None)
 
     if decision.delivery_held:
 
+        cycle = (
+            " Ele está dentro do ciclo de preparo da prova (veja a JANELA DE PREPARO): cada "
+            "semana tem função, e recuo sem motivo real é semana que não volta."
+            if weeks_to_race is not None
+            else ""
+        )
+
         return (
-            f"SINAL CURTO DE CORPO ({decision.reason}). Ele ENTREGOU o plano: quem cumpre "
-            "a semana está provando que absorve a carga — sono curto e recuperação "
-            "oscilando são a vida real de qualquer atleta (trabalho, preocupações), não "
-            "motivo pra cortar. NÃO reduza volume nem longão por isso: siga a rota. O "
-            "cuidado vai pra QUALIDADE do leve (leve de verdade, pela FC) e pra não "
-            "empilhar intensidade nova. Só recue por dor, doença ou sobrecarga real."
+            f"SINAL CURTO DE CORPO ({decision.reason}). Ele ENTREGOU o plano: quem cumpre a "
+            "semana está provando que absorve a carga — sono curto e recuperação oscilando são a "
+            "vida real de qualquer atleta (trabalho, preocupações), não motivo pra cortar. "
+            f"SEGURAR não é cortar: repita o que ele absorveu (mesmo volume, ±10%){held}, mantenha "
+            "UM estímulo de qualidade (encurtado se quiser — num recuo a qualidade é o que se "
+            "protege, o volume cede antes), longão perto do que ele acabou de correr, e leves de "
+            "verdade leves (pelo teto de FC). Depois volte a subir aos poucos (~5-8% por semana, "
+            "e o longão +1 km por vez, nunca mais de ~10% sobre o maior dos últimos 30 dias — é o "
+            "salto de UMA corrida que mais pesa em lesão, não o total da semana). NÃO marque "
+            '"is_deload" nem chame de descarga: é segurar a rampa, e o texto pro atleta tem que '
+            "dizer isso, com os números dele. Recuo de verdade (−35 a −45%) só com dor, doença ou "
+            f"sinal que dura semanas.{cycle}"
         )
 
     if not decision.due:

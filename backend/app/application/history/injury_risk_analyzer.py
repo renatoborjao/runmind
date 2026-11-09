@@ -2,8 +2,12 @@
 veredito, ANTES de virar lesão. Puro/determinístico, sinal de coach (não
 diagnóstico médico). Fatores (consenso prático de carga:lesão):
 
-- SPIKE de carga (ACWR alto) — o preditor nº1 modificável; >1.5 é alerta forte.
-- RAMPA de volume — semana pulou muito acima da anterior (regra dos ~10%).
+- SALTO DE SESSÃO — a maior corrida da semana muito acima da maior dos 30 dias anteriores: é o
+  que o estudo com 5 mil corredores (Frandsen et al., BJSM 2025) achou como melhor preditor.
+- SPIKE de carga (ACWR alto) e RAMPA de volume (semana pulou) — preditores FRACOS (Impellizzeri
+  2020: sem evidência de que a razão sirva pra reduzir lesão; Buist 2008: a regra dos 10% não
+  protegeu). Seguem como sinal, mas quando NENHUMA corrida foi um salto de sessão valem no
+  máximo 1 ponto juntos: a semana pode ter dobrado só porque ele voltou a 3 corridas.
 - RECUPERAÇÃO caindo — HRV/FC-repouso piorando (corpo não acompanha a carga).
 - HISTÓRICO de lesão — quem já lesionou tem risco de base maior no mesmo spike.
 
@@ -25,6 +29,11 @@ from app.domain.entities.training_load import (
 # salto de carga semana-a-semana que já é "rampa rápida demais" (bem além dos
 # ~10%/semana recomendados)
 _RAMP_JUMP = 1.5  # última semana ≥ 1.5× a anterior
+
+# salto de sessão: até aqui é seguro; acima, risco de lesão por corrida única sobe (10–30% acima da
+# maior dos 30 dias já foi 64% mais risco no estudo); o dobro ou mais é de longe o pior
+_SAFE_SESSION_SPIKE = 0.10
+_HUGE_SESSION_SPIKE = 1.0
 
 # pontuação → nível
 _HIGH_AT = 3
@@ -53,23 +62,46 @@ class InjuryRiskAnalyzer:
 
             reasons.append("forma quebrando sob fadiga (cadência caindo no fim)")
 
+        # SALTO DE SESSÃO — o preditor mais claro: UMA corrida bem maior que a maior dos últimos
+        # 30 dias. É o que a carga tem de mecânico (tendão, osso), e é o que mais pesa aqui.
+        session_known = load.long_spike is not None
+
+        session_safe = session_known and load.long_spike <= _SAFE_SESSION_SPIKE
+
+        if session_known and not session_safe:
+
+            big, prev = load.long_run_km or (0.0, 0.0)
+
+            points += 2 if load.long_spike >= _HUGE_SESSION_SPIKE else 1
+
+            reasons.append(
+                f"o maior treino da semana ({big:g} km) foi {load.long_spike * 100:.0f}% maior "
+                f"que o maior dos 30 dias anteriores ({prev:g} km)"
+            )
+
+        # os preditores SEMANAIS (fracos): contam inteiros enquanto não se sabe da sessão, ou
+        # quando alguma corrida foi mesmo um salto; sem salto de sessão, no máximo 1 ponto juntos
+        weekly_points = 0
+
+        weekly_reasons: list[str] = []
+
         # SPIKE de carga (ACWR) — em BASE BAIXA sem aumento real de tempo a
         # razão alta não é pico (o analisador da carga já decidiu: low_base)
         if load.acwr is not None and load.low_base is None:
 
             if load.acwr > ACWR_CAUTION_MAX:
 
-                points += 2
+                weekly_points += 2
 
-                reasons.append(
+                weekly_reasons.append(
                     f"carga subiu rápido demais (ACWR {load.acwr:.1f})"
                 )
 
             elif load.acwr > ACWR_OPTIMAL_MAX:
 
-                points += 1
+                weekly_points += 1
 
-                reasons.append(f"carga na faixa de atenção (ACWR {load.acwr:.1f})")
+                weekly_reasons.append(f"carga na faixa de atenção (ACWR {load.acwr:.1f})")
 
         # RAMPA de volume (última semana muito acima da anterior) — voltar ao que ele sustentava
         # depois de uma semana fraca (chuva, doença) não é rampa: o analisador da carga já decidiu
@@ -80,9 +112,28 @@ class InjuryRiskAnalyzer:
             and InjuryRiskAnalyzer._ramped(load.weekly_loads)
         ):
 
-            points += 1
+            weekly_points += 1
 
-            reasons.append("volume pulou muito de uma semana pra outra")
+            weekly_reasons.append("volume pulou muito de uma semana pra outra")
+
+        if session_safe and weekly_points > 1:
+
+            weekly_points = 1
+
+        if weekly_reasons:
+
+            points += weekly_points
+
+            reasons.extend(weekly_reasons)
+
+            if session_safe:
+
+                big, prev = load.long_run_km or (0.0, 0.0)
+
+                reasons.append(
+                    f"mas nenhuma corrida foi salto: o maior treino ({big:g} km) ficou dentro de "
+                    f"10% do maior dos 30 dias anteriores ({prev:g} km)"
+                )
 
         # RECUPERAÇÃO caindo
         if recovery.hrv_direction == FALLING or recovery.rhr_direction == FALLING:

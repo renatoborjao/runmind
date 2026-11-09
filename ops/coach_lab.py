@@ -125,6 +125,78 @@ async def _dossier(profile):
     print(text)
 
 
+async def _load_probe(profile):
+    """SONDA DA CARGA (só leitura, ZERO IA): os números por trás de "ACWR / rebote /
+    salto de sessão" pra conferir o veredito de carga contra o dado real."""
+
+    from app.application.coach.intelligence.body_reading_service import BodyReadingService
+    from app.application.history.training_load_analyzer import (
+        _GAP_SHARE, _MAX_STEP, TrainingLoadAnalyzer, sustained_average,
+    )
+    from app.core.clock import today_local
+    from app.domain.entities.training_history import TrainingHistory
+    from app.domain.value_objects.sports import is_foot_sport
+    from app.infrastructure.persistence.activity_archive_repository import (
+        ActivityArchiveRepository,
+    )
+
+    reading, _t = BodyReadingService.read(profile, persist=False)
+    load = reading.load
+    acts = [a for a in ActivityArchiveRepository().load_activities(profile) if is_foot_sport(a.sport)]
+    history = TrainingHistory(activities=acts)
+    ref = TrainingLoadAnalyzer._last_complete_day(history, today_local())
+
+    def back(w):
+        end = ref - timedelta(days=7 * w)
+        start = end - timedelta(days=6)
+        runs = [a for a in acts if start <= a.start_date.date() <= end]
+        return (
+            sum((a.moving_time or 0) / 60 for a in runs),
+            sum((a.distance or 0) / 1000 for a in runs),
+            max([(a.distance or 0) / 1000 for a in runs] or [0.0]),
+            len(runs),
+        )
+
+    _s(f"CARGA {profile} — ref {ref} — corpo {reading.body_state} — status {load.status} — ACWR {load.acwr}")
+    print(f"rebote={getattr(load, 'rebound', None)} low_base={getattr(load, 'low_base', None)} "
+          f"long_spike={getattr(load, 'long_spike', 'n/d')} weekly_minutes={load.weekly_minutes}")
+    print("semana (fechando em ref-7w) | min | km | maior km | corridas")
+    for w in range(12, -1, -1):
+        m, km, big, n = back(w)
+        print(f"  {w:>2} sem atrás: {m:6.0f} min · {km:5.1f} km · maior {big:4.1f} · {n} corr")
+    sust = sustained_average(lambda w: back(w)[0])
+    minutes = load.weekly_minutes
+    print(f"sustentado (min) = {sust} · aguda = {minutes[-1]} · gap_share={_GAP_SHARE} max_step={_MAX_STEP}")
+    if sust:
+        before = minutes[:-1]
+        print(f"  aguda<=sustentado: {minutes[-1] <= sust} · tem interrupção (<{_GAP_SHARE*sust:.0f}): "
+              f"{any(x < _GAP_SHARE*sust for x in before)} · degrau<= {_MAX_STEP}x melhor do mês "
+              f"({_MAX_STEP*max(before):.0f}): {minutes[-1] <= _MAX_STEP*max(before)}")
+    print(f"alerta antes da carga? alert_preceded_load={getattr(reading, 'alert_preceded_load', 'n/d')} "
+          f"alert_since={getattr(reading, 'alert_since', 'n/d')}")
+    try:
+        from app.application.history.recovery_alert_run import RecoveryAlertRun
+        from app.infrastructure.persistence.garmin_health_repository import GarminHealthRepository
+        since = RecoveryAlertRun.since(GarminHealthRepository().load(profile), today_local())
+        print(f"início do alerta de recuperação (série Garmin): {since}")
+        if since:
+            earlier = TrainingLoadAnalyzer.analyze(history, reference_date=since)
+            print(f"  carga NAQUELE dia: status={earlier.status} acwr={earlier.acwr} "
+                  f"min_semanais={earlier.weekly_minutes} dias_de_historico={earlier.days_of_history}")
+    except Exception as e:
+        print(f"  (sonda do alerta falhou: {e})")
+    # salto de SESSÃO: maior corrida dos últimos 7 dias × maior dos 30 dias anteriores
+    acute_start = ref - timedelta(days=6)
+    prev_start = acute_start - timedelta(days=30)
+    acute_long = max([(a.distance or 0) / 1000 for a in acts if acute_start <= a.start_date.date() <= ref] or [0.0])
+    prev_long = max([(a.distance or 0) / 1000 for a in acts if prev_start <= a.start_date.date() < acute_start] or [0.0])
+    if prev_long:
+        print(f"salto de sessão: maior dos últimos 7d {acute_long:.1f} km × maior dos 30d anteriores {prev_long:.1f} km "
+              f"= {100 * (acute_long / prev_long - 1):+.0f}%")
+    else:
+        print(f"salto de sessão: sem corrida nos 30d anteriores (maior 7d {acute_long:.1f} km)")
+
+
 async def _chat(profile, runner, messages=CHAT_SCENARIOS):
 
     from app.application.coach.conversation.coach_brain import CoachBrain
@@ -1166,6 +1238,7 @@ async def main() -> None:
 
         steps = (
             ("dossier", lambda: _dossier(profile)),
+            ("load", lambda: _load_probe(profile)),
             ("chat", lambda: _chat(
                 profile, runner,
                 [m.strip() for m in args.messages.split("||") if m.strip()]

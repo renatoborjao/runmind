@@ -1,0 +1,107 @@
+O QUE O COACH APRENDEU, E DE ONDE VEIO (08/11/2026)
+
+Este arquivo existe pra o Renato (e quem vier depois) saber POR QUE o coach pensa do jeito que
+pensa, e poder conferir a fonte. Tudo abaixo virou CONHECIMENTO no prompt do coach (dado + "decida"),
+nunca regra de código por cima da decisão dele.
+
+Honestidade sobre as fontes: li resumos, páginas de universidade e matérias; não li todos os
+artigos completos. Onde a fonte é secundária ou comercial, está dito. Os números do estudo de
+Aarhus vêm da divulgação da própria universidade (percentuais de risco), não da tabela do artigo.
+
+
+1) O SALTO DE UMA CORRIDA É O QUE MAIS PESA EM LESÃO
+   Estudo: "How much running is too much?" (Frandsen e colegas, British Journal of Sports Medicine,
+   2025). 5.205 corredores de 87 países, 18 meses, relógio Garmin, 588 mil corridas. Cada corrida foi
+   comparada com a MAIOR corrida dos 30 dias anteriores.
+   Achado: passar de 10% acima da maior corrida dos 30 dias já aumentou o risco de lesão por
+   sobrecarga (10 a 30% acima: cerca de 64% mais risco; 30 a 100%: cerca de 52%; mais que o dobro:
+   cerca de 128%). A variação de volume semana a semana e a razão aguda/crônica (ACWR) previram
+   bem menos. É estudo observacional: mostra associação, não prova causa.
+   Fontes:
+   - https://ph.au.dk/display/artikel/everything-we-thought-about-running-injury-development-was-wrong-study-shows
+   - https://www.eurekalert.org/news-releases/1090184
+   O que mudou no coach: o analisador de carga agora calcula o "salto de sessão" (maior corrida da
+   semana contra a maior dos 30 dias anteriores). O risco de lesão passou a pesar esse salto, e a
+   razão semanal e a rampa de volume valem no máximo 1 ponto juntas quando nenhuma corrida foi salto.
+
+2) A RAZÃO AGUDA/CRÔNICA (ACWR) NÃO É BOM PREDITOR DE LESÃO
+   Impellizzeri e colegas (2020): críticas conceituais e estatísticas; sem evidência de que a razão
+   sirva pra reduzir lesão. Ela continua útil como MONITORAMENTO, não como gatilho de corte.
+   - https://pmc.ncbi.nlm.nih.gov/articles/PMC7534938/
+   O que mudou: o ACWR segue no sistema, mas não decide sozinho o corte. Voltar ao platô que o
+   atleta já sustentava (mesmo passando 10% da média das melhores semanas) é retorno, não pico,
+   quando nenhuma corrida foi salto de sessão.
+
+3) A REGRA DOS 10% POR SEMANA NÃO PROTEGEU
+   Ensaio com 532 iniciantes (Buist e colegas): crescer ~10% por semana não reduziu lesões frente a
+   um programa que crescia mais. (Li só resumos de fontes secundárias; confira o artigo original
+   antes de citar números.)
+   - https://marathonhandbook.com/the-10-rule-new-study-suggests-weve-been-doing-it-wrong-this-whole-time/
+   O que mudou: o texto do plano não trata +30% ou +100% de volume SEMANAL como perigo por si só;
+   o teto é o salto de uma corrida e a coerência com o que o atleta sustentou.
+
+4) HRV E RECUPERAÇÃO: TENDÊNCIA, NÃO UM DIA
+   - Meta-análise do treino guiado por HRV em atletas de endurance (Granero-Gallegos e colegas,
+     2020): efeito pequeno a favor do treino guiado por HRV no VO2max, mais consistente em
+     amadores. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7663087/
+   - Plews e colegas: a média de uma semana de HRV acompanha melhor a adaptação do que um dia
+     isolado (estudos com poucos atletas de elite). https://openrepository.aut.ac.nz/items/d7b41d29-e92e-4acf-90ea-ed68d84d6c73
+   O que mudou/confirmou: o coach lê tendência de semanas contra a base do próprio atleta (já era
+   assim) e agora também pergunta pela ORDEM: se a recuperação começou a cair ANTES de a carga
+   subir, a carga que subiu depois não foi a causa. "Carga alta + recuperação caindo" deixa de
+   ser lido como sobrecarga de treino nesse caso (vira sinal de recuperação: sono, doença, vida).
+
+5) PARADA E VOLTA: A QUALIDADE SE PROTEGE, O VOLUME CEDE PRIMEIRO
+   - Mujika e Padilla (2000) e revisão de 2024 sobre destreino: com treino reduzido, manter a
+     INTENSIDADE e cortar só moderadamente a frequência limita a perda; o volume pode ser cortado
+     bem mais. https://frontiersin.org/articles/10.3389/fphys.2023.1334766/full
+   - Regras de bolso de volta (não são orientação clínica): recomeçar perto de metade do volume
+     depois de 2 semanas parado, ~30% depois de 4, e subir uns 10-15% por semana.
+     https://sunriserunco.com/running-after-an-injury/
+   O que mudou: o "segurar" mantém UM estímulo de qualidade (encurtado, se preciso), o longão perto
+   do que o atleta acabou de correr e leves de verdade leves; recuo fundo (-35 a -45%) só com dor,
+   doença ou sinal que dura semanas.
+
+6) LEVE DE VERDADE LEVE
+   Distribuição de intensidade (Seiler e Tønnessen, 2009; Stöggl e Sperlich, 2014; Muñoz e
+   colegas em corredores recreativos): muito volume fácil de verdade e poucas sessões fortes bem
+   feitas. A vantagem do modelo polarizado aparece quando o atleta cumpre a distribuição.
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC4621419/
+   Nota local: no placar do Renato, só 6 de 11 leves/longões ficaram abaixo do teto de FC.
+
+7) AFINAÇÃO (TAPER)
+   Bosquet e colegas (2007), meta-análise: o melhor padrão foi ~2 semanas, com redução de volume
+   exponencial de 41 a 60%, mantendo intensidade e frequência. https://pubmed.ncbi.nlm.nih.gov/17762369/
+   (O código já tinha taper; isto confirma a faixa.)
+
+8) JANELA DE PREPARO DA PROVA (O CICLO)
+   Referência trazida pelo Renato (GPA Assessoria Esportiva / ge): pra meia maratona, 16 a 20
+   semanas pra quem já tem base de meia; 24 a 26 semanas pra intermediário ou iniciante com alguma
+   base. Para 5 km, 10 km, 15 km e maratona usamos faixas típicas de treinador (hipótese, ajustável
+   em um lugar só: backend/app/application/history/goal_path.py, tabela _PREP_WINDOWS).
+   Planos comerciais de meia abaixo de 2h (fontes de confiança menor, só pra ordem de grandeza):
+   longão de pico de 16 a 19 km e 45 a 55 km por semana em 3 a 4 corridas.
+   - https://www.runnersblueprint.com/how-many-miles-per-week-do-you-need-for-a-half-marathon-by-goal-training-templates/
+   - https://www.trainingpeaks.com/training-plans/running/half-marathon/tp-595178/run-specific-half-marathon-intermediate-12-weeks
+   O que mudou: o coach agora sabe em que ponto do ciclo cada atleta com prova está (se ele já tem
+   a base da distância, qual a janela de preparo dele, e se falta tempo, está dentro ou sobra).
+   Dentro da janela, semana de recuo sem motivo real é semana que não volta: prefere SEGURAR o que
+   o atleta absorveu a cortar.
+
+9) LONGÃO
+   Regra atribuída a Daniels: o longão não passa de ~25% do volume semanal nem de ~150 minutos.
+   (Fontes secundárias.) Com 3 corridas por semana a fatia do longão sobe naturalmente; o que o
+   coach vigia é o salto de UMA corrida (item 1), não a fatia.
+
+
+O QUE NÃO FOI FEITO DE PROPÓSITO
+- Nenhuma regra de código manda no plano. O coach recebe dado e conhecimento e decide.
+- Não foi mexido o corte de verdade: dor, doença declarada ou queda que dura semanas continuam
+  pedindo recuo.
+
+LIMITES DESTAS FONTES
+- Estudos observacionais mostram associação, não causa.
+- Parte do que li vem de matérias e sites comerciais; os números exatos devem ser conferidos nos
+  artigos originais antes de virar promessa ao atleta.
+- Os números do atleta (HRV, FC de repouso, sono) podem estar deslocados por coisas que ele
+  contou ao coach (substâncias, cigarro, doença); o texto do coach já manda conferir isso.

@@ -75,3 +75,10 @@ class TrainingLoad:
     # (doença, chuva, viagem) — o ACWR/crônica acima já estão sobre o que ele SUSTENTAVA.
     # (minutos/semana que ele sustentava, minutos desta semana)
     rebound: tuple[float, float] | None = None
+    # SALTO DE SESSÃO: a maior corrida dos últimos 7 dias ÷ a maior dos 30 dias anteriores − 1
+    # (0,03 = +3%). É o preditor de lesão que o estudo com 5 mil corredores (BJSM 2025) achou mais
+    # claro — a razão aguda/crônica e a variação semana a semana previram bem menos. None sem
+    # corrida na semana ou sem corrida nos 30 dias anteriores (nada com que comparar).
+    long_spike: float | None = None
+    # (maior corrida da semana, maior dos 30 dias anteriores), em km — pra falar com número
+    long_run_km: tuple[float, float] | None = None

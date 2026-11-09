@@ -1001,6 +1001,7 @@ class AthleteDossier:
             lines.append(
                 body_plan_directive(
                     reading, data.trajectory, data.drift, data.ceiling,
+                    delivering=AthleteDossier._is_delivering(data),
                 )
             )
 
@@ -1144,7 +1145,9 @@ class AthleteDossier:
 
                         return deload_chat_line(decision)
 
-                    return deload_directive(decision, weeks_to_race)
+                    return deload_directive(
+                        decision, weeks_to_race, held=AthleteDossier._held_numbers(data),
+                    )
 
                 decision = DeloadAnalyzer.assess(
                     reading.load.weekly_loads,
@@ -1213,7 +1216,15 @@ class AthleteDossier:
                 current,
             )
 
-            return adaptation.render(found, directive=plan_voice) if found else ""
+            return (
+                adaptation.render(
+                    found,
+                    directive=plan_voice,
+                    load_unrelated=bool(getattr(data.reading, "alert_preceded_load", False)),
+                )
+                if found
+                else ""
+            )
 
         except Exception as e:
 
@@ -1681,11 +1692,49 @@ class AthleteDossier:
         )
 
     @staticmethod
+    def _held_numbers(data: _Inputs) -> str:
+        """Os números do que ele ABSORVEU, pro "segurar": o que fechou na última semana fechada e
+        o maior treino dela (" — na última semana fechada correu X km, maior treino Y km")."""
+
+        try:
+
+            closed = [
+                w for w in AthleteDossier._ledger(data) if not w.in_progress and w.planned_km > 0
+            ]
+
+            if not closed:
+
+                return ""
+
+            last = closed[-1]
+
+            long_part = f", maior treino {last.done_long_km:.0f} km" if last.done_long_km else ""
+
+            return (
+                f" — na última semana fechada ele correu {last.done_km:.0f} km{long_part} "
+                f"(prescrito {last.planned_km:.0f} km)"
+            )
+
+        except Exception as e:
+
+            print(f"Dossiê: números do segurar falharam p/ '{data.profile}': {e}")
+
+            return ""
+
+    @staticmethod
     def _is_delivering(data: _Inputs) -> bool:
         """O atleta ENTREGOU o plano? A semana fechada mais recente com volume
         prescrito saiu ~cheia (>= 90%) E ele não vem de não-entrega (mediana das
         últimas semanas acima do piso `DELIVERY_LOW`). Alimenta a descarga: quem
         entrega absorve — sinal curto de corpo não corta volume dele."""
+
+        cached = getattr(data, "_delivering_cache", None)
+
+        if cached is not None:
+
+            return cached
+
+        result = False
 
         try:
 
@@ -1695,23 +1744,22 @@ class AthleteDossier:
 
             closed = [w for w in ledger if not w.in_progress and w.planned_km > 0]
 
-            if not closed:
+            if closed:
 
-                return False
+                last = closed[-1]
 
-            last = closed[-1]
-
-            if last.done_km / last.planned_km < 0.9:
-
-                return False
-
-            return week_ledger.low_delivery(ledger) is None
+                result = (
+                    last.done_km / last.planned_km >= 0.9
+                    and week_ledger.low_delivery(ledger) is None
+                )
 
         except Exception as e:
 
             print(f"Dossiê: entrega falhou p/ '{data.profile}': {e}")
 
-            return False
+        data._delivering_cache = result
+
+        return result
 
     @staticmethod
     def _delivered_last(ledger, ref: date) -> float | None:

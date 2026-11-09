@@ -70,6 +70,24 @@ _SUSTAINED_LOOKBACK_WEEKS = 9      # semanas ANTERIORES à aguda onde procurar o
 _GAP_SHARE = 0.5                   # semana abaixo desta fração do sustentado = interrupção
 _MAX_STEP = 1.3                    # a aguda não passa disto vezes a MELHOR semana do último mês
 
+# Voltar ao PLATÔ dele não é pico, mesmo que a semana passe um pouco do sustentado: o sustentado é
+# uma MÉDIA das melhores semanas, então a melhor semana dele fica acima dela (Renato 08/11: 195 min
+# contra um sustentado de 183, e a melhor semana dele era 193). Tolerância de 10% sobre a média.
+_RETURN_TOLERANCE = 1.10
+
+# base rasa por parada: além de "alguma semana abaixo de metade do sustentado", vale a média das
+# semanas da janela crônica abaixo desta fração do sustentado (Renato: 128, 112 e 91 min contra
+# 183 — a média é 60%; uma única semana de 91 min contra o corte de 91,7 era a diferença entre
+# reconhecer a parada ou não)
+_SHALLOW_SHARE = 0.75
+
+# SALTO DE SESSÃO seguro: até esta fração acima da maior corrida dos 30 dias anteriores. Acima
+# disso o risco de lesão por corrida única sobe (Frandsen et al., BJSM 2025: 5.205 corredores;
+# 10–30% acima já foi 64% mais risco). Abaixo, a semana pode ter voltado a 3 corridas sem que
+# NENHUMA delas tenha sido um salto — e aí a razão semanal alta é frequência, não impacto.
+_SAFE_LONG_SPIKE = 0.10
+_LONG_SPIKE_WINDOW_DAYS = 30
+
 
 def sustained_average(week_load_back) -> float | None:
     """O que ele SUSTENTAVA: a média das `_BASELINE_WEEKS` melhores semanas das
@@ -212,11 +230,19 @@ class TrainingLoadAnalyzer:
 
             low_base = (round(base_minutes), round(minutes[-1] - base_minutes))
 
+        long_run_km = TrainingLoadAnalyzer._long_run_km(history, ref)
+
+        long_spike = (
+            round(long_run_km[0] / long_run_km[1] - 1, 3) if long_run_km is not None else None
+        )
+
         rebound = None
 
         if status in (LOAD_CAUTION, LOAD_HIGH) and race_aware is None:
 
-            sustained = TrainingLoadAnalyzer._rebound_base(history, ref, minutes)
+            sustained = TrainingLoadAnalyzer._rebound_base(
+                history, ref, minutes, long_spike=long_spike
+            )
 
             if sustained is not None:
 
@@ -243,6 +269,8 @@ class TrainingLoadAnalyzer:
             weekly_minutes=minutes,
             low_base=low_base,
             rebound=rebound,
+            long_spike=long_spike,
+            long_run_km=long_run_km,
         )
 
     # ------------------------------------------------------------------
@@ -548,6 +576,7 @@ class TrainingLoadAnalyzer:
         history: TrainingHistory,
         ref: date,
         minutes: list[float],
+        long_spike: float | None = None,
     ) -> float | None:
         """Os minutos semanais que ele SUSTENTAVA, quando a razão alta é só o retorno a eles —
         None quando é salto de verdade (ou não dá pra afirmar o contrário).
@@ -558,7 +587,15 @@ class TrainingLoadAnalyzer:
         crônica têm interrupção (abaixo de metade do sustentado — a base rasa vem de parada, não de
         mês fraco inteiro) e (3) a aguda não é um salto sobre a MELHOR semana do último mês (até
         30% acima): quem volta de meses fracos direto pra perto do pico antigo continua sendo
-        salto, e quem sobe de 128 pra 156 min na volta de uma parada não é."""
+        salto, e quem sobe de 128 pra 156 min na volta de uma parada não é.
+
+        Duas correções (Renato 08/11: 91 → 195 min, ACWR 1,42, "sobrecarregado", plano cortado,
+        mesmo tendo o MAIOR TREINO só 3% acima do maior dos 30 dias): (a) a aguda pode passar até
+        10% do sustentado (a média das melhores semanas fica abaixo da melhor semana dele); (b) o
+        passo de volume grande NÃO desqualifica o retorno quando NENHUMA corrida foi um salto de
+        sessão (`long_spike` dentro de 10%) — a semana dobrou porque ele voltou a 3 corridas, não
+        porque alguma ficou longa demais. A razão semanal prevê lesão pior que o salto de sessão
+        (Impellizzeri 2020; Frandsen 2025), então o salto de sessão é quem libera o passo grande."""
 
         acute = minutes[-1]
 
@@ -584,17 +621,55 @@ class TrainingLoadAnalyzer:
 
             return None
 
-        if acute > sustained:
+        if acute > _RETURN_TOLERANCE * sustained:
 
             return None
 
         before = minutes[:-1]
 
-        has_gap = any(load < _GAP_SHARE * sustained for load in before)
+        has_gap = any(load < _GAP_SHARE * sustained for load in before) or (
+            bool(before) and sum(before) / len(before) < _SHALLOW_SHARE * sustained
+        )
 
         small_step = acute <= _MAX_STEP * max(before)
 
-        return sustained if has_gap and small_step else None
+        safe_session = long_spike is not None and long_spike <= _SAFE_LONG_SPIKE
+
+        return sustained if has_gap and (small_step or safe_session) else None
+
+    @staticmethod
+    def _long_run_km(history: TrainingHistory, ref: date) -> tuple[float, float] | None:
+        """(maior corrida dos últimos 7 dias, maior dos 30 dias ANTERIORES a eles), em km. None
+        sem corrida na semana ou sem corrida nos 30 dias anteriores — sem base de comparação não há
+        "salto" a afirmar (a primeira corrida longa de quem volta de uma parada longa não é um)."""
+
+        acute_start = ref - timedelta(days=_ACUTE_DAYS - 1)
+
+        prev_start = acute_start - timedelta(days=_LONG_SPIKE_WINDOW_DAYS)
+
+        acute_long = 0.0
+
+        prev_long = 0.0
+
+        for a in history.activities:
+
+            day = a.start_date.date()
+
+            km = (getattr(a, "distance", None) or 0) / 1000
+
+            if acute_start <= day <= ref:
+
+                acute_long = max(acute_long, km)
+
+            elif prev_start <= day < acute_start:
+
+                prev_long = max(prev_long, km)
+
+        if acute_long <= 0 or prev_long <= 0:
+
+            return None
+
+        return round(acute_long, 1), round(prev_long, 1)
 
     @staticmethod
     def _weekly_loads(per_day: dict[date, float], ref: date) -> list[float]:

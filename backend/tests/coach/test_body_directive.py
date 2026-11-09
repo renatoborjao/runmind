@@ -139,3 +139,63 @@ def test_recovery_flag_stable_baseline_keeps_progression():
 
     assert "SEGURE" not in text
     assert "NÃO trave a progressão" in text
+
+
+# ---- quem ENTREGA não é mandado aliviar; a queda que veio antes da carga não é sobrecarga ----
+
+
+def test_strained_but_delivering_is_told_to_hold_what_he_absorbed_not_to_cut():
+
+    text = body_plan_directive(_reading(BODY_STRAINED), delivering=True)
+
+    assert "ENTREGOU o plano" in text and "SEGURAR o que ele absorveu" in text
+    assert "dente de serra" in text
+    assert "alivie o volume" not in text
+
+
+def test_strained_without_delivery_keeps_the_old_instruction():
+
+    text = body_plan_directive(_reading(BODY_STRAINED), delivering=False)
+
+    assert "alivie o volume/intensidade desta semana" in text
+
+
+def test_a_drop_that_came_before_the_load_rise_is_not_read_as_training_overload():
+
+    from datetime import date
+
+    reading = _reading(BODY_RECOVERY_FLAG)
+
+    reading.alert_preceded_load = True
+
+    reading.alert_since = date(2026, 10, 29)
+
+    text = body_plan_directive(reading)
+
+    assert "ORDEM" in text and "29/10" in text
+    assert "não a causou" in text and "motivo pra cortar volume" in text
+
+
+def test_the_hold_directive_also_carries_the_order_of_events():
+    """Renato 08/11 (FC de repouso 62→67, HRV 58→45 desde 29/10): é piora REAL e o ramo é o de
+    SEGURAR — e ele precisa dizer que a queda veio antes da carga subir."""
+
+    from datetime import date
+
+    from app.application.history.training_patterns import RecoveryDrift
+
+    drift = RecoveryDrift(
+        rhr_now=67, rhr_base=62, hrv_now=45, hrv_base=58, alert_streak=11,
+        sleep_avg=6.0, short_nights=6, nights=14,
+    )
+
+    reading = _reading(BODY_RECOVERY_FLAG)
+
+    reading.alert_preceded_load = True
+
+    reading.alert_since = date(2026, 10, 29)
+
+    text = body_plan_directive(reading, _traj(TRAJ_PERSISTING, 11), drift, 155)
+
+    assert "PIORA REAL" in text and "SEGURAR a progressão" in text
+    assert "ORDEM" in text and "29/10" in text and "não a causou" in text
