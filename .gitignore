@@ -246,3 +246,10 @@ ops/*.out
 *.pem
 *.bak
 *.bak-*
+
+# --- Dado de ATLETA gerado por ops/* fica na VM (nuvem), NUNCA no repositório ---
+# (leia pela tela: ops/relatorio_vm.sh; o relatório diário é gerado por ops/daily_report.sh)
+docs/lab_*.txt
+docs/auditoria_*.md
+docs/carga_*.txt
+docs/planos_*.md

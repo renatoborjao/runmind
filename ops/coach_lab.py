@@ -49,6 +49,12 @@ CHAT_SCENARIOS = (
 CONTEXT_ONLY = False
 CONTEXT_FULL = False
 
+# REPLAY: o cenário "plan" volta ao estado de ANTES de o plano da semana existir (o plano guardado
+# vira o da semana anterior e as mensagens do coach sobre ele somem). Sem isso, rodar o lab depois
+# do domingo faz o modelo LER a própria resposta ("ESTA SEMANA É DE DESCARGA…", a mensagem enviada
+# ao atleta) e ancorar nela — o teste não mede o código novo (Renato, 08/11).
+REPLAY = False
+
 # trechos do contexto do plano que provam o que a IA viu (rota, pedido do atleta, leve pela FC)
 SIGNALS = (
     "ROTA ATÉ A META", "ELE PEDE MAIS", "é o leve DELE", "Paces reais", "ÚLTIMA DOSE",
@@ -695,6 +701,65 @@ def _fmt_step(step, indent="    "):
     return [f"{indent}{step.kind} {size}{pace}{hr}"]
 
 
+def _replay_before_plan(profile, week):
+    """Reconstitui, SÓ em memória, o que o coach via ANTES de gerar o plano de `week`."""
+
+    from datetime import datetime
+
+    from app.infrastructure.persistence.coach_outbox_repository import CoachOutboxRepository
+    from app.infrastructure.persistence.weekly_plan_repository import WeeklyPlanRepository
+
+    repo = WeeklyPlanRepository()
+
+    stored = repo.load(profile)
+
+    if stored is None or stored.week_start < week:
+
+        print(f"(replay: ainda não existe plano de {week:%d/%m} — nada a reconstituir)")
+
+        return
+
+    earlier = [p for p in repo.history(profile) if p.week_start < week]
+
+    previous = earlier[-1] if earlier else None
+
+    cutoff = datetime.fromisoformat(stored.generated_at) if stored.generated_at else None
+
+    original_load = WeeklyPlanRepository.load
+
+    original_history = WeeklyPlanRepository.history
+
+    original_recent = CoachOutboxRepository.recent
+
+    WeeklyPlanRepository.load = lambda self, p: previous if p == profile else original_load(self, p)
+
+    WeeklyPlanRepository.history = lambda self, p: (
+        [x for x in original_history(self, p) if x.week_start < week]
+        if p == profile else original_history(self, p)
+    )
+
+    def recent(self, p, limit=3):
+
+        entries = original_recent(self, p, 500)
+
+        if p == profile and cutoff is not None:
+
+            entries = [
+                e for e in entries
+                if datetime.fromisoformat(str(e.get("timestamp"))) < cutoff
+            ]
+
+        return entries[-limit:]
+
+    CoachOutboxRepository.recent = recent
+
+    _s(
+        f"REPLAY: estado de ANTES do plano de {week:%d/%m} (gerado em {stored.generated_at}); "
+        f"plano guardado = {previous.week_start:%d/%m}" if previous else
+        f"REPLAY: estado de ANTES do plano de {week:%d/%m} (sem plano anterior)"
+    )
+
+
 async def _plan(profile, runner):
 
     from app.application.assessment.training_assessment_builder import (
@@ -727,6 +792,10 @@ async def _plan(profile, runner):
     goal = BuildTrainingGoal.execute(runner)
 
     week = WeeklyPlanService.upcoming_week_start()
+
+    if REPLAY:
+
+        _replay_before_plan(profile, week)
 
     context = AIPlanService._build_context(
         profile, runner, metrics, goal, history, WeeklyPlanRepository(), week,
@@ -1173,6 +1242,9 @@ async def main() -> None:
 
     parser.add_argument("--context-only", action="store_true")
 
+    # com "plan": refaz o estado de antes do plano da semana existir (ver REPLAY)
+    parser.add_argument("--replay", action="store_true")
+
     # com --context-only: imprime o contexto INTEIRO do plano (não só os sinais)
     parser.add_argument("--full", action="store_true")
 
@@ -1185,6 +1257,10 @@ async def main() -> None:
     global CONTEXT_FULL
 
     CONTEXT_FULL = args.full
+
+    global REPLAY
+
+    REPLAY = args.replay
 
     sys.path.insert(0, str(BACKEND))
 
