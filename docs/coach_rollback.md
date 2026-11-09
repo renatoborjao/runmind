@@ -203,3 +203,12 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service` (mesmo roteiro acima, com este stamp).
 - **Validação:** lab sem IA (contexto do plano) antes × depois para os 6 atletas; só o Renato mudou de verdade (estado, risco, descarga→segurar); os demais ganharam só a linha de JANELA DE PREPARO. Teste pago de geração de plano: pendente do OK do Renato.
 - **Fontes:** `docs/coach_conhecimento_fontes.txt`.
+
+## 08/11/2026 (noite) — monitor da geração do plano de domingo (não mexe no coach)
+
+- **O que mudou:** módulo NOVO `app/application/monitoring/plan_generation_monitor.py` (só leitura, sem IA). Depois da entrega das 20h de cada atleta confere: o plano da semana saiu e a que horas, a IA falhou (plano de rede), quem entregou foi cortado, o maior treino salta sobre o recente, treino forte repetido, custo da IA e marcadores de falha no journal. Nada importa o módulo: o coach e o app não mudam. Com `--send` avisa o dono no Telegram.
+- **Cron na VM (autorizado pelo Renato no chat):** `30 0 * * 1` (UTC) = domingo 21:30 em Brasília; saída em `~/ops/plan_generation_monitor.log`. Backup do crontab antes da mudança: `~/ops/crontab.bak-<data>`.
+- **Backup na VM:** `~/deploy_backups/20261108-224927` (o arquivo é novo: o stamp só lista ele em `.new_files`).
+- **Voltar:** tirar a linha `plan_generation_monitor` do `crontab -e` (ou restaurar o `crontab.bak-*`) e apagar `~/runmind/backend/app/application/monitoring/plan_generation_monitor.py`; não precisa reiniciar o serviço (nada importa o módulo).
+- **Ver na hora:** `bash ops/relatorio_vm.sh geracao` (com `geracao texto`, mostra também o que cada atleta recebeu).
+- **Motivo:** Renato 08/11 ("vamos monitorar a geração do domingo que vem"). Os planos de 08/11 saíram às 20h, ANTES dos dois deploys do coach (20:38 e 21:18) — só o do Renato foi refeito; o domingo 15/11 é a 1ª geração de todos com o coach novo.
