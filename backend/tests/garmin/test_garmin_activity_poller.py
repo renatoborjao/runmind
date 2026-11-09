@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -94,13 +95,16 @@ def test_analyze_skips_activity_without_distance():
     with (
         patch(f"{MODULE}.GarminActivitySource") as source,
         patch(f"{MODULE}.TrainingCompletedEvent") as event,
+        patch(f"{MODULE}.RunnerProfileRepository") as runners,
     ):
 
+        runners.return_value.load.return_value = SimpleNamespace(external_coach=False)
         source.fetch.return_value = make_activity(sport="Run", distance=0.0)
         event.execute = AsyncMock()
 
         asyncio.run(GarminActivityPoller._analyze("mauricio", 999))
 
+        source.fetch.assert_called_once()    # chegou até a atividade (não caiu antes por falta de perfil)
         event.execute.assert_not_awaited()
 
 
@@ -110,8 +114,10 @@ def test_analyze_processes_activity_with_distance():
     with (
         patch(f"{MODULE}.GarminActivitySource") as source,
         patch(f"{MODULE}.TrainingCompletedEvent") as event,
+        patch(f"{MODULE}.RunnerProfileRepository") as runners,
     ):
 
+        runners.return_value.load.return_value = SimpleNamespace(external_coach=False)
         source.fetch.return_value = make_activity(sport="Run", distance=8000.0)
         event.execute = AsyncMock()
 

@@ -43,8 +43,15 @@ echo "==> arquivos:"; printf '    %s\n' "${FILES[@]}"
 echo "==> compila"
 "$PY" -m py_compile "${FILES[@]}" || die "arquivo não compila"
 
-echo "==> suíte de testes (tem que estar 100% verde)"
-"$PY" -m pytest -q -p no:cacheprovider >/tmp/ritmind-pytest.log 2>&1 \
+echo "==> suíte de testes (tem que estar 100% verde) — numa CÓPIA temporária:"
+echo "    teste nunca lê nem escreve dado de atleta no disco deste computador"
+SANDBOX="$(mktemp -d)"
+trap 'rm -rf "$SANDBOX"' EXIT
+mkdir -p "$SANDBOX/backend"
+tar --exclude='./storage' --exclude='./.venv' --exclude='./venv' --exclude='__pycache__' \
+    --exclude='.pytest_cache' --exclude='./.env' -cf - . | tar -xf - -C "$SANDBOX/backend"
+cp -r "$ROOT/ops" "$SANDBOX/ops"   # alguns testes carregam ../ops/*.py
+( cd "$SANDBOX/backend" && "$PY" -m pytest -q -p no:cacheprovider ) >/tmp/ritmind-pytest.log 2>&1 \
   || { tail -15 /tmp/ritmind-pytest.log; die "testes falharam"; }
 tail -1 /tmp/ritmind-pytest.log
 

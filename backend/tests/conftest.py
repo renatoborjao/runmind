@@ -4,6 +4,7 @@ registrar prova estruturada, e teste não pode sujar o storage de dev."""
 
 import pytest
 
+from app.infrastructure.persistence.processed_activity_guard import ProcessedActivityGuard
 from app.infrastructure.persistence.race_repository import RaceRepository
 
 
@@ -17,3 +18,19 @@ def _isolated_race_storage(tmp_path, monkeypatch):
         self.storage.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(RaceRepository, "__init__", _init)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_activity_guard(tmp_path, monkeypatch):
+    """O guard de atividades já analisadas (e o teto de reanálise) escreve em `storage/`: no
+    teste vai pra pasta temporária — teste nunca depende nem suja dado de atleta no disco."""
+
+    def _init(self):
+
+        self.storage = tmp_path / "guard"
+
+        self.storage.mkdir(parents=True, exist_ok=True)
+
+        self.file = self.storage / "processed_activities.json"
+
+    monkeypatch.setattr(ProcessedActivityGuard, "__init__", _init)
