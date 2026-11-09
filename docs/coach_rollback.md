@@ -194,3 +194,12 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Backup na VM:** `~/deploy_backups/20261108-203811` (stamp do deploy).
 - **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service` (mesmo roteiro acima, com este stamp).
 - **Motivo:** Renato 08/11 (entregou 30,5 km + longão 15,5 e o plano veio −18%/−23%, a 21 semanas da meia); Hélio 06/11 (340 reanálises numa noite).
+
+## 08/11/2026 (noite) — ciclo de preparo, salto de sessão, ordem alerta × carga, segurar a rampa
+
+- **O que mudou:** (1) `TrainingLoad.long_spike`: maior corrida da semana × maior dos 30 dias anteriores; o risco de lesão pesa esse salto e a razão semanal/rampa valem no máximo 1 ponto juntas quando nenhuma corrida foi salto. (2) Rebote: aguda pode passar 10% do sustentado e o passo grande deixa de desqualificar o retorno quando o salto de sessão é seguro (≤10%); base rasa também pela média das semanas. (3) `BodyReading.alert_preceded_load`: se a queda de recuperação começou ≥7 dias atrás com a carga daquele dia normal/leve, STRAINED vira RECOVERY_FLAG. (4) Quem ENTREGA (última semana ≥90% e sem não-entrega) recebe "segurar" (mesmo volume ±10%, 1 qualidade, longão perto do feito), não "alivie"; adaptação não chama de "recuo maior é coerente" um sinal que começou antes da carga. (5) JANELA DE PREPARO por distância/nível no ROTA ATÉ A META (tabela `_PREP_WINDOWS`).
+- **Arquivos (backend/app):** athlete_dossier, body_reading_builder, body_directive, adaptation, deload_analyzer, goal_path, injury_risk_analyzer, training_load_analyzer, body_reading (entidade), training_load (entidade) + (já no ar antes) garmin_activity_poller, strava_activity_catchup, processed_activity_guard.
+- **Backup na VM:** `~/deploy_backups/20261108-211807`.
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service` (mesmo roteiro acima, com este stamp).
+- **Validação:** lab sem IA (contexto do plano) antes × depois para os 6 atletas; só o Renato mudou de verdade (estado, risco, descarga→segurar); os demais ganharam só a linha de JANELA DE PREPARO. Teste pago de geração de plano: pendente do OK do Renato.
+- **Fontes:** `docs/coach_conhecimento_fontes.txt`.
