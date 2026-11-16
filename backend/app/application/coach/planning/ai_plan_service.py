@@ -83,12 +83,22 @@ class AIPlanService:
                 else None
             )
 
-            context = AIPlanService._build_context(
-                profile, runner, metrics, goal, history,
-                repository, week_start, assessment.run_walk,
-                request=request, week_days=week_days,
-                correction=correction,
+            # os números do atleta pro CONFERENTE (a BASE DA SEMANA, com os
+            # mesmos números, vai no topo do contexto — ver _build_context)
+            from app.application.coach.planning import plan_check
+
+            facts = plan_check.facts_for(
+                profile, runner, history, metrics, goal, week_start,
             )
+
+            def context_for(fix: str) -> str:
+
+                return AIPlanService._build_context(
+                    profile, runner, metrics, goal, history,
+                    repository, week_start, assessment.run_walk,
+                    request=request, week_days=week_days,
+                    correction=fix,
+                )
 
             # medidor: rotula a geração como "plano" (context manager reseta
             # depois, pra não vazar o rótulo quando o plano é gerado DENTRO de
@@ -98,8 +108,43 @@ class AIPlanService:
             with TokenMeter.scope(profile, "plan"):
 
                 plan = await AIPlanService._generate_ai(
-                    profile, runner.name, goal.name, week_start, context,
+                    profile, runner.name, goal.name, week_start,
+                    context_for(correction),
                 )
+
+            # CONFERENTE: só erro grave e claro volta pra IA, UMA vez, com os
+            # números (ela corrige ou mantém justificando em route_note). O
+            # resto vira aviso no monitor de domingo. Uma falha aqui nunca
+            # derruba o plano já gerado.
+            try:
+
+                issues = plan_check.check(plan, facts)
+
+                print(f"Conferente: '{profile}' 1ª versão: {plan_check.summary(issues)}")
+
+                if plan_check.needs_revision(issues):
+
+                    fix = " ".join(
+                        x for x in (correction.strip(), plan_check.correction_text(issues)) if x
+                    )
+
+                    with TokenMeter.scope(profile, "plan"):
+
+                        revised = await AIPlanService._generate_ai(
+                            profile, runner.name, goal.name, week_start,
+                            context_for(fix),
+                        )
+
+                    plan = revised
+
+                    print(
+                        f"Conferente: '{profile}' revisado: "
+                        f"{plan_check.summary(plan_check.check(plan, facts))}"
+                    )
+
+            except Exception as e:  # noqa: BLE001
+
+                print(f"Conferente falhou p/ '{profile}' (plano segue): {e}")
 
             # A periodização é decisão do COACH (ele vê a prova/distância no
             # retrato e marca a fase coerente com o plano que montou). Só caímos
@@ -312,7 +357,7 @@ class AIPlanService:
             profile, runner=runner, history=history, week_start=week_start,
         )
 
-        return PlanContextBuilder.build(
+        body = PlanContextBuilder.build(
             runner=runner,
             goal=goal,
             week_start=week_start,
@@ -331,6 +376,16 @@ class AIPlanService:
             longest_runs=AIPlanService._longest_runs(history, recent_plans),
             correction=correction,
         )
+
+        # BASE DA SEMANA (números calculados do dado, sem IA) no TOPO — pra a
+        # IA acertar de primeira; são os mesmos números do conferente
+        from app.application.coach.planning import plan_check
+
+        base = plan_check.base_block(
+            plan_check.facts_for(profile, runner, history, metrics, goal, week_start),
+        )
+
+        return f"{base}\n\n{body}" if base else body
 
     @staticmethod
     def _longest_runs(history, plans) -> list[float]:

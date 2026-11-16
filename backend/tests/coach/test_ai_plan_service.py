@@ -307,3 +307,68 @@ def test_fill_time_based_km_estimates_and_counts_all_types():
     assert longao.estimated_distance_km is None          # já tem km planejado
     # volume conta os 3 (8 + ~6.9 + 12), não só o longão de 12
     assert plan.weekly_volume > 25
+
+
+# --- o conferente: só erro grave volta pra IA, e UMA vez -----------------------------------------
+
+
+def _run_checked(issues_per_call):
+
+    from app.application.coach.planning import plan_check
+    from app.application.coach.planning.plan_check import HIGH, Issue
+
+    calls = iter(issues_per_call)
+
+    with (
+        patch(f"{MODULE}.WeeklyPlanRepository") as repo_cls,
+        patch(f"{MODULE}.CoachPlanEngine") as coach,
+        patch(f"{MODULE}.WeeklyPlanService") as wps,
+        patch.object(AIPlanService, "_build_context", return_value="ctx") as build,
+        patch.object(plan_check, "check", side_effect=lambda *a: next(calls)),
+    ):
+
+        repo_cls.return_value.load.return_value = None
+
+        wps.active_week_start.return_value = WEEK
+
+        coach.generate = AsyncMock(return_value=_plan())
+
+        asyncio.run(
+            AIPlanService.ensure_plan(
+                "renato", make_runner(), _assessment(), MagicMock(),
+                MagicMock(race_date=None), TrainingHistory([]), WEEK,
+            )
+        )
+
+        return coach, build, HIGH, Issue
+
+
+def test_a_clean_plan_costs_one_call():
+
+    coach, build, *_ = _run_checked([[]])
+
+    coach.generate.assert_awaited_once()
+
+
+def test_a_soft_point_never_costs_a_second_call():
+
+    from app.application.coach.planning.plan_check import WATCH, Issue
+
+    coach, *_ = _run_checked([[Issue("leve_forte", WATCH, "leve rápido")]])
+
+    coach.generate.assert_awaited_once()
+
+
+def test_a_serious_point_goes_back_once_with_the_numbers_and_never_twice():
+
+    from app.application.coach.planning.plan_check import HIGH, Issue
+
+    bad = [Issue("limiar_lento", HIGH, "limiar 6:10 com a meta a 6:00")]
+
+    coach, build, *_ = _run_checked([bad, bad])
+
+    assert coach.generate.await_count == 2
+
+    correction = build.call_args_list[-1].kwargs["correction"]
+
+    assert "O CONFERENTE" in correction and "limiar 6:10 com a meta a 6:00" in correction

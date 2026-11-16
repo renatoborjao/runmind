@@ -115,6 +115,13 @@ TITLES = {
     "envio_falhou": "Falha no envio do plano",
     "envio_suprimido": "Mensagem do plano segurada pelo governador",
     "sem_conferencia": "Não consegui conferir",
+    "conferente_limiar_lento": "Limiar fora da régua dele",
+    "conferente_vo2_lento": "VO2 mais lento que a régua de quem entrega",
+    "conferente_ritmo_prova_lento": "Ritmo de prova mais lento que a meta",
+    "conferente_leve_forte": "Leve rápido demais",
+    "conferente_congelado": "Quem entregou não subiu",
+    "conferente_subiu_sem_entregar": "Subiu sem ele entregar",
+    "conferente_salto_longao": "Salto do maior treino",
 }
 
 ACTIONS = {
@@ -141,6 +148,13 @@ ACTIONS = {
     "envio_falhou": "Confira se a mensagem chegou ao atleta.",
     "envio_suprimido": "O plano só chega se alguém liberar: veja o teto diário do governador.",
     "sem_conferencia": "O monitor não conseguiu ler os dados dele: veja o log do cron.",
+    "conferente_limiar_lento": (
+        "Ficou fora mesmo depois da revisão automática: veja o motivo no plano; se não houver, "
+        "refaça a semana (/regerar-semana)."
+    ),
+    "conferente_congelado": "A IA manteve sem motivo escrito: refaça a semana ou ajuste a base.",
+    "conferente_subiu_sem_entregar": "Confira se ele aguenta a subida; se não, refaça a semana.",
+    "conferente_salto_longao": "Vale limitar o maior treino a +10% sobre o maior recente.",
 }
 
 
@@ -173,6 +187,9 @@ class Facts:
     text: str = ""
     # o plano gravado, uma linha por sessão — pro dono ler mesmo quando a mensagem não é achada
     plan_lines: list[str] = field(default_factory=list)
+    # o que o CONFERENTE (plan_check, o mesmo que roda antes do envio) acha do plano gravado:
+    # (código, "high"|"watch", texto)
+    conferente: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 # --- apoio puro ----------------------------------------------------------------------------------
@@ -469,6 +486,20 @@ def checks(f: Facts) -> list[Finding]:
         if item is not None:
 
             found.append(item)
+
+    # o conferente: o que ficou fora dos números do atleta MESMO depois da revisão da IA. Os
+    # códigos que o monitor já confere (salto do maior treino, corte de quem entrega) não repetem.
+    already = {x.code for x in found}
+
+    twins = {"salto_longao": "salto_do_maior_treino", "congelado": "corte_apos_entrega"}
+
+    for code, level, text in f.conferente:
+
+        if twins.get(code) in already:
+
+            continue
+
+        found.append(Finding(f.profile, f"conferente_{code}", HIGH if level == "high" else WATCH, text))
 
     return found
 
@@ -1021,6 +1052,20 @@ class PlanGenerationMonitor:
         f.sessions = len(sessions)
 
         f.plan_lines = [session_line(s) for s in sessions]
+
+        try:
+
+            from app.application.coach.planning import plan_check
+
+            issues = plan_check.check(
+                plan, plan_check.facts_for(profile, None, None, None, None, week),
+            )
+
+            f.conferente = [(i.code, i.level, i.text) for i in issues]
+
+        except Exception as e:  # noqa: BLE001 — sem o conferente, os outros checks seguem
+
+            print(f"Monitor do plano: conferente falhou p/ '{profile}': {e}")
 
         f.structured = sum(1 for s in sessions if (s.structure or "").strip())
 

@@ -34,3 +34,14 @@ def _isolated_activity_guard(tmp_path, monkeypatch):
         self.file = self.storage / "processed_activities.json"
 
     monkeypatch.setattr(ProcessedActivityGuard, "__init__", _init)
+
+
+@pytest.fixture(autouse=True)
+def _conferente_without_athlete_storage(monkeypatch, request):
+    """O conferente do plano (plan_check.facts_for) lê o dossiê do atleta no storage: nos testes da
+    geração, ele recebe números vazios (os checks calam). Teste nunca lê dado de atleta. O teste do
+    próprio conferente usa só as funções puras."""
+
+    from app.application.coach.planning import plan_check
+
+    monkeypatch.setattr(plan_check, "facts_for", lambda *a, **k: plan_check.CheckFacts())
