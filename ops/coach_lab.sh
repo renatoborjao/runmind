@@ -4,6 +4,7 @@
 # obrigatória de toda mudança no coach ANTES do deploy (ver docs/coach_rollback.md).
 #   bash ops/coach_lab.sh <saida.txt> [args do lab]        # candidato: tudo de backend/app que difere do HEAD
 #   bash ops/coach_lab.sh --no-overlay <saida.txt> [args]  # o que está NO AR (o "antes")
+# custo: --context-only é grátis; sem ele é PAGO e exige --profiles a,b (ou --todos)
 # args do lab: --profiles renato2,fernanda  --only dossier,chat,analysis,conduct,review,plan
 set -euo pipefail
 
@@ -20,6 +21,23 @@ cd "$ROOT/backend"
 
 REMOTE_ARGS=("$@")
 
+# TRAVA DE CUSTO: sem --context-only o lab chama a IA de verdade (o plano no Pro, ~R$0,33 por
+# atleta). Pago só com os atletas escolhidos (--profiles a,b); todos de uma vez só com --todos.
+# (30 dias até 16/11: R$12,41 de lab contra R$14,61 dos planos reais.)
+ARGS=" $* "
+if [[ "$ARGS" != *" --context-only "* && "$ARGS" != *" --profiles "* && "$ARGS" != *" --braineval "* ]]; then
+  if [[ "$ARGS" == *" --todos "* ]]; then
+    REMOTE_ARGS=()
+    for a in "$@"; do [ "$a" = "--todos" ] || REMOTE_ARGS+=("$a"); done
+    echo "==> AVISO: lab PAGO com TODOS os atletas (--todos)"
+  else
+    echo "ABORTADO: lab sem --context-only chama a IA paga. Use --context-only (grátis)," >&2
+    echo "          --profiles a,b (pago, só esses) ou --todos (pago, todos)." >&2
+    exit 1
+  fi
+fi
+[[ "$ARGS" == *" --context-only "* ]] || echo "==> lab PAGO (IA de verdade; gasto marcado como \"lab\" no medidor)"
+
 if [ "$OVERLAY" = 1 ]; then
   mapfile -t FILES < <(
     { git diff --name-only --relative HEAD -- app; git ls-files --others --exclude-standard app; } \
@@ -35,7 +53,7 @@ fi
 
 scp -q -i "$KEY" "$ROOT/ops/coach_lab.py" "$VM:/tmp/coach_lab.py"
 
-echo "==> rodando na VM (pode levar alguns minutos — chama a IA de verdade)"
+echo "==> rodando na VM (pode levar alguns minutos)"
 QUOTED=""; [ ${#REMOTE_ARGS[@]} -eq 0 ] || QUOTED=$(printf '%q ' "${REMOTE_ARGS[@]}")
 ssh -i "$KEY" "$VM" "cd ~/runmind/backend && timeout 1800 .venv/bin/python /tmp/coach_lab.py $QUOTED 2>&1 | grep -v -E '^\[token|AFC|DeprecationWarning' " > "$OUT"
 

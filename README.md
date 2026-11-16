@@ -8,9 +8,10 @@ The AI-powered platform for runners.
 |-------|------------|
 | Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS |
 | Backend | FastAPI, Python 3.14 |
-| Database | Supabase (PostgreSQL) |
+| Dados | Arquivos JSON no disco da VM (pasta storage do backend, só na VM) + backup diário no Object Storage da Oracle |
 | Architecture | Clean Architecture, DDD, SOLID |
-| DevOps | Docker, Docker Compose |
+| Produção | VM Oracle (plano gratuito): `runmind.service` (FastAPI + rotinas) e Caddy servindo o app estático; deploy por `ops/deploy_back.sh` e `ops/deploy_front.sh` |
+| IA | Gemini: Pro só no plano semanal; Flash/Flash-lite no resto (chat, análise, bom dia, leituras) |
 
 ## Quick start
 
@@ -32,7 +33,8 @@ docker compose up --build
 runmind/
 ├── frontend/           Next.js application
 ├── backend/            FastAPI application (Clean Architecture)
-├── supabase/           Database migrations and Supabase config
+├── supabase/           (legado, não usado: os dados são arquivos JSON na VM)
+├── ops/                Deploy, lab do coach, relatórios e monitores (rodam contra a VM)
 ├── docker/             Docker documentation
 ├── docs/               Architecture and development guides
 ├── docker-compose.yml  Local development stack

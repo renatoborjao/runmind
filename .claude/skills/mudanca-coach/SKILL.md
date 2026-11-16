@@ -37,7 +37,9 @@ conhecimento. A segurança é ver o que muda ANTES de ir pro ar e saber desfazer
 
 3. **Lab com IA (opcional, pago).** Se a mudança é na fala/decisão e o contexto não basta pra
    julgar, peça o OK do Renato com o custo estimado e rode sem `--context-only`
-   (`--only plan` ou `chat`, poucos atletas).
+   (`--only plan` ou `chat`) com `--profiles a,b` — o script RECUSA lab pago sem atletas escolhidos
+   (todos só com `--todos`). O plano no lab usa o Pro, como na produção (~R$ 0,33 por atleta), e
+   o gasto aparece como "lab" no medidor.
 
 4. **Contar ao Renato** em poucas linhas, sem colar dado bruto: o que mudou no antes × depois,
    para quantos atletas, e qualquer surpresa. Apague `antes.txt`/`depois.txt` em seguida.

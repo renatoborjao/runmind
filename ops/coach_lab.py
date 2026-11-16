@@ -1296,9 +1296,14 @@ async def main() -> None:
         f" — atletas: {', '.join(profiles)}"
     )
 
+    from app.application.monitoring.token_meter import TokenMeter
+
     for profile in profiles:
 
         _h(profile)
+
+        # o gasto do lab aparece separado no medidor ("lab"), não misturado com o dos atletas
+        TokenMeter.set_current(profile, "lab")
 
         try:
 
