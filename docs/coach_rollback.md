@@ -204,6 +204,13 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Validação:** lab sem IA (contexto do plano) antes × depois para os 6 atletas; só o Renato mudou de verdade (estado, risco, descarga→segurar); os demais ganharam só a linha de JANELA DE PREPARO. Teste pago de geração de plano: pendente do OK do Renato.
 - **Fontes:** `docs/coach_conhecimento_fontes.txt`.
 
+## 16/11/2026 — cron do informativo de agosto removido da VM (não mexe no coach)
+
+- **O que mudou:** saiu do crontab a linha `0 1 3 8 * … broadcast_pace_sono.py` (aviso "Novidade no seu coach", enviado uma vez em 02/08 22h BRT). Sem ano, ela dispararia de novo em 02/08/2027 pra todo atleta que entrou depois. O script e o log continuam em `~` como registro.
+- **Backup:** `~/ops/crontab.bak-20261116-170204`.
+- **Voltar:** `crontab ~/ops/crontab.bak-20261116-170204`.
+- **Motivo:** Renato 16/11 ("sim, tire"), com OK explícito no chat.
+
 ## 16/11/2026 — base da semana calculada do dado + conferente antes do envio
 
 - **O que mudou:** módulo NOVO `coach/planning/plan_check.py` (puro, sem IA). (1) BASE DA SEMANA no topo do contexto do plano (`AIPlanService._build_context`): ritmos de hoje, volume pela entrega (quem entrega: +5–10% sobre o menor entre planejado e feito; quem não entrega: entre o feito e o que sustentou, teto na melhor semana recente +10%), maior treino até +10% sobre os 30 dias, meta × capacidade (VDOT da meta × de hoje × ganho ~1 ponto/5 semanas). (2) CONFERENTE em `ensure_plan`: só erro HIGH (limiar incoerente com meta/régua de quem entrega, quem entregou sem subir, subir acima da melhor semana sem entregar, salto do maior treino) volta pra IA UMA vez via `correction`; ela corrige ou justifica em route_note. Log `Conferente: '<atleta>' 1ª versão/revisado: ...` no journal. (3) `plan_generation_monitor` roda os mesmos checks no plano gravado (códigos `conferente_*`). Simulado nos planos reais da semana de 16/11: 0 de 6 refariam.
