@@ -204,6 +204,13 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Validação:** lab sem IA (contexto do plano) antes × depois para os 6 atletas; só o Renato mudou de verdade (estado, risco, descarga→segurar); os demais ganharam só a linha de JANELA DE PREPARO. Teste pago de geração de plano: pendente do OK do Renato.
 - **Fontes:** `docs/coach_conhecimento_fontes.txt`.
 
+## 16/11/2026 — régua de hoje × última faixa de cada forte; quem entrega é puxado
+
+- **O que mudou:** `history/stimulus_dose.py` lê a faixa do trabalho principal de cada forte (ignora "início livre", aquecimento, recuperação) e, com a régua de hoje (limiar e VO2 calibrados das "Paces reais" + ritmo da meta, montada em `AthleteDossier._pace_ruler`), marca a última faixa que ficou MAIS LENTA/RÁPIDA que ela e o limiar mais lento que a meta, com o conhecimento de que a faixa nova nasce da régua, não de +5 s sobre a antiga. `history/stimulus_delivery.py`: o atraso médio fala só dos fortes NÃO entregues (antes "nos blocos medidos ficou em média 28 s/km mais lento" contava só o forte ruim); diz quanto ele passou da faixa nos entregues; pra quem vem entregando, a voz do plano lê "treinador puxa quem entrega". Lab grátis (--context-only --replay) em 6 atletas: régua aparece pra Leonardo (limiar 26–36 s/km mais lento, e mais lento que a meta) e Fernanda; os outros só ganham a leitura honesta da entrega.
+- **Backup na VM:** `~/deploy_backups/20261116-101501`.
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service`.
+- **Motivo:** Renato 16/11 ("o coach está mandando treino com pace menor do que da semana passada e considerando como se fosse mais firme… se o atleta entrega, dá pra puxar").
+
 ## 16/11/2026 — monitor de domingo manda o plano de cada atleta pro dono (não mexe no coach)
 
 - **O que mudou:** `plan_generation_monitor.py`, depois do resumo, manda 1 mensagem por atleta (com plano da semana, coach interno, já na hora) com cabeçalho (km, treinos, hora do envio, alertas) e o texto exato que ele recebeu — ou o plano gravado sessão por sessão, se a mensagem não foi achada. Longas são quebradas abaixo do teto do Telegram. Sem IA, só leitura. O cron é o mesmo (domingo 21:30).
