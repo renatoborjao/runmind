@@ -479,17 +479,89 @@ def test_the_screen_report_says_when_the_journal_cannot_be_read():
     assert "Journal do serviço: indisponível aqui" in report
 
 
-def _run(send: bool, send_mock):
+def _run(send: bool, send_mock, planos: bool = False, facts=None):
 
     with (
         patch.object(PlanGenerationMonitor, "athletes", return_value=["renato2"]),
-        patch.object(PlanGenerationMonitor, "facts", return_value=_facts()),
+        patch.object(PlanGenerationMonitor, "facts", return_value=facts or _facts()),
         patch.object(PlanGenerationMonitor, "costs", return_value=({"renato2": 0.4}, 2.0)),
         patch.object(monitor, "read_journal", return_value=[]),
         patch.object(monitor, "_send", send_mock),
     ):
 
-        return monitor.run(send=send, now=NOW)
+        return monitor.run(send=send, now=NOW, planos=planos)
+
+
+def test_with_send_the_owner_also_gets_the_plan_each_athlete_received(capsys):
+
+    send = AsyncMock(return_value=True)
+
+    message = _run(True, send, planos=True, facts=_facts(text="Seu plano da semana: 3 treinos"))
+
+    assert send.await_count == 2
+
+    assert send.await_args_list[0].args == (message,)
+
+    review = send.await_args_list[1].args[0]
+
+    assert "Plano de Renato — semana de 09/11" in review
+
+    assert "Seu plano da semana: 3 treinos" in review
+
+    assert "planos pra revisão: 1 de 1" in capsys.readouterr().out
+
+
+def test_the_dry_run_never_sends_the_plans():
+
+    send = AsyncMock(return_value=True)
+
+    _run(False, send, planos=True, facts=_facts(text="Seu plano da semana"))
+
+    send.assert_not_called()
+
+
+def test_without_the_message_the_review_shows_the_stored_plan():
+
+    lines = [monitor.session_line(_session("Intervalado", 8.0, structure="4x1km forte"))]
+
+    [review] = monitor.plan_messages([_facts(plan_lines=lines)], [])
+
+    assert "mensagem não encontrada" in review
+
+    assert "qui — Intervalado · 8" in review and "4x1km forte" in review
+
+
+def test_no_review_for_who_has_no_plan_is_external_or_not_due():
+
+    facts = [
+        _facts(plan_week=SUNDAY - timedelta(days=6)),
+        _facts(external=True, text="x"),
+        _facts(due=False, text="x"),
+    ]
+
+    assert monitor.plan_messages(facts, []) == []
+
+
+def test_a_review_carries_the_athlete_alerts():
+
+    finding = monitor.Finding("renato2", "plano_de_rede", monitor.HIGH, "sem estrutura")
+
+    [review] = monitor.plan_messages([_facts(text="plano")], [finding])
+
+    assert "🔴 Plano genérico no lugar do plano do coach" in review
+
+
+def test_a_long_plan_is_split_under_the_telegram_limit():
+
+    text = "\n".join(f"linha {i} " + "x" * 80 for i in range(200))
+
+    chunks = monitor.split_message(text)
+
+    assert len(chunks) > 1 and all(len(c) <= 4096 for c in chunks)
+
+    assert chunks[0].startswith(f"(1/{len(chunks)})")
+
+    assert "linha 199" in chunks[-1]
 
 
 def test_the_dry_run_shows_the_owner_message_and_sends_nothing(capsys):

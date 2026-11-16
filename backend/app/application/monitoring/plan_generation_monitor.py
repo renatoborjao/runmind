@@ -18,6 +18,8 @@ semana são da revisão diária (`coach_sanity_audit`, segunda 08:30) — aqui s
     python -m app.application.monitoring.plan_generation_monitor           # mostra (dry-run)
     python -m app.application.monitoring.plan_generation_monitor --texto   # + o texto recebido
     python -m app.application.monitoring.plan_generation_monitor --send    # avisa o dono (cron)
+    ... --send --sem-planos   # só o resumo (por padrão, depois do resumo vai 1 mensagem por atleta
+                              # com o plano inteiro que ele recebeu, pro dono revisar)
 
 Cron (VM, em UTC): `30 0 * * 1` = domingo 21:30 em Brasília, ~90 min depois da geração das 20h."""
 
@@ -169,6 +171,8 @@ class Facts:
     repeated: list[str] = field(default_factory=list)
     plan_cost_brl: float = 0.0
     text: str = ""
+    # o plano gravado, uma linha por sessão — pro dono ler mesmo quando a mensagem não é achada
+    plan_lines: list[str] = field(default_factory=list)
 
 
 # --- apoio puro ----------------------------------------------------------------------------------
@@ -776,6 +780,153 @@ def format_message(
     return "\n".join(lines)
 
 
+_DAYS_PT = {
+    "monday": "seg",
+    "tuesday": "ter",
+    "wednesday": "qua",
+    "thursday": "qui",
+    "friday": "sex",
+    "saturday": "sáb",
+    "sunday": "dom",
+}
+
+# teto de uma mensagem do Telegram é 4096; sobra folga pro cabeçalho "(2/3)"
+MESSAGE_LIMIT = 3800
+
+
+def session_line(session) -> str:
+    """Uma sessão do plano gravado em uma linha: dia, tipo, km/min, ritmo e a estrutura do coach."""
+
+    day = _DAYS_PT.get(str(getattr(session, "day", "")).lower(), str(getattr(session, "day", "")))
+
+    bits = [f"{day} — {getattr(session, 'workout_type', '') or 'treino'}"]
+
+    km = getattr(session, "planned_distance_km", None)
+
+    minutes = getattr(session, "planned_duration_minutes", None)
+
+    if km:
+
+        bits.append(_km(km))
+
+    elif minutes:
+
+        bits.append(f"{minutes} min")
+
+    low = getattr(session, "target_pace_min", None)
+
+    high = getattr(session, "target_pace_max", None)
+
+    if low or high:
+
+        bits.append("ritmo " + "–".join(x for x in (low, high) if x))
+
+    line = " · ".join(bits)
+
+    structure = (getattr(session, "structure", "") or "").strip()
+
+    if structure:
+
+        line += f"\n   {_short(structure, 300)}"
+
+    return line
+
+
+def split_message(text: str, limit: int = MESSAGE_LIMIT) -> list[str]:
+    """Quebra um texto longo em pedaços que cabem numa mensagem, cortando em fim de linha."""
+
+    chunks: list[str] = []
+
+    current = ""
+
+    for line in text.splitlines():
+
+        while len(line) > limit:
+
+            if current:
+
+                chunks.append(current)
+
+                current = ""
+
+            chunks.append(line[:limit])
+
+            line = line[limit:]
+
+        candidate = f"{current}\n{line}" if current else line
+
+        if len(candidate) > limit:
+
+            chunks.append(current)
+
+            current = line
+
+        else:
+
+            current = candidate
+
+    if current.strip():
+
+        chunks.append(current)
+
+    if len(chunks) > 1:
+
+        chunks = [f"({i}/{len(chunks)})\n{c}" for i, c in enumerate(chunks, 1)]
+
+    return chunks
+
+
+def plan_messages(facts: list[Facts], findings: list[Finding]) -> list[str]:
+    """Pro dono REVISAR: uma mensagem (ou mais, se longa) por atleta com plano da semana — o
+    cabeçalho com os números e alertas dele e, embaixo, o texto exato que o atleta recebeu (ou, se
+    a mensagem não foi achada, o plano gravado sessão por sessão)."""
+
+    by_profile: dict[str, list[Finding]] = {}
+
+    for item in findings:
+
+        by_profile.setdefault(item.profile, []).append(item)
+
+    out: list[str] = []
+
+    for f in facts:
+
+        if f.external or not f.due or f.plan_week != f.week:
+
+            continue
+
+        mine = by_profile.get(f.profile, [])
+
+        lines = [
+            f"📄 {_icon(f, mine)} Plano de {f.name} — semana de {f.week:%d/%m}",
+            _brief(f),
+        ]
+
+        for item in mine:
+
+            icon = "🔴" if item.level == HIGH else "🟡"
+
+            lines.append(f"{icon} {TITLES.get(item.code, item.code)}")
+
+        lines.append("")
+
+        if f.text:
+
+            lines.append("— como ele recebeu —")
+
+            lines.append(f.text.strip())
+
+        else:
+
+            lines.append("— mensagem não encontrada; o plano gravado —")
+
+            lines.extend(f.plan_lines or ["(sem sessões de corrida no plano)"])
+
+        out.extend(split_message("\n".join(lines)))
+
+    return out
+
+
 # --- ligação com os dados reais -------------------------------------------------------------------
 
 
@@ -868,6 +1019,8 @@ class PlanGenerationMonitor:
         sessions = [s for s in plan.sessions if getattr(s, "kind", "run") in _RUN_KINDS]
 
         f.sessions = len(sessions)
+
+        f.plan_lines = [session_line(s) for s in sessions]
 
         f.structured = sum(1 for s in sessions if (s.structure or "").strip())
 
@@ -974,9 +1127,15 @@ class PlanGenerationMonitor:
         return per_plan, total
 
 
-def run(send: bool, texto: bool = False, now: datetime | None = None) -> str:
+def run(
+    send: bool,
+    texto: bool = False,
+    now: datetime | None = None,
+    planos: bool = True,
+) -> str:
     """Confere TODOS os atletas ativos. Sem `send`: só mostra (dry-run). Com `send`: avisa o dono
-    (e mostra o mesmo na tela, pro log do cron). Devolve o aviso."""
+    (e mostra o mesmo na tela, pro log do cron) e, com `planos`, manda em seguida o plano inteiro
+    de cada atleta, um por mensagem, pro dono revisar. Devolve o aviso."""
 
     now = now or datetime.now(UTC)
 
@@ -1020,17 +1179,43 @@ def run(send: bool, texto: bool = False, now: datetime | None = None) -> str:
 
     message = format_message(facts, findings, total)
 
+    reviews = plan_messages(facts, findings) if planos else []
+
     if not send:
 
         print("\n--- o aviso que iria pro Telegram do dono (com --send) ---\n")
 
         print(message)
 
+        if reviews:
+
+            print(f"\n--- + {len(reviews)} mensagem(ns) com os planos pra revisar ---")
+
         return message
 
-    if asyncio.run(_send(message)):
+    if not asyncio.run(_send(message)):
 
-        print(f"{now:%F %T} conferência do plano: aviso enviado ({len(findings)} alerta(s))")
+        return message
+
+    print(f"{now:%F %T} conferência do plano: aviso enviado ({len(findings)} alerta(s))")
+
+    sent = 0
+
+    for review in reviews:
+
+        try:
+
+            if asyncio.run(_send(review)):
+
+                sent += 1
+
+        except Exception as e:  # noqa: BLE001 — um plano que não sai não segura os outros
+
+            print(f"Monitor do plano: envio de um plano pra revisão falhou: {e}")
+
+    if reviews:
+
+        print(f"{now:%F %T} planos pra revisão: {sent} de {len(reviews)} mensagem(ns) enviadas")
 
     return message
 
@@ -1043,9 +1228,13 @@ def main() -> None:
 
     parser.add_argument("--texto", action="store_true", help="mostra o texto que cada um recebeu")
 
+    parser.add_argument(
+        "--sem-planos", action="store_true", help="só o resumo, sem o plano de cada atleta"
+    )
+
     args = parser.parse_args()
 
-    run(send=args.send, texto=args.texto)
+    run(send=args.send, texto=args.texto, planos=not args.sem_planos)
 
 
 if __name__ == "__main__":
