@@ -2172,7 +2172,49 @@ class AthleteDossier:
 
         return stimulus_dose.render(
             stimulus_dose.last_doses(plans, data.activities, data.today), data.today,
+            ruler=AthleteDossier._pace_ruler(data),
         )
+
+    @staticmethod
+    def _pace_ruler(data: _Inputs) -> dict[str, float]:
+        """A régua de hoje (min/km) pra comparar com a última faixa de cada forte: limiar e VO2
+        calibrados (os mesmos das "Paces reais") e o ritmo da meta. Falta de dado = sem régua."""
+
+        from app.application.history.stimulus_ledger import RACE_PACE, THRESHOLD, VO2
+
+        ruler: dict[str, float] = {}
+
+        metrics = data.metrics
+
+        if metrics is not None:
+
+            if getattr(metrics, "threshold_pace", None):
+
+                ruler[THRESHOLD] = float(metrics.threshold_pace)
+
+            if getattr(metrics, "vo2_pace", None):
+
+                ruler[VO2] = float(metrics.vo2_pace)
+
+        goal = data.goal
+
+        try:
+
+            from app.application.coach.planning.plan_context_builder import PlanContextBuilder
+
+            secs = PlanContextBuilder._time_to_seconds(getattr(goal, "target_time", None))
+
+            km = getattr(goal, "distance_km", None)
+
+            if secs and km:
+
+                ruler[RACE_PACE] = secs / 60 / km
+
+        except Exception:  # noqa: BLE001 — sem meta legível, sem régua da meta
+
+            pass
+
+        return ruler
 
     @staticmethod
     def _plan_week(data: _Inputs) -> list[str]:

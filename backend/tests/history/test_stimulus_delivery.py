@@ -263,7 +263,8 @@ def test_the_dossier_block_names_the_numbers_and_only_the_plan_voice_gets_the_ca
     assert "fazer o treino no dia certo não basta" in facts
     assert "entregues 0" in facts and "sem intensidade 3" in facts
     assert "Nenhum forte entregue nestas semanas" in facts
-    assert "28 s/km mais lento que o alvo" in facts and "esforço percebido médio 3.0/10" in facts
+    assert "Nos 3 fortes que não entregou, ficou em média 28 s/km mais lento que o alvo" in facts
+    assert "esforço percebido médio 3.0/10" in facts
     assert "- sex 09/10 Ritmo de Prova: sem intensidade" in facts
 
     assert "CONHECIMENTO" not in facts
@@ -366,3 +367,56 @@ def test_the_plan_prompt_makes_the_coach_treat_the_cause_of_an_undelivered_forte
     assert 'FORTE ENTREGUE: o dossiê traz "FORTES: PRESCRITO × ENTREGUE"' in flat
     assert "mais um forte igual não evolui ninguém: trate a CAUSA" in flat
     assert "Prescrever e contar como feito não é estímulo" in flat
+
+
+# --- quem ENTREGA: a leitura não pode parecer que ele não aguenta (Leonardo, 16/11) ----------------
+
+
+def _delivering_leonardo():
+    """1 limiar sem intensidade (18/10) e 3 fortes entregues acima da faixa depois."""
+
+    plans, runs, log, rpes = _leonardo()
+
+    log[3] = {"date": "2026-10-23", "km": 7.1, "blocks": [_block("5:27", "5:40-5:55", False)]}
+
+    plans.append(_plan(date(2026, 11, 2), _session("Friday", "Limiar", 7.5)))
+
+    runs.append(_run(date(2026, 11, 6), 7.5, 4))
+
+    log[4] = {"date": "2026-11-06", "km": 7.5, "blocks": [_block("6:12", "6:15-6:25", True)]}
+
+    plans.append(_plan(date(2026, 11, 9), _session("Friday", "Ritmo de Prova", 7.0)))
+
+    runs.append(_run(date(2026, 11, 13), 7.0, 5))
+
+    log[5] = {"date": "2026-11-13", "km": 7.0, "blocks": [_block("5:59", "6:00-6:15", False)]}
+
+    return plans, runs, log, rpes
+
+
+def test_the_slow_average_only_speaks_of_the_fortes_he_did_not_deliver():
+
+    summary = assess(*_delivering_leonardo(), date(2026, 11, 14))
+
+    facts = render(summary)
+
+    assert "nos blocos medidos ficou em média" not in facts
+    assert "fortes que não entregou, ficou em média" in facts
+    assert "nos 3 entregues, em média" in facts and "mais rápido que a faixa" in facts
+
+
+def test_whoever_delivers_gets_the_pull_hint_only_in_the_plan_voice():
+
+    summary = assess(*_delivering_leonardo(), date(2026, 11, 14))
+
+    assert delivery.delivering(summary)
+    assert "Treinador puxa quem entrega" in render(summary, directive=True)
+    assert "Treinador puxa quem entrega" not in render(summary)
+
+
+def test_who_does_not_deliver_does_not_get_the_pull_hint():
+
+    summary = assess(*_leonardo(), TODAY)
+
+    assert not delivery.delivering(summary)
+    assert "Treinador puxa quem entrega" not in render(summary, directive=True)

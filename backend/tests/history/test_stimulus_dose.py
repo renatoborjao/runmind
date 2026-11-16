@@ -198,3 +198,61 @@ def test_the_progressive_families_are_the_ones_with_a_ladder():
     assert "rodagem leve / regenerativo" not in names and "acelerações / técnica" not in names
 
     assert timedelta(weeks=stimulus_dose.WINDOW_WEEKS).days == 56
+
+
+# --- régua de hoje × a última faixa (Leonardo, 16/11: limiar 6:10-6:20 "mais firme" com o limiar
+# calibrado em 5:49 e a meta a 6:00) ----------------------------------------------------------------
+
+
+def test_the_band_of_the_main_work_is_read_from_what_the_coach_wrote():
+
+    assert stimulus_dose.pace_band("Série: 3x 1,5 km (6:15-6:25/km)") == (6.25, 6.25 + 25 / 60 - 0.25)
+    assert stimulus_dose.pace_band("3x 1 km em ritmo de Limiar (6:15 a 6:25/km)")[0] == 6.25
+    assert stimulus_dose.pace_band("sem ritmo", "5:40", "5:55") == (5 + 40 / 60, 5 + 55 / 60)
+    assert stimulus_dose.pace_band("sem ritmo") is None
+
+
+def _limiar_doses():
+
+    plans = [_plan(WEEK_1, _session("Tuesday", "Limiar", 9.0, LIMIAR_1))]
+
+    return last_doses(plans, [_run(date(2026, 10, 6), 9.0, 1)], TODAY)
+
+
+def test_a_last_band_slower_than_todays_ruler_and_the_goal_is_flagged_with_the_numbers():
+
+    ruler = {stimulus_dose.THRESHOLD: 5 + 49 / 60, stimulus_dose.RACE_PACE: 6.0}
+
+    text = render(_limiar_doses(), TODAY, ruler=ruler)
+
+    assert "RÉGUA DE HOJE × A ÚLTIMA FAIXA DE CADA FORTE" in text
+    assert "limiar: a régua de hoje é 5:49; a última faixa (6:15–6:25, 06/10) está 26–36 s/km MAIS LENTA" in text
+    assert "MAIS LENTA que o ritmo da meta (6:00/km)" in text
+    assert "não de alguns segundos sobre a faixa antiga" in text
+    assert "a decisão" not in text.split("RÉGUA DE HOJE")[1] or "CONHECIMENTO, não regra" in text
+
+
+def test_a_band_on_the_ruler_says_nothing():
+
+    ruler = {stimulus_dose.THRESHOLD: 6 + 18 / 60, stimulus_dose.RACE_PACE: 6 + 30 / 60}
+
+    assert "RÉGUA DE HOJE" not in render(_limiar_doses(), TODAY, ruler=ruler)
+
+
+def test_the_ruler_without_the_plan_voice_is_only_the_data():
+
+    ruler = {stimulus_dose.THRESHOLD: 5 + 49 / 60}
+
+    text = render(_limiar_doses(), TODAY, plan_voice=False, ruler=ruler)
+
+    assert "MAIS LENTA" in text and "CONHECIMENTO" not in text
+
+
+def test_the_warmup_band_is_not_the_dose():
+
+    main = (
+        "Início livre: 1 km leve para soltar (6:09 a 6:49/km) · "
+        "Série Principal: 6x 400m forte em ritmo de VO2 (5:10 a 5:25/km)"
+    )
+
+    assert stimulus_dose.pace_band(main) == (5 + 10 / 60, 5 + 25 / 60)

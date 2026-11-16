@@ -381,14 +381,58 @@ def headline(summary: DeliverySummary) -> str:
     return text
 
 
+def _overshoot(summary: DeliverySummary) -> int:
+    """Quanto, em média, ele passou da faixa nos fortes ENTREGUES (s/km; 0 = dentro dela)."""
+
+    fast = [-i.gap_s for i in summary.items if i.verdict == DELIVERED and i.gap_s and i.gap_s < 0]
+
+    return round(sum(fast) / len(fast)) if fast else 0
+
+
+def delivering(summary: DeliverySummary | None) -> bool:
+    """Ele vem entregando os fortes: a maioria dos que tinham medida saiu no alvo ou mais rápido e
+    o último forte medido foi entregue."""
+
+    if summary is None or not summary.delivered:
+
+        return False
+
+    judged = [i for i in summary.items if i.verdict in (DELIVERED, SOFT)]
+
+    return summary.delivered * 2 > len(judged) and judged[-1].verdict == DELIVERED
+
+
+_PULL = (
+    "CONHECIMENTO, não regra: ele vem ENTREGANDO os fortes{faster}. Treinador puxa quem entrega: o "
+    "próximo forte sobe um degrau de verdade (bloco maior, mais repetições, ritmo mais perto da "
+    "régua de hoje e da meta) — repetir a dose, ou mexer só alguns segundos numa faixa que ele já "
+    "passa, é deixá-lo parado. A dose sobe junto do corpo de hoje; a decisão é sua."
+)
+
+
 def _tail(summary: DeliverySummary) -> str:
 
     bits = []
 
+    # o atraso médio só vale pros fortes que ele NÃO entregou: misturado com os entregues, um forte
+    # ruim virava "em média 28 s/km mais lento" pra quem entregou 4 de 4 acima da faixa (Leonardo,
+    # 16/11) e o coach segurava o ritmo
     if summary.mean_gap_s:
 
+        missed = (
+            "no forte que não entregou" if summary.soft == 1
+            else f"nos {summary.soft} fortes que não entregou"
+        )
+
+        bits.append(f"{missed}, ficou em média {summary.mean_gap_s} s/km mais lento que o alvo")
+
+    overshoot = _overshoot(summary)
+
+    if overshoot:
+
         bits.append(
-            f"nos blocos medidos ficou em média {summary.mean_gap_s} s/km mais lento que o alvo"
+            f"nos {_plural(summary.delivered, 'entregue', 'entregues')}, em média {overshoot} s/km "
+            "mais rápido que a faixa"
         )
 
     if summary.mean_rpe is not None:
@@ -456,6 +500,14 @@ def render(summary: DeliverySummary | None, *, directive: bool = False) -> str:
     if directive and summary.soft and not summary.delivered:
 
         lines.append(_DIRECTIVE)
+
+    elif directive and delivering(summary):
+
+        overshoot = _overshoot(summary)
+
+        faster = f", em média {overshoot} s/km mais rápido que a faixa" if overshoot else ""
+
+        lines.append(_PULL.format(faster=faster))
 
     return "\n".join(lines)
 

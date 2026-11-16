@@ -12,6 +12,7 @@ dica), de cada estímulo que PROGRIDE (forte, longão, moderado), as duas últim
 avança a mesma dose, repete, troca ou recua — o que a evolução × meta × objetivo pedir.
 Puro/determinístico."""
 
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -54,6 +55,148 @@ class Dose:
     workout_type: str
     main: str
     done: bool
+    # a faixa de ritmo do trabalho principal (min/km, rápida → lenta), quando dá pra ler
+    band: tuple[float, float] | None = None
+
+
+# famílias cuja faixa tem uma RÉGUA de hoje (o ritmo calibrado dele ou o ritmo da meta)
+RULED = (THRESHOLD, VO2, RACE_PACE)
+
+# diferença (s/km) abaixo da qual a faixa está "na régua"
+_RULER_TOLERANCE_S = 8
+
+# rótulos da parte principal e das partes que não são a dose (como o coach costuma escrever)
+_MAIN_LABELS = ("principal", "série", "serie", "bloco", "tiros", "blocos")
+
+_SIDE_LABELS = (
+    "início", "inicio", "aquec", "solt", "retorno", "volta à calma", "desaquec", "recupera",
+    "trote", "calma",
+)
+
+_BAND = re.compile(r"(\d{1,2}):(\d{2})\s*(?:/km)?\s*(?:a|-|–|—|até)\s*(\d{1,2}):(\d{2})")
+
+
+def _pace(text: str | None) -> float | None:
+
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", text or "")
+
+    return int(match[1]) + int(match[2]) / 60 if match else None
+
+
+def pace_band(main: str, low: str | None = None, high: str | None = None) -> tuple[float, float] | None:
+    """A faixa do trabalho principal: a "m:ss a m:ss" da parte que o coach chamou de série/bloco
+    principal (ou da primeira parte que não é soltar/voltar/recuperar); sem ela, a faixa da sessão.
+    (rápida, lenta) em min/km. O "Início livre: 1 km leve (6:09 a 6:49)" não é a dose."""
+
+    parts = [p.strip() for p in (main or "").split(" · ") if p.strip()]
+
+    def label(part: str) -> str:
+
+        return part.split(":", 1)[0].lower() if ":" in part[:40] else ""
+
+    principal = [p for p in parts if any(k in label(p) for k in _MAIN_LABELS)]
+
+    others = [p for p in parts if not any(k in label(p) for k in _SIDE_LABELS)]
+
+    match = None
+
+    for part in principal + others:
+
+        match = _BAND.search(part)
+
+        if match:
+
+            break
+
+    if match:
+
+        a = int(match[1]) + int(match[2]) / 60
+
+        b = int(match[3]) + int(match[4]) / 60
+
+        return (min(a, b), max(a, b))
+
+    a, b = _pace(low), _pace(high)
+
+    if a and b:
+
+        return (min(a, b), max(a, b))
+
+    return None
+
+
+def _fmt(pace: float) -> str:
+
+    total = round(pace * 60)
+
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def ruler_lines(doses: dict[str, list[Dose]], ruler: dict[str, float]) -> list[str]:
+    """A ÚLTIMA faixa de cada forte contra a RÉGUA DE HOJE (limiar e VO2 calibrados dele, ritmo da
+    meta). Só sai o que diverge — faixa que ficou lenta ou rápida demais — e a faixa de limiar mais
+    lenta que o ritmo da prova. Dado pro coach: quem ENTREGA uma faixa que ficou lenta não evolui
+    com +5 s sobre ela."""
+
+    out: list[str] = []
+
+    for family in RULED:
+
+        today = ruler.get(family)
+
+        last = next((d for d in doses.get(family, []) if d.band), None)
+
+        if not today or last is None:
+
+            continue
+
+        fast, slow = last.band
+
+        band = f"{_fmt(fast)}–{_fmt(slow)}"
+
+        gap_fast = round((fast - today) * 60)
+
+        gap_slow = round((slow - today) * 60)
+
+        if gap_fast > _RULER_TOLERANCE_S:
+
+            out.append(
+                f"- {family}: a régua de hoje é {_fmt(today)}; a última faixa ({band}, "
+                f"{last.day:%d/%m}) está {gap_fast}–{gap_slow} s/km MAIS LENTA que ela."
+            )
+
+        elif gap_slow < -_RULER_TOLERANCE_S:
+
+            out.append(
+                f"- {family}: a régua de hoje é {_fmt(today)}; a última faixa ({band}, "
+                f"{last.day:%d/%m}) está {abs(gap_slow)}–{abs(gap_fast)} s/km MAIS RÁPIDA que ela."
+            )
+
+    race = ruler.get(RACE_PACE)
+
+    threshold = next((d for d in doses.get(THRESHOLD, []) if d.band), None)
+
+    if race and threshold and (threshold.band[0] - race) * 60 > _RULER_TOLERANCE_S:
+
+        out.append(
+            f"- a última faixa de limiar ({_fmt(threshold.band[0])}–{_fmt(threshold.band[1])}) é "
+            f"MAIS LENTA que o ritmo da meta ({_fmt(race)}/km)."
+        )
+
+    return out
+
+
+_RULER_KNOWLEDGE = (
+    "CONHECIMENTO, não regra: a régua de hoje é a capacidade ATUAL dele (calibrada pelo que ele "
+    "entregou e pelo relógio) e o ritmo da meta. A faixa nova de cada forte nasce DELA — não de "
+    "alguns segundos sobre a faixa antiga, que foi escrita com a régua de semanas atrás. Fisiologia: "
+    "o limiar é o ritmo sustentável por ~1 hora — mais rápido que o de meia e maratona, perto do "
+    "ritmo de 10 km de quem corre os 10 km em ~1 h; limiar mais lento que o ritmo-alvo da prova "
+    "dele não treina o que a prova cobra. Se ele vem ENTREGANDO os fortes, a faixa sobe até a "
+    "régua (em degrau, se o salto for grande, e dito no propósito); se NÃO entrega, a régua pode "
+    "estar otimista — aí recalibre pelo que ele fez. E não chame de 'mais firme' uma faixa que "
+    "segue mais lenta que a régua ou que a meta."
+)
 
 
 def main_lines(structure: str | None) -> str:
@@ -128,8 +271,13 @@ def last_doses(
 
                 continue
 
+            band = pace_band(
+                main, getattr(session, "target_pace_min", None),
+                getattr(session, "target_pace_max", None),
+            )
+
             found.setdefault(family, []).append(
-                Dose(family, day, session.workout_type, main, act is not None),
+                Dose(family, day, session.workout_type, main, act is not None, band),
             )
 
     return {
@@ -143,9 +291,15 @@ def _label(day: date) -> str:
     return f"{day:%d/%m}"
 
 
-def render(doses: dict[str, list[Dose]], today: date, plan_voice: bool = True) -> str:
+def render(
+    doses: dict[str, list[Dose]],
+    today: date,
+    plan_voice: bool = True,
+    ruler: dict[str, float] | None = None,
+) -> str:
     """As doses como linhas pro prompt. Com `plan_voice`, vem junto o CONHECIMENTO de como a
-    escada costuma render (e que a decisão é do coach). Vazio sem dose."""
+    escada costuma render (e que a decisão é do coach). `ruler`: a régua de hoje por família
+    (min/km) — a última faixa que divergir dela sai marcada. Vazio sem dose."""
 
     if not doses:
 
@@ -181,5 +335,17 @@ def render(doses: dict[str, list[Dose]], today: date, plan_voice: bool = True) -
             "recue. No propósito de cada sessão diga o que mudou em relação à última dose do "
             "mesmo tipo — ou por que não mudou."
         )
+
+    diverging = ruler_lines(doses, ruler or {})
+
+    if diverging:
+
+        lines.append("RÉGUA DE HOJE × A ÚLTIMA FAIXA DE CADA FORTE:")
+
+        lines.extend(diverging)
+
+        if plan_voice:
+
+            lines.append(_RULER_KNOWLEDGE)
 
     return "\n".join(lines)
