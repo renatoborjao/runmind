@@ -37,10 +37,8 @@ BACKEND = Path.home() / "runmind" / "backend"
 
 sys.path.insert(0, str(BACKEND))
 
-NOTICE = (
-    "🔄 Refiz o plano desta semana com um ajuste na forma como leio os seus sinais de "
-    "recuperação — este substitui o que te mandei antes."
-)
+# o aviso que vai no topo da mensagem nova: diga o MOTIVO real (--aviso); sem ele, um genérico
+NOTICE = "🔄 Refiz o plano desta semana — este substitui o que te mandei antes."
 
 
 class _Tee(io.TextIOBase):
@@ -197,6 +195,8 @@ async def main() -> int:
 
     parser.add_argument("--no-send", action="store_true", help="gera e salva, mas não envia")
 
+    parser.add_argument("--aviso", default=NOTICE, help="o aviso no topo da mensagem (o motivo real)")
+
     args = parser.parse_args()
 
     from app.application.assessment.training_assessment_builder import TrainingAssessmentBuilder
@@ -279,7 +279,7 @@ async def main() -> int:
 
     lines = message.split("\n")
 
-    lines[2:2] = [NOTICE, ""]
+    lines[2:2] = [args.aviso, ""]
 
     message = "\n".join(lines)
 

@@ -3,7 +3,7 @@
 # a saída vem na TELA — nada é gravado neste computador (dado de atleta fica na nuvem).
 #   bash ops/regerar_semana.sh renato2            # dry-run: mostra o plano guardado, sem IA, sem enviar
 #   bash ops/regerar_semana.sh renato2 --apply    # backup → gera (IA paga, ~R$0,40) → salva → relógio → envia
-#   opções extras: --week AAAA-MM-DD   --no-send
+#   opções extras: --week AAAA-MM-DD   --no-send   --aviso "o motivo real, no topo da mensagem"
 set -euo pipefail
 
 VM="ubuntu@163.176.28.178"
