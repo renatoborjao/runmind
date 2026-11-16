@@ -204,6 +204,13 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Validação:** lab sem IA (contexto do plano) antes × depois para os 6 atletas; só o Renato mudou de verdade (estado, risco, descarga→segurar); os demais ganharam só a linha de JANELA DE PREPARO. Teste pago de geração de plano: pendente do OK do Renato.
 - **Fontes:** `docs/coach_conhecimento_fontes.txt`.
 
+## 16/11/2026 — monitor de domingo manda o plano de cada atleta pro dono (não mexe no coach)
+
+- **O que mudou:** `plan_generation_monitor.py`, depois do resumo, manda 1 mensagem por atleta (com plano da semana, coach interno, já na hora) com cabeçalho (km, treinos, hora do envio, alertas) e o texto exato que ele recebeu — ou o plano gravado sessão por sessão, se a mensagem não foi achada. Longas são quebradas abaixo do teto do Telegram. Sem IA, só leitura. O cron é o mesmo (domingo 21:30).
+- **Backup na VM:** `~/deploy_backups/20261116-093811`.
+- **Voltar:** acrescentar `--sem-planos` na linha do cron (só o resumo) ou restaurar o arquivo do backup; não precisa reiniciar o serviço.
+- **Motivo:** Renato 16/11 ("todo domingo, depois da geração do plano, receber todos os planos pra dar uma olhada e evitar falha").
+
 ## 08/11/2026 (noite) — monitor da geração do plano de domingo (não mexe no coach)
 
 - **O que mudou:** módulo NOVO `app/application/monitoring/plan_generation_monitor.py` (só leitura, sem IA). Depois da entrega das 20h de cada atleta confere: o plano da semana saiu e a que horas, a IA falhou (plano de rede), quem entregou foi cortado, o maior treino salta sobre o recente, treino forte repetido, custo da IA e marcadores de falha no journal. Nada importa o módulo: o coach e o app não mudam. Com `--send` avisa o dono no Telegram.
