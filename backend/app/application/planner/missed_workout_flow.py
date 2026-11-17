@@ -116,7 +116,11 @@ class MissedWorkoutFlow:
 
         marker.mark(profile, missed_date)
 
-        return runner, judgment.message
+        # o atleta só decide se souber O QUE muda: "reorganizei os dias, posso aplicar?" sem
+        # dizer o quê ficava sem resposta (Hélio 15/11)
+        from app.application.coach.conversation.proposal_status import message_with_changes
+
+        return runner, message_with_changes(judgment.message, judgment.operations)
 
     @staticmethod
     def _portrait(

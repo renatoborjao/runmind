@@ -115,7 +115,9 @@ def test_unclear_keeps_proposal_pending():
     repo.clear.assert_not_called()
 
 
-def test_expired_proposal_is_cleared_and_ignored():
+def test_expired_proposal_is_ignored_but_kept_for_the_other_voices():
+    """Caducou: o "sim" não aplica, mas a proposta NÃO é apagada — o dossiê ainda avisa as
+    outras vozes que o coach sugeriu mudar e o atleta não respondeu (proposal_status)."""
 
     old = now_local() - timedelta(hours=48)
 
@@ -126,5 +128,5 @@ def test_expired_proposal_is_cleared_and_ignored():
         reply = ProposalFlow.resolve("renato", "sim")
 
     assert reply is None
-    repo.clear.assert_called_once()
+    repo.clear.assert_not_called()
     applier.apply.assert_not_called()

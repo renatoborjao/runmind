@@ -105,6 +105,13 @@ class CoachReconcileNotifier:
         """Pergunta de oficializar o dia extra — só quando é ROTINA e ainda não
         foi perguntada pra esta configuração de dias (dedup por nº de dias)."""
 
+        # a oferta anterior ainda espera resposta (72 h): não pergunta de novo. A chave de
+        # dedup inclui a média real de dias, que muda de um dia pro outro — o Mauricio recebeu
+        # "passar pra 5 dias?" e, 27 h depois, "pra 6 dias?" sem ter respondido (14/11)
+        if FrequencyOfferStore.get_pending(profile):
+
+            return None
+
         history = await LoadTrainingHistory.execute(profile=profile)
 
         reg = len(runner.preferred_running_days)

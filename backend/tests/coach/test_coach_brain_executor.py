@@ -21,12 +21,15 @@ from tests.coach.factories import make_runner
 M = "app.application.coach.conversation.coach_brain_executor"
 
 
-def _pending() -> PlanProposal:
+def _pending(created_at: str | None = None) -> PlanProposal:
+    # recém-feita: proposta caducada (>24 h) não é mais pendência pro cérebro
+    from app.core.clock import now_local
+
     return PlanProposal(
         kind="negotiation",
         week_start="2026-08-04",
         preview="Proposta anterior. Posso aplicar?",
-        created_at="2026-08-08T20:00:00",
+        created_at=created_at or now_local().isoformat(),
         operations=[{"action": "drop", "day": "Tuesday"}],
     )
 
@@ -824,3 +827,31 @@ def test_refine_discards_old_and_reproposes_scoped():
     saved = repo.save.call_args.args[1]
     assert saved.operations == negotiation.operations
     assert "Deixei só o de amanhã" in reply
+
+
+def test_proposta_caducada_nao_e_pendencia_pro_cerebro():
+
+    decide = AsyncMock(return_value=BrainDecision(say="Oi!"))
+
+    _run(
+        BrainDecision(say="Oi!"),
+        pending=_pending(created_at="2026-08-08T20:00:00"),
+        extra_patches=[patch(f"{M}.CoachBrain.decide", new=decide)],
+        text="oi",
+    )
+
+    assert decide.await_args.kwargs["pending_preview"] is None
+
+
+def test_proposta_recente_segue_pendencia_pro_cerebro():
+
+    decide = AsyncMock(return_value=BrainDecision(say="Oi!"))
+
+    _run(
+        BrainDecision(say="Oi!"),
+        pending=_pending(),
+        extra_patches=[patch(f"{M}.CoachBrain.decide", new=decide)],
+        text="oi",
+    )
+
+    assert decide.await_args.kwargs["pending_preview"] == "Proposta anterior. Posso aplicar?"

@@ -34,7 +34,7 @@ def _acts_over():
     return acts
 
 
-def _run(active: bool):
+def _run(active: bool, offer_pending=None, set_pending=None):
 
     sent = []
 
@@ -60,6 +60,8 @@ def _run(active: bool):
                                     tzinfo=ZoneInfo("America/Sao_Paulo"))),
         patch(f"{MOD}.CoachOutbox.send",
               new=AsyncMock(side_effect=lambda *a, **k: sent.append((a, k)))),
+        patch(f"{MOD}.FrequencyOfferStore.get_pending", return_value=offer_pending),
+        patch(f"{MOD}.FrequencyOfferStore.set_pending", new=set_pending or MagicMock()),
     ):
         repo.return_value.list_active.return_value = ["helio"]
         asyncio.run(CoachReconcileNotifier.notify_all())
@@ -82,3 +84,16 @@ def test_flag_on_asks_frequency_for_routine_over():
     message = sent[0][0][1]
     assert "dias" in message and "Hélio" in message
     assert sent[0][1].get("kind") == "reconcile"
+
+
+def test_nao_repete_a_oferta_de_dias_enquanto_a_anterior_espera_resposta():
+    """Mauricio 14/11: "passar pra 5 dias?" e, 27 h depois, "pra 6 dias?" sem ter respondido."""
+
+    set_pending = MagicMock()
+
+    sent = _run(active=True, offer_pending={"days": 5, "weekday": "Friday"}, set_pending=set_pending)
+
+    set_pending.assert_not_called()
+
+    # no lugar dela pode sair a pergunta de OUTRO assunto (objetivo), uma por dia
+    assert all("objetivo" in a[1].lower() or "plano" in a[1].lower() for a, _ in sent)

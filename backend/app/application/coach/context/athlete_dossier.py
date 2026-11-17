@@ -2320,6 +2320,8 @@ class AthleteDossier:
 
         lines.append(AthleteDossier._recent_coach_messages(data))
 
+        lines.extend(AthleteDossier._pending_proposal(data))
+
         try:
 
             from app.infrastructure.persistence.conversation_repository import (
@@ -2337,6 +2339,28 @@ class AthleteDossier:
             print(f"Dossiê: resumo de conversa falhou p/ '{data.profile}': {e}")
 
         return lines
+
+    @staticmethod
+    def _pending_proposal(data: _Inputs) -> list[str]:
+        """A proposta de mudança que você fez e ele não respondeu (aberta ou caducada há pouco):
+        sem isto o bom dia celebrava o treino que você mesmo sugeriu reduzir e a análise cobrava
+        o corte (Fernanda 14-15/11)."""
+
+        try:
+
+            from app.application.coach.conversation.proposal_status import dossier_lines
+            from app.core.clock import now_local
+            from app.infrastructure.persistence.plan_proposal_repository import (
+                PlanProposalRepository,
+            )
+
+            return dossier_lines(PlanProposalRepository().load(data.profile), now_local())
+
+        except Exception as e:  # noqa: BLE001
+
+            print(f"Dossiê: proposta pendente falhou p/ '{data.profile}': {e}")
+
+            return []
 
     @staticmethod
     def _recent_coach_messages(data: _Inputs) -> str:

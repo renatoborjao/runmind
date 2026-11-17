@@ -80,6 +80,14 @@ class CoachBrainExecutor:
 
         pending = repo.load(profile)
 
+        # proposta que já caducou não é pendência (o "sim" não vale mais): fica só no dossiê
+        from app.application.coach.conversation.proposal_status import OPEN, status
+        from app.core.clock import now_local
+
+        if pending is not None and status(pending, now_local()) != OPEN:
+
+            pending = None
+
         # a proposta de TREINO AVULSO também é pendência que o cérebro precisa
         # ver: sem isso, "beleza, monta e manda pro relógio" (aceite) virava um
         # avulso NOVO — remontado, diferente, pedindo SIM de novo (log 26/09)

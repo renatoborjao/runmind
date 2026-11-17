@@ -45,8 +45,9 @@ class ProposalFlow:
 
         if ProposalFlow._expired(proposal):
 
-            repo.clear(profile)
-
+            # caducou: não vale mais o "sim", mas NÃO apaga — as outras vozes ainda precisam
+            # saber que você sugeriu mudar e ele não respondeu (proposal_status, 72 h). Uma
+            # proposta nova a substitui.
             return None
 
         reply = ProposalReplyDetector.detect(incoming_text)
