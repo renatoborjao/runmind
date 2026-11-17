@@ -330,6 +330,42 @@ async def _analysis(profile):
 
     activity = context.executed.activity
 
+    if CONTEXT_ONLY:
+
+        # grátis: só os FATOS que a análise receberia (veredito em números, blocos), sem IA
+        _s(
+            f"FATOS da análise do último treino ({activity.distance / 1000:.1f} km, "
+            f"{activity.start_date:%d/%m}) — sem IA"
+        )
+
+        planned = context.planned
+
+        structure = context.executed.structure
+
+        print(
+            "  planejado: "
+            + (f"{planned.workout_type} {planned.planned_distance_km} km" if planned else "nenhum")
+            + f" · FC média {activity.average_heartrate} · km com FC "
+            + str(sum(1 for hr in (getattr(structure, 'km_hr', None) or []) if hr))
+            + f" · pareamento por bloco {'sim' if context.block_comparison else 'não'}"
+        )
+
+        shown = 0
+
+        for line in AIAnalysisWriter._facts(context).splitlines():
+
+            if any(key in line for key in ("VEREDITO", "Execução por bloco", "Volume:")):
+
+                print(f"  > {line[:900]}")
+
+                shown += 1
+
+        if not shown:
+
+            print("  (sem veredito em números nem blocos)")
+
+        return
+
     analysis = await AIAnalysisWriter.write(context)
 
     _s(

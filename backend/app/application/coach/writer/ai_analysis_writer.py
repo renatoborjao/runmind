@@ -550,6 +550,15 @@ class AIAnalysisWriter:
 
             lines.append(intent)
 
+        # o VEREDITO em números já contados (volume feito/cortado, km acima do teto, tempo em
+        # Z4+): sem isto a IA julgava pela MÉDIA e escrevia "respeitou o teto" com km acima dele
+        # e "encurtou 44%" quando o atleta FEZ 44% (revisão de conversas 17/11)
+        verdict = AIAnalysisWriter._verdict_numbers(context)
+
+        if verdict:
+
+            lines.append(verdict)
+
         if activity.average_heartrate:
 
             hr = f"FC média {int(activity.average_heartrate)}"
@@ -784,6 +793,191 @@ class AIAnalysisWriter:
 
         return text + "."
 
+    # volume: abaixo/acima do planejado por mais que isto vira número explícito pra IA
+    _VOLUME_GAP = 0.10
+
+    @staticmethod
+    def _easy_ceiling(context: CoachContext) -> int | None:
+        """Teto aeróbico quando o treino PEDIA leve (leve ou longão-base) e há FC medida. Num
+        treino de qualidade (ou longão com parte forte) passar do teto é o objetivo — None."""
+
+        from app.application.history.stimulus_ledger import EASY, LONG, StimulusLedger
+        from app.application.history.training_patterns import TrainingPatterns
+
+        planned = context.planned
+
+        if planned is None or not context.executed.activity.average_heartrate:
+
+            return None
+
+        family = StimulusLedger.classify(planned.workout_type)
+
+        norm = StimulusLedger._normalize(planned.workout_type)
+
+        long_quality = family == LONG and any(
+            c in norm for c in ("progress", "misto", "bloco", "final", "ritmo")
+        )
+
+        if not (family == EASY or (family == LONG and not long_quality)):
+
+            return None
+
+        return TrainingPatterns.ceiling_of(
+            getattr(context.executed, "hr_zones", None),
+            getattr(context.runner, "id", None),
+        )
+
+    @staticmethod
+    def volume_numbers(planned_km, executed_km) -> str | None:
+        """'fez 7,0 de 16,0 km = 44% do planejado (cortou 56%)' — a conta pronta, pra a IA não
+        confundir o que FEZ com o que CORTOU. None quando ficou dentro de ±10%."""
+
+        if not planned_km or not executed_km or planned_km <= 0:
+
+            return None
+
+        done = executed_km / planned_km
+
+        if abs(done - 1) <= AIAnalysisWriter._VOLUME_GAP:
+
+            return None
+
+        pct = round(done * 100)
+
+        def km(value):
+
+            return f"{value:.1f}".replace(".", ",")
+
+        if done < 1:
+
+            return (
+                f"Volume: fez {km(executed_km)} de {km(planned_km)} km = {pct}% do planejado "
+                f"(cortou {100 - pct}%)"
+            )
+
+        return (
+            f"Volume: fez {km(executed_km)} de {km(planned_km)} km = {pct}% do planejado "
+            f"({pct - 100}% acima)"
+        )
+
+    @staticmethod
+    def ceiling_numbers(km_hr, ceiling: int | None, max_hr=None) -> str | None:
+        """Quantos km passaram do teto aeróbico, quais e com que FC — a média abaixo do teto
+        esconde os km acima. None sem teto ou sem FC por km."""
+
+        if not ceiling:
+
+            return None
+
+        measured = [(i + 1, hr) for i, hr in enumerate(km_hr or []) if hr]
+
+        if not measured:
+
+            return None
+
+        above = [(k, hr) for k, hr in measured if hr > ceiling]
+
+        if not above:
+
+            text = f"Teto aeróbico ({ceiling} bpm): todos os {len(measured)} km com FC abaixo dele"
+
+            if max_hr and max_hr > ceiling:
+
+                text += f" (só o pico foi a {int(max_hr)})"
+
+            return text
+
+        listed = ", ".join(f"km {k}: {hr}" for k, hr in above[:8])
+
+        if len(above) > 8:
+
+            listed += ", …"
+
+        text = (
+            f"Teto aeróbico ({ceiling} bpm): {len(above)} de {len(measured)} km ACIMA dele "
+            f"({listed})"
+        )
+
+        if max_hr:
+
+            text += f"; FC máxima {int(max_hr)}"
+
+        return text
+
+    @staticmethod
+    def high_zone_share(zone_minutes) -> int | None:
+        """% do tempo em Z4 ou Z5 (as zonas do relógio do atleta)."""
+
+        if not zone_minutes or len(zone_minutes) != 5:
+
+            return None
+
+        total = sum(zone_minutes)
+
+        if total <= 0:
+
+            return None
+
+        return round((zone_minutes[3] + zone_minutes[4]) / total * 100)
+
+    @staticmethod
+    def _verdict_numbers(context: CoachContext) -> str | None:
+        """O veredito do treino em números já CONTADOS por código. A IA narra a partir deles e
+        não pode afirmar o contrário (é a regra 'verdade primeiro')."""
+
+        executed = context.executed
+
+        activity = executed.activity
+
+        planned = context.planned
+
+        parts = []
+
+        if planned is not None and not executed.indoor and not has_open_cooldown(
+            getattr(planned, "steps", None) or []
+        ):
+
+            volume = AIAnalysisWriter.volume_numbers(
+                planned.planned_distance_km, (activity.distance or 0) / 1000,
+            )
+
+            if volume:
+
+                parts.append(volume)
+
+        ceiling = AIAnalysisWriter._easy_ceiling(context)
+
+        if ceiling:
+
+            line = AIAnalysisWriter.ceiling_numbers(
+                getattr(executed.structure, "km_hr", None), ceiling, activity.max_heartrate,
+            )
+
+            if line:
+
+                parts.append(line)
+
+            share = AIAnalysisWriter.high_zone_share(
+                getattr(activity, "hr_zone_minutes", None)
+            )
+
+            if share:
+
+                parts.append(f"tempo em Z4 ou acima: {share}%")
+
+        if not parts:
+
+            return None
+
+        return (
+            "VEREDITO EM NÚMEROS (já contado — use ESTES números): "
+            + "; ".join(parts)
+            + ". Não escreva 'respeitou o teto', 'leve de fato', 'dentro da faixa' nem "
+            "'exatamente como planejado' se um número aqui diz o contrário: diga o que "
+            "aconteceu, com o número (ex.: 'abaixo do teto até o km 4; do 5 em diante passou, "
+            "com pico de 150'). Ao falar de corte de volume, use o 'cortou' daqui."
+        )
+
     # parciais por km que divergem do pace médio por mais que isto = dado de esteira
     # que não se sustenta (Fernanda 16/10: média 5:36 com parciais 6:37 · 6:38 · 6:07 · 5:47)
     _PACE_MISMATCH = 0.07
@@ -981,6 +1175,43 @@ class AIAnalysisWriter:
         return "ok" if hr <= aerobic_ceiling else None
 
     @staticmethod
+    def pace_outside_range(executed_pace, pace_min, pace_max) -> str | None:
+        """'2 s mais lento' / '4 s mais rápido' quando o pace executado (min/km) sai da faixa
+        ESTRITA prescrita ('M:SS'); None se dentro ou sem dado."""
+
+        def seconds(value):
+
+            try:
+
+                minutes, secs = str(value).strip().split(":")
+
+                return int(minutes) * 60 + int(secs)
+
+            except (ValueError, AttributeError):
+
+                return None
+
+        low, high = seconds(pace_min), seconds(pace_max)
+
+        if not executed_pace or low is None or high is None:
+
+            return None
+
+        fast, slow = min(low, high), max(low, high)
+
+        pace = round(executed_pace * 60)
+
+        if pace > slow:
+
+            return f"{pace - slow} s mais lento"
+
+        if pace < fast:
+
+            return f"{fast - pace} s mais rápido"
+
+        return None
+
+    @staticmethod
     def _block_comparison_fact(comparison, aerobic_ceiling: int | None = None) -> str:
         """Comparação EXATA bloco-a-bloco (PlannedExecutionMatcher) — cada
         bloco já traz o veredito calculado por código; a IA só narra. Nos
@@ -1024,7 +1255,20 @@ class AIAnalysisWriter:
 
                 seg += f" — alvo {p_min}'{p_sec:02d}"
 
-            if block.within_target is True:
+            outside = AIAnalysisWriter.pace_outside_range(
+                block.executed_pace, block.pace_min, block.pace_max,
+            )
+
+            if block.within_target is True and outside:
+
+                # o pareamento aceita 3% de folga: 5:47 numa faixa 5:30–5:45 passa como ✅, e a
+                # IA escrevia "dentro da faixa, exatamente como planejado" (Mauricio 15/11)
+                seg += (
+                    f" [pace {outside} da faixa — dentro da tolerância, mas NÃO diga "
+                    "'dentro da faixa']"
+                )
+
+            elif block.within_target is True:
 
                 seg += " [pace dentro do alvo]"
 
