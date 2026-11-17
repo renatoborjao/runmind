@@ -249,3 +249,11 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service`.
 - **Medir:** próxima revisão de conversas (`revisor-de-conversas`): sumiu "respeitou o teto" com km acima e "encurtou X%" trocado?
 - **Motivo:** Renato 17/11 ("corrige a análise"), a partir da 1ª revisão de conversas (padrão A em 3 atletas).
+
+## 17/11/2026 — proposta de mudança não some mais (todas as vozes sabem dela)
+
+- **O que mudou:** NOVO `coach/conversation/proposal_status.py` (puro): proposta aberta (24 h) ou sem resposta (até 72 h), mudanças em português e linhas do dossiê. `coach/context/athlete_dossier.py` (seção "o que você já disse"): "PROPOSTA EM ABERTO" / "PROPOSTA SEM RESPOSTA" com a semana, as mudanças e o que o coach disse. `planner/missed_workout_flow.py`: a mensagem da proposta de furo ganha "O que muda, se você topar" + como responder. `coach/conversation/proposal_flow.py`: proposta caducada não é mais apagada no próximo "oi" (fica pro dossiê; uma nova a substitui). `coach/conversation/coach_brain_executor.py`: caducada não é pendência pro cérebro. `coach/intelligence/coach_reconcile_notifier.py`: oferta de oficializar dias não se repete enquanto a anterior espera (72 h). Lab do dossiê: só o Hélio mudou (proposta de 15/11 sem resposta, semana de 09/11).
+- **Backup na VM:** `~/deploy_backups/20261117-184003` (`proposal_status.py` é novo: listado em `.new_files`).
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/`, apagar `app/application/coach/conversation/proposal_status.py` e `sudo systemctl restart runmind.service`.
+- **Medir:** próxima revisão de conversas: proposta seguida de mensagem que a ignora/contradiz sumiu? "Posso aplicar?" sem dizer o quê sumiu?
+- **Motivo:** Renato 17/11 ("corrige a proposta"), padrão B da 1ª revisão de conversas.
