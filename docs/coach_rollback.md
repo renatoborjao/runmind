@@ -241,3 +241,11 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Voltar:** tirar a linha `plan_generation_monitor` do `crontab -e` (ou restaurar o `crontab.bak-*`) e apagar `~/runmind/backend/app/application/monitoring/plan_generation_monitor.py`; não precisa reiniciar o serviço (nada importa o módulo).
 - **Ver na hora:** `bash ops/relatorio_vm.sh geracao` (com `geracao texto`, mostra também o que cada atleta recebeu).
 - **Motivo:** Renato 08/11 ("vamos monitorar a geração do domingo que vem"). Os planos de 08/11 saíram às 20h, ANTES dos dois deploys do coach (20:38 e 21:18) — só o do Renato foi refeito; o domingo 15/11 é a 1ª geração de todos com o coach novo.
+
+## 17/11/2026 — análise de treino recebe o veredito em números já contados
+
+- **O que mudou:** `coach/writer/ai_analysis_writer.py`. Fato novo "VEREDITO EM NÚMEROS" no prompt da análise: volume feito × cortado (fora de ±10%), km acima do teto aeróbico (só leve/longão-base com FC; quais e com que FC), tempo em Z4+; e no bloco aceito pela folga de 3% mas fora da faixa estrita, "N s mais lento/rápido — NÃO diga 'dentro da faixa'". Regra: não afirmar "respeitou o teto / leve de fato / dentro da faixa / como planejado" contra esses números. A IA segue escrevendo; só recebe a conta certa. Conferido nos treinos reais de 15/11 (Fernanda 1 de 7 km acima, corte 56%; Renato 4 de 15 km acima). Lab ganhou `--context-only --only analysis` (fatos, sem IA).
+- **Backup na VM:** `~/deploy_backups/20261117-182245`.
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service`.
+- **Medir:** próxima revisão de conversas (`revisor-de-conversas`): sumiu "respeitou o teto" com km acima e "encurtou X%" trocado?
+- **Motivo:** Renato 17/11 ("corrige a análise"), a partir da 1ª revisão de conversas (padrão A em 3 atletas).
