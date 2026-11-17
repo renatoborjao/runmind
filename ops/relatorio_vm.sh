@@ -7,6 +7,7 @@
 #   bash ops/relatorio_vm.sh lista             # os dias disponíveis
 #   bash ops/relatorio_vm.sh geracao           # confere AGORA o plano de domingo de cada atleta
 #   bash ops/relatorio_vm.sh geracao texto     # idem, com o texto que cada atleta recebeu
+#   bash ops/relatorio_vm.sh conversas [dias]  # chat, análises e avisos do coach na janela (padrão 7)
 set -euo pipefail
 
 VM="ubuntu@163.176.28.178"
@@ -27,7 +28,15 @@ case "$KIND" in
     ssh -i "$KEY" "$VM" "cd ~/runmind/backend && GOOGLE_API_KEY=DISABLED PYTHONIOENCODING=utf-8 .venv/bin/python -m app.application.monitoring.plan_generation_monitor $FLAG 2>/dev/null" \
       | grep -v -E '^\[token|AFC|DeprecationWarning' || true
     exit 0 ;;
-  *) echo "tipo inválido: $KIND (use planos, carga, armazenamento, lista ou geracao)" >&2; exit 1 ;;
+  conversas)
+    # o que o coach disse e o que o atleta disse na janela (só leitura, ZERO IA): pro revisor de
+    # conversas julgar a qualidade do coach. Lido na tela, nada gravado aqui nem lá.
+    DIAS="${2:-7}"
+    [[ "$DIAS" =~ ^[0-9]{1,2}$ ]] || { echo "dias inválido: $DIAS" >&2; exit 1; }
+    ssh -i "$KEY" "$VM" "cd ~/runmind/backend && GOOGLE_API_KEY=DISABLED PYTHONIOENCODING=utf-8 .venv/bin/python -m app.application.monitoring.coach_conversation_digest --dias $DIAS 2>/dev/null" \
+      | grep -v -E '^\[token|AFC|DeprecationWarning' || true
+    exit 0 ;;
+  *) echo "tipo inválido: $KIND (use planos, carga, armazenamento, lista, geracao ou conversas)" >&2; exit 1 ;;
 esac
 
 # o nome vem de lista fechada acima; DAY só aceita data ou "latest"
