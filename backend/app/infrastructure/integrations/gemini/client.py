@@ -159,6 +159,33 @@ def _normalize_thinking(config) -> None:
         config.max_output_tokens = max_out + THINKING_HEADROOM
 
 
+def is_billing_error(exc: Exception) -> bool:
+    """Recusa por COBRANÇA: 402 ou a mensagem de crédito pré-pago esgotado. Não melhora com
+    retry nem trocando de modelo (o saldo é da conta)."""
+
+    if getattr(exc, "code", None) == 402:
+
+        return True
+
+    text = str(exc).lower()
+
+    return "credits are depleted" in text or "prepayment" in text
+
+
+async def _alert_billing(exc: Exception) -> None:
+    """Avisa o dono na hora (1x/dia). Best-effort: nunca muda o erro que sobe."""
+
+    try:
+
+        from app.application.monitoring.ai_health_monitor import AIHealthMonitor
+
+        await AIHealthMonitor.record_billing_failure(str(exc))
+
+    except Exception as alert_exc:  # noqa: BLE001 — alerta nunca derruba o fluxo
+
+        print(f"Falha ao avisar crédito esgotado: {alert_exc}")
+
+
 def _is_retryable(exc: Exception) -> bool:
 
     if isinstance(exc, EmptyGeminiResponse):
@@ -319,6 +346,10 @@ async def _generate_text_once(
                 # erro que não melhora com retry (400/401/403 — pedido
                 # inválido, credencial) é igual em qualquer modelo: sobe já
                 if not _is_retryable(exc):
+
+                    if is_billing_error(exc):
+
+                        await _alert_billing(exc)
 
                     raise
 

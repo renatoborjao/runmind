@@ -120,10 +120,10 @@ def test_cost_uses_the_list_price_of_the_model():
 
     pro = {"model": "gemini-3.1-pro-preview", "in": 100_000, "out": 10_000, "thoughts": 20_000}
 
-    assert round(cost_brl(pro), 3) == 2.295
+    assert round(cost_brl(pro), 3) == 3.024
 
     # modelo desconhecido cai no preço padrão (o do flash)
-    assert cost_brl({"model": "?", "in": 1_000_000}) == 0.15 * 5.40
+    assert cost_brl({"model": "?", "in": 1_000_000}) == 0.75 * 5.40
 
 
 # --- entrega -------------------------------------------------------------------------------------
@@ -361,13 +361,13 @@ def test_a_normal_sunday_cost_is_quiet():
 
 def test_an_expensive_plan_and_an_expensive_weekend_are_flagged():
 
-    found = cost_findings({"renato2": 1.80, "fernanda": 0.35}, 6.0)
+    found = cost_findings({"renato2": 3.00, "fernanda": 0.60}, 10.0)
 
     assert [(x.profile, x.code) for x in found] == [
         ("renato2", "custo_alto"), ("geral", "custo_alto"),
     ]
 
-    assert "R$ 1,80" in found[0].text and "R$ 6,00" in found[1].text
+    assert "R$ 3,00" in found[0].text and "R$ 10,00" in found[1].text
 
 
 # --- journal -------------------------------------------------------------------------------------

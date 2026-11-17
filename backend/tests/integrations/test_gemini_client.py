@@ -405,3 +405,47 @@ def test_generate_json_none_after_all_attempts_fail():
 
     assert result is None
     assert mock.await_count == 3
+
+
+def test_falta_de_credito_402_sobe_sem_retry_e_avisa_o_dono():
+
+    depleted = genai_errors.ClientError(
+        402, {"error": {"message": "Your prepayment credits are depleted"}}
+    )
+
+    generate_content = AsyncMock(side_effect=depleted)
+
+    alert = AsyncMock()
+
+    with (
+        patch(f"{MODULE}._client", return_value=_mock_client(generate_content)),
+        patch(f"{MODULE}._alert_billing", new=alert),
+    ):
+
+        with pytest.raises(genai_errors.ClientError):
+
+            _run()
+
+    assert generate_content.await_count == 1
+
+    alert.assert_awaited_once()
+
+
+def test_erro_400_comum_nao_dispara_aviso_de_credito():
+
+    generate_content = AsyncMock(
+        side_effect=genai_errors.ClientError(400, {"error": {"message": "ruim"}})
+    )
+
+    alert = AsyncMock()
+
+    with (
+        patch(f"{MODULE}._client", return_value=_mock_client(generate_content)),
+        patch(f"{MODULE}._alert_billing", new=alert),
+    ):
+
+        with pytest.raises(genai_errors.ClientError):
+
+            _run()
+
+    alert.assert_not_awaited()

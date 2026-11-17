@@ -118,3 +118,35 @@ def test_no_admin_configured_sends_nothing(tmp_path, monkeypatch):
             asyncio.run(AIHealthMonitor.record_failure("boom"))
 
     send.assert_not_awaited()
+
+
+def test_falta_de_credito_avisa_na_primeira_e_so_uma_vez_por_dia(tmp_path, monkeypatch):
+
+    _isolate(tmp_path, monkeypatch)
+
+    with _sends() as send:
+
+        asyncio.run(AIHealthMonitor.record_billing_failure("402 prepayment credits are depleted"))
+
+        asyncio.run(AIHealthMonitor.record_billing_failure("402 de novo"))
+
+    assert send.await_count == 1
+
+    assert "CRÉDITO" in send.await_args.kwargs["message"]
+
+
+def test_aviso_de_credito_sobrevive_ao_contador_do_chat(tmp_path, monkeypatch):
+
+    _isolate(tmp_path, monkeypatch)
+
+    with _sends() as send:
+
+        asyncio.run(AIHealthMonitor.record_billing_failure("402"))
+
+        asyncio.run(AIHealthMonitor.record_success())
+
+        asyncio.run(AIHealthMonitor.record_failure("x"))
+
+        asyncio.run(AIHealthMonitor.record_billing_failure("402"))
+
+    assert send.await_count == 1

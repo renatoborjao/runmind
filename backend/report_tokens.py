@@ -1,12 +1,8 @@
-"""Consumo de IA (Gemini) por atleta — tokens e custo-sombra em reais.
+"""Consumo de IA (Gemini) por atleta — tokens e custo estimado em reais.
 
-HOJE o RunMind roda no TIER GRÁTIS do Gemini: o custo real é R$ 0,00 (o limite
-é rate-limit/429, não dinheiro). O valor em reais aqui é o CUSTO-SOMBRA: quanto
-SERIA se fosse cobrado pelos preços de lista — pra dimensionar o negócio e
-saber quanto cada atleta 'custaria' de IA num plano pago.
-
-Os preços abaixo são de REFERÊNCIA (USD por 1M tokens) — ajuste PRICING com a
-tabela oficial vigente. Cobrança do Gemini: thinking conta como saída.
+A conta do Gemini é PAGA (pré-paga). O valor aqui é uma ESTIMATIVA a partir dos tokens que o
+medidor grava, no preço oficial de lista (app/application/monitoring/ai_pricing.py); a fonte de
+verdade do total é o painel do AI Studio (o medidor não vê voz/TTS nem a pesquisa na web).
 
 O medidor (`TokenMeter`) começou em 2026-09-04, então o total reflete a janela
 desde então, não a vida toda do atleta.
@@ -20,30 +16,11 @@ from app.infrastructure.persistence.token_usage_repository import (
     TokenUsageRepository,
 )
 
-# câmbio USD->BRL (ajuste conforme o dia)
-USD_BRL = 5.40
-
-# preços de REFERÊNCIA por modelo, USD por 1M tokens (input, output).
-# thinking é cobrado como output. Ajuste com a tabela oficial do Gemini.
-PRICING = {
-    "gemini-3.6-flash": (0.15, 0.60),
-    "gemini-3.5-flash-lite": (0.075, 0.30),
-    "gemini-3.1-pro-preview": (1.25, 10.00),
-    "_default": (0.15, 0.60),
-}
-
-
-def _cost_brl(model: str, in_t: int, out_billable: int) -> float:
-
-    price_in, price_out = PRICING.get(model, PRICING["_default"])
-
-    usd = (in_t * price_in + out_billable * price_out) / 1_000_000
-
-    return usd * USD_BRL
+from app.application.monitoring.ai_pricing import USD_BRL, record_cost_brl  # noqa: E402
 
 
 def _report_cost(report: dict) -> float:
-    """Custo-sombra do atleta somando por modelo (preço difere por modelo).
+    """Custo estimado do atleta somando por modelo (preço difere por modelo).
     Reconstrói in/out por modelo lendo os registros crus — o report agrega
     total por modelo, mas o custo precisa separar entrada de saída."""
 
@@ -53,11 +30,7 @@ def _report_cost(report: dict) -> float:
 
     for r in records:
 
-        in_t = r.get("in", 0)
-
-        out_billable = r.get("out", 0) + r.get("thoughts", 0)
-
-        total += _cost_brl(r.get("model", "_default"), in_t, out_billable)
+        total += record_cost_brl(r)
 
     return total
 
@@ -76,13 +49,13 @@ def main() -> None:
 
     print()
     print("CONSUMO DE IA (GEMINI) POR ATLETA")
-    print("Hoje = TIER GRÁTIS → custo real R$ 0,00. Abaixo = CUSTO-SOMBRA")
-    print(f"(se fosse pago · câmbio US$1={USD_BRL} · medidor desde 2026-09-04)")
+    print("Conta PAGA. Abaixo = custo ESTIMADO (preço oficial; o painel do AI Studio é a verdade)")
+    print(f"(estimado · câmbio US$1={USD_BRL} · medidor desde 2026-09-04)")
     print()
 
     header = (
         f"{'atleta':<14} {'chamadas':>8} {'tokens':>12} "
-        f"{'R$ sombra':>10}  modelos"
+        f"{'R$ estim.':>10}  modelos"
     )
     print(header)
     print("-" * len(header))
@@ -137,8 +110,8 @@ def main() -> None:
         )
 
     print()
-    print("⚠ R$ é ESTIMATIVA (tier grátis = R$0 hoje). Ajuste PRICING/câmbio")
-    print("  no topo do script com a tabela oficial do Gemini.")
+    print("⚠ R$ é ESTIMATIVA. Preço e câmbio em app/application/monitoring/ai_pricing.py")
+    print("  (conferir com o painel do AI Studio).")
     print()
 
 

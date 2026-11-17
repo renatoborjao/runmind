@@ -57,24 +57,17 @@ CUT_TOLERANCE = 0.10
 LONG_SPIKE_MAX = 0.10
 RECENT_WEEKS = 4
 
-# custo da IA: por plano (o normal é ~R$ 0,30; um bloco novo soma ~R$ 0,70) e no total desde domingo
-PLAN_COST_WARN_BRL = 1.50
-TOTAL_COST_WARN_BRL = 5.00
+# custo da IA: por plano (no preço oficial o normal é ~R$ 0,60 no Pro; um bloco novo soma mais) e no
+# total desde domingo (~R$ 4-5 com 6 atletas)
+PLAN_COST_WARN_BRL = 2.50
+TOTAL_COST_WARN_BRL = 9.00
 
 # a mensagem do plano só é achada no registro de envios (guarda as últimas 10) por poucos dias
 FRESH_DAYS = 3
 
 DEFAULT_TZ = "America/Sao_Paulo"
 
-# preços de lista (USD por 1M de tokens): (entrada, saída) — os mesmos de ops/plan_audit.py
-USD_BRL = 5.40
-
-PRICING = {
-    "gemini-3.6-flash": (0.15, 0.60),
-    "gemini-3.5-flash-lite": (0.075, 0.30),
-    "gemini-3.1-pro-preview": (1.25, 10.00),
-    "_default": (0.15, 0.60),
-}
+# preço do Gemini: app/application/monitoring/ai_pricing.py (um lugar só)
 
 # os rótulos de chamada de IA que montam o plano da semana
 PLAN_LABELS = ("plan", "auto:coach_plan_engine")
@@ -204,15 +197,11 @@ def last_sunday(now: datetime) -> datetime:
 
 
 def cost_brl(record: dict) -> float:
-    """Custo-sombra de UMA chamada de IA (preço de lista; é o que o medidor registra)."""
+    """Custo estimado de UMA chamada de IA (preço oficial de lista; ver ai_pricing)."""
 
-    pin, pout = PRICING.get(record.get("model"), PRICING["_default"])
+    from app.application.monitoring.ai_pricing import record_cost_brl
 
-    tokens_in = record.get("in") or 0
-
-    tokens_out = (record.get("out") or 0) + (record.get("thoughts") or 0)
-
-    return (tokens_in * pin + tokens_out * pout) / 1_000_000 * USD_BRL
+    return record_cost_brl(record)
 
 
 def _parse_ts(value) -> datetime | None:

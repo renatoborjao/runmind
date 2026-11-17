@@ -48,7 +48,7 @@ class AIHealthMonitor:
 
         was_alerted = state.get("alerted", False)
 
-        repo.save({"consecutive_failures": 0, "alerted": False})
+        repo.save({**state, "consecutive_failures": 0, "alerted": False})
 
         if was_alerted:
 
@@ -73,6 +73,7 @@ class AIHealthMonitor:
 
         repo.save(
             {
+                **state,
                 "consecutive_failures": failures,
                 "alerted": already_alerted or should_alert,
             }
@@ -85,6 +86,36 @@ class AIHealthMonitor:
                 f"responder atletas. Última causa: {reason[:300]}\n\n"
                 f"Verifique o backend/Gemini."
             )
+
+    @staticmethod
+    async def record_billing_failure(reason: str) -> None:
+        """O Gemini recusou por COBRANÇA (crédito pré-pago acabou, 402). Isso derruba TODA a IA
+        de uma vez — chat, análise e o plano de domingo (que cai no plano genérico sem ninguém
+        ver). Avisa o dono NA PRIMEIRA falha, não depois de 3 no chat; no máximo 1 aviso por dia
+        (Brasília) pra não spamar a cada chamada. Foi o que aconteceu em 28/09."""
+
+        from app.core.clock import DEFAULT_TIMEZONE
+
+        from datetime import datetime
+
+        today = datetime.now(DEFAULT_TIMEZONE).date().isoformat()
+
+        repo = AIHealthRepository()
+
+        state = repo.load()
+
+        if state.get("billing_alert_day") == today:
+
+            return
+
+        repo.save({**state, "billing_alert_day": today})
+
+        await AIHealthMonitor._notify(
+            "🚨 Ritmind: o Gemini recusou por falta de CRÉDITO — a IA do coach (chat, análise e "
+            "plano) está parada até recarregar.\n"
+            "👉 Recarregar em AI Studio → projeto → Billing.\n"
+            f"Erro: {reason[:200]}"
+        )
 
     @staticmethod
     async def _notify(message: str) -> None:

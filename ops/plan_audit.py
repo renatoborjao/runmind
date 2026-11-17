@@ -17,14 +17,13 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 STORAGE = Path("storage")
-USD_BRL = 5.40
-# preços de lista (USD/1M tokens): (entrada, saída) — igual report_tokens.py
-PRICING = {
-    "gemini-3.6-flash": (0.15, 0.60),
-    "gemini-3.5-flash-lite": (0.075, 0.30),
-    "gemini-3.1-pro-preview": (1.25, 10.00),
-    "_default": (0.15, 0.60),
-}
+# preço do Gemini num lugar só (backend/app/application/monitoring/ai_pricing.py); o script roda
+# de dentro de ~/runmind/backend, então o app entra pelo diretório atual
+import sys  # noqa: E402
+
+sys.path.insert(0, str(Path.cwd()))
+
+from app.application.monitoring.ai_pricing import cost_brl as _cost_brl  # noqa: E402
 
 
 def jload(p: Path):
@@ -35,10 +34,13 @@ def jload(p: Path):
 
 
 def cost(model, rec) -> float:
-    pin, pout = PRICING.get(model, PRICING["_default"])
-    in_t = rec.get("in") or 0
     out_t = (rec.get("out") or 0) + (rec.get("thoughts") or 0)
-    return (in_t * pin + out_t * pout) / 1_000_000 * USD_BRL
+    stamp = rec.get("ts") or ""
+    try:
+        when = date.fromisoformat(stamp[:10])
+    except ValueError:
+        when = None
+    return _cost_brl(model, rec.get("in") or 0, out_t, when)
 
 
 def usage_section(day: str):
