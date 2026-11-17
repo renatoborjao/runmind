@@ -257,3 +257,11 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/`, apagar `app/application/coach/conversation/proposal_status.py` e `sudo systemctl restart runmind.service`.
 - **Medir:** próxima revisão de conversas: proposta seguida de mensagem que a ignora/contradiz sumiu? "Posso aplicar?" sem dizer o quê sumiu?
 - **Motivo:** Renato 17/11 ("corrige a proposta"), padrão B da 1ª revisão de conversas.
+
+## 17/11/2026 — resumo de domingo e dica de calor sem frase fixa contradizendo os números
+
+- **O que mudou:** `review/weekly_review_message_formatter.py`: "vem cumprindo mais/caindo" sai da série exibida (2ª metade × 1ª, ≥20%); com sequência cumprida não sai "caindo"; linha de volume diz a janela (4 semanas × 4 anteriores). `history/evolution_analyzer.py`: semana recente com 0 km entra como 0 na tendência de volume (também na API de evolução). `coach/writer/state_portrait_writer.py` + `review/weekly_review_notifier.py`: retrato condensado troca "janela ideal pra progredir/empurrão" por constância quando a semana teve menos da metade dos treinos. `coach/intelligence/weather_advisor.py`: hora mais fresca só entre as que ainda vêm (hoje); à tarde sugere o fim do dia; sem hora fresca, não sugere. Tudo determinístico (sem IA), coberto por testes; sem lab (não muda contexto/dossiê).
+- **Backup na VM:** `~/deploy_backups/20261117-185120`.
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service`.
+- **Medir:** resumo de domingo 22/11 (19h) e a próxima revisão de conversas.
+- **Motivo:** Renato 17/11 ("corrige o resumo"), padrões C e H da 1ª revisão de conversas.
