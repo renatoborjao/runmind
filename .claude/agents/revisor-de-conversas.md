@@ -21,9 +21,13 @@ o que você achar vira melhoria do coach, então seja preciso e justo (aponte ta
 
 ## O que ler (rodar da raiz do repo `C:\Users\renat\Documents\runmind`)
 
-1. `bash ops/relatorio_vm.sh conversas 7` — por atleta, em ordem de tempo: o plano gravado, as
-   falas do atleta e do coach, os avisos proativos, as análises de treino, as decisões do cérebro
-   que caíram em plano B (fallback) ou ficaram pendentes, e o que foi gravado na memória.
+1. `bash ops/relatorio_vm.sh atletas` (a lista) e, UM ATLETA POR VEZ,
+   `bash ops/relatorio_vm.sh conversas 7 <perfil>` — em ordem de tempo: o plano gravado, a
+   proposta de mudança em aberto (se houver), as falas do atleta e do coach, os avisos
+   proativos (inclusive os que já foram pro arquivo), as análises de treino, as mensagens em que
+   o cérebro caiu no plano B (fallback) ou que chegaram com proposta do coach em aberto, e o que
+   foi gravado na memória. Um por vez mantém a saída pequena: saída grande vira arquivo no PC —
+   se a ferramenta avisar que gravou a saída num arquivo, apague esse arquivo antes de terminar.
 2. `bash ops/relatorio_vm.sh planos` — plano × feito semana a semana (pra saber se o que o coach
    disse sobre o atleta bate com o que ele fez).
 3. `docs/coach_conhecimento_fontes.txt` — o que o coach sabe e por quê. Julgue com o MESMO

@@ -3,11 +3,14 @@ que o coach falou e o que o atleta disse numa janela (padrão: 7 dias), pra um r
 `revisor-de-conversas` ou o próprio dono) julgar a QUALIDADE do coach com olho de treinador:
 
   chat          as falas do atleta e as respostas do coach
-  proativo      o que o coach mandou sozinho (briefing, alerta, lembrete) — se não repetiu no chat
+  proativo      o que o coach mandou sozinho (briefing, alerta, lembrete) — se não repetiu no chat;
+                inclui o que já saiu da janela do outbox (guarda só os 10 últimos) e foi pro arquivo
   análise       a análise de cada treino gravada na janela
-  cérebro       decisões do roteador que caíram no plano B (fallback) ou ficaram pendentes
+  cérebro       mensagens do atleta em que o roteador caiu no plano B (fallback) ou que chegaram com
+                uma proposta do coach EM ABERTO (o atleta respondeu com uma oferta pendente)
   memória       o que foi gravado na memória do atleta (pra ver se algo dito se perdeu)
   plano         o plano gravado da semana, sessão por sessão (pra conferir promessa × plano)
+  proposta      a proposta de mudança de plano que ainda espera o "sim" do atleta, se houver
 
 Não muda nada e não manda nada: só imprime. Dado de atleta fica na VM — rodar lá e ler na tela
 (`bash ops/relatorio_vm.sh conversas [dias]`). As peças puras (`collect`, `render`) recebem
@@ -145,7 +148,10 @@ def collect(
 
             continue
 
-        flag = "plano B (fallback)" if entry.get("fallback") else "pendente"
+        flag = (
+            "plano B (fallback)" if entry.get("fallback")
+            else "chegou com proposta do coach em aberto"
+        )
 
         items.append(
             Item(
@@ -196,7 +202,45 @@ def _cut(text: str) -> str:
     return text[:MAX_ITEM_CHARS].rstrip() + f" […cortado: {len(text)} caracteres no total]"
 
 
-def render(name: str, items: list[Item], plan_lines: list[str], tz: ZoneInfo, days: int) -> str:
+def proposal_lines(proposal) -> list[str]:
+    """A proposta pendente em poucas linhas: tipo, semana e cada mudança (dia → o que entra)."""
+
+    if proposal is None:
+
+        return []
+
+    get = proposal.get if isinstance(proposal, dict) else lambda k: getattr(proposal, k, None)
+
+    lines = [f"tipo {get('kind')} · semana {get('week_start')}"]
+
+    for op in get("operations") or []:
+
+        session = op.get("session") or {}
+
+        what = " · ".join(
+            str(x)
+            for x in (
+                session.get("workout_type"),
+                f"{session.get('planned_distance_km')} km" if session.get("planned_distance_km") else None,
+                f"{session.get('planned_duration_minutes')} min"
+                if session.get("planned_duration_minutes") else None,
+            )
+            if x
+        )
+
+        lines.append(f"{op.get('action')} {op.get('day')}" + (f": {what}" if what else ""))
+
+    return lines
+
+
+def render(
+    name: str,
+    items: list[Item],
+    plan_lines: list[str],
+    tz: ZoneInfo,
+    days: int,
+    pending: list[str] | None = None,
+) -> str:
     """O bloco de UM atleta, pronto pra ler na tela."""
 
     chat = sum(1 for i in items if i.kind == "atleta")
@@ -209,6 +253,12 @@ def render(name: str, items: list[Item], plan_lines: list[str], tz: ZoneInfo, da
     ]
 
     out.extend(plan_lines or ["(sem plano gravado)"])
+
+    out.append("")
+
+    out.append("-- proposta em aberto (espera o sim do atleta) --")
+
+    out.extend(pending or ["(nenhuma)"])
 
     out.append("")
 
@@ -257,6 +307,10 @@ class CoachConversationDigest:
         from app.infrastructure.persistence.coach_outbox_repository import (
             CoachOutboxRepository,
         )
+        from app.infrastructure.persistence.permanent_archive import PermanentArchive
+        from app.infrastructure.persistence.plan_proposal_repository import (
+            PlanProposalRepository,
+        )
         from app.infrastructure.persistence.conversation_repository import (
             ConversationRepository,
         )
@@ -276,10 +330,26 @@ class CoachConversationDigest:
 
         since = now - timedelta(days=days)
 
+        outbox_repo = CoachOutboxRepository()
+
+        archived = [
+            row.get("record")
+            for row in PermanentArchive.load(outbox_repo.storage, "coach_outbox", profile)
+            if isinstance(row.get("record"), dict)
+        ]
+
+        try:
+
+            proposal = PlanProposalRepository().load(profile)
+
+        except Exception:  # noqa: BLE001 — proposta ilegível não derruba o resumo
+
+            proposal = None
+
         items = collect(
             since,
             chat=ConversationRepository().load(profile),
-            outbox=CoachOutboxRepository()._load(profile),
+            outbox=archived + outbox_repo._load(profile),
             analyses=WorkoutAnalysisRepository()._load(profile),
             brain_log=CoachBrainLogRepository().load(profile),
             memories=RunnerMemoryRepository().load(profile),
@@ -295,7 +365,10 @@ class CoachConversationDigest:
 
             plan_lines = [session_line(s) for s in sessions]
 
-        return render(first_name(runner.name) or profile, items, plan_lines, tz, days)
+        return render(
+            first_name(runner.name) or profile, items, plan_lines, tz, days,
+            pending=proposal_lines(proposal),
+        )
 
 
 def run(days: int = DEFAULT_DAYS, only: str | None = None, now: datetime | None = None) -> str:

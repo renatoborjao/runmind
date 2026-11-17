@@ -5,6 +5,7 @@ from app.application.monitoring.coach_conversation_digest import (
     MAX_ITEM_CHARS,
     collect,
     parse_ts,
+    proposal_lines,
     render,
 )
 
@@ -103,3 +104,54 @@ def test_render_sem_nada_na_janela():
     assert "(sem plano gravado)" in text
 
     assert "(nada na janela)" in text
+
+
+def test_proativo_repetido_no_arquivo_e_na_janela_aparece_uma_vez_so_se_nao_estiver_no_chat():
+
+    outbox = [
+        {"text": "Lembrete A", "timestamp": "2026-11-11T09:00:00+00:00"},
+        {"text": "Lembrete B", "timestamp": "2026-11-12T09:00:00+00:00"},
+    ]
+
+    items = collect(SINCE, outbox=outbox)
+
+    assert [i.text for i in items] == ["Lembrete A", "Lembrete B"]
+
+
+def test_cerebro_com_proposta_em_aberto_tem_rotulo_claro():
+
+    items = collect(
+        SINCE,
+        brain_log=[{"ts": "2026-11-11T10:00:00+00:00", "incoming": "sim", "say": "aplicado",
+                    "fallback": False, "pending": True}],
+    )
+
+    assert items[0].kind == "cérebro: chegou com proposta do coach em aberto"
+
+
+def test_proposta_pendente_vira_linhas_e_aparece_no_bloco():
+
+    proposal = {
+        "kind": "move", "week_start": "2026-11-16",
+        "operations": [
+            {"action": "drop", "day": "Wednesday"},
+            {"action": "replace", "day": "Friday",
+             "session": {"workout_type": "intervals", "planned_distance_km": 8}},
+        ],
+    }
+
+    lines = proposal_lines(proposal)
+
+    assert lines == [
+        "tipo move · semana 2026-11-16",
+        "drop Wednesday",
+        "replace Friday: intervals · 8 km",
+    ]
+
+    text = render("Ana", [], [], BRT, 7, pending=lines)
+
+    assert "-- proposta em aberto (espera o sim do atleta) --" in text
+
+    assert "replace Friday: intervals · 8 km" in text
+
+    assert proposal_lines(None) == []

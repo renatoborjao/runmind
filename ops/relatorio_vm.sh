@@ -7,7 +7,8 @@
 #   bash ops/relatorio_vm.sh lista             # os dias disponíveis
 #   bash ops/relatorio_vm.sh geracao           # confere AGORA o plano de domingo de cada atleta
 #   bash ops/relatorio_vm.sh geracao texto     # idem, com o texto que cada atleta recebeu
-#   bash ops/relatorio_vm.sh conversas [dias]  # chat, análises e avisos do coach na janela (padrão 7)
+#   bash ops/relatorio_vm.sh atletas           # os perfis ativos
+#   bash ops/relatorio_vm.sh conversas [dias] [atleta]  # chat, análises e avisos do coach (7 dias)
 set -euo pipefail
 
 VM="ubuntu@163.176.28.178"
@@ -28,12 +29,20 @@ case "$KIND" in
     ssh -i "$KEY" "$VM" "cd ~/runmind/backend && GOOGLE_API_KEY=DISABLED PYTHONIOENCODING=utf-8 .venv/bin/python -m app.application.monitoring.plan_generation_monitor $FLAG 2>/dev/null" \
       | grep -v -E '^\[token|AFC|DeprecationWarning' || true
     exit 0 ;;
+  atletas)
+    # os perfis ativos, pra ler as conversas um a um
+    ssh -i "$KEY" "$VM" "cd ~/runmind/backend && GOOGLE_API_KEY=DISABLED .venv/bin/python -c 'from app.infrastructure.persistence.runner_profile_repository import RunnerProfileRepository as R; print(chr(10).join(R().list_active()))' 2>/dev/null"
+    exit 0 ;;
   conversas)
     # o que o coach disse e o que o atleta disse na janela (só leitura, ZERO IA): pro revisor de
     # conversas julgar a qualidade do coach. Lido na tela, nada gravado aqui nem lá.
     DIAS="${2:-7}"
+    ATLETA="${3:-}"
     [[ "$DIAS" =~ ^[0-9]{1,2}$ ]] || { echo "dias inválido: $DIAS" >&2; exit 1; }
-    ssh -i "$KEY" "$VM" "cd ~/runmind/backend && GOOGLE_API_KEY=DISABLED PYTHONIOENCODING=utf-8 .venv/bin/python -m app.application.monitoring.coach_conversation_digest --dias $DIAS 2>/dev/null" \
+    [[ "$ATLETA" =~ ^[a-z0-9_]{0,40}$ ]] || { echo "atleta inválido: $ATLETA" >&2; exit 1; }
+    ONLY=""
+    [ -n "$ATLETA" ] && ONLY="--atleta $ATLETA"
+    ssh -i "$KEY" "$VM" "cd ~/runmind/backend && GOOGLE_API_KEY=DISABLED PYTHONIOENCODING=utf-8 .venv/bin/python -m app.application.monitoring.coach_conversation_digest --dias $DIAS $ONLY 2>/dev/null" \
       | grep -v -E '^\[token|AFC|DeprecationWarning' || true
     exit 0 ;;
   *) echo "tipo inválido: $KIND (use planos, carga, armazenamento, lista, geracao ou conversas)" >&2; exit 1 ;;
