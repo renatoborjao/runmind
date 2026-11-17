@@ -41,7 +41,13 @@ class WeatherAdvisor:
 
                 return None
 
-            return WeatherAdvisor._build(hours)
+            # aviso de HOJE: a "hora mais fresca" só pode ser uma que ainda não passou
+            # (João recebeu "corra mais cedo (~5h)" às 10h, 15/11)
+            from app.core.clock import now_local, today_local
+
+            now_hour = now_local().hour if target_date == today_local() else None
+
+            return WeatherAdvisor._build(hours, now_hour)
 
         except Exception as e:
 
@@ -131,8 +137,9 @@ class WeatherAdvisor:
         return out
 
     @staticmethod
-    def _build(hours: list[dict]) -> str | None:
-        """Monta o aviso a partir das horas de treino do dia. None se ameno."""
+    def _build(hours: list[dict], now_hour: int | None = None) -> str | None:
+        """Monta o aviso a partir das horas de treino do dia. None se ameno. `now_hour` (aviso
+        do próprio dia): a janela sugerida sai só das horas que ainda vêm."""
 
         valid = [h for h in hours if h["feels"] is not None]
 
@@ -146,16 +153,40 @@ class WeatherAdvisor:
 
             return None  # dia ameno: sem aviso
 
-        coolest = min(valid, key=lambda h: h["feels"])
+        ahead = [h for h in valid if now_hour is None or h["hour"] > now_hour]
+
+        coolest = min(ahead, key=lambda h: h["feels"]) if ahead else None
 
         ease, extra = WeatherAdvisor._pace_caution(peak["feels"])
 
-        return (
-            f"🌡️ Hoje esquenta: sensação de até ~{round(peak['feels'])}° "
-            f"(por volta das {peak['hour']}h). Se der, corra mais cedo "
-            f"(~{coolest['hour']}h, ~{round(coolest['feels'])}°); "
+        if coolest is None or coolest["feels"] > peak["feels"] - 2:
+
+            # nenhuma hora que ainda vem é bem mais fresca: não sugere horário
+            window = ""
+
+        elif now_hour is not None and coolest["hour"] > peak["hour"]:
+
+            window = (
+                f" Se der, deixa pro fim do dia (~{coolest['hour']}h, "
+                f"~{round(coolest['feels'])}°);"
+            )
+
+        else:
+
+            window = (
+                f" Se der, corra mais cedo (~{coolest['hour']}h, "
+                f"~{round(coolest['feels'])}°);"
+            )
+
+        pace = (
             f"segura o pace {ease} mais leve{extra}, foca no esforço/FC e "
             "capricha na hidratação. 💧"
+        )
+
+        return (
+            f"🌡️ Hoje esquenta: sensação de até ~{round(peak['feels'])}° "
+            f"(por volta das {peak['hour']}h)."
+            + (f"{window} {pace}" if window else f" {pace[0].upper()}{pace[1:]}")
         )
 
     @staticmethod

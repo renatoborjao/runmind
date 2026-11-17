@@ -58,7 +58,7 @@ def test_format_renders_full_message():
     assert "• Volume: 7.2 km (14.1 km na anterior, -48.9%)" in message
     assert "• Treinos: 1 (2 na anterior)" in message
     assert "• Pace médio: 5:59 min/km (5:30 min/km na anterior)" in message
-    assert "• Volume: caindo (-11.7%)" in message
+    assert "• Volume (últimas 4 semanas × as 4 anteriores): caindo (-11.7%)" in message
     assert "• Pace: mais rápido (-7.2%)" in message
 
 
@@ -264,7 +264,7 @@ def test_format_translates_upward_trends():
 
     message = WeeklyReviewMessageFormatter.format("Renato", review)
 
-    assert "• Volume: subindo (+12.0%)" in message
+    assert "• Volume (últimas 4 semanas × as 4 anteriores): subindo (+12.0%)" in message
     assert "• Pace: mais lento (+6.1%)" in message
 
 

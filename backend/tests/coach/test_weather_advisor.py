@@ -44,3 +44,37 @@ def test_pace_caution_scales_with_heat():
 def test_build_empty_when_no_valid_feels():
 
     assert WeatherAdvisor._build([{"hour": 8, "feels": None, "rain": 0}]) is None
+
+
+def test_aviso_de_hoje_nao_sugere_hora_que_ja_passou():
+
+    hours = [
+        {"hour": 5, "feels": 22, "rain": 0},
+        {"hour": 10, "feels": 30, "rain": 0},
+        {"hour": 15, "feels": 34, "rain": 0},
+        {"hour": 20, "feels": 26, "rain": 0},
+    ]
+
+    out = WeatherAdvisor._build(hours, now_hour=10)
+
+    assert "~5h" not in out
+
+    assert "fim do dia (~20h" in out
+
+    # de manhã cedo, o horário fresco ainda vem pela frente
+    assert "mais cedo (~5h" in WeatherAdvisor._build(hours, now_hour=4)
+
+
+def test_sem_hora_fresca_pela_frente_nao_sugere_horario():
+
+    hours = [
+        {"hour": 5, "feels": 22, "rain": 0},
+        {"hour": 14, "feels": 34, "rain": 0},
+        {"hour": 16, "feels": 33, "rain": 0},
+    ]
+
+    out = WeatherAdvisor._build(hours, now_hour=13)
+
+    assert "Se der" not in out
+
+    assert "Segura o pace" in out

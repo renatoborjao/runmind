@@ -97,11 +97,43 @@ class StatePortraitWriter:
 
         return "\n".join(lines)
 
+    # menos que isto dos treinos da semana feitos = a semana não sustenta "pronto pra progredir"
+    _LOW_ADHERENCE = 0.5
+
+    @staticmethod
+    def with_week_reality(state: str, week_adherence: dict | None) -> str:
+        """A síntese corpo × forma fala de PROGREDIR ("janela ideal", "empurrão"); com menos da
+        metade dos treinos da semana feitos isso contradiz a semana que o atleta acabou de ler
+        (Fernanda e Hélio 15/11: 1 de 3 treinos e "a janela ideal pra progredir"). Aí troca
+        pela verdade: o corpo dá espaço, o que falta é a constância."""
+
+        if not week_adherence:
+
+            return state
+
+        planned = week_adherence.get("planned") or 0
+
+        done = week_adherence.get("done") or 0
+
+        if planned <= 0 or done / planned >= StatePortraitWriter._LOW_ADHERENCE:
+
+            return state
+
+        if not any(key in state for key in ("progredir", "empurrão")):
+
+            return state
+
+        return (
+            f"Corpo e forma dão espaço pra evoluir, mas a semana teve {done} de {planned} "
+            "treinos — o que vai fazer diferença agora é a constância, não puxar mais."
+        )
+
     @staticmethod
     def write_compact(
         reading: BodyReading,
         evolution: FitnessEvolution,
         worsening: bool | None = None,
+        week_adherence: dict | None = None,
     ) -> str | None:
         """O retrato CONDENSADO pra dentro do resumo de domingo: a síntese + uma
         linha do corpo (com o aviso do limitador, ex.: sono) + a forma. Sem o
@@ -120,6 +152,8 @@ class StatePortraitWriter:
         state, _conduct = StatePortraitSynthesizer.synthesize(
             reading, evolution, worsening,
         )
+
+        state = StatePortraitWriter.with_week_reality(state, week_adherence)
 
         lines = ["📷 Como você está", state]
 

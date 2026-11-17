@@ -332,24 +332,19 @@ class WeeklyReviewMessageFormatter:
 
         lines.append(f"• Últimas {len(shown)} semanas: {series}{rate}")
 
-        # "vem cumprindo MAIS" só faz sentido se a série EXIBIDA sobe de verdade.
-        # Quando as semanas mostradas estão no teto (todas cumpridas) ou iguais,
-        # dizer "mais que antes" contradiz o que o atleta vê (3/3·3/3·3/3·3/3) —
-        # a linha do streak acima já celebra. Suprime (fim da redundância + do
-        # sem-nexo). Bug do Renato.
-        shown_perfect = all(
-            week.done >= week.planned for week in shown if week.planned
-        )
+        # a tendência sai da série EXIBIDA (a que o atleta lê logo acima), não de uma janela
+        # mais longa: "vem cumprindo mais 👏" ao lado de 3/3 · 3/3 · 2/3 · 1/3 (Hélio 15/11) e
+        # "2 semanas seguidas" + "vem caindo" na mesma mensagem (Renato 15/11) eram a janela
+        # longa contradizendo os números na tela. Série no teto ou igual = sem frase.
+        direction = WeeklyReviewMessageFormatter.shown_direction(shown)
 
-        shown_flat = len({(week.done, week.planned) for week in shown}) == 1
-
-        if report.trend == ADHERENCE_RISING and not (shown_perfect or shown_flat):
+        if direction == ADHERENCE_RISING:
 
             lines.append(
                 "• Você vem cumprindo mais que nas semanas anteriores 👏"
             )
 
-        elif report.trend == ADHERENCE_FALLING:
+        elif direction == ADHERENCE_FALLING and streak < 2:
 
             lines.append(
                 "• O cumprimento vem caindo — se a rotina mudou, me conta "
@@ -376,6 +371,36 @@ class WeeklyReviewMessageFormatter:
             )
 
         return lines
+
+    # diferença mínima de cumprimento (fração) entre a 1ª e a 2ª metade da série exibida
+    _SHOWN_TREND_GAP = 0.20
+
+    @staticmethod
+    def shown_direction(shown) -> str | None:
+        """Sobe/cai pela série que o atleta VÊ: média de cumprimento da 2ª metade × 1ª metade.
+        None quando estável, no teto ou com menos de 2 semanas."""
+
+        rates = [min(1.0, week.done / week.planned) for week in shown if week.planned]
+
+        if len(rates) < 2:
+
+            return None
+
+        half = len(rates) // 2
+
+        first = sum(rates[:half]) / half
+
+        second = sum(rates[half:]) / (len(rates) - half)
+
+        if second - first >= WeeklyReviewMessageFormatter._SHOWN_TREND_GAP:
+
+            return ADHERENCE_RISING
+
+        if first - second >= WeeklyReviewMessageFormatter._SHOWN_TREND_GAP:
+
+            return ADHERENCE_FALLING
+
+        return None
 
     @staticmethod
     def _goal_lines(goal: dict) -> list[str]:
@@ -438,8 +463,11 @@ class WeeklyReviewMessageFormatter:
 
         if volume.get("delta_percent") is not None:
 
+            # a janela é longa (4 semanas × 4 anteriores): sem dizer isso, "Volume: subindo"
+            # ao lado de uma semana de 0 km lia como sobre ESTA semana (João 15/11)
             lines.append(
-                f"• Volume: {VOLUME_DIRECTIONS[volume['direction']]} "
+                f"• Volume (últimas 4 semanas × as 4 anteriores): "
+                f"{VOLUME_DIRECTIONS[volume['direction']]} "
                 f"({volume['delta_percent']:+.1f}%)"
             )
 

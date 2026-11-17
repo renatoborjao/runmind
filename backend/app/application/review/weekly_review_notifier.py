@@ -147,6 +147,7 @@ class WeeklyReviewNotifier:
             # separado. Em vez de 3 mensagens no mesmo minuto.
             sections, shown = await WeeklyReviewNotifier._unified_sections(
                 profile, runner, history, local, message,
+                week_adherence=review.get("adherence"),
             )
 
             await CoachOutbox.send(
@@ -340,6 +341,7 @@ class WeeklyReviewNotifier:
     @staticmethod
     async def _unified_sections(
         profile: str, runner, history, local, review_text: str = "",
+        week_adherence: dict | None = None,
     ) -> tuple[list[str], dict | None]:
         """As seções que entram no resumo de domingo unificado: o retrato
         condensado e, SÓ se houver novidade (ou 1x/mês), o "rumo à meta".
@@ -368,6 +370,7 @@ class WeeklyReviewNotifier:
             portrait = StatePortraitWriter.write_compact(
                 reading, evolution,
                 worsening=drift.worsening if drift else None,
+                week_adherence=week_adherence,
             )
 
             if portrait:

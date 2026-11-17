@@ -45,6 +45,7 @@ class EvolutionAnalyzer:
             "trends": {
                 "volume": EvolutionAnalyzer._trend(
                     [week["distance_km"] for week in series],
+                    zero_counts=True,
                 ),
                 "pace": EvolutionAnalyzer._trend(
                     [week["avg_pace_min_km"] for week in series],
@@ -53,12 +54,16 @@ class EvolutionAnalyzer:
         }
 
     @staticmethod
-    def _trend(values: list) -> dict:
+    def _trend(values: list, zero_counts: bool = False) -> dict:
+        """Média das 4 semanas recentes × as 4 anteriores. `zero_counts` (volume): semana
+        recente com 0 km ENTRA como 0 — ele não correu, e tirá-la fazia "subindo +20%" numa
+        semana zerada (João 15/11). Nas anteriores o zero segue fora (pode ser antes de ele
+        começar). Pace: zero = sem dado, sempre fora."""
 
         recent = [
-            value
+            value or 0
             for value in values[-4:]
-            if value
+            if value or (zero_counts and value is not None)
         ]
 
         previous = [
