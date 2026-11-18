@@ -65,6 +65,9 @@ def _isolated_shared_storage(tmp_path, monkeypatch):
 
     root = tmp_path / "storage"
 
+    from app.infrastructure.persistence import blocked_athlete_repository
+
+    monkeypatch.setattr(blocked_athlete_repository, "_STORAGE", root / "auth")
     monkeypatch.setattr(ai_health_repository, "_STORAGE", root)
     monkeypatch.setattr(coach_brain_health_repository, "_STORAGE", root)
     monkeypatch.setattr(frequency_offer_store, "_STORAGE", root / "reconcile" / "freq_offer")

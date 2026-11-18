@@ -30,6 +30,9 @@ from app.application.notifications.notification_service import (
 from app.application.strava.strava_activity_renamer import (
     StravaActivityRenamer,
 )
+from app.infrastructure.persistence.blocked_athlete_repository import (
+    BlockedAthleteRepository,
+)
 from app.application.use_cases.owner_resolver import (
     OwnerResolver,
 )
@@ -76,6 +79,12 @@ from app.infrastructure.persistence.processed_inbound_guard import (
 )
 from app.infrastructure.persistence.runner_profile_repository import (
     RunnerProfileRepository,
+)
+
+# resposta fixa (sem IA) pro atleta desligado que volta a escrever
+BLOCKED_NOTICE = (
+    "Oi! Seu acesso ao Ritmind foi encerrado. Se quiser voltar, "
+    "é só pedir um convite pra gente. 🏃"
 )
 
 router = APIRouter(
@@ -575,6 +584,28 @@ async def route_inbound(
     else:
 
         profile = repo.find_by_phone(address)
+
+    # atleta DESLIGADO: não reabre cadastro (que chama IA) — só volta por
+    # convite no app. Aviso fixo, sem IA, no máximo de tempos em tempos.
+    if profile is None:
+
+        blocked = BlockedAthleteRepository()
+
+        blocked_slug = blocked.find_by_address(channel, address)
+
+        if blocked_slug:
+
+            notified = blocked.should_notify(blocked_slug)
+
+            if notified:
+
+                await NotificationService.send_to(
+                    channel=channel,
+                    address=address,
+                    message=BLOCKED_NOTICE,
+                )
+
+            return {"success": True, "blocked": True, "reply_sent": notified}
 
     # endereço desconhecido: inicia (ou continua) o cadastro
     if profile is None:

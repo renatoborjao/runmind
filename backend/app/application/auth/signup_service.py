@@ -24,6 +24,9 @@ from app.infrastructure.integrations.email.email_sender import EmailSender
 from app.infrastructure.persistence.auth_token_repository import (
     AuthTokenRepository,
 )
+from app.infrastructure.persistence.blocked_athlete_repository import (
+    BlockedAthleteRepository,
+)
 from app.infrastructure.persistence.invite_code_repository import (
     InviteCodeRepository,
 )
@@ -95,6 +98,10 @@ class SignupService:
             SignupService._send_code(existing, email)
 
             return {"status": "exists", "profile": existing}
+
+        # convite válido = porta de volta do atleta DESLIGADO: tira o bloqueio
+        # desse e-mail ANTES do slug (o slug antigo pode ser reaproveitado)
+        BlockedAthleteRepository().unblock_email(email)
 
         # novo atleta: cria o esqueleto, consome o convite
         slug = SignupService._unique_slug(email)
@@ -196,7 +203,9 @@ class SignupService:
 
         repo = RunnerProfileRepository()
 
-        existing = set(repo.list_all())
+        # slug de atleta desligado fica reservado (a sessão antiga dele segue
+        # barrada; quem volta por convite já teve o bloqueio tirado antes)
+        existing = set(repo.list_all()) | set(BlockedAthleteRepository().list())
 
         if slug not in existing:
 

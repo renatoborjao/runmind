@@ -18,6 +18,9 @@ from app.application.use_cases.load_training_history import (
     LoadTrainingHistory,
 )
 from app.core.config import get_settings
+from app.infrastructure.persistence.blocked_athlete_repository import (
+    BlockedAthleteRepository,
+)
 from app.infrastructure.integrations.evolution.phone_normalizer import (
     PhoneNormalizer,
 )
@@ -132,6 +135,11 @@ async def app_connect(request: Request, back: str = "perfil"):
     profile = SessionToken.verify(
         request.cookies.get(get_settings().auth_cookie_name)
     )
+
+    # atleta desligado não reconecta o Strava com a sessão antiga
+    if profile and BlockedAthleteRepository().is_slug_blocked(profile):
+
+        profile = None
 
     if not profile:
 
