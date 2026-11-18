@@ -57,6 +57,7 @@ def _isolated_shared_storage(tmp_path, monkeypatch):
     from app.infrastructure.persistence import (
         ai_health_repository,
         app_notification_repository,
+        applied_strava_rename_store,
         coach_brain_health_repository,
         coach_brain_log_repository,
         frequency_offer_store,
@@ -67,6 +68,9 @@ def _isolated_shared_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(ai_health_repository, "_STORAGE", root)
     monkeypatch.setattr(coach_brain_health_repository, "_STORAGE", root)
     monkeypatch.setattr(frequency_offer_store, "_STORAGE", root / "reconcile" / "freq_offer")
+    monkeypatch.setattr(
+        applied_strava_rename_store, "_STORAGE", root / "applied_strava_rename",
+    )
 
     signals = root / "learning_signals"
 

@@ -9,6 +9,8 @@ lugar do genérico do Strava ("Corrida matinal"). Best-effort ponta a ponta:
   o sync), o nome fica PENDENTE e é aplicado quando ela aparecer (webhook do
   Strava ou varredura periódica) — nunca desiste calado;
 - só sobrescreve nome GENÉRICO do Strava (respeita nome que o atleta pôs à mão);
+- se algo SOBRESCREVE o nome logo depois com o genérico (app do Strava aberto
+  com a tela antiga, 18/11), o webhook de update reaplica UMA vez;
 - idempotente: se já está com o nome certo, não bate na API.
 
 Ver [[project_tracker_tenis]] (roadmap de escrita no Strava) e
@@ -23,6 +25,9 @@ from app.application.history.planned_execution_matcher import (
 )
 from app.core.config import get_settings
 from app.infrastructure.integrations.strava.client import StravaClient
+from app.infrastructure.persistence.applied_strava_rename_store import (
+    AppliedStravaRenameStore,
+)
 from app.infrastructure.persistence.pending_strava_rename_store import (
     MAX_AGE_SECONDS,
     PendingStravaRenameStore,
@@ -233,7 +238,86 @@ class StravaActivityRenamer:
 
         ok = await client.update_activity(target.id, name)
 
+        if ok:
+
+            # guarda pra perceber se o nome for sobrescrito logo depois; falha
+            # aqui não desfaz o renome que já deu certo
+            try:
+
+                AppliedStravaRenameStore.record(
+                    target.id, str(client.profile), name
+                )
+
+            except Exception as e:
+
+                print(f"Renomear Strava: não guardei o renome de {target.id}: {e}")
+
         return "renamed" if ok else "write_failed"
+
+    @staticmethod
+    async def reapply_if_reverted(strava_activity_id, new_title) -> str:
+        """Webhook de UPDATE do Strava trocou o título de uma atividade que a
+        gente renomeou nas últimas 24h. Se voltou pra nome GENÉRICO ('Corrida
+        matinal'), algo salvou por cima com a tela antiga (18/11: o app do
+        Strava do atleta, 11 s depois da nossa troca) → reaplica o nome do
+        plano UMA vez. Nome próprio do atleta é respeitado (e esquecemos a
+        atividade). Resultado: 'reapplied' | 'not_ours' | 'same' |
+        'custom_name' | 'already_reapplied' | 'write_failed' | 'error'."""
+
+        try:
+
+            item = AppliedStravaRenameStore.get(strava_activity_id)
+
+            if item is None:
+
+                return "not_ours"
+
+            name = item.get("name") or ""
+
+            title = (new_title or "").strip()
+
+            if title == name:
+
+                return "same"  # eco da nossa própria troca
+
+            if not StravaActivityRenamer._is_generic(title):
+
+                # o atleta escolheu um nome — vale o dele
+                AppliedStravaRenameStore.forget(strava_activity_id)
+
+                outcome = "custom_name"
+
+            elif item.get("reapplied"):
+
+                # já reaplicamos uma vez: não entra em briga com outro app
+                outcome = "already_reapplied"
+
+            else:
+
+                profile = item["profile"]
+
+                ok = await StravaClient(profile).update_activity(
+                    int(strava_activity_id), name
+                )
+
+                if ok:
+
+                    AppliedStravaRenameStore.mark_reapplied(strava_activity_id)
+
+                outcome = "reapplied" if ok else "write_failed"
+
+            print(
+                f"Renomear Strava [{item.get('profile')}] nome revertido p/ "
+                f"'{title}' em {strava_activity_id}: {outcome} ('{name}')"
+            )
+
+            return outcome
+
+        except Exception as e:
+
+            print(f"Reaplicar nome Strava falhou em {strava_activity_id}: {e}")
+
+            return "error"
 
     @staticmethod
     def _executed_prescribed(planned_session, activity) -> bool:

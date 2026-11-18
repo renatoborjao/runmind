@@ -152,6 +152,21 @@ async def receive_webhook(
             background_tasks,
         )
 
+    # Título trocado numa atividade que a gente renomeou: se voltou pro
+    # genérico ('Corrida matinal'), reaplica o nome do plano uma vez
+    # (18/11: o app do Strava do atleta salvou por cima com a tela antiga).
+    title = (payload.get("updates") or {}).get("title")
+
+    if payload.get("aspect_type") == "update" and title is not None:
+
+        background_tasks.add_task(
+            StravaActivityRenamer.reapply_if_reverted,
+            payload["object_id"],
+            title,
+        )
+
+        return {"queued": True, "reason": "title update"}
+
     # Só treino recém-criado gera feedback. update não —
     # o que havia pra avaliar já foi avaliado na criação.
     if payload.get("aspect_type") != "create":

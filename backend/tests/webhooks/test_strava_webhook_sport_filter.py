@@ -283,3 +283,41 @@ def test_duplicate_activity_is_ignored():
         # não resolve dono, não busca atividade, não envia feedback
         mock_resolver.resolve.assert_not_called()
         mock_event.execute.assert_not_awaited()
+
+
+def _post_update(updates: dict):
+
+    with (
+        patch(f"{MODULE}.StravaActivityRenamer") as mock_renamer,
+        patch(f"{MODULE}.TrainingCompletedEvent") as mock_event,
+    ):
+
+        mock_renamer.reapply_if_reverted = AsyncMock()
+
+        response = TestClient(app).post(
+            "/api/v1/webhooks/strava",
+            json={**PAYLOAD, "aspect_type": "update", "updates": updates},
+        )
+
+        return response.json(), mock_renamer, mock_event
+
+
+def test_title_update_goes_to_rename_guard():
+    """18/11: título voltou pra 'Corrida matinal' logo depois do nosso renome
+    -> o webhook passa pro renomeador decidir se reaplica."""
+
+    body, mock_renamer, mock_event = _post_update({"title": "Corrida matinal"})
+
+    assert body["queued"] is True
+    mock_renamer.reapply_if_reverted.assert_awaited_once_with(
+        123, "Corrida matinal"
+    )
+    mock_event.execute.assert_not_called()
+
+
+def test_update_without_title_is_still_ignored():
+
+    body, mock_renamer, _ = _post_update({"private": "true"})
+
+    assert body["ignored"] is True
+    mock_renamer.reapply_if_reverted.assert_not_called()

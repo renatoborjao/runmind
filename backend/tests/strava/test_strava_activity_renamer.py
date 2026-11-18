@@ -421,3 +421,120 @@ def test_is_generic_rejects_custom_names():
     assert not StravaActivityRenamer._is_generic("Tempo · 6 km")
     assert not StravaActivityRenamer._is_generic("Treino com a galera")
     assert not StravaActivityRenamer._is_generic("PR 10k")
+
+
+# ---- nome sobrescrito logo depois (18/11): reaplica UMA vez ---------------
+
+
+def _reapply(activity_id, title, update=True):
+
+    client = MagicMock()
+    client.update_activity = AsyncMock(return_value=update)
+
+    with patch(f"{MOD}.StravaClient", return_value=client):
+
+        out = asyncio.run(
+            StravaActivityRenamer.reapply_if_reverted(activity_id, title)
+        )
+
+    return out, client
+
+
+def _renamed_by_us(strava_id=21031895091, name="Ritmind · Limiar 9.5km"):
+    """Renomeia pelo caminho real (_apply) e devolve o que ficou gravado."""
+
+    from app.infrastructure.persistence.applied_strava_rename_store import (
+        AppliedStravaRenameStore,
+    )
+
+    strava = [_activity(dist=9800.0, act_id=strava_id, name="Corrida matinal")]
+
+    client = MagicMock()
+    client.profile = "mauricio"
+    client.get_last_activities = AsyncMock(return_value=strava)
+    client.update_activity = AsyncMock(return_value=True)
+
+    out = asyncio.run(StravaActivityRenamer._apply(
+        client, strava[0].start_date.timestamp(), 9800.0, name,
+    ))
+
+    assert out == "renamed"
+
+    return AppliedStravaRenameStore.get(strava_id)
+
+
+def test_apply_records_the_rename():
+
+    item = _renamed_by_us()
+
+    assert item["profile"] == "mauricio"
+    assert item["name"] == "Ritmind · Limiar 9.5km"
+    assert item["reapplied"] is False
+
+
+def test_reverted_to_generic_is_reapplied_once():
+    """O caso do Maurício em 18/11: renomeamos, 11 s depois o título voltou
+    pra 'Corrida matinal' -> reaplica; uma segunda reversão não briga."""
+
+    _renamed_by_us()
+
+    out, client = _reapply(21031895091, "Corrida matinal")
+
+    assert out == "reapplied"
+    client.update_activity.assert_awaited_once_with(
+        21031895091, "Ritmind · Limiar 9.5km"
+    )
+
+    out2, client2 = _reapply(21031895091, "Corrida matinal")
+
+    assert out2 == "already_reapplied"
+    client2.update_activity.assert_not_awaited()
+
+
+def test_echo_of_our_own_rename_is_ignored():
+
+    _renamed_by_us()
+
+    out, client = _reapply(21031895091, "Ritmind · Limiar 9.5km")
+
+    assert out == "same"
+    client.update_activity.assert_not_awaited()
+
+
+def test_athlete_custom_name_wins_after_rename():
+
+    _renamed_by_us()
+
+    out, client = _reapply(21031895091, "Limiar no Ibirapuera 🔥")
+
+    assert out == "custom_name"
+    client.update_activity.assert_not_awaited()
+
+    # esquecida: mesmo se depois virar genérico, não mexemos mais
+    out2, _ = _reapply(21031895091, "Corrida matinal")
+
+    assert out2 == "not_ours"
+
+
+def test_activity_we_never_renamed_is_untouched():
+
+    out, client = _reapply(99999, "Corrida matinal")
+
+    assert out == "not_ours"
+    client.update_activity.assert_not_awaited()
+
+
+def test_old_rename_is_out_of_the_window():
+
+    import time
+
+    from app.infrastructure.persistence import applied_strava_rename_store as s
+
+    _renamed_by_us()
+
+    with patch.object(s.time, "time", return_value=time.time() + 25 * 3600):
+
+        out, client = _reapply(21031895091, "Corrida matinal")
+
+    assert out == "not_ours"
+    client.update_activity.assert_not_awaited()
