@@ -22,6 +22,9 @@ from app.core.weekdays import WEEKDAYS, weekday_label
 from app.infrastructure.integrations.media_download import (
     download_media,
 )
+from app.infrastructure.persistence.invite_code_repository import (
+    InviteCodeRepository,
+)
 from app.infrastructure.persistence.onboarding_state_repository import (
     OnboardingStateRepository,
 )
@@ -1007,6 +1010,12 @@ class OnboardingFlow:
         )
 
         # a prova do cadastro já nasce na lista estruturada (distância pelo nome)
+        # cadastro fechado por convite: queima o uso só agora, com o perfil
+        # criado (desistiu no meio = convite não gasto à toa)
+        if state.get("invite_code"):
+
+            InviteCodeRepository().consume(state["invite_code"])
+
         RaceService.record_from_conversation(
             slug,
             answers.get("target_race"),

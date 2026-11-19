@@ -2,6 +2,8 @@
 sessão antiga cai em 401, e o cadastro com convite tira o bloqueio."""
 
 import asyncio
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,6 +12,13 @@ from starlette.requests import Request
 
 from app.application.auth import signup_service
 from app.application.auth.signup_service import SignupService
+from app.application.onboarding import onboarding_flow
+from app.infrastructure.persistence.invite_code_repository import (
+    InviteCodeRepository,
+)
+from app.infrastructure.persistence.onboarding_state_repository import (
+    OnboardingStateRepository,
+)
 from app.core.config import get_settings
 from app.infrastructure.persistence.blocked_athlete_repository import (
     BlockedAthleteRepository,
@@ -77,21 +86,94 @@ def test_blocked_telegram_does_not_start_onboarding():
     assert notif.send_to.await_args.kwargs["message"] == webhooks.BLOCKED_NOTICE
 
 
-def test_unknown_not_blocked_still_onboards():
+@pytest.fixture
+def invites(monkeypatch):
+    """Convites num arquivo temporário, com um válido (RIT-AB23)."""
+
+    repo = InviteCodeRepository.__new__(InviteCodeRepository)
+    repo.storage = Path(__import__("tempfile").mkdtemp())
+    repo.file = repo.storage / "invite_codes.json"
+    repo.file.write_text(json.dumps({"RIT-AB23": {"max_uses": 1, "uses": 0}}))
+
+    for mod in (webhooks, onboarding_flow):
+        monkeypatch.setattr(mod, "InviteCodeRepository", lambda: repo)
+
+    return repo
+
+
+def _route(address, text, onboarding_reply="Como você se chama?"):
 
     with (
         patch.object(webhooks, "RunnerProfileRepository") as repo_cls,
         patch.object(webhooks, "OnboardingEvent") as onboarding,
-        patch.object(webhooks, "NotificationService"),
+        patch.object(webhooks, "NotificationService") as notif,
     ):
 
         repo_cls.return_value.find_by_telegram_id.return_value = None
-        onboarding.execute = AsyncMock(return_value="oi")
+        notif.send_to = AsyncMock()
 
-        result = asyncio.run(webhooks.route_inbound("telegram", "999", "oi", None, "F"))
+        async def _start(**kw):
+            # o fluxo real cria o estado do cadastro na 1ª mensagem
+            OnboardingStateRepository().save(kw["address"], {"step": "ASK_NAME"})
+            return onboarding_reply
 
-    onboarding.execute.assert_awaited_once()
+        onboarding.execute = AsyncMock(side_effect=_start)
+
+        result = asyncio.run(webhooks.route_inbound("telegram", address, text, None, "F"))
+
+    return result, onboarding.execute, notif.send_to
+
+
+def test_unknown_without_invite_gets_fixed_reply_no_onboarding(invites):
+
+    result, onboarding, send = _route("999", "/start")
+
+    assert result["needs_invite"]
+    onboarding.assert_not_called()
+    assert send.await_args.kwargs["message"] == webhooks.INVITE_REQUIRED_NOTICE
+    assert OnboardingStateRepository().load("999") is None
+
+
+def test_unknown_with_invite_onboards_and_keeps_code(invites):
+
+    result, onboarding, _ = _route("999", "/start rit-ab23")
+
     assert result["onboarding"]
+    onboarding.assert_awaited_once()
+    assert OnboardingStateRepository().load("999")["invite_code"] == "RIT-AB23"
+    # não consome ainda: só quando o perfil nasce
+    assert invites.validate("RIT-AB23")
+
+
+def test_onboarding_in_progress_continues_without_invite(invites):
+
+    OnboardingStateRepository().save("999", {"step": "ASK_AGE"})
+
+    result, onboarding, _ = _route("999", "34")
+
+    assert result["onboarding"]
+    onboarding.assert_awaited_once()
+
+
+def test_invalid_or_used_invite_is_refused(invites):
+
+    invites.consume("RIT-AB23")
+
+    result, onboarding, _ = _route("999", "RIT-AB23")
+
+    assert result["needs_invite"]
+    onboarding.assert_not_called()
+
+
+def test_blocked_athlete_with_invite_comes_back(invites):
+
+    _block()
+
+    result, onboarding, _ = _route("777", "meu convite: RIT AB23")
+
+    assert result["onboarding"]
+    onboarding.assert_awaited_once()
+    assert not BlockedAthleteRepository().is_slug_blocked("fulano")
 
 
 def _request_with_session(slug):

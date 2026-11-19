@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.core.clock import now_local
+
+# "RIT-7K2M", "rit 7k2m", "RIT7K2M" no meio de uma frase
+_CODE_IN_TEXT = re.compile(r"\bRIT[-\s]?([A-Z0-9]{4})\b", re.IGNORECASE)
 
 
 class InviteCodeRepository:
@@ -116,6 +120,20 @@ class InviteCodeRepository:
             return "RIT-" + raw[3:]
 
         return "RIT-" + raw
+
+    def find_in_text(self, text: str | None) -> str | None:
+        """Convite VÁLIDO dentro de uma mensagem ("meu convite é rit-7k2m",
+        "/start RIT-7K2M" do link do Telegram). Devolve o código normalizado."""
+
+        for m in _CODE_IN_TEXT.finditer(text or ""):
+
+            code = f"RIT-{m.group(1).upper()}"
+
+            if self.validate(code):
+
+                return code
+
+        return None
 
     def validate(self, code: str) -> bool:
         """Dá pra usar este código agora? (existe, não expirou, tem uso

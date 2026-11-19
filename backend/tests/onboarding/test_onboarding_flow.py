@@ -1146,3 +1146,30 @@ def test_onboarding_race_lands_in_the_structured_race_list(tmp_path):
     # prova única: o app sugere principal (nada gravado de papel)
     assert races[0]["priority"] is None
     assert races[0]["priority_effective"] == "A"
+
+
+def test_finished_onboarding_consumes_the_invite(tmp_path, monkeypatch):
+    """Cadastro por mensagem é fechado por convite: o roteador grava o código
+    no estado; o uso só é queimado quando o perfil nasce."""
+
+    consumed = []
+
+    class _Invites:
+        def consume(self, code):
+            consumed.append(code)
+            return True
+
+    monkeypatch.setattr(f"{MODULE}.InviteCodeRepository", lambda: _Invites())
+
+    original_save = OnboardingStateRepository.save
+
+    def _save_with_invite(self, phone, state):
+        state.setdefault("invite_code", "RIT-AB23")  # como o roteador faz
+        return original_save(self, phone, state)
+
+    monkeypatch.setattr(OnboardingStateRepository, "save", _save_with_invite)
+
+    replies, _, _ = _run_conversation(tmp_path, FULL_CONVERSATION)
+
+    assert "Cadastro feito, Fulano" in replies[-1]
+    assert consumed == ["RIT-AB23"]

@@ -33,6 +33,12 @@ from app.application.strava.strava_activity_renamer import (
 from app.infrastructure.persistence.blocked_athlete_repository import (
     BlockedAthleteRepository,
 )
+from app.infrastructure.persistence.invite_code_repository import (
+    InviteCodeRepository,
+)
+from app.infrastructure.persistence.onboarding_state_repository import (
+    OnboardingStateRepository,
+)
 from app.application.use_cases.owner_resolver import (
     OwnerResolver,
 )
@@ -85,6 +91,12 @@ from app.infrastructure.persistence.runner_profile_repository import (
 BLOCKED_NOTICE = (
     "Oi! Seu acesso ao Ritmind foi encerrado. Se quiser voltar, "
     "é só pedir um convite pra gente. 🏃"
+)
+
+# resposta fixa (sem IA) pra número novo sem convite: o acesso é fechado
+INVITE_REQUIRED_NOTICE = (
+    "Oi! O Ritmind está com acesso só por convite. 🏃 "
+    "Se você recebeu um, me manda o código (ex.: RIT-7K2M) pra começar."
 )
 
 router = APIRouter(
@@ -585,15 +597,29 @@ async def route_inbound(
 
         profile = repo.find_by_phone(address)
 
-    # atleta DESLIGADO: não reabre cadastro (que chama IA) — só volta por
-    # convite no app. Aviso fixo, sem IA, no máximo de tempos em tempos.
+    # Cadastro por mensagem é FECHADO por convite (como o app): número novo só
+    # começa se mandar um convite válido; quem já está no meio do cadastro segue.
+    invite = None
+
     if profile is None:
 
+        onboarding_states = OnboardingStateRepository()
+
+        in_progress = onboarding_states.load(address) is not None
+
+        invite = None if in_progress else InviteCodeRepository().find_in_text(text)
+
+        # atleta DESLIGADO: não reabre cadastro (que chama IA) — só volta por
+        # convite. Aviso fixo, sem IA, no máximo de tempos em tempos.
         blocked = BlockedAthleteRepository()
 
         blocked_slug = blocked.find_by_address(channel, address)
 
-        if blocked_slug:
+        if blocked_slug and invite:
+
+            blocked.unblock(blocked_slug)  # o convite é a porta de volta
+
+        elif blocked_slug:
 
             notified = blocked.should_notify(blocked_slug)
 
@@ -607,6 +633,16 @@ async def route_inbound(
 
             return {"success": True, "blocked": True, "reply_sent": notified}
 
+        if not in_progress and not invite:
+
+            await NotificationService.send_to(
+                channel=channel,
+                address=address,
+                message=INVITE_REQUIRED_NOTICE,
+            )
+
+            return {"success": True, "needs_invite": True, "reply_sent": True}
+
     # endereço desconhecido: inicia (ou continua) o cadastro
     if profile is None:
 
@@ -618,6 +654,17 @@ async def route_inbound(
             media=media,
             send_fallback=send_fallback,
         )
+
+        # guarda o convite no cadastro: ele é consumido quando o perfil nasce
+        if invite:
+
+            state = onboarding_states.load(address)
+
+            if state is not None:
+
+                state["invite_code"] = invite
+
+                onboarding_states.save(address, state)
 
         return {
 

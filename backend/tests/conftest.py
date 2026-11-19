@@ -65,9 +65,23 @@ def _isolated_shared_storage(tmp_path, monkeypatch):
 
     root = tmp_path / "storage"
 
-    from app.infrastructure.persistence import blocked_athlete_repository
+    from app.infrastructure.persistence import (
+        blocked_athlete_repository,
+        onboarding_state_repository,
+    )
 
     monkeypatch.setattr(blocked_athlete_repository, "_STORAGE", root / "auth")
+
+    # o roteador de mensagens consulta o cadastro em andamento (trava do convite)
+    def _onboarding_init(self):
+
+        self.storage = root / "onboarding"
+
+        self.storage.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        onboarding_state_repository.OnboardingStateRepository, "__init__", _onboarding_init,
+    )
     monkeypatch.setattr(ai_health_repository, "_STORAGE", root)
     monkeypatch.setattr(coach_brain_health_repository, "_STORAGE", root)
     monkeypatch.setattr(frequency_offer_store, "_STORAGE", root / "reconcile" / "freq_offer")
