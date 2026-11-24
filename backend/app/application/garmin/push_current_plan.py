@@ -9,7 +9,10 @@ chamar de novo NÃO duplica — só empurra o que falta ou mudou."""
 import asyncio
 from datetime import date, timedelta
 
-from app.application.garmin.garmin_push import sweep_orphan_workouts
+from app.application.garmin.garmin_push import (
+    find_foreign_scheduled,
+    sweep_orphan_workouts,
+)
 from app.application.garmin.garmin_reconciler import (
     _RUNNING_KINDS,
     GarminReconciler,
@@ -36,6 +39,7 @@ async def push_current_plan(
     profile: str,
     only_future: bool = True,
     full_refresh: bool = True,
+    foreign_out: list | None = None,
 ) -> tuple[RunnerProfile, TrainingPlan, list[dict]]:
     """Sobe as sessões de corrida da semana atual pro Garmin do atleta.
     only_future descarta os dias que já passaram (não reagenda o que ficou
@@ -134,6 +138,18 @@ async def push_current_plan(
     }
 
     await asyncio.to_thread(sweep_orphan_workouts, profile, keep_ids, garmin)
+
+    # treinos de FORA do Ritmind agendados no resto da semana: a varredura não
+    # mexe neles (podem ser do atleta), então quem chama avisa e pergunta.
+    if foreign_out is not None:
+
+        week_end = plan.week_start + timedelta(days=6)
+
+        foreign_out.extend(
+            await asyncio.to_thread(
+                find_foreign_scheduled, garmin, max(reference, plan.week_start), week_end
+            )
+        )
 
     return runner, plan, results
 

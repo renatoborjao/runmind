@@ -77,9 +77,11 @@ async def push_watch(profile: str = Depends(current_profile)):
 
     from app.application.garmin.push_current_plan import push_current_plan
 
+    foreign: list[dict] = []
+
     try:
 
-        _, _, results = await push_current_plan(profile)
+        _, _, results = await push_current_plan(profile, foreign_out=foreign)
 
     except Exception as e:
 
@@ -96,9 +98,11 @@ async def push_watch(profile: str = Depends(current_profile)):
 
     late = any(r.get("action") == "late_today" for r in results)
 
+    foreign_tail = _foreign_tail(profile, foreign)
+
     if late and not pushed:
 
-        return {"ok": True, "pushed": 0, "message": LATE_TODAY_NOTE}
+        return {"ok": True, "pushed": 0, "message": LATE_TODAY_NOTE + foreign_tail}
 
     return {
         "ok": True,
@@ -108,7 +112,7 @@ async def push_watch(profile: str = Depends(current_profile)):
             "com o app que eles aparecem em Treino → Programados. 🏃"
             if pushed
             else "Teu relógio já está com os treinos da semana. 👍"
-        ) + (" " + LATE_TODAY_NOTE if late else ""),
+        ) + (" " + LATE_TODAY_NOTE if late else "") + foreign_tail,
     }
 
 
@@ -211,7 +215,11 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
     # relógio vai junto — então quem tem Garmin recebe a semana atualizada na
     # hora. Se o Garmin falhar, o treino continua movido e a rede de segurança
     # do relógio (oferta no chat) cobre — nunca vira limbo. Ver [[project_rede_relogio]].
-    watch = await _push_watch_after_move(profile)
+    foreign: list[dict] = []
+
+    watch = await _push_watch_after_move(profile, foreign)
+
+    foreign_tail = _foreign_tail(profile, foreign)
 
     from app.application.garmin.watch_day import LATE_TODAY_NOTE
 
@@ -244,7 +252,7 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
         repo.append_turn(
             profile,
             "assistant",
-            f"Feito! Movi teu {source.workout_type} de {pt_from} pra {pt_to}.{coach_tail}",
+            f"Feito! Movi teu {source.workout_type} de {pt_from} pra {pt_to}.{coach_tail}{foreign_tail}",
         )
 
     except Exception as e:
@@ -265,10 +273,34 @@ async def move_workout(body: MoveIn, profile: str = Depends(current_profile)):
 
         message += " Não consegui falar com teu Garmin agora; toca em 'Enviar pro relógio' pra tentar de novo."
 
+    if foreign_tail:
+
+        message += foreign_tail
+
     return {"ok": True, "message": message, "watch": watch}
 
 
-async def _push_watch_after_move(profile: str) -> str:
+def _foreign_tail(profile: str, foreign: list[dict]) -> str:
+    """Treinos de FORA do Ritmind no relógio: avisa quais são e arma o "pode
+    apagar" no chat (nunca apaga sem o OK). Sem nenhum, encerra o aviso velho."""
+
+    from app.application.garmin.garmin_sync import foreign_note
+    from app.infrastructure.integrations.garmin.foreign_workout_store import (
+        ForeignWorkoutStore,
+    )
+
+    if not foreign:
+
+        ForeignWorkoutStore.clear(profile)
+
+        return ""
+
+    ForeignWorkoutStore.set_pending(profile, foreign)
+
+    return "\n\n" + foreign_note(foreign, from_app=True)
+
+
+async def _push_watch_after_move(profile: str, foreign: list | None = None) -> str:
     """Empurra a semana (já com o treino no dia novo) pro Garmin.
     'sent' | 'late' | 'failed' | 'none' (sem Garmin conectado → nada a fazer).
     'late' = moveu pra HOJE na janela da noite: o Garmin já fechou o dia, o
@@ -283,7 +315,7 @@ async def _push_watch_after_move(profile: str) -> str:
 
             return "none"
 
-        _, _, results = await push_current_plan(profile)
+        _, _, results = await push_current_plan(profile, foreign_out=foreign)
 
         if any(r.get("action") == "late_today" for r in results):
 

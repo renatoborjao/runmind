@@ -177,6 +177,67 @@ def sweep_orphan_workouts(
     return removed
 
 
+def find_foreign_scheduled(garmin, start: date, end: date) -> list[dict]:
+    """Treinos AGENDADOS no calendário do Garmin entre `start` e `end` que NÃO
+    são do Ritmind (sem o nosso prefixo): do atleta, do próprio Garmin ou de
+    outro app. A varredura nunca toca neles — então, se ficam nos mesmos dias
+    do plano, o relógio mostra treino "duplicado" e reenviar não resolve
+    (Renato 24/11: 3 treinos de outra origem + os 3 nossos = "6 treinos", e o
+    coach prometeu 3x "sobrescrever"). Quem chama AVISA o atleta e só apaga
+    com o OK dele. Best-effort: falha volta []."""
+
+    months = sorted({(start.year, start.month), (end.year, end.month)})
+
+    found: dict[int, dict] = {}
+
+    try:
+
+        for year, month in months:
+
+            # o mês da API do calendário é base ZERO (novembro = 10)
+            data = garmin.connectapi(
+                f"/calendar-service/year/{year}/month/{month - 1}"
+            ) or {}
+
+            for item in data.get("calendarItems") or []:
+
+                if item.get("itemType") != "workout":
+
+                    continue
+
+                title = item.get("title") or ""
+
+                workout_id = item.get("workoutId")
+
+                try:
+
+                    on = date.fromisoformat(item.get("date") or "")
+
+                except ValueError:
+
+                    continue
+
+                if (
+                    workout_id
+                    and start <= on <= end
+                    and not title.startswith(OUR_WORKOUT_PREFIXES)
+                ):
+
+                    found[workout_id] = {
+                        "workout_id": workout_id,
+                        "title": title,
+                        "date": on.isoformat(),
+                    }
+
+    except Exception as e:  # noqa: BLE001 — conferência best-effort
+
+        print(f"Conferência de treinos de fora falhou: {e}")
+
+        return []
+
+    return sorted(found.values(), key=lambda f: (f["date"], f["title"]))
+
+
 def push_week(
     profile: str,
     sessions_with_dates: list[tuple[PlannedSession, date]],

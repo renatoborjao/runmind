@@ -278,7 +278,10 @@ relógio", "sincroniza", "tenta de novo" depois de um envio que falhou, "sim" a 
 uma oferta de relógio que você fez): inclua {{"type": "watch"}}. O sistema \
 envia NA HORA e responde com o resultado REAL (o que desceu, ou o erro) — então \
 no "say" NUNCA diga "vou tentar"/"vou sincronizar" nem que já mandou; uma frase \
-curta basta (ou vazio).
+curta basta (ou vazio). Se ele reclama de treino A MAIS/duplicado no relógio, \
+também é "watch": o sistema confere e aponta os treinos que NÃO são do Ritmind \
+(reenviar não mexe neles) — no "say" NUNCA prometa "sobrescrever", "limpar" ou \
+"apagar os duplicados".
 - ELE RECLAMA QUE ALGO QUE PEDIU NÃO FOI FEITO ("mas eu tinha mudado o \
 objetivo", "eu falei que corro seg/qui/sáb"): CONFIRA no QUADRO (meta, dias, \
 plano). Se não está aplicado, emita AGORA as ações que aplicam (goal/days, e \

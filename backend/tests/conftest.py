@@ -72,6 +72,10 @@ def _isolated_shared_storage(tmp_path, monkeypatch):
 
     monkeypatch.setattr(blocked_athlete_repository, "_STORAGE", root / "auth")
 
+    from app.infrastructure.integrations.garmin import foreign_workout_store
+
+    monkeypatch.setattr(foreign_workout_store, "_STORAGE", root / "garmin" / "foreign")
+
     # o roteador de mensagens consulta o cadastro em andamento (trava do convite)
     def _onboarding_init(self):
 
