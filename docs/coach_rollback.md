@@ -265,3 +265,11 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/` e `sudo systemctl restart runmind.service`.
 - **Medir:** resumo de domingo 22/11 (19h) e a próxima revisão de conversas.
 - **Motivo:** Renato 17/11 ("corrige o resumo"), padrões C e H da 1ª revisão de conversas.
+
+## 24/11/2026 — relógio aponta treinos de fora do Ritmind; coach não promete "sobrescrever"
+
+- **O que mudou:** `garmin/garmin_push.py` (`find_foreign_scheduled`: treinos agendados no calendário da semana sem o prefixo "Ritmind ·"); `garmin/push_current_plan.py` (`foreign_out` opcional); `garmin/garmin_sync.py` (o envio pelo chat lista esses treinos e arma o "pode apagar"; só apaga com o OK, conferindo id + nome; "não" encerra); `presentation/api/v1/plan.py` (mover pelo app e "Enviar pro relógio" dão o mesmo aviso); **novo** `infrastructure/integrations/garmin/foreign_workout_store.py`; `coach/conversation/coach_brain.py` (uma frase: reclamação de treino a mais/duplicado é "watch" e o "say" nunca promete sobrescrever/limpar/apagar). Lab grátis: dossiê e plano idênticos antes × depois.
+- **Backup na VM:** `~/deploy_backups/20261124-205038` (`foreign_workout_store.py` é novo).
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/`, apagar `app/infrastructure/integrations/garmin/foreign_workout_store.py` e `sudo systemctl restart runmind.service`.
+- **Medir:** próxima reclamação de "treino a mais no relógio": o coach aponta quais são e o "pode apagar" funciona?
+- **Motivo:** Renato 24/11 ("troquei de dia... agora tem 6 treinos no relógio... ISSO não deve acontecer"): 3 treinos de outra origem nos mesmos dias + os 3 nossos; o coach prometeu 3x "envio limpo pra sobrescrever".
