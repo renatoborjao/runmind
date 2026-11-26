@@ -65,7 +65,7 @@ class ReengagementNotifier:
         # quem AVISOU que ia parar (viagem, afastamento médico) não sumiu: o
         # silêncio dele é combinado, o coach não vai atrás — (Renato 29/09: 7
         # dias sem treinar por orientação médica)
-        if AbsenceWindow.open(profile, today) is not None:
+        if runner.paused_since or AbsenceWindow.open(profile, today) is not None:
 
             return
 

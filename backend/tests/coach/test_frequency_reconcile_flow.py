@@ -90,3 +90,16 @@ def test_external_coach_updates_without_regenerating():
 
     repo.update_fields.assert_called_once()
     assert "<PLANO>" not in msg
+
+
+def test_confirm_word_inside_another_subject_does_not_change_the_profile():
+    """Bug real 25/11: um "vamos" no meio de uma frase sobre pausa virou aceite."""
+
+    msg, repo, store = _run(
+        {"days": 5, "weekday": "Monday"},
+        "Boa!! Vamos tirar esse mês de dezembro de recuperação e voltar com tudo",
+    )
+
+    assert msg is None
+    repo.update_fields.assert_not_called()
+    store.clear.assert_not_called()

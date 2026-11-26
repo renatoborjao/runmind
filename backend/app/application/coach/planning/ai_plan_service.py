@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from app.application.coach.intelligence.training_pause import TrainingPause
 from app.application.coach.planning.coach_plan_engine import CoachPlanEngine
 from app.application.coach.planning.executed_week_summary import (
     ExecutedWeekSummary,
@@ -48,6 +49,16 @@ class AIPlanService:
         repository = WeeklyPlanRepository()
 
         existing = repository.load(profile)
+
+        # atleta em PAUSA: nada é gerado (nem com force) até ele pedir pra voltar.
+        # Devolve o que já houver da semana ativa, senão uma semana vazia não gravada.
+        if runner.paused_since:
+
+            if existing is not None and existing.week_start >= week_start:
+
+                return existing
+
+            return TrainingPause.empty_plan(runner, goal.name, week_start)
 
         # já há plano desta semana ATIVA (ou de uma futura já entregue):
         # reaproveita. force=True (o atleta pediu uma mudança) regenera pela

@@ -79,6 +79,11 @@ class RunnerProfile:
     # (print/foto/PDF), nunca gera nem ajusta plano.
     external_coach: bool = False
 
+    # PAUSA a pedido do atleta (ISO da data em que ele pediu). Enquanto
+    # preenchido, nenhum plano é gerado nem enviado — só ELE encerra, pedindo
+    # pra voltar. Ver [[TrainingPause]].
+    paused_since: str | None = None
+
     # Canal de mensagens do atleta e endereço nativo do Telegram.
     # "whatsapp" usa `phone`; "telegram" usa `telegram_id` (chat_id).
     channel: str = "whatsapp"

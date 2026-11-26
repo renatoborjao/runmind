@@ -28,6 +28,7 @@ import argparse
 import re
 from datetime import timedelta
 import asyncio
+import contextlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
@@ -952,13 +953,13 @@ BRAIN_EVAL = [
      [{"goal"}], {"relationship": ("primary",)}),
     ("renato2", "esquece a 15k, não vou mais correr ela, meu foco agora é só "
      "a meia", [{"goal"}], {"relationship": ("replace",)}),
-    ("joaosoares", "vou correr uma prova de 5 km dia 25/10 pra testar, quero "
+    ("leonardo", "vou correr uma prova de 5 km dia 25/10 pra testar, quero "
      "fazer em 24 minutos", [{"goal"}],
      {"relationship": ("stepping_stone", "additional")}),
     ("fernanda", "esquece perder peso, agora meu objetivo é correr 10 km em "
      "50 minutos", [{"goal"}], {"relationship": ("replace", "primary")}),
     # ---- DIAS
-    ("joaosoares", "a partir de agora só consigo correr terça e sábado",
+    ("leonardo", "a partir de agora só consigo correr terça e sábado",
      [{"days"}, {"days", "replan"}], {"days": ["Tuesday", "Saturday"]}),
     ("helio", "agora consigo correr 4x: segunda, quarta, sexta e sábado",
      [{"days"}, {"days", "replan"}],
@@ -985,7 +986,7 @@ BRAIN_EVAL = [
     # valia no domingo em que foi escrito)
     ("helio", "amanhã não vou conseguir treinar, tenho plantão", [{"skip"}],
      {"target_day": "TOMORROW", "scope": "single_session"}),
-    ("joaosoares", "estou resfriado, não vou conseguir treinar essa semana",
+    ("leonardo", "estou resfriado, não vou conseguir treinar essa semana",
      [{"skip"}], {"scope": "week"}),
     ("leonardo", "vou viajar a trabalho a semana toda, não vou conseguir "
      "treinar", [{"skip"}], {"scope": "week"}),
@@ -1002,7 +1003,7 @@ BRAIN_EVAL = [
     # com fartlek NA SEMANA, negociar a troca dele (perguntar ou ajustar) é o
     # comportamento desenhado (aversão: negocia, não obedece); o "não gosto"
     # durável vai pra memória pela extração. Sem fartlek na semana: routine.
-    ("joaosoares", "não gosto de fartlek, prefiro tiro na pista",
+    ("leonardo", "não gosto de fartlek, prefiro tiro na pista",
      [{"preference"}, {"routine"}, {"adjust"}, {"routine", "adjust"}, set()], {}),
     # ---- RELÓGIO (manda na hora, nunca "vou tentar")
     ("renato2", "manda os treinos da semana pro relógio", [{"watch"}], {}),
@@ -1018,7 +1019,7 @@ BRAIN_EVAL = [
     ("fernanda", "me manda meu plano da semana", NONE,
      {"card": ("weekly_plan",)}),
     ("mauricio", "quais são meus paces?", NONE, {"card": ("paces",)}),
-    ("joaosoares", "como tá meu corpo hoje?", NONE, {"card": ("body",)}),
+    ("leonardo", "como tá meu corpo hoje?", NONE, {"card": ("body",)}),
     ("renato2", "vou conseguir fazer a meia abaixo de 2h?", NONE,
      {"card": ("race",)}),
     ("leonardo", "como eu tô evoluindo?", NONE,
@@ -1032,7 +1033,7 @@ BRAIN_EVAL = [
     ("fernanda", "o que é bom comer antes do longão?", NONE, {}),
     ("mauricio", "posso fazer musculação no mesmo dia do treino?", NONE, {}),
     # ---- RELATO / PERCEPÇÃO / VIDA
-    ("joaosoares", "o treino de sábado foi pesado, perna morta no fim", NONE,
+    ("leonardo", "o treino de sábado foi pesado, perna morta no fim", NONE,
      {"perception": True}),
     ("renato2", "o longão de sábado foi ok, uns 7 de 10 de esforço", NONE,
      {"perception": True}),
@@ -1045,7 +1046,56 @@ BRAIN_EVAL = [
     # ---- CONVERSA
     ("helio", "valeu, coach!", NONE, {}),
     ("fernanda", "bom dia!", NONE, {}),
+    # ---- PAUSA (para os planos até ELE pedir pra voltar) × PULAR
+    ("leonardo", "Rit vamo da uma pausa nos treinos até ano que vem, quero "
+     "deixar os treinos livre até lá", [{"pause"}], {}),
+    ("helio", "para de me mandar treino por um tempo, quando eu quiser voltar "
+     "eu te aviso", [{"pause"}], {}),
+    ("fernanda", "essa semana tô doente, não vou conseguir correr", [{"skip"}],
+     {"scope": "week"}),
+    ("mauricio", "Boa!! Vamos tirar esse mês de dezembro de recuperação e "
+     "voltar com tudo em janeiro", NONE, {"paused": "2026-11-25"}),
+    ("mauricio", "Treinos livre !", NONE, {"paused": "2026-11-25"}),
+    ("mauricio", "corri 8 km livre hoje, foi muito bom", NONE,
+     {"paused": "2026-11-25"}),
+    ("mauricio", "bora voltar, pode montar meus treinos de novo",
+     [{"resume"}, {"resume", "replan"}], {"paused": "2026-11-25"}),
+    ("mauricio", "quando eu voltar quero treinar só terça e quinta",
+     [{"days"}], {"paused": "2026-11-25"}),
 ]
+
+
+@contextlib.contextmanager
+def _paused(since):
+    """O estado de pausa do CASO (None = sem pausa) na montagem do contexto, seja
+    qual for o estado real do atleta hoje."""
+
+    from app.infrastructure.persistence.runner_profile_repository import (
+        RunnerProfileRepository,
+    )
+
+    original = RunnerProfileRepository.load
+
+    def load(self, profile):
+
+        runner = original(self, profile)
+
+        # código no ar sem o campo (--no-overlay): não há pausa pra simular
+        if hasattr(runner, "paused_since"):
+
+            runner.paused_since = since
+
+        return runner
+
+    RunnerProfileRepository.load = load
+
+    try:
+
+        yield
+
+    finally:
+
+        RunnerProfileRepository.load = original
 
 
 def _grade(decision, expected_sets, extra) -> list[str]:
@@ -1154,7 +1204,7 @@ PROMISE_SAY = re.compile(
 )
 
 
-async def _brain_eval(budgets: list[int], repeats: int) -> None:
+async def _brain_eval(budgets: list[int], repeats: int, cases: str = "") -> None:
 
     from app.application.coach.conversation.coach_brain import CoachBrain
     from app.application.coach.conversation.conversation_context_builder import (
@@ -1163,13 +1213,23 @@ async def _brain_eval(budgets: list[int], repeats: int) -> None:
     from app.application.use_cases.load_runner_profile import LoadRunnerProfile
     from app.core.config import get_settings
 
+    # `cases`: roda só as frases que contêm um destes trechos (separados por "||")
+    wanted = [c.lower() for c in cases.split("||") if c]
+
+    catalog = [
+        case for case in BRAIN_EVAL
+        if not wanted or any(w in case[1].lower() for w in wanted)
+    ]
+
     contexts = {}
 
-    for profile, message, *_ in BRAIN_EVAL:
+    for profile, message, _, extra in catalog:
 
-        contexts[(profile, message)] = await ConversationContextBuilder.build(
-            profile, message,
-        )
+        with _paused(extra.get("paused")):
+
+            contexts[(profile, message)] = await ConversationContextBuilder.build(
+                profile, message,
+            )
 
     summary = []
 
@@ -1181,7 +1241,7 @@ async def _brain_eval(budgets: list[int], repeats: int) -> None:
 
         hits, total, seconds = 0, 0, []
 
-        for profile, message, expected_sets, extra in BRAIN_EVAL:
+        for profile, message, expected_sets, extra in catalog:
 
             runner = LoadRunnerProfile.execute(profile)
 
@@ -1276,6 +1336,9 @@ async def main() -> None:
 
     parser.add_argument("--repeats", type=int, default=2)
 
+    # com --braineval: só os casos cuja frase contém um destes trechos ("a||b")
+    parser.add_argument("--cases", default="")
+
     parser.add_argument("--context-only", action="store_true")
 
     # com "plan": refaz o estado de antes do plano da semana existir (ver REPLAY)
@@ -1317,6 +1380,7 @@ async def main() -> None:
         await _brain_eval(
             [int(b) for b in args.braineval.split(",") if b.strip()],
             args.repeats,
+            args.cases,
         )
 
         return

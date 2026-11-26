@@ -23,6 +23,7 @@ from app.application.coach.conversation.on_demand_answers import OnDemandAnswers
 from app.application.coach.conversation.plan_change_applier import (
     PlanChangeApplier,
 )
+from app.application.coach.intelligence.training_pause import TrainingPause
 from app.application.coach.planning.move_skip_engine import MoveSkipEngine
 from app.application.coach.planning.negotiation_engine import NegotiationEngine
 from app.application.garmin.watch_offer import watch_update_offer
@@ -35,6 +36,9 @@ from app.domain.entities.plan_proposal import PlanProposal
 from app.domain.entities.runner_profile import RunnerProfile
 from app.infrastructure.integrations.garmin.one_off_proposal_store import (
     OneOffProposalStore,
+)
+from app.infrastructure.persistence.frequency_offer_store import (
+    FrequencyOfferStore,
 )
 from app.infrastructure.persistence.plan_proposal_repository import (
     PlanProposalRepository,
@@ -59,6 +63,11 @@ _CARD_TO_INTENT = {
 
 # ações que viram PROPOSTA (pedem "sim") vs. as que os appliers já aplicam
 _PROPOSAL_ACTIONS = {"move", "skip", "adjust", "simplify"}
+
+# pedidos que a PAUSA já resolve (ou contradiz) quando vêm na mesma mensagem
+_PAUSE_SUPERSEDES = {
+    "move", "skip", "adjust", "simplify", "one_off", "replan", "resume",
+}
 
 
 class CoachBrainExecutor:
@@ -151,8 +160,11 @@ class CoachBrainExecutor:
 
             PerceptionRecorder.from_chat(profile, decision.perception)
 
+        # pausar (ou voltar) vale mais que a resposta a uma proposta em aberto
+        pausing = any(a.type in ("pause", "resume") for a in decision.all_actions)
+
         # 1) resposta a uma proposta PENDENTE
-        if pending is not None and decision.on_pending:
+        if pending is not None and decision.on_pending and not pausing:
 
             return await CoachBrainExecutor._resolve_pending(
                 profile, runner, decision, pending, repo, incoming_text,
@@ -162,8 +174,10 @@ class CoachBrainExecutor:
         # 1b) resposta à proposta pendente de treino AVULSO (aceite grava a
         # proposta como está — não remonta; refine cai nas ações abaixo, que
         # remontam a partir dela)
-        if oneoff_pending is not None and decision.on_pending in (
-            "apply", "reject",
+        if (
+            oneoff_pending is not None
+            and decision.on_pending in ("apply", "reject")
+            and not pausing
         ):
 
             resolved = await CoachBrainExecutor._resolve_oneoff_pending(
@@ -301,6 +315,25 @@ class CoachBrainExecutor:
         combinada — nenhuma troca fica de fora (o bug do Renato). Uma ação (ou
         mistura rara com rotina/objetivo) segue o caminho de sempre."""
 
+        if any(a.type == "pause" for a in actions):
+
+            actions = [a for a in actions if a.type not in _PAUSE_SUPERSEDES]
+
+        # voltar da pausa É pedir treino: a semana sai na mesma resposta (senão o
+        # primeiro lembrete da manhã geraria o plano calado)
+        elif (
+            runner.paused_since
+            and not runner.external_coach
+            and any(a.type == "resume" for a in actions)
+            and not any(a.type in ("replan", "coach_switch") for a in actions)
+        ):
+
+            actions = actions + [
+                BrainAction(
+                    type="replan", scope="week", target_day=None, instruction="",
+                ),
+            ]
+
         proposal = [
             a for a in actions
             if a.type in _PROPOSAL_ACTIONS
@@ -356,6 +389,10 @@ class CoachBrainExecutor:
 
         replan = any(a.type == "replan" for a in actions)
 
+        resuming = bool(runner.paused_since) and any(
+            a.type == "resume" for a in actions
+        )
+
         # o relógio vai por ÚLTIMO — já com a semana do jeito que ficou
         watch = any(a.type == "watch" for a in actions)
 
@@ -368,6 +405,9 @@ class CoachBrainExecutor:
             and a.type not in ("goal", "replan", "watch")
         ]
 
+        # pausar/voltar vem antes do resto do estado
+        state.sort(key=lambda a: a.type not in ("pause", "resume"))
+
         parts: list[str | None] = []
 
         lead = (say or "").strip()
@@ -378,7 +418,10 @@ class CoachBrainExecutor:
             # com "replan" na mesma mensagem, a semana é refeita UMA vez, no fim
             parts.append(
                 await CoachBrainExecutor._goals(
-                    profile, runner, goals, lead, regenerate=not replan,
+                    profile, runner, goals, lead,
+                    regenerate=not (
+                        replan or any(a.type == "pause" for a in actions)
+                    ),
                 )
             )
 
@@ -402,6 +445,7 @@ class CoachBrainExecutor:
                 await CoachBrainExecutor._replan(
                     profile, runner,
                     CoachBrainExecutor._replan_request(incoming_text, actions),
+                    **({"resumed": True} if resuming else {}),
                 )
             )
 
@@ -456,6 +500,18 @@ class CoachBrainExecutor:
             if not removed:
 
                 return reply
+
+            return f"{say}\n\n{reply}" if say and reply else reply
+
+        if action.type == "pause":
+
+            reply = await CoachBrainExecutor._pause(profile, runner)
+
+            return f"{say}\n\n{reply}" if say else reply
+
+        if action.type == "resume":
+
+            reply = CoachBrainExecutor._resume(profile, runner)
 
             return f"{say}\n\n{reply}" if say and reply else reply
 
@@ -533,6 +589,11 @@ class CoachBrainExecutor:
 
         if action.type == "replan":
 
+            # em pausa a fala do coach pode prometer plano: vale só a verdade
+            if runner.paused_since:
+
+                say = ""
+
             reply = await CoachBrainExecutor._replan(
                 profile, runner,
                 CoachBrainExecutor._replan_request(incoming_text, [action]),
@@ -590,8 +651,44 @@ class CoachBrainExecutor:
         )
 
     @staticmethod
+    async def _pause(profile, runner: RunnerProfile) -> str:
+        """PAUSA pedida pelo atleta: liga o estado que trava os geradores, esquece
+        oferta de dia extra em aberto e tira o que falta da semana."""
+
+        TrainingPause.start(profile, runner, today_local())
+
+        FrequencyOfferStore.clear(profile)
+
+        PlanProposalRepository().clear(profile)
+
+        OneOffProposalStore.clear(profile)
+
+        reply = (
+            "⏸️ Pausa ligada: não monto nem mando plano novo até você pedir pra "
+            "voltar. Quando quiser, é só me chamar aqui."
+        )
+
+        dropped, removed = await CoachBrainExecutor._skip(
+            profile, runner,
+            BrainAction(type="skip", scope="week", target_day=None, instruction=""),
+            pausing=True,
+        )
+
+        return f"{reply}\n\n{dropped}" if removed else reply
+
+    @staticmethod
+    def _resume(profile, runner: RunnerProfile) -> str | None:
+        """Ele pediu pra voltar. None se não havia pausa (fica a fala do coach)."""
+
+        if not TrainingPause.end(profile, runner):
+
+            return None
+
+        return "▶️ Pausa encerrada, teus planos estão ligados de novo."
+
+    @staticmethod
     async def _skip(
-        profile, runner: RunnerProfile, action: BrainAction,
+        profile, runner: RunnerProfile, action: BrainAction, pausing: bool = False,
     ) -> tuple[str | None, bool]:
         """Pular é decisão DO ATLETA (doente, viagem, não vai dar): tira NA HORA
         e diz EXATAMENTE o que saiu — ou que não havia treino. Nunca proposta
@@ -695,10 +792,11 @@ class CoachBrainExecutor:
 
             labels = ", ".join(weekday_label(d) for d in days)
 
-            done = (
-                f"🗓️ Tirei os treinos que faltavam desta semana ({labels}). "
-                "Quando estiver bem, me avisa que a gente volta com calma."
-            )
+            done = f"🗓️ Tirei os treinos que faltavam desta semana ({labels})."
+
+            if not pausing:
+
+                done += " Quando estiver bem, me avisa que a gente volta com calma."
 
         else:
 
@@ -788,6 +886,9 @@ class CoachBrainExecutor:
             profile, {"external_coach": False},
         )
 
+        # pedir que EU assuma é pedir plano: encerra uma pausa
+        TrainingPause.end(profile, runner)
+
         # regenera a semana com o NOSSO motor (o flag já está False no disco;
         # for_profile recarrega o perfil e gera de verdade)
         _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
@@ -863,6 +964,10 @@ class CoachBrainExecutor:
 
             return reply
 
+        if runner.paused_since:
+
+            return f"{reply} Quando você voltar da pausa, o plano nasce nesses dias."
+
         return (
             f"{reply} A semana atual segue como está e o plano de domingo já "
             "nasce nesses dias — se quiser que eu refaça esta semana agora, é "
@@ -893,7 +998,9 @@ class CoachBrainExecutor:
         return text
 
     @staticmethod
-    async def _replan(profile, runner, request: str = "") -> str | None:
+    async def _replan(
+        profile, runner, request: str = "", resumed: bool = False,
+    ) -> str | None:
         """Refaz AGORA os dias que faltam da semana, com o estado atual (meta,
         dias, corpo — o dossiê inteiro) E o pedido que motivou refazer, e
         entrega o plano + oferta do relógio. É a ação que cumpre o "monta meu
@@ -912,6 +1019,12 @@ class CoachBrainExecutor:
             WeeklyPlanMessageFormatter,
         )
 
+        # só o pedido de VOLTAR encerra a pausa (ação resume, que roda antes):
+        # um replan solto (meta ou dias novos) não religa os planos
+        if runner.paused_since:
+
+            return TrainingPause.athlete_message(runner.name)
+
         fresh, plan = await CurrentPlanProvider.for_profile(
             profile, force=True, request=request,
         )
@@ -920,10 +1033,13 @@ class CoachBrainExecutor:
             fresh.name, plan, profile=profile,
         )
 
-        return (
-            f"Refiz o que falta da tua semana com isso 👇\n\n{plan_text}"
-            f"{watch_update_offer(profile)}"
+        lead = (
+            "Montei teus treinos pro que falta da semana"
+            if resumed
+            else "Refiz o que falta da tua semana com isso"
         )
+
+        return f"{lead} 👇\n\n{plan_text}{watch_update_offer(profile)}"
 
     @staticmethod
     async def _routine(profile, runner, incoming_text) -> str | None:

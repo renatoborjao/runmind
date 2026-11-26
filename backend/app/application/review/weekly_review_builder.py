@@ -109,7 +109,7 @@ class WeeklyReviewBuilder:
             "race": WeeklyReviewBuilder._race_in_week(runner.id, review_week),
             # o plano da próxima semana sai logo depois do resumo (mesmo dia) —
             # só pra quem tem plano NOSSO (treinador externo conduz o dele).
-            "plan_incoming": not runner.external_coach,
+            "plan_incoming": not runner.external_coach and not runner.paused_since,
         }
 
     @staticmethod

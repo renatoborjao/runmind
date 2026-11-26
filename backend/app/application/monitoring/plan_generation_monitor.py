@@ -163,6 +163,8 @@ class Facts:
     due: bool = False
     fresh: bool = True
     external: bool = False
+    # pausa pedida pelo atleta: não há plano a conferir
+    paused: bool = False
     plan_week: date | None = None
     new_km: float = 0.0
     sessions: int = 0
@@ -183,6 +185,12 @@ class Facts:
     # o que o CONFERENTE (plan_check, o mesmo que roda antes do envio) acha do plano gravado:
     # (código, "high"|"watch", texto)
     conferente: list[tuple[str, str, str]] = field(default_factory=list)
+
+    @property
+    def no_plan(self) -> bool:
+        """O coach não gera plano pra ele (treinador externo ou pausa)."""
+
+        return self.external or self.paused
 
 
 # --- apoio puro ----------------------------------------------------------------------------------
@@ -304,7 +312,7 @@ def repeated_sessions(new_sessions: list, previous_sessions: list) -> list[str]:
 def delivery(f: Facts) -> list[Finding]:
     """A entrega: o plano da semana existe e a mensagem saiu perto da hora marcada."""
 
-    if f.external or not f.due:
+    if f.no_plan or not f.due:
 
         return []
 
@@ -359,7 +367,7 @@ def network_plan(f: Facts) -> Finding | None:
     """O plano veio do plano de rede? As sessões do coach trazem a estrutura escrita (aquecimento,
     série, foco); o plano genérico não — sem nenhuma estrutura, a IA falhou."""
 
-    if f.external or f.plan_week != f.week or f.sessions == 0:
+    if f.no_plan or f.plan_week != f.week or f.sessions == 0:
 
         return None
 
@@ -386,7 +394,7 @@ def cut_after_delivery(f: Facts) -> Finding | None:
     forte quando o volume cai mais de `CUT_TOLERANCE` sobre o que fez; atenção quando só a semana
     vem marcada como descarga."""
 
-    if f.external or f.plan_week != f.week or not f.delivering:
+    if f.no_plan or f.plan_week != f.week or not f.delivering:
 
         return None
 
@@ -429,7 +437,7 @@ def cut_after_delivery(f: Facts) -> Finding | None:
 def long_jump(f: Facts) -> Finding | None:
     """O maior treino do plano contra o maior das últimas semanas fechadas."""
 
-    if f.external or f.plan_week != f.week:
+    if f.no_plan or f.plan_week != f.week:
 
         return None
 
@@ -452,7 +460,7 @@ def long_jump(f: Facts) -> Finding | None:
 
 def repeated_quality(f: Facts) -> Finding | None:
 
-    if f.external or not f.repeated:
+    if f.no_plan or not f.repeated:
 
         return None
 
@@ -572,6 +580,10 @@ def read_journal(since: datetime) -> list[str] | None:
 
 def _icon(f: Facts, mine: list[Finding]) -> str:
 
+    if f.paused:
+
+        return "⏸️"
+
     if f.external:
 
         return "⚪"
@@ -588,6 +600,10 @@ def _icon(f: Facts, mine: list[Finding]) -> str:
 
 
 def _brief(f: Facts) -> str:
+
+    if f.paused:
+
+        return "em pausa a pedido do atleta (o coach não gera)"
 
     if f.external:
 
@@ -640,7 +656,7 @@ def render_report(
 
         lines.append(f"{_icon(f, mine)} {f.name} — {_brief(f)}")
 
-        if f.plan_week == f.week and not f.external:
+        if f.plan_week == f.week and not f.no_plan:
 
             bits = [f"estrutura do coach em {f.structured}/{f.sessions} sessões"]
 
@@ -697,7 +713,7 @@ def render_report(
 
         lines.append(f"Journal do serviço: {len(marks)} marcador(es) de falha na geração.")
 
-    due = [f for f in facts if not f.external and f.due]
+    due = [f for f in facts if not f.no_plan and f.due]
 
     done = [f for f in due if f.plan_week == f.week and f.sent]
 
@@ -726,11 +742,11 @@ def format_message(
 
         by_profile.setdefault(item.profile, []).append(item)
 
-    due = [f for f in facts if not f.external and f.due]
+    due = [f for f in facts if not f.no_plan and f.due]
 
     done = [f for f in due if f.plan_week == f.week and f.sent]
 
-    waiting = [f for f in facts if not f.external and not f.due]
+    waiting = [f for f in facts if not f.no_plan and not f.due]
 
     serious = sum(1 for x in findings if x.level == HIGH)
 
@@ -911,7 +927,7 @@ def plan_messages(facts: list[Facts], findings: list[Finding]) -> list[str]:
 
     for f in facts:
 
-        if f.external or not f.due or f.plan_week != f.week:
+        if f.no_plan or not f.due or f.plan_week != f.week:
 
             continue
 
@@ -998,6 +1014,7 @@ class PlanGenerationMonitor:
             due=local >= start.replace(hour=CHECK_HOUR),
             fresh=(local - start) < timedelta(days=FRESH_DAYS),
             external=bool(runner.external_coach),
+            paused=bool(getattr(runner, "paused_since", None)),
         )
 
         plans = WeeklyPlanRepository()
@@ -1008,7 +1025,7 @@ class PlanGenerationMonitor:
 
             f.plan_week = plan.week_start
 
-        if f.external or plan is None or plan.week_start != week:
+        if f.no_plan or plan is None or plan.week_start != week:
 
             return f
 

@@ -62,8 +62,8 @@ class PlanPreferenceApplier:
             },
         )
 
-        # atleta com treinador: só registra, não gera plano
-        if runner.external_coach:
+        # atleta com treinador (ou em pausa): só registra, não gera plano
+        if runner.external_coach or runner.paused_since:
 
             return (
                 f"Fechou! Anotei que você faz o longão {day_label}. 💪"

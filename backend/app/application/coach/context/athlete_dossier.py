@@ -185,6 +185,14 @@ class AthleteDossier:
 
                 blocks.append(f"▸ {_TITLES[name]}\n" + "\n".join(lines))
 
+        from app.application.coach.intelligence.training_pause import TrainingPause
+
+        pause = TrainingPause.coach_line(data.runner)
+
+        if pause:
+
+            blocks.insert(0, f"▸ PAUSA\n{pause}")
+
         if not blocks:
 
             return ""

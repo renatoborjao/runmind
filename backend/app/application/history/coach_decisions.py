@@ -19,6 +19,8 @@ _IGNORED = frozenset({"shoe", "watch"})
 _TYPE_PT = {
     "move": "troca de dia",
     "skip": "treino pulado a pedido",
+    "pause": "pausa nos treinos a pedido",
+    "resume": "voltou da pausa",
     "adjust": "ajuste de treino",
     "simplify": "treino simplificado",
     "routine": "rotina de dias/horário",

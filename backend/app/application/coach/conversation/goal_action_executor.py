@@ -126,7 +126,11 @@ class GoalActionExecutor:
             return lead or "Anotado! 🎯"
 
         # regeração: no MÁXIMO uma, só se alguma âncora mudou dentro da janela
-        if regenerate and any(o.regen_due for o in outcomes):
+        if (
+            regenerate
+            and not runner.paused_since
+            and any(o.regen_due for o in outcomes)
+        ):
 
             _, plan = await CurrentPlanProvider.for_profile(profile, force=True)
 

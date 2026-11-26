@@ -205,6 +205,7 @@ class Snapshot:
     adherence: float | None
     next_race: str | None
     route: str | None = None
+    paused: bool = False
 
 
 # --- os checks (puros) ---------------------------------------------------------------------------
@@ -748,6 +749,11 @@ class CoachSanityAudit:
 
         data = AthleteDossier._inputs(profile, None, None, None, today)
 
+        # em pausa a pedido dele não há plano nem meta a cobrar
+        if getattr(getattr(data, "runner", None), "paused_since", None):
+
+            return []
+
         findings: list[Finding] = []
 
         def run(check):
@@ -1283,7 +1289,10 @@ class CoachSanityAudit:
 
             print(f"Sanidade: painel (rota) falhou p/ '{profile}': {e}")
 
-        return Snapshot(profile, km_week, long_km, adherence, next_race, route)
+        return Snapshot(
+            profile, km_week, long_km, adherence, next_race, route,
+            paused=bool(getattr(data.runner, "paused_since", None)),
+        )
 
     @staticmethod
     def audit_all(today: date | None = None) -> list[Finding]:
@@ -1375,6 +1384,19 @@ def _name(profile: str) -> str:
         return profile
 
 
+def _paused(profile: str) -> bool:
+
+    try:
+
+        from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+
+        return bool(LoadRunnerProfile.execute(profile).paused_since)
+
+    except Exception:  # noqa: BLE001
+
+        return False
+
+
 def _count(n: int, one: str, many: str) -> str:
 
     return f"{n} {one if n == 1 else many}"
@@ -1385,6 +1407,7 @@ def format_message(
     names: dict[str, str] | None = None,
     audited: list[str] | None = None,
     open_findings: list[Finding] | None = None,
+    paused: list[str] | None = None,
 ) -> str:
     """O aviso pro dono: um bloco por atleta (🔴 alto antes de 🟡 atenção), cada achado com título,
     a frase com os números e o que fazer. Com `audited`, diz QUEM foi olhado: quem está em dia de
@@ -1449,7 +1472,11 @@ def format_message(
 
         still_open = {f.profile for f in open_findings or findings}
 
-        clean = [names.get(p, p) for p in audited if p not in still_open]
+        resting = set(paused or [])
+
+        clean = [
+            names.get(p, p) for p in audited if p not in still_open and p not in resting
+        ]
 
         pending = [names.get(p, p) for p in audited if p in still_open and p not in by_profile]
 
@@ -1462,6 +1489,13 @@ def format_message(
         if pending:
 
             lines.append(f"🕐 Avisados antes e ainda em aberto: {', '.join(pending)}.")
+
+        if resting:
+
+            lines.append(
+                "⏸️ Em pausa a pedido: "
+                f"{', '.join(names.get(p, p) for p in audited if p in resting)}."
+            )
 
         lines.append("")
 
@@ -1497,6 +1531,10 @@ def format_panel(
 
         icon = "🔴" if any(f.level == HIGH for f in items) else ("🟡" if items else "🟢")
 
+        if snap.paused:
+
+            icon = "⏸️"
+
         bits = []
 
         if snap.km_week is not None:
@@ -1520,6 +1558,10 @@ def format_panel(
             bits.append(snap.route)
 
         alerts = f" — {len(items)} alerta(s)" if items else ""
+
+        if snap.paused:
+
+            bits.insert(0, "em pausa a pedido")
 
         lines.append(f"{icon} {names.get(snap.profile, snap.profile)}{alerts}: " + " · ".join(bits))
 
@@ -1574,6 +1616,8 @@ def run(
 
     names = {p: _name(p) for p in audited}
 
+    paused = [p for p in audited if _paused(p)]
+
     def panel() -> str:
 
         snaps = [CoachSanityAudit.snapshot(p, today) for p in audited]
@@ -1582,7 +1626,10 @@ def run(
 
     if not send:
 
-        alert = format_message(findings, names, audited, findings) if findings else "Sem achados."
+        alert = (
+            format_message(findings, names, audited, findings, paused)
+            if findings else "Sem achados."
+        )
 
         shown = f"{alert}\n\n{panel()}"
 
@@ -1596,7 +1643,7 @@ def run(
 
     if pending:
 
-        parts.append(format_message(pending, names, audited, findings))
+        parts.append(format_message(pending, names, audited, findings, paused))
 
     with_panel = today.weekday() == 0 or force_panel
 

@@ -73,7 +73,7 @@ class StravaConnectRefresh:
 
         # Treinador externo: o plano é do treinador; o Strava entra só como
         # histórico/contexto. Arquiva e sai — não gera nem envia plano.
-        if runner.external_coach:
+        if runner.external_coach or runner.paused_since:
 
             await LoadTrainingHistory.execute(profile=profile)
 

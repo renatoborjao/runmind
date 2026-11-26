@@ -16,6 +16,7 @@ from app.application.coach.intelligence.sleep_reading_service import (
 from app.application.coach.intelligence.state_portrait_service import (
     StatePortraitService,
 )
+from app.application.coach.intelligence.training_pause import TrainingPause
 from app.application.coach.planning.body_conduct_proposer import (
     BodyConductProposer,
 )
@@ -82,6 +83,17 @@ class OnDemandAnswers:
     )
 
     @staticmethod
+    def _paused_week(runner: RunnerProfile, plan) -> bool:
+        """Em pausa e sem treino pela frente: a resposta é a pausa, não "o plano
+        chega no domingo"."""
+
+        today = today_local()
+
+        return bool(runner.paused_since) and not any(
+            plan.session_date(s) >= today for s in plan.sessions
+        )
+
+    @staticmethod
     async def answer(
         intent: ChatIntent,
         profile: str,
@@ -97,6 +109,10 @@ class OnDemandAnswers:
         if intent == ChatIntent.NEXT_TRAINING:
 
             _, plan = await CurrentPlanProvider.for_profile(profile)
+
+            if OnDemandAnswers._paused_week(runner, plan):
+
+                return TrainingPause.athlete_message(runner.name)
 
             # pula as sessões já cumpridas (mesmo fora de ordem)
             history = await LoadTrainingHistory.execute(profile=profile)
@@ -116,6 +132,10 @@ class OnDemandAnswers:
         if intent == ChatIntent.WEEKLY_PLAN:
 
             _, plan = await CurrentPlanProvider.for_profile(profile)
+
+            if OnDemandAnswers._paused_week(runner, plan):
+
+                return TrainingPause.athlete_message(runner.name)
 
             # valida contra o histórico real: o que foi de fato treinado
             # aparece como feito; o resto do passado, como não feito

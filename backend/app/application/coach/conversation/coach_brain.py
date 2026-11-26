@@ -47,7 +47,8 @@ _CARDS = {
 
 _ACTION_TYPES = {
     "move", "skip", "adjust", "simplify", "one_off", "routine", "goal",
-    "preference", "coach_switch", "shoe", "days", "replan", "watch",
+    "preference", "coach_switch", "shoe", "days", "replan", "watch", "pause",
+    "resume",
 }
 
 _SCOPES = {"single_session", "week"}
@@ -93,7 +94,7 @@ Decida a MELHOR reação à mensagem do atleta e devolva UM JSON:
 {{"say": "sua resposta ao atleta, na voz do coach",
   "answer_card": <um de: {cards} | null>,
   "actions": [] | [{{"type": <move|skip|adjust|simplify|one_off|routine|goal|\
-preference|coach_switch|shoe|days|replan|watch>,
+preference|coach_switch|shoe|days|replan|watch|pause|resume>,
                      "scope": <single_session|week>,
                      "target_day": <dia em inglês|null>,
                      "instruction": "o que mudar, em 1 frase",
@@ -166,8 +167,22 @@ target_day=destino E preencha "content_change" com o que muda no conteúdo — o
 sistema faz as duas coisas numa proposta só. Deixar mais leve/livre/sem pace \
 SEM trocar de dia = "simplify" ou "adjust". NÃO aplique agora — o sistema monta \
 a proposta e pergunta "posso aplicar?". No "say", reconheça o pedido.
-- PULAR — ele NÃO VAI FAZER um treino ou a semana (doente, viagem, lesão, "não \
-vou conseguir"): type="skip". A semana/o resto dela ("não vou conseguir \
+- PAUSA × PULAR — decida pelo que ele quer das PRÓXIMAS semanas. Se ele pede pra \
+parar de receber treino por um tempo que passa desta semana ("vamos dar uma pausa \
+nos treinos", "quero deixar os treinos livres até ano que vem", "para de mandar \
+treino até eu pedir", "esse mês quero correr sem planilha"): type="pause" (só ele, \
+sem "skip" junto). O sistema desliga os planos e tira o que falta da semana; eles só \
+voltam quando ELE pedir, mesmo que cite uma data. No "say", acolha e diga que é só \
+chamar quando quiser voltar, sem prometer retomar sozinho em data nenhuma. Se ele só \
+continua falando de uma pausa que o quadro já mostra, "actions"=[].
+- VOLTAR DA PAUSA — só vale com "TREINOS EM PAUSA" no quadro. Ele pede pra voltar \
+AGORA ou pede plano/treino da semana ("bora voltar", "pode montar meus treinos de \
+novo", "quero meu plano"): inclua {{"type": "resume"}} — o sistema religa e já \
+manda os treinos da semana, e o "say" só acolhe. Falar da volta no futuro ("em \
+janeiro a gente volta com tudo"), contar um treino livre, perguntar algo ou mudar \
+meta/dias sem pedir pra voltar NÃO encerra a pausa: nada de resume nem replan.
+- PULAR — ele NÃO VAI FAZER um treino ou a semana, mas segue com o plano depois \
+(doente, viagem curta, lesão, "não vou conseguir"): type="skip". A semana/o resto dela ("não vou conseguir \
 cumprir o plano semanal") = scope="week"; um dia ("hoje não vou conseguir", \
 "amanhã não dá") = scope="single_session" + target_day. PULAR NÃO É PROPOSTA — \
 a decisão é dele: o sistema tira NA HORA e, na mesma mensagem, confirma \

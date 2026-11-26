@@ -85,6 +85,13 @@ class WeeklyPlanNotifier:
 
             return
 
+        # em pausa a pedido dele: nem plano, nem pedido do treino ao externo
+        if runner.paused_since:
+
+            print(f"Plano semanal: '{profile}' em pausa, nada gerado.")
+
+            return
+
         period = _week_key(local)
 
         if DispatchGuard.already_sent("weekly_plan", profile, period):
@@ -188,7 +195,7 @@ class WeeklyPlanNotifier:
 
                     continue
 
-                if not runner.external_coach:
+                if not runner.external_coach or runner.paused_since:
 
                     continue
 

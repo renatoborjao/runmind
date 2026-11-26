@@ -9,6 +9,9 @@ from app.infrastructure.persistence.weekly_plan_repository import (
 )
 
 
+DROP_NOTE = "Treinos tirados a pedido do atleta."
+
+
 class PlanChangeApplier:
     """Efetiva no plano vivo a mudança que o atleta ACEITOU e reconcilia o
     relógio (só o que mudou; nada de duplicata). É o passo 'aplica no sim' —
@@ -35,12 +38,29 @@ class PlanChangeApplier:
 
         PlanChangeApplier._apply_operations(updated, proposal.operations)
 
+        # só tirou treino (ele pediu): o plano guarda o motivo, senão o volume
+        # menor parece desvio da rota sem explicação (histórico e auditoria)
+        if proposal.operations and all(
+            op.get("action") == "drop" for op in proposal.operations
+        ):
+
+            PlanChangeApplier._note_drop(updated)
+
         # NÃO empurra pro relógio aqui: mudança mid-week PERGUNTA antes (o
         # ProposalFlow oferece "quer no relógio?" e o 'sim' sincroniza pelo
         # caminho opt-in). Só o plano do domingo vai automático pro Garmin.
         repository.save(profile, updated)
 
         return updated
+
+    @staticmethod
+    def _note_drop(plan: TrainingPlan) -> None:
+
+        note = (plan.route_note or "").strip()
+
+        if DROP_NOTE not in note:
+
+            plan.route_note = f"{note} {DROP_NOTE}".strip()
 
     @staticmethod
     def _apply_operations(

@@ -70,6 +70,11 @@ class CoachReconcileNotifier:
 
         runner = LoadRunnerProfile.execute(profile)
 
+        # em pausa não se pergunta sobre dia extra nem meta
+        if getattr(runner, "paused_since", None):
+
+            return
+
         use_athlete_timezone(runner.timezone)
 
         local = now_in(runner.timezone)

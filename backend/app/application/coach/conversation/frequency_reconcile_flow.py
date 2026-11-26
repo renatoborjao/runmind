@@ -41,6 +41,12 @@ class FrequencyReconcileFlow:
 
             return None
 
+        # a mensagem fala de outra coisa (ou traz ressalva): não é um sim/não à
+        # oferta, mesmo com um "vamos" no meio — quem lê é o cérebro
+        if not ProposalReplyDetector.is_short_reply(incoming_text):
+
+            return None
+
         reply = ProposalReplyDetector.detect(incoming_text)
 
         if reply == ProposalReply.UNCLEAR:

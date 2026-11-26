@@ -43,7 +43,32 @@ _ADVERSATIVE = [
 ]
 
 
+# o que pode acompanhar um sim/não numa resposta CURTA e só sobre a pergunta
+_SHORT_FILLERS = {
+    "a", "o", "as", "os", "e", "ai", "ja", "entao", "por", "favor", "quero",
+    "queria", "coloca", "colocar", "inclui", "incluir", "oficializa", "mantem",
+    "manter", "fica", "ficar", "assim", "mesmo", "esse", "essa", "dia", "dias",
+    "treino", "plano", "no", "na", "meu", "minha", "rit", "ritmind", "coach",
+    "claro", "com", "certeza", "boa", "bom", "ta", "obrigado", "obrigada",
+    "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo", "feira",
+}
+
+
 class ProposalReplyDetector:
+
+    @staticmethod
+    def is_short_reply(text: str) -> bool:
+        """A mensagem INTEIRA é um sim/não (com no máximo enfeite)? Pra ofertas
+        que mudam o perfil: um "vamos" no meio de uma frase sobre outra coisa
+        ("vamos tirar dezembro de recuperação") não é aceite — bug real 25/11."""
+
+        words = re.findall(r"[a-z0-9]+", ProposalReplyDetector._normalize(text))
+
+        cues = {w for cue in _CONFIRM + _REJECT for w in cue.split()}
+
+        return bool(words) and all(
+            w in cues or w in _SHORT_FILLERS or w.isdigit() for w in words
+        )
 
     @staticmethod
     def detect(text: str) -> ProposalReply:

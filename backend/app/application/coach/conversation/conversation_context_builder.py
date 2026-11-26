@@ -179,7 +179,10 @@ class ConversationContextBuilder:
         19h (sai às 20h) e ainda disse o que o plano "já entrega" antes de ele
         existir (Renato 27/09). Treinador externo: o plano vem dele."""
 
-        if getattr(runner, "external_coach", False):
+        # em pausa não há plano a caminho (o dossiê diz o porquê)
+        if getattr(runner, "external_coach", False) or getattr(
+            runner, "paused_since", None,
+        ):
 
             return ""
 
