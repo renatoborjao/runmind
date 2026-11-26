@@ -273,3 +273,13 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/`, apagar `app/infrastructure/integrations/garmin/foreign_workout_store.py` e `sudo systemctl restart runmind.service`.
 - **Medir:** próxima reclamação de "treino a mais no relógio": o coach aponta quais são e o "pode apagar" funciona?
 - **Motivo:** Renato 24/11 ("troquei de dia... agora tem 6 treinos no relógio... ISSO não deve acontecer"): 3 treinos de outra origem nos mesmos dias + os 3 nossos; o coach prometeu 3x "envio limpo pra sobrescrever".
+
+## 26/11/2026 — pausa a pedido do atleta: sem plano até ele pedir pra voltar
+
+- **O que mudou:** NOVO `coach/intelligence/training_pause.py` + campo `paused_since` no perfil. Cérebro ganha as ações `pause` e `resume` (`coach_brain.py`, `coach_brain_executor.py`): a pausa tira o que falta da semana, derruba propostas e oferta de dia extra; só o pedido de volta encerra (sem data que encerre sozinha), e a volta já entrega a semana. Em pausa: `ai_plan_service.ensure_plan` não gera nem com `force`; plano de domingo, lembrete ao treinador externo, reconciliação, reengajamento e regeração por meta, longão ou Strava param; dossiê ganha o bloco PAUSA; auditoria diária e monitor de domingo mostram ⏸️. `frequency_reconcile_flow.py`: oferta de dia extra só aceita resposta curta (um "vamos" no meio de outra frase virou aceite). `plan_change_applier.py`: treino tirado a pedido grava o motivo em `route_note`.
+- **Lab:** dossiê e plano sem diferença com ninguém em pausa. Cérebro 50/55 no catálogo, 8/8 de pausa/volta; 3 erros são frases vencidas pela data do teste e as 2 de "refaz minha semana" passaram 6/6 no reteste (no ar, 5/6).
+- **Backup na VM:** `~/deploy_backups/20261126-095239`.
+- **Voltar:** copiar os arquivos do stamp de volta pra `~/runmind/backend/`, apagar `app/application/coach/intelligence/training_pause.py` e `sudo systemctl restart runmind.service`. **Atenção:** sem o código, quem está em pausa volta a receber plano no domingo.
+- **Dado ajustado na VM:** perfil e plano do Mauricio (pausa e dias); cópia anterior em `~/rollback_points/pausa-mauricio-20261126-123325`.
+- **Medir:** domingo 29/11: atleta em pausa sem plano e ⏸️ no monitor. Pendência do lab: frases do catálogo que dependem do dia em que rodam.
+- **Motivo:** Renato 26/11 ("se o atleta pediu pausa, não devemos gerar treinos para ele até que ele volte a solicitar").
