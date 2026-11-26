@@ -937,8 +937,40 @@ async def _plan(profile, runner):
 # de 27/09 (pular a semana, relógio, "quando chega o plano") eram situações
 # fora do gabarito — o catálogo cobre as categorias todas e roda antes de todo
 # deploy do coach: `bash ops/coach_lab.sh <saida> --braineval 0 --repeats 1`.
+# Só os contextos, sem IA (grátis): acrescente `--context-only` (--full imprime
+# o contexto inteiro).
+#
+# O resultado NÃO depende do dia em que roda: todo caso é montado na SEMANA DE
+# LABORATÓRIO — hoje é a segunda-feira que vem, com uma semana inventada inteira
+# pela frente (ver _lab_week). Datas nas frases são marcadores (ver _phrase):
+# {PROVA}/{PROVA_2} daqui a 4/5 semanas, {MES}/{MES_SEGUINTE}, {TENIS} um par
+# do armário.
 # (perfil, mensagem, tipos esperados (conjuntos aceitos), extra)
 NONE = [set()]
+
+WEEKDAYS = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    "Sunday",
+)
+
+MONTHS = (
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+    "agosto", "setembro", "outubro", "novembro", "dezembro",
+)
+
+# (dia, treino, km) — quarta, sexta e domingo livres
+LAB_WEEK = (
+    ("Tuesday", "Rodagem Leve", 6.0),
+    ("Thursday", "Limiar Intervalado", 7.0),
+    ("Saturday", "Longão", 12.0),
+)
+
+# pras frases que falam do treino de SEXTA — quarta e sábado livres
+FRIDAY_WEEK = (
+    ("Tuesday", "Rodagem Leve", 6.0),
+    ("Friday", "Limiar Intervalado", 7.0),
+    ("Sunday", "Longão", 12.0),
+)
 
 BRAIN_EVAL = [
     # ---- META / PROVA
@@ -947,13 +979,13 @@ BRAIN_EVAL = [
      [{"goal", "days"}, {"goal", "days", "replan"}],
      {"relationship": ("replace", "primary"),
       "days": ["Tuesday", "Thursday", "Sunday"]}),
-    ("renato2", "também quero correr a São Silvestre em 31/12, sem tempo, só "
-     "pra curtir", [{"goal"}], {"relationship": ("additional",)}),
+    ("renato2", "também quero correr a corrida da cidade em {PROVA_2}, sem "
+     "tempo, só pra curtir", [{"goal"}], {"relationship": ("additional",)}),
     ("renato2", "meu objetivo principal agora é fazer a meia em 1h50",
      [{"goal"}], {"relationship": ("primary",)}),
     ("renato2", "esquece a 15k, não vou mais correr ela, meu foco agora é só "
      "a meia", [{"goal"}], {"relationship": ("replace",)}),
-    ("leonardo", "vou correr uma prova de 5 km dia 25/10 pra testar, quero "
+    ("leonardo", "vou correr uma prova de 5 km dia {PROVA} pra testar, quero "
      "fazer em 24 minutos", [{"goal"}],
      {"relationship": ("stepping_stone", "additional")}),
     ("fernanda", "esquece perder peso, agora meu objetivo é correr 10 km em "
@@ -966,8 +998,8 @@ BRAIN_EVAL = [
      {"days": ["Monday", "Wednesday", "Friday", "Saturday"]}),
     # ---- MUDAR A SEMANA
     ("fernanda", "troca o treino de terça pra quarta e o de sexta pra sábado",
-     [{"move"}], {"count": 2}),
-    ("mauricio", "o treino de terça pode ser mais leve? tô cansado",
+     [{"move"}], {"count": 2, "week": FRIDAY_WEEK}),
+    ("helio", "o treino de terça pode ser mais leve? tô cansado",
      [{"adjust"}, {"simplify"}], {"target_day": "Tuesday"}),
     ("renato2", "passa o longão de sábado pra domingo", [{"move"}],
      {"target_day": "Sunday"}),
@@ -976,14 +1008,13 @@ BRAIN_EVAL = [
      {"target_day": "Friday", "content_change": True}),
     # adjust/simplify + replan juntos: o replan vence e leva o pedido junto
     # (28/09) — refaz a semana honrando o "só leve até sexta"
-    ("mauricio", "tô gripado, refaz minha semana só com treino leve até "
+    ("leonardo", "tô gripado, refaz minha semana só com treino leve até "
      "sexta", [{"replan"}, {"adjust"}, {"simplify"}, {"adjust", "replan"},
                {"simplify", "replan"}], {}),
     ("fernanda", "refaz minha semana, mudou tudo aqui na minha rotina",
      [{"replan"}], {}),
     # ---- PULAR (aplica na hora)
-    # "amanhã" é relativo ao dia em que o catálogo roda (fixo "Monday" só
-    # valia no domingo em que foi escrito)
+    # "amanhã" é relativo ao "hoje" da semana de laboratório
     ("helio", "amanhã não vou conseguir treinar, tenho plantão", [{"skip"}],
      {"target_day": "TOMORROW", "scope": "single_session"}),
     ("leonardo", "estou resfriado, não vou conseguir treinar essa semana",
@@ -1007,10 +1038,10 @@ BRAIN_EVAL = [
      [{"preference"}, {"routine"}, {"adjust"}, {"routine", "adjust"}, set()], {}),
     # ---- RELÓGIO (manda na hora, nunca "vou tentar")
     ("renato2", "manda os treinos da semana pro relógio", [{"watch"}], {}),
-    ("mauricio", "não chegou no Garmin, tenta de novo", [{"watch"}], {}),
+    ("fernanda", "não chegou no Garmin, tenta de novo", [{"watch"}], {}),
     # ---- TÊNIS / TREINADOR
     ("fernanda", "comprei um tênis novo, um Adidas Adizero SL", [{"shoe"}], {}),
-    ("mauricio", "quantos km tem meu Corre Turbo?", [{"shoe"}], {}),
+    ("renato2", "quantos km tem meu {TENIS}?", [{"shoe"}], {}),
     ("leonardo", "contratei uma assessoria, vou seguir o plano do meu "
      "treinador agora", [{"coach_switch"}], {}),
     # ---- PERGUNTA COM DADO EXATO (cartão)
@@ -1018,7 +1049,7 @@ BRAIN_EVAL = [
      {"card": ("next_training",)}),
     ("fernanda", "me manda meu plano da semana", NONE,
      {"card": ("weekly_plan",)}),
-    ("mauricio", "quais são meus paces?", NONE, {"card": ("paces",)}),
+    ("helio", "quais são meus paces?", NONE, {"card": ("paces",)}),
     ("leonardo", "como tá meu corpo hoje?", NONE, {"card": ("body",)}),
     ("renato2", "vou conseguir fazer a meia abaixo de 2h?", NONE,
      {"card": ("race",)}),
@@ -1026,18 +1057,20 @@ BRAIN_EVAL = [
      {"card": ("fitness", "portrait")}),
     # ---- PERGUNTA SEM MUDANÇA (responde, não mexe)
     ("renato2", "o longão de sábado é 12 km né?", NONE, {}),
-    ("mauricio", "meu longão é no sábado, certo?", NONE, {}),
+    ("leonardo", "meu longão é no sábado, certo?", NONE, {}),
     ("leonardo", "tá chovendo, como faço o treino de sexta na esteira?", NONE,
-     {"card": (None,)}),
+     {"card": (None,), "week": FRIDAY_WEEK}),
     ("helio", "quando chega meu plano novo?", NONE, {}),
     ("fernanda", "o que é bom comer antes do longão?", NONE, {}),
-    ("mauricio", "posso fazer musculação no mesmo dia do treino?", NONE, {}),
+    ("helio", "posso fazer musculação no mesmo dia do treino?", NONE, {}),
     # ---- RELATO / PERCEPÇÃO / VIDA
-    ("leonardo", "o treino de sábado foi pesado, perna morta no fim", NONE,
+    # relato fala do "último treino" (sempre no contexto): um dia da semana
+    # citado cairia nos dias sem dado antes da semana de laboratório
+    ("leonardo", "o último treino foi pesado, perna morta no fim", NONE,
      {"perception": True}),
-    ("renato2", "o longão de sábado foi ok, uns 7 de 10 de esforço", NONE,
+    ("renato2", "o último treino foi ok, uns 7 de 10 de esforço", NONE,
      {"perception": True}),
-    ("mauricio", "tô sentindo uma dorzinha no joelho direito",
+    ("fernanda", "tô sentindo uma dorzinha no joelho direito",
      [set(), {"adjust"}, {"simplify"}], {}),
     ("helio", "tô meio desanimado essa semana", NONE, {}),
     ("renato2", "tive uma recaída no vape, mas já parei faz 2 dias", NONE, {}),
@@ -1053,16 +1086,162 @@ BRAIN_EVAL = [
      "eu te aviso", [{"pause"}], {}),
     ("fernanda", "essa semana tô doente, não vou conseguir correr", [{"skip"}],
      {"scope": "week"}),
-    ("mauricio", "Boa!! Vamos tirar esse mês de dezembro de recuperação e "
-     "voltar com tudo em janeiro", NONE, {"paused": "2026-11-25"}),
-    ("mauricio", "Treinos livre !", NONE, {"paused": "2026-11-25"}),
+    # "paused": em pausa desde a véspera, sem treino pela frente
+    ("mauricio", "Boa!! Vamos tirar esse mês de {MES} de recuperação e "
+     "voltar com tudo em {MES_SEGUINTE}", NONE, {"paused": True}),
+    ("mauricio", "Treinos livre !", NONE, {"paused": True}),
     ("mauricio", "corri 8 km livre hoje, foi muito bom", NONE,
-     {"paused": "2026-11-25"}),
+     {"paused": True}),
     ("mauricio", "bora voltar, pode montar meus treinos de novo",
-     [{"resume"}, {"resume", "replan"}], {"paused": "2026-11-25"}),
+     [{"resume"}, {"resume", "replan"}], {"paused": True}),
     ("mauricio", "quando eu voltar quero treinar só terça e quinta",
-     [{"days"}], {"paused": "2026-11-25"}),
+     [{"days"}], {"paused": True}),
 ]
+
+
+def _lab_day(today):
+    """O "hoje" do catálogo: a segunda-feira QUE VEM. Semana inteira pela frente
+    e todo dado real no passado, rode quando rodar."""
+
+    return today + timedelta(days=7 - today.weekday())
+
+
+def _phrase(template, day, profile):
+    """A frase do caso com as datas relativas ao "hoje" do laboratório. None =
+    o atleta não tem o que a frase pede (par de tênis)."""
+
+    month = (day + timedelta(days=7)).month
+
+    text = (
+        template
+        .replace("{PROVA}", (day + timedelta(days=27)).strftime("%d/%m"))
+        .replace("{PROVA_2}", (day + timedelta(days=33)).strftime("%d/%m"))
+        .replace("{MES}", MONTHS[month - 1])
+        .replace("{MES_SEGUINTE}", MONTHS[month % 12])
+    )
+
+    if "{TENIS}" in text:
+
+        from app.infrastructure.persistence.shoe_repository import ShoeRepository
+
+        shoes = ShoeRepository().load(profile).active()
+
+        if not shoes:
+
+            return None
+
+        text = text.replace("{TENIS}", shoes[0].name)
+
+    return text
+
+
+@contextlib.contextmanager
+def _swapped(*changes):
+    """Troca atributos (dono, nome, valor) só durante o bloco."""
+
+    originals = [(owner, name, owner.__dict__[name]) for owner, name, _ in changes]
+
+    try:
+
+        for owner, name, value in changes:
+
+            setattr(owner, name, value)
+
+        yield
+
+    finally:
+
+        for owner, name, value in originals:
+
+            setattr(owner, name, value)
+
+
+@contextlib.contextmanager
+def _lab_week(day, week):
+    """A montagem do contexto de um caso, tudo em memória: relógio parado em
+    `day` às 8h, a semana inventada `week` no lugar do plano (vazia em pausa),
+    sem o plano real da semana em curso no histórico (o que ainda não foi
+    corrido pareceria furo) e histórico só do arquivo (sem buscar nem gravar
+    atividade)."""
+
+    from datetime import datetime
+
+    from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+    from app.core import clock
+    from app.domain.entities.planned_session import PlannedSession
+    from app.domain.entities.training_plan import TrainingPlan
+    from app.infrastructure.integrations.garmin.garmin_activity_source import (
+        GarminActivitySource,
+    )
+    from app.infrastructure.integrations.strava.client import StravaClient
+    from app.infrastructure.persistence.activity_archive_repository import (
+        ActivityArchiveRepository,
+    )
+    from app.infrastructure.persistence.weekly_plan_repository import (
+        WeeklyPlanRepository,
+    )
+
+    frozen = datetime(
+        day.year, day.month, day.day, 8, tzinfo=clock.DEFAULT_TIMEZONE,
+    )
+
+    # trocar o `datetime` DENTRO do relógio alcança quem importou today_local /
+    # now_local pelo nome
+    class _Frozen(datetime):
+
+        @classmethod
+        def now(cls, tz=None):
+
+            return frozen.astimezone(tz) if tz else frozen.replace(tzinfo=None)
+
+    real_history = WeeklyPlanRepository.history
+
+    def load(self, profile):
+
+        runner = LoadRunnerProfile.execute(profile)
+
+        days = () if getattr(runner, "paused_since", None) else week
+
+        return TrainingPlan(
+            athlete_name=runner.name,
+            objective=runner.goal,
+            phase="BASE",
+            weekly_volume=sum(km for _, _, km in days),
+            running_days=[weekday for weekday, _, _ in days],
+            week_start=day,
+            sessions=[
+                PlannedSession(
+                    day=weekday, workout_type=kind, objective=kind,
+                    planned_distance_km=km, planned_duration_minutes=None,
+                    target_pace_min=None, target_pace_max=None,
+                )
+                for weekday, kind, km in days
+            ],
+            source="externo" if runner.external_coach else "runmind",
+            generated_at=(day - timedelta(days=1)).isoformat(),
+        )
+
+    def history(self, profile):
+
+        return [
+            plan for plan in real_history(self, profile)
+            if plan.week_start < day - timedelta(days=7)
+        ]
+
+    async def no_live(self, *args, **kwargs):
+
+        return []
+
+    with _swapped(
+        (clock, "datetime", _Frozen),
+        (WeeklyPlanRepository, "load", load),
+        (WeeklyPlanRepository, "history", history),
+        (StravaClient, "get_last_activities", no_live),
+        (GarminActivitySource, "recent", staticmethod(lambda *a, **k: [])),
+        (ActivityArchiveRepository, "upsert_many", lambda *a, **k: None),
+    ):
+
+        yield
 
 
 @contextlib.contextmanager
@@ -1098,7 +1277,7 @@ def _paused(since):
         RunnerProfileRepository.load = original
 
 
-def _grade(decision, expected_sets, extra) -> list[str]:
+def _grade(decision, expected_sets, extra, today) -> list[str]:
     """Lista de erros (vazia = acertou): a DECISÃO (ações, meta, dias, dia,
     escopo, cartão, percepção) e a FALA (sem promessa vazia, com acento)."""
 
@@ -1144,14 +1323,7 @@ def _grade(decision, expected_sets, extra) -> list[str]:
 
         if expected == "TOMORROW":
 
-            from datetime import timedelta
-
-            from app.core.clock import today_local
-
-            expected = (
-                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
-                "Saturday", "Sunday",
-            )[(today_local() + timedelta(days=1)).weekday()]
+            expected = WEEKDAYS[(today + timedelta(days=1)).weekday()]
 
         if target != expected:
 
@@ -1211,29 +1383,114 @@ async def _brain_eval(budgets: list[int], repeats: int, cases: str = "") -> None
         ConversationContextBuilder,
     )
     from app.application.use_cases.load_runner_profile import LoadRunnerProfile
+    from app.core.clock import today_local
     from app.core.config import get_settings
+    from app.infrastructure.persistence.runner_profile_repository import (
+        RunnerProfileRepository,
+    )
 
     # `cases`: roda só as frases que contêm um destes trechos (separados por "||")
     wanted = [c.lower() for c in cases.split("||") if c]
 
-    catalog = [
-        case for case in BRAIN_EVAL
-        if not wanted or any(w in case[1].lower() for w in wanted)
-    ]
+    day = _lab_day(today_local())
 
-    contexts = {}
+    print(f"semana de laboratório: hoje = segunda {day.strftime('%d/%m/%Y')}")
 
-    for profile, message, _, extra in catalog:
+    catalog, skipped = [], []
 
-        with _paused(extra.get("paused")):
+    # um caso que não dá pra montar é PULADO com aviso; o resto roda
+    for profile, template, expected_sets, extra in BRAIN_EVAL:
 
-            contexts[(profile, message)] = await ConversationContextBuilder.build(
-                profile, message,
-            )
+        message, context, reason = template, None, None
+
+        try:
+
+            repository = RunnerProfileRepository()
+
+            if not repository.exists(profile):
+
+                reason = "atleta não existe"
+
+            elif not extra.get("paused") and getattr(
+                repository.load(profile), "paused_since", None,
+            ):
+
+                # a conversa e a memória reais falam da pausa e confundem o caso
+                reason = "atleta em pausa de verdade e o caso é sem pausa"
+
+            else:
+
+                message = _phrase(template, day, profile)
+
+                if message is None:
+
+                    message, reason = template, "atleta sem tênis no armário"
+
+            if wanted and not any(
+                w in template.lower() or w in message.lower() for w in wanted
+            ):
+
+                continue
+
+            if reason is None:
+
+                since = (
+                    (day - timedelta(days=1)).isoformat()
+                    if extra.get("paused") else None
+                )
+
+                with _paused(since), _lab_week(day, extra.get("week", LAB_WEEK)):
+
+                    context = await ConversationContextBuilder.build(
+                        profile, message,
+                    )
+
+        except Exception as e:  # noqa: BLE001
+
+            reason = f"montagem quebrou: {type(e).__name__}: {e}"
+
+            traceback.print_exc(limit=6, file=sys.stdout)
+
+        if reason:
+
+            skipped.append(f"PULADO {profile}: \"{message[:60]}\" — {reason}")
+
+            print(skipped[-1])
+
+        else:
+
+            catalog.append((profile, message, expected_sets, extra, context))
+
+    if CONTEXT_ONLY:
+
+        _h("CONTEXTOS (sem IA)")
+
+        for profile, message, _, _, context in catalog:
+
+            anchors = [
+                line for line in context.splitlines()
+                if line.startswith(("- HOJE é", "Próximo treino planejado"))
+            ]
+
+            print(f"{profile}: \"{message}\" ({len(context)} chars)")
+
+            print("\n".join(f"    {line}" for line in anchors))
+
+            if CONTEXT_FULL:
+
+                print(context)
+
+        _h("RESUMO")
+
+        print(f"{len(catalog)} contextos montados, {len(skipped)} pulados")
+
+        print("\n".join(skipped))
+
+        return
 
     summary = []
 
-    for budget in budgets:
+    for budget in budgets if catalog else []:
 
         get_settings().coach_brain_thinking_budget = budget
 
@@ -1241,7 +1498,7 @@ async def _brain_eval(budgets: list[int], repeats: int, cases: str = "") -> None
 
         hits, total, seconds = 0, 0, []
 
-        for profile, message, expected_sets, extra in catalog:
+        for profile, message, expected_sets, extra, context in catalog:
 
             runner = LoadRunnerProfile.execute(profile)
 
@@ -1251,13 +1508,13 @@ async def _brain_eval(budgets: list[int], repeats: int, cases: str = "") -> None
 
                 decision = await CoachBrain.decide(
                     runner_name=runner.name,
-                    context_facts=contexts[(profile, message)],
+                    context_facts=context,
                     incoming_text=message,
                 )
 
                 seconds.append(time.time() - started)
 
-                errors = _grade(decision, expected_sets, extra)
+                errors = _grade(decision, expected_sets, extra, day)
 
                 total += 1
 
@@ -1280,7 +1537,13 @@ async def _brain_eval(budgets: list[int], repeats: int, cases: str = "") -> None
 
     _h("RESUMO")
 
-    print("\n".join(summary))
+    print("\n".join(summary) or "nenhum caso rodou")
+
+    if skipped:
+
+        print(f"\n{len(skipped)} casos PULADOS (fora da conta):")
+
+        print("\n".join(skipped))
 
 
 def _read_only() -> None:

@@ -6,6 +6,7 @@
 #   bash ops/coach_lab.sh --no-overlay <saida.txt> [args]  # o que está NO AR (o "antes")
 # custo: --context-only é grátis; sem ele é PAGO e exige --profiles a,b (ou --todos)
 # args do lab: --profiles renato2,fernanda  --only dossier,chat,analysis,conduct,review,plan
+# catálogo do cérebro: --braineval 0 --repeats 1 (pago); com --context-only monta os contextos sem IA
 set -euo pipefail
 
 VM="ubuntu@163.176.28.178"
