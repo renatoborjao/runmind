@@ -17,6 +17,11 @@ PRICING = {
     "gemini-3.5-flash": (0.75, 3.75),
     "gemini-3.5-flash-lite": (0.30, 2.50),
     "gemini-3.1-flash-lite": (0.30, 2.50),
+    # Claude (AI_PROVIDER=claude), lista da Anthropic 03/11/2026; o medidor soma o
+    # cache como entrada cheia, então a estimativa fica ACIMA do real
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-haiku-5-5": (0.10, 0.50),
     "_default": (0.75, 3.75),
 }
 

@@ -227,6 +227,21 @@ class Settings(BaseSettings):
     gemini_coach_model: str = "gemini-3.6-flash"
 
     # ==========================
+    # CLAUDE (API da Anthropic)
+    # ==========================
+    # AI_PROVIDER=claude manda TODA chamada de texto/imagem pro Claude
+    # (integrations/claude/adapter.py traduz o config do Gemini); se o Claude
+    # falhar, a chamada segue no Gemini. A voz do coach (TTS) fica no Gemini.
+    # Voltar: AI_PROVIDER=gemini no .env + restart. Renato 26/11/2026.
+    ai_provider: str = "gemini"
+    anthropic_api_key: str = ""
+    # papel -> modelo: Pro (plano) / flash (chat, análise) / flash-lite (extração)
+    claude_plan_model: str = "claude-opus-5-5"
+    claude_chat_model: str = "claude-sonnet-5-5"
+    claude_extract_model: str = "claude-haiku-5-5"
+    claude_plan_effort: str = "high"
+
+    # ==========================
     # BACKUP DO STORAGE
     # ==========================
 

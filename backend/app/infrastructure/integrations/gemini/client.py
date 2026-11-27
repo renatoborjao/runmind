@@ -169,7 +169,12 @@ def is_billing_error(exc: Exception) -> bool:
 
     text = str(exc).lower()
 
-    return "credits are depleted" in text or "prepayment" in text
+    return (
+        "credits are depleted" in text
+        or "prepayment" in text
+        # Anthropic: 400 "Your credit balance is too low to access the API"
+        or "credit balance is too low" in text
+    )
 
 
 async def _alert_billing(exc: Exception) -> None:
@@ -285,6 +290,14 @@ async def _generate_text_once(
     cair no fallback — nunca envia mensagem em branco.
     """
 
+    if get_settings().ai_provider == "claude":
+
+        claude_text = await _try_claude(model, contents, config, require_text, capture)
+
+        if claude_text is not None:
+
+            return claude_text
+
     _normalize_thinking(config)
 
     candidates = _model_candidates(model)
@@ -374,6 +387,49 @@ async def _generate_text_once(
         await asyncio.sleep(delay)
 
     raise last_exc  # type: ignore[misc]
+
+
+async def _try_claude(model, contents, config, require_text, capture) -> str | None:
+    """AI_PROVIDER=claude: tenta o Claude primeiro (adaptador traduz o config do
+    Gemini). Qualquer falha (sem suporte, recusa, crédito, rede depois dos
+    retries do SDK, resposta vazia) devolve None e a chamada segue no Gemini —
+    o atleta nunca fica sem resposta por causa da troca."""
+
+    from app.infrastructure.integrations.claude import adapter
+
+    try:
+
+        text, used_model, usage = await adapter.generate(
+            model, contents, config, capture=capture,
+        )
+
+    except Exception as exc:  # noqa: BLE001 — cai no Gemini
+
+        if is_billing_error(exc):
+
+            await _alert_billing(exc)
+
+        print(f"Claude falhou ({type(exc).__name__}: {exc}); seguindo no Gemini")
+
+        return None
+
+    try:
+
+        from app.application.monitoring.token_meter import TokenMeter
+
+        TokenMeter.record(used_model, usage)
+
+    except Exception:  # noqa: BLE001 — medidor é best-effort
+
+        pass
+
+    if require_text and not (text or "").strip():
+
+        print("Claude respondeu vazio; seguindo no Gemini")
+
+        return None
+
+    return text
 
 
 def repair_json(raw: str) -> str:

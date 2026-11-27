@@ -17,6 +17,7 @@ dependencies = [
     "edge-tts>=6.1.0",
     "pywebpush>=2.0.0",
     "Pillow>=11.0.0",
+    "anthropic>=1.0",
 ]
 
 [project.optional-dependencies]
