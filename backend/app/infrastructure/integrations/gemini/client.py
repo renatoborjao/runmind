@@ -290,7 +290,11 @@ async def _generate_text_once(
     cair no fallback — nunca envia mensagem em branco.
     """
 
-    if get_settings().ai_provider == "claude":
+    settings = get_settings()
+
+    # GOOGLE_API_KEY=DISABLED é a trava "ZERO IA" dos relatórios/auditorias:
+    # vale pro Claude também (senão uma chamada acidental viraria gasto real)
+    if settings.ai_provider == "claude" and settings.google_api_key != "DISABLED":
 
         claude_text = await _try_claude(model, contents, config, require_text, capture)
 

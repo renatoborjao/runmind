@@ -334,6 +334,29 @@ def test_credito_do_claude_esgotado_avisa_e_cai_no_gemini():
     alert.assert_awaited_once()
 
 
+def test_trava_zero_ia_vale_pro_claude():
+
+    gemini = _gemini_mock()
+
+    claude = AsyncMock()
+
+    with patch(f"{GEMINI}.get_settings", return_value=_settings(google_api_key="DISABLED")), \
+         patch(f"{GEMINI}._client", return_value=gemini), \
+         patch.object(adapter, "generate", claude):
+
+        _run_client()
+
+    claude.assert_not_awaited()
+
+
+def test_timeout_curto_no_chat_longo_no_plano():
+
+    chat = build_request("gemini-3.6-flash", "x", types.GenerateContentConfig())
+    plan = build_request("gemini-3.1-pro-preview", "x", types.GenerateContentConfig())
+
+    assert chat["_timeout"] < plan["_timeout"]
+
+
 def test_provider_gemini_nao_toca_no_claude():
 
     gemini = _gemini_mock()

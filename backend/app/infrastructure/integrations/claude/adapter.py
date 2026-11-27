@@ -34,6 +34,12 @@ THINKING_HEADROOM = 8_000
 # web_search do Claude: buscas por chamada (cada uma custa ~US$ 0,01)
 WEB_SEARCH_MAX_USES = 5
 
+# teto por tentativa (o SDK repete até 3x): plano pode pensar minutos (mediu
+# 67s no lab); chat/extração respondem em segundos ou caem no Gemini
+PLAN_TIMEOUT_SECONDS = 600.0
+
+FAST_TIMEOUT_SECONDS = 60.0
+
 # rodadas de continuação quando a busca na web pausa o turno (pause_turn)
 MAX_PAUSE_RESUMES = 3
 
@@ -343,6 +349,9 @@ def build_request(model: str, contents, config) -> dict:
         system = f"{system}\n\n{extra}" if system else extra
 
     request: dict = {
+        # interno (não vai pra API): chat/extração não podem segurar o atleta
+        # minutos antes de cair no Gemini; o plano (Opus, esforço alto) pode
+        "_timeout": PLAN_TIMEOUT_SECONDS if role == "plan" else FAST_TIMEOUT_SECONDS,
         "model": claude_model,
         "max_tokens": max_tokens_for(config),
         "messages": build_messages(contents),
@@ -451,9 +460,11 @@ def grounding_shim(message):
 
 async def _call(request: dict):
 
-    client = _client()
-
     params = dict(request)
+
+    timeout = params.pop("_timeout", PLAN_TIMEOUT_SECONDS)
+
+    client = _client().with_options(timeout=timeout)
 
     betas = params.pop("betas", None)
 
