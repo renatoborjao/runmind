@@ -283,3 +283,10 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/api/v1/health   #
 - **Dado ajustado na VM:** perfil e plano do Mauricio (pausa e dias); cópia anterior em `~/rollback_points/pausa-mauricio-20261126-123325`.
 - **Medir:** domingo 29/11: atleta em pausa sem plano e ⏸️ no monitor. Pendência do lab: frases do catálogo que dependem do dia em que rodam.
 - **Motivo:** Renato 26/11 ("se o atleta pediu pausa, não devemos gerar treinos para ele até que ele volte a solicitar").
+
+## 26/11/2026 — toda a IA de texto/imagem passa pro Claude (API da Anthropic)
+
+- **O que mudou:** `integrations/claude/adapter.py` traduz as chamadas do Gemini pro Claude; `gemini/client.py` tenta o Claude primeiro quando `AI_PROVIDER=claude` e cai no Gemini em qualquer falha (recusa, crédito, rede, mídia sem suporte). Plano no Opus 5.5 (esforço alto), chat/análise no Sonnet 5.5, extração/imagem no Haiku 5.5. Voz do coach (TTS) segue no Gemini. Lab pago com o Renato: respostas mais longas e mais amarradas nos números; plano no mesmo volume (~29 km) com limiar 3x2 km + 4 km de ritmo de prova no longão; custo ~3× o do Gemini por chamada.
+- **Backup na VM:** `~/deploy_backups/20261126-214516` (código entrou com a chave desligada); `.env` anterior em `~/runmind/backend/.env.bak-antes-claude`.
+- **Voltar:** no `~/runmind/backend/.env` trocar para `AI_PROVIDER=gemini` e `sudo systemctl restart runmind.service` (o código pode ficar). Pra tirar o código: copiar os arquivos do stamp e apagar `app/infrastructure/integrations/claude/`.
+- **Motivo:** Renato 26/11 ("vamos alterar então todo o consumo do gemini para o consumo dessa api do claude").
